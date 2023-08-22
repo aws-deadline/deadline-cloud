@@ -3,6 +3,7 @@
 """
 A UI Widget containing the render setup tab
 """
+import sys
 import threading
 from typing import Any, Dict, Optional
 
@@ -358,3 +359,51 @@ class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
             return (response["queueId"], response["displayName"], response["description"])
         else:
             return ("", "", "")
+
+
+class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
+    WINDOWS_OS = "Windows"
+    MAC_OS = "Macos"
+    LINUX_OS = "Linux"
+
+    def __init__(self, parent=None):
+        super().__init__(
+            resource_name="Storage Profile Name",
+            setting_name="defaults.storage_profile_id",
+            parent=parent,
+        )
+
+    def get_item(self):
+        farm_id = get_setting("defaults.farm_id")
+        queue_id = get_setting("defaults.queue_id")
+        storage_profile_id = get_setting(self.setting_name)
+
+        if farm_id and queue_id and storage_profile_id:
+            deadline = api.get_boto3_client("deadline")
+            response = deadline.list_storage_profiles_for_queue(farmId=farm_id, queueId=queue_id)
+            farm_storage_profiles = response.get("storageProfiles", {})
+
+            if farm_storage_profiles:
+                storage_profile = [
+                    (item["storageProfileId"], item["displayName"], item["osFamily"])
+                    for item in farm_storage_profiles
+                    if storage_profile_id == item["storageProfileId"]
+                ]
+                return storage_profile[0]
+
+        return ("", "", "")
+
+    def _get_default_storage_profile_name(self) -> str:
+        """
+        Get a string specifying what the OS is, following the format the Deadline storage profile API expects.
+        """
+        if sys.platform.startswith("linux"):
+            return self.LINUX_OS
+
+        if sys.platform.startswith("darwin"):
+            return self.MAC_OS
+
+        if sys.platform.startswith("win"):
+            return self.WINDOWS_OS
+
+        return ""

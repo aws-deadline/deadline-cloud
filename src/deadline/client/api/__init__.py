@@ -12,10 +12,13 @@ __all__ = [
     "check_credentials_status",
     "check_deadline_api_available",
     "get_credentials_type",
+    "get_farm",
     "list_farms",
     "list_queues",
     "list_jobs",
     "list_fleets",
+    "list_storage_profiles",
+    "list_storage_profiles_for_queue",
     "get_queue_boto3_session",
 ]
 
@@ -152,3 +155,21 @@ def list_fleets(config=None, **kwargs):
 
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_fleets, "fleets", **kwargs)
+
+
+def list_storage_profiles_for_queue(config=None, **kwargs):
+    """
+    Calls the deadline:ListStorageProfilesForQueue API call, applying the filter for user membership
+    depending on the configuration. If the response is paginated, it repeated
+    calls the API to get all the fleets.
+    """
+    if "principalId" not in kwargs:
+        user_id, _ = get_user_and_identity_store_id(config=config)
+        if user_id:
+            kwargs["principalId"] = user_id
+
+    deadline = get_boto3_client("deadline", config=config)
+
+    return _call_paginated_deadline_list_api(
+        deadline.list_storage_profiles_for_queue, "storage_profiles", **kwargs
+    )
