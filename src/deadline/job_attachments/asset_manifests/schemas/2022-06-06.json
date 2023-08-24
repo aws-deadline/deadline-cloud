@@ -1,0 +1,42 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Amazon Deadline Cloud Asset Manifest Schema",
+    "type": "object",
+    "required": [
+        "hashAlg",
+        "paths",
+        "manifestVersion"
+    ],
+    "properties": {
+        "manifestVersion": {
+            "const" : "2022-06-06",
+            "description": "The version of this asset manifest."
+        },
+        "hashAlg": {
+            "enum": ["xxh128"],
+            "description": "The algorithm that the files in this manifest were hashed with"
+        },
+        "paths": {
+            "type": "array",
+            "description": "All files in the data set and their hashes",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "required": [
+                    "path",
+                    "hash"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path to this file relative to a root directory"
+                    },
+                    "hash": {
+                        "type": "string",
+                        "description": "The hash of this file."
+                    }
+                }
+            }
+        }
+    }
+}

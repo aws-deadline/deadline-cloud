@@ -1,0 +1,67 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+""" Contains methods for decoding and validating Asset Manifests. """
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Optional, Tuple
+
+import jsonschema
+
+from ..errors import ManifestDecodeValidationError
+from .base_manifest import AssetManifest
+from .manifest_model import ManifestModelRegistry
+from .versions import ManifestVersion
+
+
+def _get_schema(version) -> dict[str, Any]:
+    schema_filename = Path(__file__).parent.joinpath("schemas", version + ".json").resolve()
+
+    with open(schema_filename) as schema_file:
+        return json.load(schema_file)
+
+
+def validate_manifest(
+    manifest: dict[str, Any], version: ManifestVersion
+) -> Tuple[bool, Optional[str]]:
+    """
+    Checks if the given manifest is valid for the given manifest version. Returns True if the manifest
+    is valid for the given version. Returns False and a string explaining the error if the manifest is not valid.
+    """
+    try:
+        jsonschema.validate(manifest, _get_schema(version))
+    except (jsonschema.ValidationError, jsonschema.SchemaError) as e:
+        return False, str(e)
+
+    return True, None
+
+
+def decode_manifest(manifest: str) -> AssetManifest:
+    """
+    Takes in a manifest string and returns an Asset Manifest object.
+    A ManifestDecodeValidationError will be raised if the manifest version is unknown or
+    the manifest is not valid.
+    """
+    document: dict[str, Any] = json.loads(manifest)
+
+    try:
+        version = ManifestVersion(document["manifestVersion"])
+    except ValueError:
+        # Value of the manifest version is not one we know.
+        raise ManifestDecodeValidationError(
+            f"Unknown manifest version: {document['manifestVersion']}"
+        )
+    except KeyError:
+        raise ManifestDecodeValidationError(
+            'Manifest is missing the required "manifestVersion" field'
+        )
+
+    manifest_valid, error_string = validate_manifest(document, version)
+
+    if not manifest_valid:
+        raise ManifestDecodeValidationError(error_string)
+
+    manifest_model = ManifestModelRegistry.get_manifest_model(version=version)
+
+    return manifest_model.AssetManifest.decode(manifest_data=document)
