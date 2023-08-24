@@ -1,0 +1,17 @@
+name: "🛠️ Maintenance"
+description: Some type of improvement
+title: "Maintenance: TITLE"
+labels: ["feature"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution
+    validations:
+      required: true

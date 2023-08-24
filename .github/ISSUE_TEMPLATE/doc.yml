@@ -1,0 +1,13 @@
+
+name: "📕 Documentation Issue"
+description: Issue in the documentation
+title: "Docs: TITLE"
+labels: ["documenation"]
+body:
+  - type: textarea
+    id: documentation_issue
+    attributes:
+      label: Documentation Issue
+      description: Describe the issue
+    validations:
+      required: true
