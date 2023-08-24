@@ -12,7 +12,6 @@ import pytest
 
 from deadline.client import config
 from deadline.client.config import (
-    DEFAULT_DEADLINE_AWS_PROFILE_NAME,
     DEFAULT_DEADLINE_ENDPOINT_URL,
     config_file,
 )
@@ -20,7 +19,7 @@ from deadline.client.exceptions import DeadlineOperationError
 
 # This is imported by `test_cli_config.py` for a matching CLI test
 CONFIG_SETTING_ROUND_TRIP = [
-    ("defaults.aws_profile_name", DEFAULT_DEADLINE_AWS_PROFILE_NAME, "AnotherProfileName"),
+    ("defaults.aws_profile_name", "", "AnotherProfileName"),
     (
         "settings.deadline_endpoint_url",
         DEFAULT_DEADLINE_ENDPOINT_URL,
@@ -59,7 +58,7 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     assert config.get_setting("defaults.queue_id") == ""
 
     # Switch back to the default profile, and check the next layer of the onion
-    config.set_setting("defaults.aws_profile_name", DEFAULT_DEADLINE_AWS_PROFILE_NAME)
+    config.set_setting("defaults.aws_profile_name", "")
     assert config.get_setting("settings.deadline_endpoint_url") == "nondefault-endpoint-url"
     assert config.get_setting("defaults.farm_id") == "farm-for-profile-default"
     # The queue id is still default
@@ -126,7 +125,7 @@ def test_config_file_env_var(fresh_deadline_config):
         os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
 
         # Confirm that we see the default settings again
-        assert config.get_setting("defaults.aws_profile_name") == DEFAULT_DEADLINE_AWS_PROFILE_NAME
+        assert config.get_setting("defaults.aws_profile_name") == ""
 
         # Change the settings in this new file
         config.set_setting("defaults.aws_profile_name", "AlternateProfileName")

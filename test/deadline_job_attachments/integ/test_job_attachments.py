@@ -237,6 +237,7 @@ def upload_input_files_one_asset_in_cas(
     return UploadInputFilesOneAssetInCasOutputs(attachments)
 
 
+@pytest.mark.integ
 def test_upload_input_files_all_assets_in_cas(
     job_attachment_test: JobAttachmentTest,
     upload_input_files_one_asset_in_cas: UploadInputFilesOneAssetInCasOutputs,
@@ -506,6 +507,7 @@ def sync_inputs_no_job_attachment_settings_in_job(
     )
 
 
+@pytest.mark.integ
 def test_sync_outputs_no_job_attachment_settings_in_job(
     job_attachment_test: JobAttachmentTest,
     sync_inputs_no_job_attachment_settings_in_job: SyncInputsNoJobAttachmentSettingsInJobOutput,
@@ -564,6 +566,7 @@ def test_sync_outputs_no_job_attachment_settings_in_job(
     )
 
 
+@pytest.mark.integ
 def test_sync_outputs_no_job_attachment_s3_settings(
     job_attachment_test: JobAttachmentTest,
     sync_inputs_no_job_attachment_s3_settings: SyncInputsNoJobAttachmentS3SettingsOutput,
@@ -812,6 +815,7 @@ def sync_outputs(
     )
 
 
+@pytest.mark.integ
 def test_sync_inputs_with_step_dependencies(
     job_attachment_test: JobAttachmentTest,
     tmp_path_factory: TempPathFactory,
@@ -868,6 +872,7 @@ def test_sync_inputs_with_step_dependencies(
     assert not Path(session_dir / dest_dir / job_attachment_test.MOV_FILE_OUTPUT_PATH).exists()
 
 
+@pytest.mark.integ
 def test_download_outputs_with_job_id_step_id_task_id_and_download_directory(
     job_attachment_test: JobAttachmentTest, tmp_path: Path, sync_outputs: SyncOutputsOutput
 ):
@@ -902,6 +907,7 @@ def test_download_outputs_with_job_id_step_id_task_id_and_download_directory(
         shutil.rmtree(job_attachment_test.OUTPUT_PATH)
 
 
+@pytest.mark.integ
 def test_download_outputs_with_job_id_step_id_and_download_directory(
     job_attachment_test: JobAttachmentTest, tmp_path: Path, sync_outputs: SyncOutputsOutput
 ):
@@ -937,6 +943,7 @@ def test_download_outputs_with_job_id_step_id_and_download_directory(
         shutil.rmtree(job_attachment_test.OUTPUT_PATH)
 
 
+@pytest.mark.integ
 def test_download_outputs_with_job_id_and_download_directory(
     job_attachment_test: JobAttachmentTest, tmp_path: Path, sync_outputs: SyncOutputsOutput
 ):
@@ -1043,6 +1050,7 @@ def upload_input_files_no_input_paths(
     return UploadInputFilesNoInputPathsOutput(attachments=attachments)
 
 
+@pytest.mark.integ
 def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachmentTest) -> None:
     """
     Test that if there are no output directories, when upload_assets is called,
@@ -1111,6 +1119,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     assert attachments.manifests[0].inputManifestHash == manifest_hash
 
 
+@pytest.mark.integ
 def test_sync_inputs_no_inputs(
     job_attachment_test: JobAttachmentTest,
     upload_input_files_no_input_paths: UploadInputFilesNoInputPathsOutput,
@@ -1158,6 +1167,7 @@ def test_sync_inputs_no_inputs(
     assert not any(Path(session_dir).iterdir())
 
 
+@pytest.mark.integ
 def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: JobAttachmentTest):
     """
     Test that if trying to upload to a bucket that isn't in the farm's AWS account, the correct error is thrown.
@@ -1191,6 +1201,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
         asset_manager.upload_assets(manifests, on_uploading_assets=mock_on_uploading_files)
 
 
+@pytest.mark.integ
 def test_sync_inputs_bucket_wrong_account(
     external_bucket: str,
     job_attachment_test: JobAttachmentTest,
@@ -1237,6 +1248,7 @@ def test_sync_inputs_bucket_wrong_account(
     assert excinfo.value.response["ResponseMetadata"]["HTTPStatusCode"] == 403
 
 
+@pytest.mark.integ
 def test_sync_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
     sync_inputs: SyncInputsOutputs,
@@ -1321,6 +1333,7 @@ def test_sync_outputs_bucket_wrong_account(
         )
 
 
+@pytest.mark.integ
 def test_download_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
     tmp_path: Path,

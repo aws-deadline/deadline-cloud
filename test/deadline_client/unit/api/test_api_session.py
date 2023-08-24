@@ -37,7 +37,7 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         # This is a session with the default profile name
         session0 = api.get_boto3_session()
 
-        assert session0 == f"session for {config.DEFAULT_DEADLINE_AWS_PROFILE_NAME}"  # type: ignore
+        assert session0 == "session for None"  # type: ignore
 
         # This should return the cached object, and not call boto3.Session
         session1 = api.get_boto3_session()
@@ -65,7 +65,7 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         # value of AWS profile name that was configured.
         boto3_session.assert_has_calls(
             [
-                call(profile_name=config.DEFAULT_DEADLINE_AWS_PROFILE_NAME),
+                call(profile_name=None),
                 call(profile_name="SomeRandomProfileName"),
             ]
         )

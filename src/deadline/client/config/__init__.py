@@ -14,11 +14,9 @@ __all__ = [
     "get_best_profile_for_farm",
     "str2bool",
     "DEFAULT_DEADLINE_ENDPOINT_URL",
-    "DEFAULT_DEADLINE_AWS_PROFILE_NAME",
 ]
 
 from .config_file import (
-    DEFAULT_DEADLINE_AWS_PROFILE_NAME,
     DEFAULT_DEADLINE_ENDPOINT_URL,
     get_best_profile_for_farm,
     get_setting,
