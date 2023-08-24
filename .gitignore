@@ -1,0 +1,16 @@
+/dist
+*.egg-info/
+__pycache__/
+.mypy_cache
+.ruff_cache
+.coverage*
+.tox
+.venv
+/htmlcov
+.vscode
+.attach_pid*
+/build
+*.swp
+*_version.py
+.attach_pid*
+.DS_Store

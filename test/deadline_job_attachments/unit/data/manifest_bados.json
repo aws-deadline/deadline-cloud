@@ -1,0 +1,18 @@
+{
+    "sourceRoot": "/tmp",
+    "sourceOS": "maclindows",
+    "s3bucket": "test-bucket",
+    "s3inputPrefix": "input-ca",
+    "s3outputPrefix": "output",
+    "inputFiles": [
+      {
+         "relativePath": "test_inputs/input.txt",
+         "s3Path": "test-abc-123"
+      }
+     ],
+     "outputDirectories": [
+      {
+         "relativePath": "test_outputs"
+      }
+    ] 
+  }

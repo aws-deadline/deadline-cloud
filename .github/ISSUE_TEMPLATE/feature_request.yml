@@ -1,0 +1,17 @@
+name: "\U0001F680 Feature Request"
+description: Request a new feature
+title: "Feature request: TITLE"
+labels: ["feature"]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+    validations:
+      required: true

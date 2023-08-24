@@ -1,0 +1,319 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+__all__ = [
+    "get_config_file_path",
+    "read_config",
+    "write_config",
+    "get_setting_default",
+    "get_setting",
+    "set_setting",
+    "get_best_profile_for_farm",
+    "str2bool",
+    "DEFAULT_DEADLINE_ENDPOINT_URL",
+    "DEFAULT_DEADLINE_AWS_PROFILE_NAME",
+]
+
+import os
+from configparser import ConfigParser
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import boto3  # type: ignore[import]
+
+from ..exceptions import DeadlineOperationError
+
+# Default path where Amazon Deadline Cloud's configuration lives
+CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
+# Environment variable that, if set, overrides the value of CONFIG_FILE_PATH
+CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
+# The default Amazon Deadline Cloud SDK AWS profile
+DEFAULT_DEADLINE_AWS_PROFILE_NAME = "AmazonDeadlineCliAccess"
+# The default Amazon Deadline Cloud endpoint URL
+# TODO: This is currently set to our closed-beta endpoint. We need to update this for GA.
+DEFAULT_DEADLINE_ENDPOINT_URL = "https://btpdb6qczg.execute-api.us-west-2.amazonaws.com"
+# The default directory within which to save the history of created jobs.
+DEFAULT_JOB_HISTORY_DIR = os.path.join("~", ".deadline", "job_history", "{aws_profile_name}")
+
+_TRUE_VALUES = {"yes", "on", "true", "1"}
+_FALSE_VALUES = {"no", "off", "false", "0"}
+_BOOL_VALUES = _TRUE_VALUES | _FALSE_VALUES
+
+__config = ConfigParser()
+__config_file_path = None
+__config_mtime = None
+
+# This value defines the Amazon Deadline Cloud settings structure. For each named setting,
+# it stores:
+# "default" - The default value.
+# "depend"  - The setting it depends on, if any. This modifies the section name of the
+#             setting to embed the dependency value, e.g. default.farm_id goes in
+#             section [profile-{profileName} default]
+# "section_format" - How its value gets formatted into config file sections.
+SETTINGS: Dict[str, Dict[str, Any]] = {
+    # This is written by Cloud Companion and read by deadline
+    "cloud-companion.path": {
+        "default": "",
+    },
+    "defaults.aws_profile_name": {
+        "default": DEFAULT_DEADLINE_AWS_PROFILE_NAME,
+        "section_format": "profile-{}",
+    },
+    "settings.job_history_dir": {
+        "default": DEFAULT_JOB_HISTORY_DIR,
+        "depend": "defaults.aws_profile_name",
+    },
+    "settings.deadline_endpoint_url": {
+        "default": DEFAULT_DEADLINE_ENDPOINT_URL,
+        "depend": "defaults.aws_profile_name",
+    },
+    "defaults.farm_id": {
+        "default": "",
+        "depend": "defaults.aws_profile_name",
+        "section_format": "{}",
+    },
+    "defaults.queue_id": {
+        "default": "",
+        "depend": "defaults.farm_id",
+        "section_format": "{}",
+    },
+    "settings.auto_accept": {
+        "default": "false",
+    },
+    "settings.log_level": {
+        "default": "INFO",
+    },
+}
+
+
+def get_config_file_path() -> Path:
+    """
+    Get the config file path from the environment variable, falling back
+    to our default if it is not set.
+    """
+    return Path(os.environ.get(CONFIG_FILE_PATH_ENV_VAR) or CONFIG_FILE_PATH).expanduser()
+
+
+def read_config() -> ConfigParser:
+    """
+    If the config hasn't been read yet, or was modified since it was last
+    read, reads the Amazon Deadline Cloud configuration.
+    """
+    global __config
+    global __config_file_path
+    global __config_mtime
+
+    config_file_path = get_config_file_path()
+
+    config_file_exists = config_file_path.is_file()
+
+    # Return without re-reading the config file if the last-modified time is the same
+    reload_config = True
+    if __config_mtime is not None and config_file_path == __config_file_path and config_file_exists:
+        mtime = config_file_path.stat().st_mtime
+        if mtime == __config_mtime:
+            reload_config = False
+
+    if reload_config:
+        # Read the config file with a fresh config parser, and update the last-modified time stamp
+        __config = ConfigParser()
+        __config_file_path = config_file_path
+        __config.read(config_file_path)
+        if config_file_exists:
+            __config_mtime = config_file_path.stat().st_mtime
+        else:
+            __config_mtime = None
+
+    return __config
+
+
+def write_config(config: ConfigParser) -> None:
+    """
+    Writes the provided config to the Amazon Deadline Cloud configuration.
+
+    Args:
+        config (ConfigParser): The config object to write. Generally this is
+            a modified value from what `read_config` returns.
+    """
+    config_file_path = get_config_file_path()
+    os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
+    with open(config_file_path, "w") as configfile:
+        config.write(configfile)
+
+
+def _get_setting_config(setting_name: str) -> dict:
+    """
+    Gets the setting configuration for the specified setting name,
+    raising an error if it does not exist.
+
+    Args:
+        setting_name (str): The full setting name, like `section.setting`.
+    """
+    setting_config = SETTINGS.get(setting_name)
+    if not setting_config:
+        raise DeadlineOperationError(
+            f"Amazon Deadline Cloud configuration has no setting named {setting_name!r}."
+        )
+    return setting_config
+
+
+def _get_default_from_setting_config(setting_config, config: Optional[ConfigParser]) -> str:
+    """
+    Gets the default value from a setting_config entry, performing value substitutions.
+
+    Currently the only substitution supported is `{aws_profile_name}`.
+    """
+    default_value = setting_config["default"]
+    # Only do the substitution if we see a pattern
+    if "{" in default_value:
+        default_value = default_value.format(
+            aws_profile_name=get_setting("defaults.aws_profile_name", config=config)
+        )
+    return default_value
+
+
+def get_setting_default(setting_name: str, config: Optional[ConfigParser] = None) -> str:
+    """
+    Gets the default value for the setting `setting_name`.
+    Raises an exception if the setting does not exist.
+
+    Args:
+        setting_name (str): The full setting name, like `section.setting`.
+        config: The config file read with `read_config()`.
+    """
+    setting_config = _get_setting_config(setting_name)
+    return _get_default_from_setting_config(setting_config, config=config)
+
+
+def _get_section_prefixes(setting_config: dict, config: ConfigParser) -> List[str]:
+    """
+    Gets a list of the section name prefixes for the specified setting section + setting config
+
+    Args:
+        setting_config: The setting config object from the SETTINGS dictionary.
+        config: The config file read with `read_config()`.
+    """
+    if "depend" in setting_config:
+        dep_setting_name = setting_config["depend"]
+        dep_setting_config = SETTINGS[dep_setting_name]
+        dep_section_format = dep_setting_config["section_format"]
+
+        dep_section, dep_name = dep_setting_name.split(".", 1)
+        dep_section_prefixes = _get_section_prefixes(dep_setting_config, config)
+        dep_section_value: Optional[str] = config.get(
+            " ".join(dep_section_prefixes + [dep_section]), dep_name, fallback=None
+        )
+        if dep_section_value is None:
+            dep_section_value = _get_default_from_setting_config(dep_setting_config, config=config)
+        formatted_section_value = dep_section_format.format(dep_section_value)
+        return dep_section_prefixes + [formatted_section_value]
+    else:
+        return []
+
+
+def get_setting(setting_name: str, config: Optional[ConfigParser] = None) -> str:
+    """
+    Gets the value of the specified setting, returning the default if
+    not configured. Raises an exception if the setting does not exist.
+
+    Args:
+        setting_name (str): The full setting name, like `section.setting`.
+        config (ConfigParser, optional): The config file read with `read_config()`.
+    """
+    if "." not in setting_name:
+        raise DeadlineOperationError(f"The setting name {setting_name!r} is not valid.")
+    section, name = setting_name.split(".", 1)
+
+    if config is None:
+        config = read_config()
+
+    setting_config = _get_setting_config(setting_name)
+
+    section_prefixes = _get_section_prefixes(setting_config, config)
+    section = " ".join(section_prefixes + [section])
+
+    result: Optional[str] = config.get(section, name, fallback=None)
+
+    if result is None:
+        return _get_default_from_setting_config(setting_config, config=config)
+    else:
+        return result
+
+
+def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = None):
+    """
+    Sets the value of the specified setting, returning the default if
+    not configured. Raises an exception if the setting does not exist.
+
+    Args:
+        setting_name (str): The full setting name, like `section.setting`.
+        value (bool|int|float|str): The value to set.
+        config (Optional[ConfigParser]): If provided sets the setting in the parser and does not save to disk.
+    """
+    if "." not in setting_name:
+        raise DeadlineOperationError(f"The setting name {setting_name!r} is not valid.")
+    section, name = setting_name.split(".", 1)
+
+    # Get the type of the default to validate it is a Amazon Deadline Cloud setting, and retrieve its type
+    setting_config = _get_setting_config(setting_name)
+
+    # If no config was provided, then read from disk and signal to write it later
+    if not config:
+        config = read_config()
+        save_config = True
+    else:
+        save_config = False
+
+    section_prefixes = _get_section_prefixes(setting_config, config)
+    section = " ".join(section_prefixes + [section])
+    if section not in config:
+        config[section] = {}
+    config.set(section, name, value)
+    if save_config:
+        write_config(config)
+
+
+def get_best_profile_for_farm(farm_id: str, queue_id: Optional[str] = None) -> str:
+    """
+    Finds the best AWS profile for the specified farm and queue IDs. Chooses
+    the first match from:
+    1. AWS profiles whose default farm and queue IDs match.
+    2. AWS profiles whose default farm matches.
+    3. The default AWS profile.
+    """
+    # Get the full list of AWS profiles
+    session = boto3.Session()
+    aws_profile_names = session._session.full_config["profiles"].keys()
+
+    config = read_config()
+
+    # (For 2.) We'll accumulate the profiles whose farms matched here
+    first_farm_aws_profile_name: Optional[str] = None
+
+    # (For 3.) Save the default profile
+    default_aws_profile_name: str = str(get_setting("defaults.aws_profile_name", config=config))
+
+    # (For 1.) Search for a profile with both a farm and queue match
+    for aws_profile_name in aws_profile_names:
+        set_setting("defaults.aws_profile_name", aws_profile_name, config=config)
+        if get_setting("defaults.farm_id", config=config) == farm_id:
+            # Return if both matched
+            if queue_id and get_setting("defaults.queue_id", config=config) == queue_id:
+                return aws_profile_name
+            # Save if this was the first time the farm matched
+            if not first_farm_aws_profile_name:
+                first_farm_aws_profile_name = aws_profile_name
+
+    # Return the first farm-matched profile, or the default if there was none
+    return first_farm_aws_profile_name or default_aws_profile_name
+
+
+def str2bool(value: str) -> bool:
+    """
+    Converts a string to boolean, accepting a variety of on/off,
+    true/false, 0/1 variants.
+    """
+    value = value.lower()
+    if value in _BOOL_VALUES:
+        return value in _TRUE_VALUES
+    else:
+        raise ValueError(f"{value!r} is not a valid boolean string value")

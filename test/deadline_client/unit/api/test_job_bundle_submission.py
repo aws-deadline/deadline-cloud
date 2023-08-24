@@ -1,0 +1,724 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+"""
+Tests the deadline.client.api functions for submitting OpenJobIO job bundles.
+"""
+
+import json
+import os
+from typing import Any, Dict, Tuple
+from unittest.mock import ANY, patch, Mock
+from deadline.client import exceptions
+
+import pytest
+import time
+
+from deadline.client import api, config
+from deadline.client.api import _submit_job_bundle
+from deadline.client.job_bundle import submission
+from deadline.job_attachments.models import ManifestProperties, Attachments
+from deadline.job_attachments.progress_tracker import SummaryStatistics
+from deadline.job_attachments.utils import AssetLoadingMethod, OperatingSystemFamily
+
+from ..shared_constants import MOCK_BUCKET_NAME, MOCK_FARM_ID, MOCK_QUEUE_ID
+
+MOCK_GET_QUEUE_RESPONSE = {
+    "queueId": MOCK_QUEUE_ID,
+    "displayName": "Test Queue",
+    "description": "",
+    "farmId": MOCK_FARM_ID,
+    "status": "ACTIVE",
+    "logBucketName": MOCK_BUCKET_NAME,
+    "jobAttachmentSettings": {
+        "s3BucketName": MOCK_BUCKET_NAME,
+        "rootPrefix": "Amazon Deadline Cloud",
+    },
+    "sessionRoleArn": "arn:aws:iam::123456789012:role/DeadlineQueueSessionRole",
+    "createdAt": "2022-11-22T06:37:35+00:00",
+    "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin/user",
+    "updatedAt": "2022-11-22T22:26:57+00:00",
+    "updatedBy": "0123abcdf-abcd-0123-fa82-0123456abcd1",
+}
+
+MOCK_JOB_ID = "job-0123456789abcdefghijklmnopqrstuv"
+
+MOCK_CREATE_JOB_RESPONSE = {"jobId": MOCK_JOB_ID}
+
+MOCK_STATUS_MESSAGE = "Testing123"
+
+MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
+
+# This contains tuples of:
+#    (file type, JSON/YAML content)
+MOCK_JOB_TEMPLATE_CASES = {
+    "MINIMAL_JSON": (
+        "JSON",
+        """
+{
+ "specificationVersion": "2022-09-01",
+ "name": "CLI Job",
+ "parameters": [
+  {
+    "name": "priority",
+    "type": "INT",
+    "default": 10
+  },
+  {
+    "name": "sceneFile",
+    "type": "STRING",
+    "default": "/tmp/scene"
+  }
+ ],
+ "steps": [
+  {
+   "name": "CliScript",
+   "script": {
+    "embeddedFiles": [
+     {
+      "name": "runScript",
+      "type": "TEXT",
+      "runnable": true,
+      "data": "#!/usr/bin/env bash\\n\\necho \\"Running the task\\"\\nsleep 35\\n"
+     }
+    ],
+    "actions": {
+     "onRun": {
+      "command": "{{Task.File.runScript}}"
+     }
+    }
+   }
+  }
+ ]
+}
+""",
+    ),
+    "MINIMAL_YAML": (
+        "YAML",
+        """
+specificationVersion: '2022-09-01'
+name: CLI Job
+parameters:
+- name: priority
+  type: INT
+  default: 10
+- name: sceneFile
+  type: STRING
+  default: "/tmp/scene"
+steps:
+- name: CliScript
+  script:
+    embeddedFiles:
+    - name: runScript
+      type: TEXT
+      runnable: true
+      data: |
+          #!/usr/bin/env bash
+
+          echo "Running the task"
+          sleep 35
+    actions:
+      onRun:
+        command: "{{Task.File.runScript}}"
+""",
+    ),
+}
+
+# This contains tuples of:
+#    (file type, JSON/YAML content, expected additional create_job parameters)
+MOCK_PARAMETERS_CASES: Dict[str, Tuple[str, str, Dict[str, Any]]] = {
+    "NO_PARAMETERS_FILE": ("", "", {}),
+    # A parameter_values.json/yaml file with no parameter values
+    "EMPTY_JSON": (
+        "JSON",
+        """
+{
+ "parameterValues": []
+}
+""",
+        {},
+    ),
+    "EMPTY_YAML": (
+        "YAML",
+        """
+parameterValues: []
+""",
+        {},
+    ),
+    # A parameter_values.json/yaml file with just Amazon Deadline Cloud-specific values
+    "DEADLINE_ONLY_JSON": (
+        "JSON",
+        """
+{
+ "parameterValues": [
+    {
+        "name": "deadline:priority",
+        "value": 45
+    },
+    {
+        "name": "deadline:targetTaskRunStatus",
+        "value": "SUSPENDED"
+    },
+    {
+        "name": "deadline:maxFailedTasksCount",
+        "value": 100
+    },
+    {
+        "name": "deadline:maxRetriesPerTask",
+        "value": 5
+    }
+ ]
+}
+""",
+        {
+            "priority": 45,
+            "targetTaskRunStatus": "SUSPENDED",
+            "maxFailedTasksCount": 100,
+            "maxRetriesPerTask": 5,
+        },
+    ),
+    "DEADLINE_ONLY_YAML": (
+        "YAML",
+        """
+parameterValues:
+- name: "deadline:priority"
+  value: 45
+- name: "deadline:targetTaskRunStatus"
+  value: SUSPENDED
+- name: "deadline:maxFailedTasksCount"
+  value: 250
+- name: "deadline:maxRetriesPerTask"
+  value: 15
+""",
+        {
+            "priority": 45,
+            "targetTaskRunStatus": "SUSPENDED",
+            "maxFailedTasksCount": 250,
+            "maxRetriesPerTask": 15,
+        },
+    ),
+    # A parameter_values.json/yaml file with just job template values
+    "TEMPLATE_ONLY_JSON": (
+        "JSON",
+        """
+{
+ "parameterValues": [
+    {
+        "name": "priority",
+        "value": "500"
+    },
+    {
+        "name": "sceneFile",
+        "value": "/mnt/prod/project1/main_scene.mb"
+    }
+ ]
+}
+""",
+        {
+            "parameters": {
+                "priority": {"int": "500"},
+                "sceneFile": {"string": "/mnt/prod/project1/main_scene.mb"},
+            },
+        },
+    ),
+    "TEMPLATE_ONLY_YAML": (
+        "YAML",
+        """
+parameterValues:
+- name: "priority"
+  value: "500"
+- name: "sceneFile"
+  value: /mnt/prod/project1/main_scene.mb
+""",
+        {
+            "parameters": {
+                "priority": {"int": "500"},
+                "sceneFile": {"string": "/mnt/prod/project1/main_scene.mb"},
+            },
+        },
+    ),
+}
+
+MOCK_PARAMETERS_JSON_NONEXISTENT_DEADLINE_PARAMETER = """
+{
+ "parameterValues": [
+    {
+        "name": "deadline:nonExistentParameter",
+        "value": 45
+    }
+ ]
+}
+"""
+
+
+@pytest.mark.parametrize("job_template_case", MOCK_JOB_TEMPLATE_CASES.keys())
+@pytest.mark.parametrize("parameters_case", MOCK_PARAMETERS_CASES.keys())
+def test_create_job_from_job_bundle(
+    fresh_deadline_config, temp_job_bundle_dir, job_template_case, parameters_case
+):
+    """
+    Test a matrix of different job template and parameters file cases.
+    """
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES[job_template_case]
+    parameters_type, parameters, expected_create_job_parameters = MOCK_PARAMETERS_CASES[
+        parameters_case
+    ]
+    with patch(
+        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
+    ) as input_shape_mock:
+        input_shape_mock.return_value = {"template": ""}
+        with patch.object(api._session, "get_boto3_session") as session_mock:
+            session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+
+            config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+            config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+            # Write the template to the job bundle
+            with open(
+                os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+                "w",
+                encoding="utf8",
+            ) as f:
+                f.write(job_template)
+
+            # Write the parameter values to the job bundle, if the test case parameter includes them
+            if parameters_type:
+                with open(
+                    os.path.join(
+                        temp_job_bundle_dir, f"parameter_values.{parameters_type.lower()}"
+                    ),
+                    "w",
+                    encoding="utf8",
+                ) as f:
+                    f.write(parameters)
+
+            # This is the function under test
+            response = api.create_job_from_job_bundle(temp_job_bundle_dir)
+
+        # The response from the API is returned verbatim
+        assert response == MOCK_JOB_ID
+        expected_create_job_parameters_dict: dict = dict(**expected_create_job_parameters)
+        expected_create_job_parameters_dict["priority"] = expected_create_job_parameters_dict.get(
+            "priority", 50
+        )
+        session_mock().client("deadline").create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=job_template,
+            templateType=job_template_type,
+            **expected_create_job_parameters_dict,
+        )
+
+
+def test_create_job_from_job_bundle_error_missing_template(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """
+    Test a job bundle with missing template.
+    """
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Don't write a template file
+
+        # Write the parameters to the job bundle, if the test case parameter includes them
+        with open(
+            os.path.join(temp_job_bundle_dir, "parameter_values.json"), "w", encoding="utf8"
+        ) as f:
+            f.write(MOCK_PARAMETERS_CASES["DEADLINE_ONLY_JSON"][1])
+
+        # This is the function under test
+        with pytest.raises(exceptions.DeadlineOperationError):
+            api.create_job_from_job_bundle(temp_job_bundle_dir)
+
+
+def test_create_job_from_job_bundle_error_duplicate_template(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """
+    Test a job bundle with both a JSON and YAML template.
+    """
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write both a JSON and YAML template file
+        with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_YAML"][1])
+
+        # Write the parameters to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, "parameter_values.json"), "w", encoding="utf8"
+        ) as f:
+            f.write(MOCK_PARAMETERS_CASES["DEADLINE_ONLY_JSON"][1])
+
+        # This is the function under test
+        with pytest.raises(exceptions.DeadlineOperationError):
+            api.create_job_from_job_bundle(temp_job_bundle_dir)
+
+
+def test_create_job_from_job_bundle_error_duplicate_parameters(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """
+    Test a job bundle with an incorrect Amazon Deadline Cloud parameter
+    """
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write a JSON template
+        with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        # Write the parameters file with a nonexistent Amazon Deadline Cloud parameter
+        with open(
+            os.path.join(temp_job_bundle_dir, "parameter_values.json"), "w", encoding="utf8"
+        ) as f:
+            f.write(MOCK_PARAMETERS_JSON_NONEXISTENT_DEADLINE_PARAMETER)
+
+        # This is the function under test
+        with pytest.raises(exceptions.DeadlineOperationError):
+            api.create_job_from_job_bundle(temp_job_bundle_dir)
+
+
+def _write_asset_files(assets_dir: str, asset_contents: Dict[str, str]):
+    """
+    Write a set of asset contents files to the provided assets directory.
+    Each key of asset_contents is a relative path from assets_dir, and
+    each value is what to write to the file.
+    """
+    for rel_path, contents in asset_contents.items():
+        path = os.path.join(assets_dir, rel_path)
+        if not os.path.isdir(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        if isinstance(contents, str):
+            with open(path, "w", encoding="utf8") as f:
+                f.write(contents)
+        elif isinstance(contents, bytes):
+            with open(path, "wb") as f:
+                f.write(contents)
+        else:
+            raise ValueError("The contents provided in asset_contents must be either str or bytes.")
+
+
+def test_create_job_from_job_bundle_job_attachments(
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+):
+    """
+    Test a job bundle with asset references.
+    """
+    # Use a temporary directory for the job bundle
+    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+        api._submit_job_bundle, "_hash_attachments"
+    ) as mock_hash_attachments, patch.object(
+        submission.S3AssetManager, "upload_assets"
+    ) as mock_upload_assets:
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        mock_upload_assets.return_value = [
+            SummaryStatistics(),
+            Attachments([]),
+        ]
+
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write a JSON template
+        with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        # Create some files in the assets dir
+        asset_contents = {
+            "asset-1.txt": "This is asset 1",
+            "somedir/asset-2.txt": "Asset 2",
+            "somedir/asset-3.bat": "@echo asset 3",
+        }
+        _write_asset_files(temp_assets_dir, asset_contents)
+
+        # Write the asset_references file
+        asset_references = {
+            "inputs": {
+                "filenames": [os.path.join(temp_assets_dir, "asset-1.txt")],
+                "directories": [os.path.join(temp_assets_dir, "somedir")],
+            },
+            "outputs": {"directories": [os.path.join(temp_assets_dir, "somedir")]},
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
+
+        def fake_hashing_callback(metadata: Dict[str, Any]) -> bool:
+            return True
+
+        def fake_upload_callback(metadata: Dict[str, Any]) -> bool:
+            return True
+
+        # This is the function we're testing
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            hashing_progress_callback=fake_hashing_callback,
+            upload_progress_callback=fake_upload_callback,
+        )
+
+        mock_hash_attachments.assert_called_once_with(
+            ANY,
+            set(
+                [
+                    os.path.join(temp_assets_dir, "asset-1.txt"),
+                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
+                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
+                ]
+            ),
+            set([os.path.join(temp_assets_dir, "somedir")]),
+            fake_hashing_callback,
+        )
+        client_mock().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType=ANY,
+            attachments={
+                "manifests": [],
+                "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
+            },
+        )
+
+
+def test_create_job_from_job_bundle_with_empty_asset_references(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """
+    Test a job bundle with an asset_references file but no referenced files.
+    """
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    with patch(
+        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
+    ) as input_shape_mock:
+        input_shape_mock.return_value = {}
+        with patch.object(api._session, "get_boto3_session") as session_mock:
+            session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+            session_mock().client("deadline").get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+
+            config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+            config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+            # Write the template to the job bundle
+            with open(
+                os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+                "w",
+                encoding="utf8",
+            ) as f:
+                f.write(job_template)
+
+            # Write an asset_references.json file with empty lists
+            asset_references: dict = {
+                "inputs": {"filenames": [], "directories": []},
+                "outputs": {"directories": []},
+            }
+            with open(
+                os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+            ) as f:
+                json.dump({"assetReferences": asset_references}, f)
+
+            # This is the function under test
+            response = api.create_job_from_job_bundle(temp_job_bundle_dir)
+
+            assert response == MOCK_JOB_ID
+            # There should be no job attachments section in the result
+            session_mock().client("deadline").create_job.assert_called_once_with(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                template=job_template,
+                templateType=job_template_type,
+                priority=50,
+            )
+
+
+def test_create_job_from_job_bundle_with_single_asset_file(
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+):
+    """
+    Test a job bundle with a single input file reference and no output directories.
+    """
+
+    # Use a temporary directory for the job bundle
+    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+        api._submit_job_bundle, "_hash_attachments"
+    ) as mock_hash_attachments, patch.object(
+        submission.S3AssetManager, "upload_assets"
+    ) as mock_upload_assets:
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        mock_upload_assets.return_value = [
+            SummaryStatistics,
+            Attachments(
+                [
+                    ManifestProperties(
+                        rootPath="/mnt/root/path1",
+                        osType=OperatingSystemFamily.LINUX,
+                        inputManifestPath="mock-manifest",
+                        inputManifestHash="mock-manifest-hash",
+                        outputRelativeDirectories=["."],
+                    ),
+                ],
+            ),
+        ]
+
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write a JSON template
+        with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        # Create some files in the assets dir
+        asset_contents = {
+            "asset-1.txt": "This is asset 1",
+        }
+        _write_asset_files(temp_assets_dir, asset_contents)
+
+        # Write the asset_references file
+        asset_references = {
+            "inputs": {
+                "filenames": [os.path.join(temp_assets_dir, "asset-1.txt")],
+            },
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
+
+        def fake_hashing_callback(metadata: Dict[str, Any]) -> bool:
+            return True
+
+        def fake_upload_callback(metadata: Dict[str, Any]) -> bool:
+            return True
+
+        # This is the function we're testing
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            hashing_progress_callback=fake_hashing_callback,
+            upload_progress_callback=fake_upload_callback,
+        )
+
+        mock_hash_attachments.assert_called_once_with(
+            ANY, set([os.path.join(temp_assets_dir, "asset-1.txt")]), set(), fake_hashing_callback
+        )
+        client_mock().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType=ANY,
+            attachments={
+                "manifests": [
+                    {
+                        "rootPath": "/mnt/root/path1",
+                        "osType": OperatingSystemFamily.LINUX,
+                        "inputManifestPath": "mock-manifest",
+                        "inputManifestHash": "mock-manifest-hash",
+                        "outputRelativeDirectories": ["."],
+                    },
+                ],
+                "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
+            },
+        )
+
+
+get_job_responses = [
+    pytest.param(
+        [
+            "CREATE_IN_PROGRESS",
+            "CREATE_COMPLETE",
+        ],
+        True,
+        id="CreateSucceeded",
+    ),
+    pytest.param(
+        [
+            "CREATE_IN_PROGRESS",
+            "CREATE_IN_PROGRESS",
+            "POSSIBLE_FUTURE_STATUS",
+        ],
+        True,
+        id="CreateSucceededUnknownStatus",
+    ),
+    pytest.param(
+        [
+            "CREATE_IN_PROGRESS",
+            "CREATE_FAILED",
+        ],
+        False,
+        id="CreateFailed",
+    ),
+]
+
+
+@pytest.mark.parametrize("responses, final_status", get_job_responses)
+def test_wait_for_create_job_to_complete(responses, final_status):
+    """
+    Test the waiter for calling CreateJob.
+    """
+
+    def mock_continue_callback() -> bool:
+        return True
+
+    deadline_client = Mock()
+
+    deadline_client.get_job.side_effect = [
+        {
+            "lifecycleStatus": response,
+            "lifecycleStatusMessage": MOCK_STATUS_MESSAGE,
+        }
+        for response in responses
+    ]
+
+    with patch.object(time, "sleep"):
+        success, status_message = api.wait_for_create_job_to_complete(
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            deadline_client=deadline_client,
+            continue_callback=mock_continue_callback,
+        )
+    assert success == final_status
+    assert status_message == MOCK_STATUS_MESSAGE
+
+
+def test_wait_for_create_job_to_complete_timeout():
+    """
+    Test the waiter for calling CreateJob when it times out.
+    """
+
+    def mock_continue_callback() -> bool:
+        return True
+
+    deadline_client = Mock()
+    deadline_client.get_job.return_value = {
+        "state": "CREATE_IN_PROGRESS",
+        "lifecycleStatusMessage": MOCK_STATUS_MESSAGE,
+    }
+
+    with pytest.raises(TimeoutError), patch.object(time, "sleep"):
+        api.wait_for_create_job_to_complete(
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            deadline_client=deadline_client,
+            continue_callback=mock_continue_callback,
+        )

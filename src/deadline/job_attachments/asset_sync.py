@@ -1,0 +1,442 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+""" Module for File Attachment synching """
+from __future__ import annotations
+import sys
+import time
+from io import BytesIO
+from logging import Logger, LoggerAdapter, getLogger
+from math import trunc
+from pathlib import Path
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple, Type, Union
+
+import boto3
+
+from .progress_tracker import (
+    ProgressReportMetadata,
+    ProgressStatus,
+    ProgressTracker,
+    SummaryStatistics,
+)
+
+from .asset_manifests.decode import decode_manifest
+from .asset_manifests import AssetManifest, ManifestModel, ManifestModelRegistry, ManifestVersion
+from .asset_manifests import Path as RelativeFilePath
+from .aws.aws_clients import get_boto3_session
+from .aws.deadline import get_job, get_queue
+from .download import (
+    _progress_logger,
+    merge_asset_manifests,
+    download_files_from_manifests,
+    get_manifest_from_s3,
+    get_output_manifests_by_asset_root,
+    mount_vfs_from_manifests,
+)
+from .fus3 import Fus3ProcessManager
+from .models import (
+    ManifestProperties,
+    Attachments,
+    JobAttachmentS3Settings,
+    OutputFile,
+)
+from .upload import S3AssetUploader
+from .utils import (
+    AssetLoadingMethod,
+    float_to_iso_string,
+    get_deadline_formatted_os,
+    get_unique_dest_dir_name,
+    hash_data,
+    hash_file,
+    join_s3_paths,
+    log_and_reraise_exception,
+    map_source_path_to_dest_path,
+)
+
+logger = getLogger(__name__)
+
+
+class AssetSync:
+    """Class for managing Amazon Deadline Cloud job-level attachments."""
+
+    _HASH_ALG: str = "xxh128"
+    _ENDING_PROGRESS = 100.0
+
+    def __init__(
+        self,
+        farm_id: str,
+        boto3_session: Optional[boto3.Session] = None,
+        manifest_version: ManifestVersion = ManifestVersion.v2023_03_03,
+        deadline_endpoint_url: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> None:
+        self.farm_id = farm_id
+
+        self.logger: Union[Logger, LoggerAdapter] = logger
+        if session_id:
+            self.logger = LoggerAdapter(logger, {"session_id": session_id})
+
+        self.session: boto3.Session
+        if boto3_session is None:
+            self.session = get_boto3_session()
+        else:
+            self.session = boto3_session
+
+        self.deadline_endpoint_url = deadline_endpoint_url
+        self.s3_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
+        self.manifest_model: Type[ManifestModel] = ManifestModelRegistry.get_manifest_model(
+            version=manifest_version
+        )
+
+        # TODO: Once Windows pathmapping is implemented we can remove this
+        if sys.platform == "win32":
+            raise NotImplementedError("Windows is not currently supported for Job Attachments")
+
+    def _upload_output_files_to_s3(
+        self,
+        s3_settings: JobAttachmentS3Settings,
+        output_files: List[OutputFile],
+        on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]],
+    ) -> SummaryStatistics:
+        """
+        Uploads the given output files to the given S3 bucket.
+        Sets up `progress_tracker` to report upload progress back to the caller (i.e. worker.)
+        """
+        progress_tracker = ProgressTracker(ProgressStatus.UPLOAD_IN_PROGRESS, on_uploading_files)
+
+        total_file_size = sum([file.file_size for file in output_files])
+        progress_tracker.set_total_files(len(output_files), total_file_size)
+
+        start_time = time.perf_counter()
+
+        for file in output_files:
+            if file.in_s3:
+                progress_tracker.increase_skipped(1, file.file_size)
+                continue
+
+            self.logger.info(f"Uploading output file to {file.s3_key}")
+
+            self.s3_uploader.upload_file_to_s3(
+                file.full_path,
+                s3_settings.s3BucketName,
+                file.s3_key,
+                progress_handler=_progress_logger(
+                    file.file_size, progress_tracker.track_progress_callback
+                ),
+            )
+
+        progress_tracker.total_time = time.perf_counter() - start_time
+        return progress_tracker.get_summary_statistics()
+
+    def _upload_output_manifest_to_s3(
+        self,
+        s3_settings: JobAttachmentS3Settings,
+        output_manifest: AssetManifest,
+        root_path: str,
+        full_output_prefix: str,
+    ) -> None:
+        """Uploads the given output manifest to the given S3 bucket."""
+        manifest_bytes = output_manifest.encode().encode("utf-8")
+        manifest_path = join_s3_paths(
+            full_output_prefix,
+            f"{hash_data(str(root_path).encode())}_output.{output_manifest.hashAlg}",
+        )
+        metadata = {"Metadata": {"asset-root": root_path}}
+
+        self.logger.info(f"Uploading output manifest to {manifest_path}")
+
+        self.s3_uploader.upload_bytes_to_s3(
+            BytesIO(manifest_bytes),
+            s3_settings.s3BucketName,
+            manifest_path,
+            extra_args=metadata,
+        )
+
+    def _generate_output_manifest(self, outputs: List[OutputFile]) -> AssetManifest:
+        paths: list[RelativeFilePath] = []
+        for output in outputs:
+            path_args: dict[str, Any] = {
+                "hash": output.file_hash,
+                "path": output.rel_path,
+            }
+            if self.manifest_model.manifest_version == ManifestVersion.v2023_03_03:
+                path_args["size"] = output.file_size
+                # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
+                # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
+                path_args["mtime"] = trunc(Path(output.full_path).stat().st_mtime_ns // 1000)
+            paths.append(self.manifest_model.Path(**path_args))
+
+        asset_manifest_args: dict[str, Any] = {
+            "paths": paths,
+            "hash_alg": self._HASH_ALG,
+        }
+        if self.manifest_model.manifest_version == ManifestVersion.v2023_03_03:
+            asset_manifest_args["total_size"] = sum([output.file_size for output in outputs])
+
+        return self.manifest_model.AssetManifest(**asset_manifest_args)  # type: ignore[call-arg]
+
+    def _get_output_files(
+        self,
+        source_profile: str,
+        manifest_properties: ManifestProperties,
+        s3_settings: JobAttachmentS3Settings,
+        local_root: Path,
+        start_time: float,
+    ) -> List[OutputFile]:
+        """
+        Walks the output directories for this asset root for any output files that have been created or modified
+        since the start time provided. Hashes and checks if the output files already exist in the CAS.
+        """
+        output_files: List[OutputFile] = []
+
+        for output_dir in manifest_properties.outputRelativeDirectories or []:
+            # Don't fail if output dir hasn't been created yet; another task might be working on it
+            output_pure_path = map_source_path_to_dest_path(
+                source_profile, get_deadline_formatted_os(), output_dir
+            )
+            output_root: Path = local_root.joinpath(output_pure_path)
+            if not output_root.is_dir():
+                continue
+
+            # Get all files in this directory (includes sub-directories)
+            for file_path in output_root.glob("**/*"):
+                if (
+                    not file_path.is_dir()
+                    and file_path.exists()
+                    and file_path.lstat().st_mtime >= start_time
+                ):
+                    file_size = file_path.lstat().st_size
+                    file_hash = hash_file(str(file_path))
+
+                    if s3_settings.full_cas_prefix():
+                        s3_key = join_s3_paths(s3_settings.full_cas_prefix(), file_hash)
+                    else:
+                        s3_key = file_hash
+                    in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
+
+                    output_files.append(
+                        OutputFile(
+                            file_size=file_size,
+                            file_hash=file_hash,
+                            rel_path=str(file_path.relative_to(local_root)),
+                            full_path=str(file_path.resolve()),
+                            s3_key=s3_key,
+                            in_s3=in_s3,
+                        )
+                    )
+
+        return output_files
+
+    def get_s3_settings(self, farm_id: str, queue_id: str) -> Optional[JobAttachmentS3Settings]:
+        """
+        Gets Job Attachment S3 settings by calling the Deadline GetQueue API.
+        """
+        queue = get_queue(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            session=self.session,
+            deadline_endpoint_url=self.deadline_endpoint_url,
+        )
+        return queue.jobAttachmentSettings if queue and queue.jobAttachmentSettings else None
+
+    def get_attachments(self, farm_id: str, queue_id: str, job_id: str) -> Optional[Attachments]:
+        """
+        Gets Job Attachment settings by calling the Deadline GetJob API.
+        """
+        job = get_job(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_id=job_id,
+            session=self.session,
+            deadline_endpoint_url=self.deadline_endpoint_url,
+        )
+        return job.attachments if job and job.attachments else None
+
+    @log_and_reraise_exception(prefix_mssage="Error syncing inputs for Job.")
+    def sync_inputs(
+        self,
+        s3_settings: Optional[JobAttachmentS3Settings],
+        attachments: Optional[Attachments],
+        queue_id: str,
+        job_id: str,
+        session_dir: Path,
+        step_dependencies: Optional[list[str]] = None,
+        on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
+        """
+        Depending on the assetLoadingMethod in the Attachments this will perform two
+        different behaviors:
+            PRELOAD / None : downloads a manifest file and corresponding input files, if found.
+            ON_DEMAND: downloads a manifest file and mounts a Virtual File System at the
+                       specified asset root corresponding to the manifest contents
+
+
+        Args:
+            s3_settings: S3-specific Job Attachment settings.
+            attachments: an object that holds all input assets for the job.
+            queue_id: the ID of the queue.
+            job_id: the ID of the job.
+            session_dir: the directory that the session is going to use.
+            step_dependencies: the list of Step IDs whose output should be downloaded over the input
+                job attachments.
+            on_downloading_files: a function that will be called with a ProgressReportMetadata object
+                for each file being downloaded. If the function returns False, the download will be
+                cancelled. If it returns True, the download will continue.
+
+        Returns:
+            PRELOAD / None : a tuple of (1) final summary statistics for file downloads,
+                             and (2) a list of local roots for each asset root, used for
+                             path mapping.
+            ON_DEMAND: same as PRELOAD, but the summary statistics will be empty since the
+                       download hasn't started yet.
+        """
+        if not s3_settings:
+            self.logger.info(
+                f"No Job Attachment settings configured for Queue {queue_id}, no inputs to sync."
+            )
+            return (SummaryStatistics(), [])
+        if not attachments:
+            self.logger.info(f"No attachments configured for Job {job_id}, no inputs to sync.")
+            return (SummaryStatistics(), [])
+
+        grouped_manifests_by_root: DefaultDict[str, list[tuple[AssetManifest, str]]] = DefaultDict(
+            list
+        )
+        pathmapping_rules: Dict[str, Dict[str, str]] = {}
+
+        for manifest_properties in attachments.manifests:
+            dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+            local_root: str = str(session_dir.joinpath(dir_name))
+            pathmapping_rules[dir_name] = {
+                "source_os": manifest_properties.osType.to_path_mapping_os(),
+                "source_path": manifest_properties.rootPath,
+                "destination_path": local_root,
+            }
+            if manifest_properties.inputManifestPath:
+                key = s3_settings.add_root_and_manifest_folder_prefix(
+                    manifest_properties.inputManifestPath
+                )
+                manifest_path = get_manifest_from_s3(
+                    manifest_key=key,
+                    s3_bucket=s3_settings.s3BucketName,
+                    session=self.session,
+                )
+                with open(manifest_path) as manifest_file:
+                    manifest = decode_manifest(manifest_file.read())
+                grouped_manifests_by_root[local_root].append((manifest, manifest_path))
+
+        # Handle step-step dependencies.
+        if step_dependencies:
+            for step_id in step_dependencies:
+                manifests_by_root = get_output_manifests_by_asset_root(
+                    s3_settings,
+                    self.farm_id,
+                    queue_id,
+                    job_id,
+                    step_id=step_id,
+                    session=self.session,
+                )
+                for root, manifests in manifests_by_root.items():
+                    dir_name = get_unique_dest_dir_name(root)
+                    local_root = str(session_dir.joinpath(dir_name))
+                    grouped_manifests_by_root[local_root].extend(manifests)
+
+        # Merge the manifests in each root into a single manifest
+        merged_manifests_by_root: dict[str, AssetManifest] = dict()
+        for root, manifests in grouped_manifests_by_root.items():
+            merged_manifest = merge_asset_manifests([manifest[0] for manifest in manifests])
+
+            if merged_manifest:
+                merged_manifests_by_root[root] = merged_manifest
+
+        # Download
+        if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND:
+            mount_vfs_from_manifests(
+                s3_bucket=s3_settings.s3BucketName,
+                manifests_by_root=merged_manifests_by_root,
+                boto3_session=self.session,
+                session_dir=session_dir,
+                cas_prefix=s3_settings.full_cas_prefix(),
+            )
+            summary_statistics = SummaryStatistics()
+        else:
+            download_summary_statistics = download_files_from_manifests(
+                s3_bucket=s3_settings.s3BucketName,
+                manifests_by_root=merged_manifests_by_root,
+                cas_prefix=s3_settings.full_cas_prefix(),
+                session=self.session,
+                on_downloading_files=on_downloading_files,
+            )
+
+            summary_statistics = download_summary_statistics.convert_to_summary_statistics()
+        return (summary_statistics, list(pathmapping_rules.values()))
+
+    @log_and_reraise_exception(prefix_mssage="Error syncing outputs for Job.")
+    def sync_outputs(
+        self,
+        s3_settings: Optional[JobAttachmentS3Settings],
+        attachments: Optional[Attachments],
+        queue_id: str,
+        job_id: str,
+        step_id: str,
+        task_id: str,
+        session_action_id: str,
+        start_time: float,
+        session_dir: Path,
+        on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    ) -> SummaryStatistics:
+        """Uploads any output files specified in the manifest, if found."""
+        if not s3_settings:
+            self.logger.info(
+                f"No Job Attachment settings configured for Queue {queue_id}, no outputs to sync."
+            )
+            return SummaryStatistics()
+        if not attachments:
+            self.logger.info(f"No attachments configured for Job {job_id}, no outputs to sync.")
+            return SummaryStatistics()
+
+        all_output_files: List[OutputFile] = []
+
+        try:
+            for manifest_properties in attachments.manifests:
+                dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+                local_root: Path = session_dir.joinpath(dir_name)
+                output_files: List[OutputFile] = self._get_output_files(
+                    manifest_properties.osType.value,
+                    manifest_properties,
+                    s3_settings,
+                    local_root,
+                    start_time,
+                )
+                if output_files:
+                    output_manifest = self._generate_output_manifest(output_files)
+                    session_action_id_with_time_stamp = (
+                        f"{float_to_iso_string(start_time)}_{session_action_id}"
+                    )
+                    full_output_prefix = s3_settings.full_output_prefix(
+                        farm_id=self.farm_id,
+                        queue_id=queue_id,
+                        job_id=job_id,
+                        step_id=step_id,
+                        task_id=task_id,
+                        session_action_id=session_action_id_with_time_stamp,
+                    )
+                    self._upload_output_manifest_to_s3(
+                        s3_settings,
+                        output_manifest,
+                        manifest_properties.rootPath,
+                        full_output_prefix,
+                    )
+                    all_output_files.extend(output_files)
+
+            if all_output_files:
+                summary_stats: SummaryStatistics = self._upload_output_files_to_s3(
+                    s3_settings, all_output_files, on_uploading_files
+                )
+            else:
+                summary_stats = SummaryStatistics()
+        finally:
+            if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND:
+                # Shutdown all running Fus3 processes since task is completed
+                Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
+
+        return summary_stats

@@ -1,0 +1,45 @@
+specificationVersion: '2022-09-01'
+name: Job Bundle - CLI Job Example
+parameters:
+  - name: BashScript
+    type: STRING
+    userInterface:
+      control: MULTILINE_EDIT
+      label: Bash Script
+    description: "Write your bash script code here."
+    default: |
+      echo "The file contents attached to this job:"
+      ls
+
+      # Example workload to compute hashes of all the input
+      find . -type f -exec md5sum {} \; > computed_hashes.txt
+  - name: DataDir
+    type: PATH
+    objectType: DIRECTORY
+    dataFlow: INOUT
+    userInterface:
+      control: CHOOSE_DIRECTORY
+      label: Input/Output Data Directory
+    description: |
+      This is a directory for your input files. Any output files
+      that the script writes will download back to the same
+      directory.
+steps:
+- name: CliScript
+  script:
+    embeddedFiles:
+      - name: runScript
+        type: TEXT
+        runnable: true
+        data: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          cd "{{Param.DataDir}}"
+
+          set -x
+
+          {{Param.BashScript}}
+    actions:
+      onRun:
+        command: '{{Task.File.runScript}}'

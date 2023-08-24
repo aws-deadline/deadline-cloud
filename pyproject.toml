@@ -1,0 +1,149 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deadline"
+dynamic = ["version"]
+readme = "README.md"
+license = ""
+requires-python = ">=3.7"
+
+dependencies = [
+    "boto3 ~= 1.26",
+    # 8.1.4 failing with mypy
+    "click == 8.1.3",
+    "pyyaml ~= 6.0",
+    # Job Attachments
+    "typing_extensions ~= 4.5",
+    "xxhash ~= 3.2",
+    "dataclasses-json ~= 0.5",
+    # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
+    "jsonschema == 4.17.*",
+]
+
+[project.scripts]
+deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
+deadline = "deadline.client.cli.deadline_cli_main:main"
+
+[tool.hatch.build]
+artifacts = [
+  "*_version.py",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "post-release"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "_version.py"
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_version_hook.py"
+
+[[tool.hatch.build.hooks.custom.copy_map]]
+sources = [
+  "_version.py",
+]
+destinations = [
+  "src/deadline/client",
+  "src/deadline/job_attachments",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/*",
+  "hatch_version_hook.py",
+  "THIRD_PARTY_LICENSES",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/deadline",
+  # TODO: Remove this once consumers update to deadline.job_attachments
+  "src/deadline_job_attachments",
+]
+
+[tool.mypy]
+# Enables the type-checker on the interior of functions without type annotations.
+check_untyped_defs = true
+# Displaying specific error codes makes it easier to silence specific errors
+show_error_codes = true
+# Show source code snippets and location markers in error messages
+pretty = true
+# Prohibit equality checks, identity checks, and container checks between non-overlapping types.
+strict_equality = true
+ignore_missing_imports = true
+# Tell mypy that there's a namespace package at src/deadline
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+  "PySide2.*",
+  "boto3.*",
+  "botocore.*",
+  "moto.*",
+  "xxhash",
+  "jsonschema",
+]
+
+[tool.ruff]
+ignore = [
+  "E501",
+]
+line-length = 100
+
+[tool.ruff.isort]
+known-first-party = [
+  "deadline"
+]
+
+[tool.black]
+line-length = 100
+
+# Configuration for pytest; enable coverage for deadline_worker_agent, emit
+# XML, HTML, and terminal reports.
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = [
+    "--durations=5",
+    "--color=yes",
+    "--cov=src/deadline",
+    "--cov-report=html:build/coverage",
+    "--cov-report=xml:build/coverage/coverage.xml",
+    "--cov-report=term-missing",
+    "--numprocesses=auto"
+]
+testpaths = [ "test" ]
+looponfailroots = [
+    "src",
+    "test",
+]
+markers = [
+    "no_setup: mark that test shouldn't use default setups",
+]
+# looponfailroots is deprecated, this removes the deprecation from the test output
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]
+
+
+[tool.coverage.run]
+disable_warnings = ["module-not-measured"]
+branch = true
+parallel = false
+source_pkgs = [ "deadline" ]
+omit = [
+    "*/deadline/client/ui/*",
+]
+
+[tool.coverage.paths]
+source = [ "src/" ]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

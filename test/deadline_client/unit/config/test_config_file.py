@@ -1,0 +1,211 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+"""
+tests the deadline.client.config settings
+"""
+
+import os
+from unittest.mock import patch
+
+import boto3  # type: ignore[import]
+import pytest
+
+from deadline.client import config
+from deadline.client.config import (
+    DEFAULT_DEADLINE_AWS_PROFILE_NAME,
+    DEFAULT_DEADLINE_ENDPOINT_URL,
+    config_file,
+)
+from deadline.client.exceptions import DeadlineOperationError
+
+# This is imported by `test_cli_config.py` for a matching CLI test
+CONFIG_SETTING_ROUND_TRIP = [
+    ("defaults.aws_profile_name", DEFAULT_DEADLINE_AWS_PROFILE_NAME, "AnotherProfileName"),
+    (
+        "settings.deadline_endpoint_url",
+        DEFAULT_DEADLINE_ENDPOINT_URL,
+        "https://some-other-url",
+    ),
+    ("defaults.farm_id", "", "farm-82934h23k4j23kjh"),
+]
+
+
+@pytest.mark.parametrize("setting_name,default_value,alternate_value", CONFIG_SETTING_ROUND_TRIP)
+def test_config_settings_roundtrip(
+    fresh_deadline_config, setting_name, default_value, alternate_value
+):
+    """Test that each setting we support has the right default and roundtrips changes"""
+    assert config.get_setting(setting_name) == default_value
+    config.set_setting(setting_name, alternate_value)
+    assert config.get_setting(setting_name) == alternate_value
+
+
+def test_config_settings_hierarchy(fresh_deadline_config):
+    """
+    Test that settings are stored hierarchically,
+    aws profile -> farm id -> queue id
+    """
+    # First set some settings that apply to the defaults, changing the
+    # hierarchy from queue inwards.
+    config.set_setting("settings.deadline_endpoint_url", "nondefault-endpoint-url")
+    config.set_setting("defaults.queue_id", "queue-for-farm-default")
+    config.set_setting("defaults.farm_id", "farm-for-profile-default")
+    config.set_setting("defaults.aws_profile_name", "NonDefaultProfile")
+
+    # Confirm that all child settings we changed are default, because they were
+    # for a different profile.
+    assert config.get_setting("settings.deadline_endpoint_url") == DEFAULT_DEADLINE_ENDPOINT_URL
+    assert config.get_setting("defaults.farm_id") == ""
+    assert config.get_setting("defaults.queue_id") == ""
+
+    # Switch back to the default profile, and check the next layer of the onion
+    config.set_setting("defaults.aws_profile_name", DEFAULT_DEADLINE_AWS_PROFILE_NAME)
+    assert config.get_setting("settings.deadline_endpoint_url") == "nondefault-endpoint-url"
+    assert config.get_setting("defaults.farm_id") == "farm-for-profile-default"
+    # The queue id is still default
+    assert config.get_setting("defaults.queue_id") == ""
+
+    # Switch back to the default farm
+    config.set_setting("defaults.farm_id", "")
+    assert config.get_setting("defaults.queue_id") == "queue-for-farm-default"
+
+
+def test_config_get_setting_nonexistant(fresh_deadline_config):
+    """Test the error from get_setting when a setting doesn't exist."""
+    # Setting name without the '.'
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.get_setting("setting_name_bad_format")
+    assert "is not valid" in str(excinfo.value)
+    assert "setting_name_bad_format" in str(excinfo.value)
+
+    # Section name is wrong
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.get_setting("setitngs.aws_profile_name")
+    assert "has no setting" in str(excinfo.value)
+    assert "setitngs" in str(excinfo.value)
+
+    # Section is good, but no setting
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.get_setting("settings.aws_porfile_name")
+    assert "has no setting" in str(excinfo.value)
+    assert "aws_porfile_name" in str(excinfo.value)
+
+
+def test_config_set_setting_nonexistant(fresh_deadline_config):
+    """Test the error from set_setting when a setting doesn't exist."""
+    # Setting name without the '.'
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.set_setting("setting_name_bad_format", "value")
+    assert "is not valid" in str(excinfo.value)
+    assert "setting_name_bad_format" in str(excinfo.value)
+
+    # Section name is wrong
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.set_setting("setitngs.aws_profile_name", "value")
+    assert "has no setting" in str(excinfo.value)
+    assert "setitngs" in str(excinfo.value)
+
+    # Section is good, but no setting
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.set_setting("settings.aws_porfile_name", "value")
+    assert "has no setting" in str(excinfo.value)
+    assert "aws_porfile_name" in str(excinfo.value)
+
+
+def test_config_file_env_var(fresh_deadline_config):
+    """Test that setting the env var DEADLINE_CONFIG_FILE_PATH overrides the config path"""
+
+    alternate_deadline_config_file = fresh_deadline_config + "_alternative_file"
+
+    # Set our config file to a known starting point
+    config.set_setting("defaults.aws_profile_name", "EnvVarOverrideProfile")
+    assert config.get_setting("defaults.aws_profile_name") == "EnvVarOverrideProfile"
+
+    try:
+        # Set the override environment variable
+        os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
+
+        # Confirm that we see the default settings again
+        assert config.get_setting("defaults.aws_profile_name") == DEFAULT_DEADLINE_AWS_PROFILE_NAME
+
+        # Change the settings in this new file
+        config.set_setting("defaults.aws_profile_name", "AlternateProfileName")
+        assert config.get_setting("defaults.aws_profile_name") == "AlternateProfileName"
+
+        # Remove the override
+        del os.environ["DEADLINE_CONFIG_FILE_PATH"]
+
+        # We should see the known starting point again
+        assert config.get_setting("defaults.aws_profile_name") == "EnvVarOverrideProfile"
+
+        # Set the override environment variable again
+        os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
+
+        assert config.get_setting("defaults.aws_profile_name") == "AlternateProfileName"
+    finally:
+        os.unlink(alternate_deadline_config_file)
+        del os.environ["DEADLINE_CONFIG_FILE_PATH"]
+
+
+def test_get_best_profile_for_farm(fresh_deadline_config):
+    """
+    Test that it returns the exact farm + queue id match
+    """
+    PROFILE_SETTINGS = [
+        ("Profile1", "farm-1", "queue-1"),
+        ("Profile2", "farm-2", "queue-2"),
+        ("Profile3", "farm-1", "queue-3"),
+        ("Profile4", "farm-3", "queue-4"),
+        ("Profile5", "farm-3", "queue-5"),
+    ]
+    for profile_name, farm_id, queue_id in PROFILE_SETTINGS:
+        config.set_setting("defaults.aws_profile_name", profile_name)
+        config.set_setting("defaults.farm_id", farm_id)
+        config.set_setting("defaults.queue_id", queue_id)
+
+    with patch.object(boto3, "Session") as boto3_session:
+        MOCK_PROFILE_VALUE = {
+            "sso_start_url": "https://d-012345abcd.awsapps.com/start",
+            "sso_region": "us-west-2",
+            "sso_account_id": "123456789012",
+            "sso_role_name": "AwsProfileForDeadline",
+            "region": "us-west-2",
+        }
+        boto3_session()._session.full_config = {
+            "profiles": {
+                profile_settings[0]: MOCK_PROFILE_VALUE for profile_settings in PROFILE_SETTINGS
+            },
+        }
+
+        # In each case, an exact match of farm/queue id should return the corresponding profile
+        for profile_name, farm_id, queue_id in PROFILE_SETTINGS:
+            assert config.get_best_profile_for_farm(farm_id, queue_id) == profile_name
+
+        # Matching just the farm id should return the first matching profile
+        assert config.get_best_profile_for_farm("farm-1") == "Profile1"
+        assert config.get_best_profile_for_farm("farm-2") == "Profile2"
+        assert config.get_best_profile_for_farm("farm-3") == "Profile4"
+
+        # Matching the farm id with a missing queue id should return the first matching profile
+        assert config.get_best_profile_for_farm("farm-1", "queue-missing") == "Profile1"
+        assert config.get_best_profile_for_farm("farm-2", "queue-missing") == "Profile2"
+        assert config.get_best_profile_for_farm("farm-3", "queue-missing") == "Profile4"
+
+        # If the farm id doesn't match, should return the default (which is Profile5)
+        assert config.get_best_profile_for_farm("farm-missing") == "Profile5"
+        assert config.get_best_profile_for_farm("farm-missing", "queue-missing") == "Profile5"
+
+
+def test_str2bool():
+    assert config_file.str2bool("on") is True
+    assert config_file.str2bool("true") is True
+    assert config_file.str2bool("tRuE") is True
+    assert config_file.str2bool("1") is True
+    assert config_file.str2bool("off") is False
+    assert config_file.str2bool("false") is False
+    assert config_file.str2bool("FaLsE") is False
+    assert config_file.str2bool("0") is False
+    with pytest.raises(ValueError):
+        config_file.str2bool("not_boolean")
+    with pytest.raises(ValueError):
+        config_file.str2bool("")
