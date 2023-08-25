@@ -40,7 +40,7 @@ from .errors import (
 )
 from .fus3 import Fus3ProcessManager
 from .models import JobAttachmentS3Settings, Attachments
-from .utils import FileConflictResolution, join_s3_paths
+from .utils import FileConflictResolution, is_relative_to, join_s3_paths
 
 logger = getLogger("deadline.job_attachments.download")
 
@@ -581,7 +581,7 @@ def get_output_manifests_by_asset_root(
     session: Optional[boto3.Session] = None,
 ) -> dict[str, list[tuple[AssetManifest, str]]]:
     """
-    For a given job/step/task, Gets a map from each root path to a corresponding list of
+    For a given job/step/task, gets a map from each root path to a corresponding list of
     output manifests.
     """
     outputs: DefaultDict[str, list[tuple[AssetManifest, str]]] = DefaultDict(list)
@@ -772,9 +772,7 @@ def _ensure_paths_within_directory(root_path: str, paths_relative_to_root: list[
 
     for path in paths_relative_to_root:
         resolved_path = Path(root_path, path).resolve()
-        try:
-            resolved_path.relative_to(Path(root_path).resolve())
-        except ValueError:
+        if not is_relative_to(resolved_path, Path(root_path).resolve()):
             raise PathOutsideDirectoryError(
                 f"The provided path is not under the root directory: {path}"
             )

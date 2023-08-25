@@ -264,6 +264,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         mock_hash_assets.assert_called_once_with(
             input_paths=input_paths,
             output_paths=output_paths,
+            storage_profile_id="",
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=ANY,
         )

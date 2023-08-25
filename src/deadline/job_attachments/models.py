@@ -13,7 +13,13 @@ from deadline.job_attachments.asset_manifests.base_manifest import AssetManifest
 
 from deadline.job_attachments.errors import MissingS3RootPrefixError
 
-from .utils import AssetLoadingMethod, OperatingSystemFamily, generate_random_guid, join_s3_paths
+from .utils import (
+    AssetLoadingMethod,
+    FileSystemLocationType,
+    OperatingSystemFamily,
+    generate_random_guid,
+    join_s3_paths,
+)
 
 S3_DATA_FOLDER_NAME = "Data"
 S3_MANIFEST_FOLDER_NAME = "Manifests"
@@ -34,6 +40,7 @@ class AssetRootManifest:
 class AssetRootGroup:
     """Represents lists of input and output files grouped under the same root"""
 
+    file_system_location_name: Optional[str] = None
     root_path: str = ""
     inputs: Set[Path] = field(default_factory=set)
     outputs: Set[Path] = field(default_factory=set)
@@ -187,3 +194,22 @@ class Job:
 
     jobId: str
     attachments: Optional[Attachments] = None  # pylint: disable=invalid-name
+
+
+@dataclass
+class FileSystemLocation:
+    """DataClass to store File System Location objects"""
+
+    name: str
+    path: str
+    type: FileSystemLocationType
+
+
+@dataclass
+class StorageProfileForQueue:
+    """DataClass to store Storage Profile For Queue objects"""
+
+    storageProfileId: str
+    displayName: str
+    osFamily: OperatingSystemFamily = OperatingSystemFamily.WINDOWS
+    fileSystemLocations: List[FileSystemLocation] = field(default_factory=list)  # type: ignore

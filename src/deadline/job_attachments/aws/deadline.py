@@ -7,8 +7,16 @@ import boto3
 from botocore.exceptions import ClientError
 
 from ..errors import JobAttachmentsError
-from ..models import ManifestProperties, Attachments, Job, JobAttachmentS3Settings, Queue
-from ..utils import AssetLoadingMethod, OperatingSystemFamily
+from ..models import (
+    Attachments,
+    FileSystemLocation,
+    Job,
+    JobAttachmentS3Settings,
+    ManifestProperties,
+    Queue,
+    StorageProfileForQueue,
+)
+from ..utils import AssetLoadingMethod, FileSystemLocationType, OperatingSystemFamily
 from .aws_clients import get_deadline_client
 
 
@@ -62,7 +70,7 @@ def get_job(
     deadline_endpoint_url: Optional[str] = None,
 ) -> Job:
     """
-    Retrieves a specific job from Deadline.
+    Retrieves a specific job from Amazon Deadline Cloud.
     """
     try:
         response = get_deadline_client(session=session, endpoint_url=deadline_endpoint_url).get_job(
@@ -89,4 +97,39 @@ def get_job(
         )
         if "attachments" in response and response["attachments"]
         else None,
+    )
+
+
+def get_storage_profile_for_queue(
+    farm_id: str,
+    queue_id: str,
+    storage_profile_id: str,
+    session: Optional[boto3.Session] = None,
+    deadline_endpoint_url: Optional[str] = None,
+) -> StorageProfileForQueue:
+    """
+    Retrieves a specific storage profile for queue from Amazon Deadline Cloud.
+    """
+    try:
+        response = get_deadline_client(
+            session=session, endpoint_url=deadline_endpoint_url
+        ).get_storage_profile_for_queue(
+            farmId=farm_id, queueId=queue_id, storageProfileId=storage_profile_id
+        )
+    except ClientError as exc:
+        raise JobAttachmentsError(
+            f'Failed to get Storage profile "{storage_profile_id}" from Deadline'
+        ) from exc
+    return StorageProfileForQueue(
+        storageProfileId=response["storageProfileId"],
+        displayName=response["displayName"],
+        osFamily=OperatingSystemFamily.get_os_family(response["osFamily"]),
+        fileSystemLocations=[
+            FileSystemLocation(
+                name=file_system_location["name"],
+                path=file_system_location["path"],
+                type=FileSystemLocationType.get_type(file_system_location["type"]),
+            )
+            for file_system_location in response.get("fileSystemLocations", [])
+        ],
     )

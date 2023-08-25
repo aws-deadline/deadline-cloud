@@ -492,6 +492,7 @@ def test_create_job_from_job_bundle_job_attachments(
                 ]
             ),
             set([os.path.join(temp_assets_dir, "somedir")]),
+            MOCK_STORAGE_PROFILE_ID,
             fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(
@@ -631,7 +632,11 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         )
 
         mock_hash_attachments.assert_called_once_with(
-            ANY, set([os.path.join(temp_assets_dir, "asset-1.txt")]), set(), fake_hashing_callback
+            ANY,
+            set([os.path.join(temp_assets_dir, "asset-1.txt")]),
+            set(),
+            MOCK_STORAGE_PROFILE_ID,
+            fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
