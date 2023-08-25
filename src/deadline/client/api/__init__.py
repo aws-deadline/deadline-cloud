@@ -12,12 +12,10 @@ __all__ = [
     "check_credentials_status",
     "check_deadline_api_available",
     "get_credentials_type",
-    "get_farm",
     "list_farms",
     "list_queues",
     "list_jobs",
     "list_fleets",
-    "list_storage_profiles",
     "list_storage_profiles_for_queue",
     "get_queue_boto3_session",
 ]
