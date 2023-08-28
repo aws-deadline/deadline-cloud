@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import threading
-from configparser import ConfigParser
 from typing import Any, Dict, List, Optional, Set
 
 from botocore.client import BaseClient  # type: ignore[import]
@@ -30,6 +29,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 
 from deadline.client import api
 from deadline.client.exceptions import CreateJobWaiterCanceled
+from deadline.client.config import set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
@@ -77,7 +77,6 @@ class SubmitJobProgressDialog(QDialog):
         deadline_client: BaseClient,
         parent: QWidget = None,
         auto_accept: bool = False,
-        config: Optional[ConfigParser] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Static method that runs the SubmitJobProgressDialog. Returns the response
@@ -109,7 +108,6 @@ class SubmitJobProgressDialog(QDialog):
             deadline_client,
             parent=parent,
             auto_accept=auto_accept,
-            config=config,
         )
         return job_progress_dialog.exec()
 
@@ -123,7 +121,6 @@ class SubmitJobProgressDialog(QDialog):
         deadline_client: BaseClient,
         parent: QWidget = None,
         auto_accept: bool = False,
-        config: Optional[ConfigParser] = None,
     ) -> None:
         super().__init__(parent=parent)
 
@@ -134,7 +131,6 @@ class SubmitJobProgressDialog(QDialog):
         self._asset_manager = asset_manager
         self._deadline_client = deadline_client
         self._auto_accept = auto_accept
-        self._config = config
 
         self._continue_submission = True
         self._submission_complete = False
@@ -337,6 +333,10 @@ class SubmitJobProgressDialog(QDialog):
 
             if self._create_job_response and "jobId" in self._create_job_response:
                 job_id = self._create_job_response["jobId"]
+
+                # Set the default job id so it holds the most-recently submitted job.
+                set_setting("defaults.job_id", job_id)
+
                 success, message = api.wait_for_create_job_to_complete(
                     self._farm_id,
                     self._queue_id,

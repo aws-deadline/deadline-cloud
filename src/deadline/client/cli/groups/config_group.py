@@ -27,8 +27,10 @@ def cli_config():
     defaults.queue_id:
         The default queue ID to use for job submissions or CLI operations.
 
-    defaults.storage_profile_id:
-        The default storage profile ID to use for job submission or CLI operations.
+    settings.storage_profile_id:
+        The storage profile that this workstation conforms to. It specifies
+        where shared file systems are mounted, and where named job attachments
+        should go.
 
     settings.job_history_dir:
         The directory in which to create new job bundles for
@@ -86,7 +88,7 @@ def config_gui():
 @handle_error
 def config_set(setting_name, value):
     """
-    Sets a Amazon Deadline Cloud workstation configuration setting.
+    Sets an Amazon Deadline Cloud workstation configuration setting.
 
     For example `deadline config set defaults.farm_id <farm-id>`.
     Run `deadline config --help` to show available settings.
@@ -99,7 +101,7 @@ def config_set(setting_name, value):
 @handle_error
 def config_get(setting_name):
     """
-    Gets a Amazon Deadline Cloud workstation configuration setting.
+    Gets an Amazon Deadline Cloud workstation configuration setting.
 
     For example `deadline config get defaults.farm_id`.
     Run `deadline config --help` to show available settings.

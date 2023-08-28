@@ -39,14 +39,9 @@ class JobTemplateParametersWidget(QWidget):
     a UI form to edit them with.
 
     OpenJobIO has optional UI metadata for each parameter specified under "userInterface".
-    Before this was added,this widget used an extension to the OJIO syntax, consisting of a
-    "uiHint" property, that is now deprecated. The code prefers to use the "userInterface"
-    properties, then the "uiHint" properties, then the defaults defined by the OpenJobIO
-    specification of "userInterface".
 
     Args:
-        initial_job_parameters (Dict[str, Any]): OpenJobIO parameters block, with additional
-                uiHint fields.
+        initial_job_parameters (Dict[str, Any]): OpenJobIO parameters block.
         parent: The parent Qt Widget.
     """
 
@@ -84,14 +79,6 @@ class JobTemplateParametersWidget(QWidget):
                 control_type_name = ""
                 if "userInterface" in parameter:
                     control_type_name = parameter["userInterface"].get("control", "")
-                elif "uiHint" in parameter:
-                    control_type_name = parameter["uiHint"].get("controlType", "")
-                    # Special case the uiHint pre-PATH parameter logic
-                    if (
-                        parameter["type"] == "STRING"
-                        and parameter["uiHint"].get("ojioFutureType") == "PATH"
-                    ):
-                        parameter["type"] = "PATH"
 
                 # If not explicitly provided, determine the default control type name based on the OJIO specification
                 if not control_type_name:
@@ -122,8 +109,6 @@ class JobTemplateParametersWidget(QWidget):
 
             if "userInterface" in parameter:
                 group_label = parameter["userInterface"].get("groupLabel", "")
-            elif "uiHint" in parameter:
-                group_label = parameter["uiHint"].get("displayGroup", "")
             else:
                 group_label = ""
 
@@ -154,14 +139,12 @@ class JobTemplateParametersWidget(QWidget):
 
 def _get_parameter_label(parameter):
     """
-    Returns the label to use for this parameter. Default to the label from "userInterface", then
-    the label from "uiHint", then the parameter name.
+    Returns the label to use for this parameter. Default to the label from "userInterface",
+    then the parameter name.
     """
     name = parameter["name"]
     if "userInterface" in parameter:
         return parameter["userInterface"].get("label", name)
-    elif "uiHint" in parameter:
-        return parameter["uiHint"].get("label", name)
     else:
         return name
 
@@ -375,9 +358,6 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
         if "userInterface" in parameter:
             single_step_delta = parameter["userInterface"].get("singleStepDelta", -1)
             drag_multiplier = -1.0  # TODO: Make a good default based on single_step_delta
-        elif "uiHint" in parameter:
-            single_step_delta = parameter["uiHint"].get("singleStep", -1)
-            drag_multiplier = parameter["uiHint"].get("dragMultiplier", -1.0)
         else:
             single_step_delta = -1
             drag_multiplier = -1.0
@@ -451,10 +431,6 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
             decimals = parameter["userInterface"].get("decimals", -1)
             single_step_delta = parameter["userInterface"].get("singleStepDelta", -1)
             drag_multiplier = -1.0  # TODO: Make a good default based on single_step_delta
-        elif "uiHint" in parameter:
-            decimals = parameter["uiHint"].get("decimals", -1)
-            single_step_delta = parameter["uiHint"].get("singleStep", -1.0)
-            drag_multiplier = parameter["uiHint"].get("dragMultiplier", -1.0)
         else:
             decimals = -1
             single_step_delta = -1
@@ -554,9 +530,6 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
                 selected_filter = (
                     f"{file_filter_default['label']} ({' '.join(file_filter_default['patterns'])})"
                 )
-        elif "uiHint" in parameter:
-            filetype_filter = parameter["uiHint"].get("filter", filetype_filter)
-            selected_filter = parameter["uiHint"].get("selectedFilter", selected_filter)
 
         if not selected_filter:
             selected_filter = filetype_filter.split(";", 1)[0]

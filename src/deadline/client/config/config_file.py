@@ -26,7 +26,7 @@ CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
 # Environment variable that, if set, overrides the value of CONFIG_FILE_PATH
 CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
 # The default Amazon Deadline Cloud endpoint URL
-# TODO: This is currently set to our closed-beta endpoint. We need to update this for GA.
+# TODO: This is currently set to our closed-beta endpoint. We need to remove this for GA.
 DEFAULT_DEADLINE_ENDPOINT_URL = "https://btpdb6qczg.execute-api.us-west-2.amazonaws.com"
 # The default directory within which to save the history of created jobs.
 DEFAULT_JOB_HISTORY_DIR = os.path.join("~", ".deadline", "job_history", "{aws_profile_name}")
@@ -47,36 +47,48 @@ __config_mtime = None
 #             section [profile-{profileName} default]
 # "section_format" - How its value gets formatted into config file sections.
 SETTINGS: Dict[str, Dict[str, Any]] = {
-    # This is written by Cloud Companion and read by deadline
     "cloud-companion.path": {
         "default": "",
+        "description": "The filesystem path to Cloud Companion, set during login process.",
     },
     "defaults.aws_profile_name": {
         "default": "",
         "section_format": "profile-{}",
+        "description": "The AWS profile name to use by default. Set to '' to use the default credentials."
+        + " Other settings are saved with the profile.",
     },
     "settings.job_history_dir": {
         "default": DEFAULT_JOB_HISTORY_DIR,
         "depend": "defaults.aws_profile_name",
+        "description": "The directory in which to place the job submission history for this AWS profile name.",
     },
     "settings.deadline_endpoint_url": {
         "default": DEFAULT_DEADLINE_ENDPOINT_URL,
         "depend": "defaults.aws_profile_name",
+        "description": "The endpoint URL for Amazon Deadline Cloud.",
     },
     "defaults.farm_id": {
         "default": "",
         "depend": "defaults.aws_profile_name",
         "section_format": "{}",
+        "description": "The Farm ID to use by default.",
+    },
+    "settings.storage_profile_id": {
+        "default": "",
+        "depend": "defaults.farm_id",
+        "section_format": "{}",
+        "description": "The storage profile that this workstation conforms to. It specifies where shared file systems are mounted, and where named job attachments should go.",
     },
     "defaults.queue_id": {
         "default": "",
         "depend": "defaults.farm_id",
         "section_format": "{}",
+        "description": "The Queue ID to use by default.",
     },
-    "defaults.storage_profile_id": {
+    "defaults.job_id": {
         "default": "",
         "depend": "defaults.queue_id",
-        "section_format": "{}",
+        "description": "The Job ID to use by default. This gets updated by job submission, so is normally the most recently submitted job.",
     },
     "settings.auto_accept": {
         "default": "false",
@@ -255,7 +267,7 @@ def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = 
         raise DeadlineOperationError(f"The setting name {setting_name!r} is not valid.")
     section, name = setting_name.split(".", 1)
 
-    # Get the type of the default to validate it is a Amazon Deadline Cloud setting, and retrieve its type
+    # Get the type of the default to validate it is an Amazon Deadline Cloud setting, and retrieve its type
     setting_config = _get_setting_config(setting_name)
 
     # If no config was provided, then read from disk and signal to write it later

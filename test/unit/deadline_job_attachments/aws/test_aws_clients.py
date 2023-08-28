@@ -7,7 +7,6 @@ from deadline.job_attachments.aws.aws_clients import (
     get_sts_client,
 )
 from deadline.job_attachments.aws.aws_config import (
-    DEADLINE_ENDPOINT,
     S3_CONNECT_TIMEOUT_IN_SECS,
     S3_READ_TIMEOUT_IN_SECS,
 )
@@ -20,7 +19,6 @@ def test_get_deadline_client(boto_config):
     deadline_client = get_deadline_client()
 
     assert deadline_client.meta.service_model.service_name == "deadline"
-    assert deadline_client.meta.endpoint_url == DEADLINE_ENDPOINT
 
 
 def test_get_deadline_client_non_default_endpoint(boto_config):

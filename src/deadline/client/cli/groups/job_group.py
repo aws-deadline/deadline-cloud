@@ -56,7 +56,7 @@ def cli_job():
 @handle_error
 def job_list(page_size, item_offset, **args):
     """
-    Lists the Jobs in a Amazon Deadline Cloud Queue.
+    Lists the Jobs in an Amazon Deadline Cloud Queue.
     """
     # Get a temporary config object with the standard options handled
     config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -110,17 +110,18 @@ def job_list(page_size, item_offset, **args):
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to get.", required=True)
+@click.option("--job-id", help="The Amazon Deadline Cloud Job to get.")
 @handle_error
-def job_get(job_id, **args):
+def job_get(**args):
     """
-    Get the details of a Amazon Deadline Cloud Job.
+    Get the details of an Amazon Deadline Cloud Job.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
     response = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
@@ -129,7 +130,7 @@ def job_get(job_id, **args):
     click.echo(cli_object_repr(response))
 
 
-def download_job_output(
+def _download_job_output(
     config: Optional[ConfigParser],
     farm_id: str,
     queue_id: str,
@@ -444,7 +445,7 @@ def _is_path_in_windows_format(path_str: str) -> bool:
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to use.", required=True)
+@click.option("--job-id", help="The Amazon Deadline Cloud Job to use.")
 @click.option("--step-id", help="The Amazon Deadline Cloud Step to use.")
 @click.option("--task-id", help="The Amazon Deadline Cloud Task to use.")
 @click.option(
@@ -480,21 +481,22 @@ def _is_path_in_windows_format(path_str: str) -> bool:
     "parsed/consumed by custom scripts.",
 )
 @handle_error
-def job_download_output(job_id, step_id, task_id, conflict_resolution, output, **args):
+def job_download_output(step_id, task_id, conflict_resolution, output, **args):
     """
-    Download the output attached to a Amazon Deadline Cloud Job.
+    Download the output attached to an Amazon Deadline Cloud Job.
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
     is_json_format = True if output == "json" else False
 
     try:
-        download_job_output(
+        _download_job_output(
             config, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, is_json_format
         )
     except Exception as e:

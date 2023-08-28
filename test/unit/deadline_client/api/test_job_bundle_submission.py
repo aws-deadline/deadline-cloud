@@ -165,7 +165,7 @@ parameterValues: []
     },
     {
         "name": "deadline:maxFailedTasksCount",
-        "value": 100
+        "value": 20
     },
     {
         "name": "deadline:maxRetriesPerTask",
@@ -177,7 +177,7 @@ parameterValues: []
         {
             "priority": 45,
             "targetTaskRunStatus": "SUSPENDED",
-            "maxFailedTasksCount": 100,
+            "maxFailedTasksCount": 20,
             "maxRetriesPerTask": 5,
         },
     ),
@@ -277,7 +277,7 @@ def test_create_job_from_job_bundle(
 
             config.set_setting("defaults.farm_id", MOCK_FARM_ID)
             config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-            config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+            config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
             # Write the template to the job bundle
             with open(
@@ -442,7 +442,7 @@ def test_create_job_from_job_bundle_job_attachments(
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -524,7 +524,7 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
 
             config.set_setting("defaults.farm_id", MOCK_FARM_ID)
             config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-            config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+            config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
             # Write the template to the job bundle
             with open(
@@ -594,7 +594,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:

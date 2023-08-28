@@ -243,7 +243,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.addRow(default_queue_box_label, self.default_queue_box)
 
         self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
-        default_storage_profile_box_label = self.labels["defaults.storage_profile_id"] = QLabel(
+        default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
             "Default Storage Profile"
         )
         self.default_storage_profile_box.box.currentIndexChanged.connect(
@@ -499,7 +499,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.default_storage_profile_box.refresh_list()
 
     def default_storage_profile_name_changed(self, index):
-        self.changes["defaults.storage_profile_id"] = self.default_storage_profile_box.box.itemData(
+        self.changes["settings.storage_profile_id"] = self.default_storage_profile_box.box.itemData(
             index
         )
         self.refresh()
@@ -507,7 +507,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
 class _DeadlineResourceListComboBox(QWidget):
     """
-    A ComboBox for selecting a Amazon Deadline Cloud Id, with a refresh button.
+    A ComboBox for selecting an Amazon Deadline Cloud Id, with a refresh button.
 
     The caller should connect the `background_exception` signal, e.g.
     to show a message box, and should call `set_config` whenever there is
@@ -659,7 +659,7 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
     def __init__(self, parent=None):
         super().__init__(
             resource_name="Storage Profile",
-            setting_name="defaults.storage_profile_id",
+            setting_name="settings.storage_profile_id",
             parent=parent,
         )
 

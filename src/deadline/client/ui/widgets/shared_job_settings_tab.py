@@ -43,8 +43,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.deadline_settings_box = DeadlineSettingsWidget(initial_settings, self)
         layout.addWidget(self.deadline_settings_box)
 
-        self.installation_requirements_box = InstallationRequirementsWidget(initial_settings, self)
-        layout.addWidget(self.installation_requirements_box)
+        self.rez_packages_box = InstallationRequirementsWidget(initial_settings, self)
+        layout.addWidget(self.rez_packages_box)
 
         layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
@@ -73,10 +73,6 @@ class SubmissionDescriptionWidget(QGroupBox):  # pylint: disable=too-few-public-
         self.desc_label = QLabel("Description")
         self.desc_edit = QLineEdit()
         self.layout.addRow(self.desc_label, self.desc_edit)
-
-        # TODO: Re-enable when this option is available in the back end.
-        self.desc_label.setEnabled(False)
-        self.desc_edit.setEnabled(False)
 
     def _load_initial_settings(self, settings):
         self.sub_name_edit.setText(settings.name)
@@ -126,21 +122,21 @@ class DeadlineSettingsWidget(QGroupBox):
         self.initial_status_box.addItems(["READY", "SUSPENDED"])
         self.lyt.addRow(self.initial_status_box_label, self.initial_status_box)
 
-        self.failed_tasks_limit_box_label = QLabel("Failed Tasks Limit")
-        self.failed_tasks_limit_box_label.setToolTip(
+        self.max_failed_tasks_count_box_label = QLabel("Maximum Failed Tasks Count")
+        self.max_failed_tasks_count_box_label.setToolTip(
             "Maximum number of Tasks that can fail before the Job will be marked as failed."
         )
-        self.failed_tasks_limit_box = QSpinBox(parent=self)
-        self.failed_tasks_limit_box.setRange(0, 2147483647)
-        self.lyt.addRow(self.failed_tasks_limit_box_label, self.failed_tasks_limit_box)
+        self.max_failed_tasks_count_box = QSpinBox(parent=self)
+        self.max_failed_tasks_count_box.setRange(0, 2147483647)
+        self.lyt.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
 
-        self.task_retry_limit_box_label = QLabel("Task Retry Limit")
-        self.task_retry_limit_box_label.setToolTip(
+        self.max_retries_per_task_box_label = QLabel("Maximum Retries Per Task")
+        self.max_retries_per_task_box_label.setToolTip(
             "Maximum number of times that a Task will retry before it's marked as failed."
         )
-        self.task_retry_limit_box = QSpinBox(parent=self)
-        self.task_retry_limit_box.setRange(0, 2147483647)
-        self.lyt.addRow(self.task_retry_limit_box_label, self.task_retry_limit_box)
+        self.max_retries_per_task_box = QSpinBox(parent=self)
+        self.max_retries_per_task_box.setRange(0, 2147483647)
+        self.lyt.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
 
         self.priority_box_label = QLabel("Priority")
         self.priority_box = QSpinBox(parent=self)
@@ -154,30 +150,30 @@ class DeadlineSettingsWidget(QGroupBox):
         Args:
             deadline_authorized (bool): Should be the result of a call to
                     api.check_deadline_available, for example from
-                    a Amazon Deadline Cloud Status Widget.
+                    an Amazon Deadline Cloud Status Widget.
         """
         self.farm_box.refresh(deadline_authorized)
         self.queue_box.refresh(deadline_authorized)
 
     def _load_initial_settings(self, settings):
         self.initial_status_box.setCurrentText(settings.initial_status)
-        self.failed_tasks_limit_box.setValue(settings.failed_tasks_limit)
-        self.task_retry_limit_box.setValue(settings.task_retry_limit)
+        self.max_failed_tasks_count_box.setValue(settings.max_failed_tasks_count)
+        self.max_retries_per_task_box.setValue(settings.max_retries_per_task)
         self.priority_box.setValue(settings.priority)
 
     def update_settings(self, settings) -> None:
         """
-        Updates a Amazon Deadline Cloud settings object with the latest values.
+        Updates an Amazon Deadline Cloud settings object with the latest values.
 
         The settings object should be a dataclass with:
             initial_status: str (or enum of base str)
-            failed_tasks_limit: int
-            task_retry_limit: int
+            max_failed_tasks_count: int
+            max_retries_per_task: int
             priority: int
         """
         settings.initial_status = self.initial_status_box.currentText()
-        settings.failed_tasks_limit = self.failed_tasks_limit_box.value()
-        settings.task_retry_limit = self.task_retry_limit_box.value()
+        settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
+        settings.max_retries_per_task = self.max_retries_per_task_box.value()
         settings.priority = self.priority_box.value()
 
 
@@ -186,8 +182,8 @@ class InstallationRequirementsWidget(QGroupBox):  # pylint: disable=too-few-publ
     UI element to hold list of Installation Requirements
 
     The settings object should be a dataclass with:
-      - `override_installation_requirements: bool`
-      - `installation_requirements: str`
+      - `override_rez_packages: bool`
+      - `rez_packages: str`
     """
 
     def __init__(self, initial_settings, parent=None):
@@ -199,23 +195,23 @@ class InstallationRequirementsWidget(QGroupBox):  # pylint: disable=too-few-publ
     def _build_ui(self):
         self.layout = QGridLayout(self)
 
-        self.requirements_chck = QCheckBox("Override Installation Requirements", self)
+        self.requirements_chck = QCheckBox("Override Rez Packages", self)
         self.requirements_edit = QLineEdit(self)
         self.layout.addWidget(self.requirements_chck, 4, 0)
         self.layout.addWidget(self.requirements_edit, 4, 1)
         self.requirements_chck.stateChanged.connect(self.enable_requirements_override_changed)
 
     def _load_initial_settings(self, settings):
-        self.requirements_chck.setChecked(settings.override_installation_requirements)
-        self.requirements_edit.setEnabled(settings.override_installation_requirements)
-        self.requirements_edit.setText(settings.installation_requirements)
+        self.requirements_chck.setChecked(settings.override_rez_packages)
+        self.requirements_edit.setEnabled(settings.override_rez_packages)
+        self.requirements_edit.setText(settings.rez_packages)
 
     def update_settings(self, settings):
         """
         Update a given instance of scene settings with updated values.
         """
-        settings.installation_requirements = self.requirements_edit.text()
-        settings.override_installation_requirements = self.requirements_chck.isChecked()
+        settings.rez_packages = self.requirements_edit.text()
+        settings.override_rez_packages = self.requirements_chck.isChecked()
 
     def enable_requirements_override_changed(self, state):
         """
@@ -226,7 +222,7 @@ class InstallationRequirementsWidget(QGroupBox):  # pylint: disable=too-few-publ
 
 class _DeadlineNamedResourceDisplay(QWidget):
     """
-    A Label for displaying a Amazon Deadline Cloud resource, that starts displaying
+    A Label for displaying an Amazon Deadline Cloud resource, that starts displaying
     it as the Id, but does an async call to Amazon Deadline Cloud to convert it
     to the name.
 
@@ -285,7 +281,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
         Args:
             deadline_authorized (bool): Should be the result of a call to
                     api.check_deadline_available, for example from
-                    a Amazon Deadline Cloud Status Widget.
+                    an Amazon Deadline Cloud Status Widget.
         """
         resource_id = get_setting(self.setting_name)
         if resource_id != self.item_id or not self.item_name:
@@ -369,7 +365,7 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
     def __init__(self, parent=None):
         super().__init__(
             resource_name="Storage Profile Name",
-            setting_name="defaults.storage_profile_id",
+            setting_name="settings.storage_profile_id",
             parent=parent,
         )
 

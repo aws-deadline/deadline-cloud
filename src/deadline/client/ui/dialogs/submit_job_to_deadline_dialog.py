@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 class SubmitJobToDeadlineDialog(QDialog):
     """
-    A widget containing all the standard tabs for submitting a Amazon Deadline Cloud job.
+    A widget containing all the standard tabs for submitting an Amazon Deadline Cloud job.
 
     If you're using this dialog within an application and want it to stay in front,
     pass f=Qt.Tool, a flag that tells it to do that.
@@ -213,7 +213,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings.deadline_settings_box.update_settings(settings)
         self.shared_job_settings.desc_box.update_settings(settings)
         self.job_settings.update_settings(settings)
-        self.shared_job_settings.installation_requirements_box.update_settings(settings)
+        self.shared_job_settings.rez_packages_box.update_settings(settings)
 
         asset_references = self.job_attachments.get_asset_references()
 
@@ -248,7 +248,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings.deadline_settings_box.update_settings(settings)
         self.shared_job_settings.desc_box.update_settings(settings)
         self.job_settings.update_settings(settings)
-        self.shared_job_settings.installation_requirements_box.update_settings(settings)
+        self.shared_job_settings.rez_packages_box.update_settings(settings)
 
         asset_references = self.job_attachments.get_asset_references()
 
@@ -261,7 +261,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
             farm_id = get_setting("defaults.farm_id")
             queue_id = get_setting("defaults.queue_id")
-            storage_profile_id = get_setting("defaults.storage_profile_id")
+            storage_profile_id = get_setting("settings.storage_profile_id")
 
             queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 

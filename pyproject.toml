@@ -118,10 +118,10 @@ addopts = [
     "--cov-report=term-missing",
     "--numprocesses=auto"
 ]
-testpaths = [ "test" ]
+testpaths = [ "test/unit" ]
 looponfailroots = [
     "src",
-    "test",
+    "test/unit",
 ]
 markers = [
     "no_setup: mark that test shouldn't use default setups",

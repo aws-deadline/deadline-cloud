@@ -7,7 +7,7 @@ import time
 from io import BytesIO
 from logging import Logger, LoggerAdapter, getLogger
 from math import trunc
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple, Type, Union
 
 import boto3
@@ -86,10 +86,6 @@ class AssetSync:
         self.manifest_model: Type[ManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
-
-        # TODO: Once Windows pathmapping is implemented we can remove this
-        if sys.platform == "win32":
-            raise NotImplementedError("Windows is not currently supported for Job Attachments")
 
     def _upload_output_files_to_s3(
         self,
@@ -217,7 +213,7 @@ class AssetSync:
                         OutputFile(
                             file_size=file_size,
                             file_hash=file_hash,
-                            rel_path=str(file_path.relative_to(local_root)),
+                            rel_path=str(PurePosixPath(*file_path.relative_to(local_root).parts)),
                             full_path=str(file_path.resolve()),
                             s3_key=s3_key,
                             in_s3=in_s3,
@@ -349,7 +345,10 @@ class AssetSync:
                 merged_manifests_by_root[root] = merged_manifest
 
         # Download
-        if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND:
+        if (
+            attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value
+            and sys.platform != "win32"
+        ):
             mount_vfs_from_manifests(
                 s3_bucket=s3_settings.s3BucketName,
                 manifests_by_root=merged_manifests_by_root,
@@ -435,7 +434,7 @@ class AssetSync:
             else:
                 summary_stats = SummaryStatistics()
         finally:
-            if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND:
+            if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value:
                 # Shutdown all running Fus3 processes since task is completed
                 Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
 
