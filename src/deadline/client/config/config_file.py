@@ -98,6 +98,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "telemetry.opt_out": {"default": "false"},
     "telemetry.identifier": {"default": ""},
+    "defaults.job_attachments_file_system": {"default": "PRELOAD", "depend": "defaults.farm_id"},
 }
 
 

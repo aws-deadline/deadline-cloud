@@ -44,6 +44,10 @@ def cli_config():
 
     settings.log_level:
         Setting to change the log level. Must be one of ["ERROR", "WARNING", "INFO", "DEBUG"]
+
+    defaults.job_attachments_file_system:
+        Setting to determine if attachments are preloaded on to workers before a job executes
+        or fetched in realtime. Must be one of ["PRELOAD", "ON_DEMAND"]
     """
 
 

@@ -253,6 +253,13 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.handle_background_exception
         )
         layout.addRow(default_storage_profile_box_label, self.default_storage_profile_box)
+        self.file_system_box = self._init_combobox_setting(
+            group,
+            layout,
+            "defaults.job_attachments_file_system",
+            "Job Attachments FileSystem Options",
+            ["PRELOAD", "ON_DEMAND"],
+        )
 
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
