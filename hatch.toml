@@ -24,7 +24,7 @@ lint = [
 python = ["3.7", "3.8", "3.9", "3.10", "3.11"]
 
 [envs.default.env-vars]
-# PIP_INDEX_URL="https://aws:{env:CODEARTIFACT_AUTH_TOKEN}@{env:CODEARTIFACT_DOMAIN}-{env:CODEARTIFACT_ACCOUNT_ID}.d.codeartifact.{env:CODEARTIFACT_REGION}.amazonaws.com/pypi/{env:CODEARTIFACT_REPOSITORY}/simple/"
+PIP_INDEX_URL="https://aws:{env:CODEARTIFACT_AUTH_TOKEN}@{env:CODEARTIFACT_DOMAIN}-{env:CODEARTIFACT_ACCOUNT_ID}.d.codeartifact.{env:CODEARTIFACT_REGION}.amazonaws.com/pypi/{env:CODEARTIFACT_REPOSITORY}/simple/"
 SKIP_BOOTSTRAP_TEST_RESOURCES="True"
 
 [envs.codebuild.scripts]
