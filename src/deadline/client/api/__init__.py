@@ -159,7 +159,7 @@ def list_storage_profiles_for_queue(config=None, **kwargs):
     """
     Calls the deadline:ListStorageProfilesForQueue API call, applying the filter for user membership
     depending on the configuration. If the response is paginated, it repeated
-    calls the API to get all the fleets.
+    calls the API to get all the storage profiles.
     """
     if "principalId" not in kwargs:
         user_id, _ = get_user_and_identity_store_id(config=config)
@@ -169,5 +169,5 @@ def list_storage_profiles_for_queue(config=None, **kwargs):
     deadline = get_boto3_client("deadline", config=config)
 
     return _call_paginated_deadline_list_api(
-        deadline.list_storage_profiles_for_queue, "storage_profiles", **kwargs
+        deadline.list_storage_profiles_for_queue, "storageProfiles", **kwargs
     )
