@@ -47,7 +47,7 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     # First set some settings that apply to the defaults, changing the
     # hierarchy from queue inwards.
     config.set_setting("settings.deadline_endpoint_url", "nondefault-endpoint-url")
-    config.set_setting("defaults.storage_profile_id", "storage-profile-for-queue-default")
+    config.set_setting("settings.storage_profile_id", "storage-profile-for-farm-default")
     config.set_setting("defaults.queue_id", "queue-for-farm-default")
     config.set_setting("defaults.farm_id", "farm-for-profile-default")
     config.set_setting("defaults.aws_profile_name", "NonDefaultProfile")
@@ -57,7 +57,7 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     assert config.get_setting("settings.deadline_endpoint_url") == DEFAULT_DEADLINE_ENDPOINT_URL
     assert config.get_setting("defaults.farm_id") == ""
     assert config.get_setting("defaults.queue_id") == ""
-    assert config.get_setting("defaults.storage_profile_id") == ""
+    assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default profile, and check the next layer of the onion
     config.set_setting("defaults.aws_profile_name", "")
@@ -66,17 +66,17 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     # The queue id is still default
     assert config.get_setting("defaults.queue_id") == ""
     # The storage profile id is still default
-    assert config.get_setting("defaults.storage_profile_id") == ""
+    assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default farm
     config.set_setting("defaults.farm_id", "")
     assert config.get_setting("defaults.queue_id") == "queue-for-farm-default"
-    # Storage profile needs "profile - farm_id - queue_id" so it should still be empty
-    assert config.get_setting("defaults.storage_profile_id") == ""
+    # Storage profile needs "profile - farm_id" so it should be back to the original
+    assert config.get_setting("settings.storage_profile_id") == "storage-profile-for-farm-default"
 
     # Switch to default farm and default queue
     config.set_setting("defaults.queue_id", "")
-    assert config.get_setting("defaults.storage_profile_id") == "storage-profile-for-queue-default"
+    assert config.get_setting("settings.storage_profile_id") == "storage-profile-for-farm-default"
 
 
 def test_config_get_setting_nonexistant(fresh_deadline_config):

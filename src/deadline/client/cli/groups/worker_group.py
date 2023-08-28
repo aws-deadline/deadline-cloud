@@ -30,7 +30,7 @@ def cli_worker():
 @handle_error
 def worker_list(page_size, item_offset, fleet_id, **args):
     """
-    Lists the Workers in a Amazon Deadline Cloud Fleet.
+    Lists the Workers in an Amazon Deadline Cloud Fleet.
     """
     # Get a temporary config object with the standard options handled
     config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -83,7 +83,7 @@ def worker_list(page_size, item_offset, fleet_id, **args):
 @handle_error
 def worker_get(fleet_id, worker_id, **args):
     """
-    Get the details of a Amazon Deadline Cloud worker.
+    Get the details of an Amazon Deadline Cloud worker.
     """
     # Get a temporary config object with the standard options handled
     config = apply_cli_options_to_config(required_options={"farm_id"}, **args)

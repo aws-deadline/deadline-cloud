@@ -13,7 +13,6 @@ from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import (
     PROMPT_WHEN_COMPLETE,
-    apply_cli_options_to_config,
     handle_error,
     prompt_at_completion,
 )
@@ -24,7 +23,7 @@ from ..deadline_web_url import (
     uninstall_deadline_web_url_handler,
     validate_resource_ids,
 )
-from .job_group import download_job_output
+from .job_group import _download_job_output
 
 
 @click.command(name="handle-web-url")
@@ -108,28 +107,24 @@ def cli_handle_web_url(
             # We copy the dict without the 'profile' key as that isn't a resource ID
             validate_resource_ids({k: url_queries[k] for k in url_queries.keys() - {"profile"}})
 
+            farm_id = url_queries.pop("farm_id")
+            queue_id = url_queries.pop("queue_id")
             job_id = url_queries.pop("job_id")
             step_id = url_queries.pop("step_id", None)
             task_id = url_queries.pop("task_id", None)
 
-            # Add the standard option "profile", using the one provided by the url(set by Cloud Companion)
+            # Add the standard option "profile", using the one provided by the url (set by Cloud Companion)
             # or choosing a best guess based on farm and queue IDs
-            url_queries["profile"] = url_queries.pop(
+            aws_profile_name = url_queries.pop(
                 "profile",
-                config_file.get_best_profile_for_farm(
-                    url_queries["farm_id"], url_queries["queue_id"]
-                ),
+                config_file.get_best_profile_for_farm(farm_id, queue_id),
             )
 
-            # Get a temporary config object with the remaining standard options handled
-            config = apply_cli_options_to_config(
-                required_options={"farm_id", "queue_id"}, config=None, **url_queries
-            )
+            # Read the config, and switch the in-memory version to use the chosen AWS profile
+            config = config_file.read_config()
+            config_file.set_setting("defaults.aws_profile_name", aws_profile_name, config=config)
 
-            farm_id = str(config_file.get_setting("defaults.farm_id", config=config))
-            queue_id = str(config_file.get_setting("defaults.queue_id", config=config))
-
-            download_job_output(config, farm_id, queue_id, job_id, step_id, task_id)
+            _download_job_output(config, farm_id, queue_id, job_id, step_id, task_id)
         else:
             raise DeadlineOperationError(
                 f"Command {split_url.netloc} is not supported through handle-web-url.",

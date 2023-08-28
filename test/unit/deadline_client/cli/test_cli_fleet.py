@@ -4,6 +4,7 @@
 Tests for the CLI fleet commands.
 """
 from unittest.mock import patch
+from copy import deepcopy
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -12,7 +13,7 @@ from click.testing import CliRunner
 from deadline.client import api, config
 from deadline.client.cli import deadline_cli
 
-from ..shared_constants import MOCK_FARM_ID
+from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID, MOCK_QUEUES_LIST
 
 MOCK_FLEET_ID = "fleet-0123456789abcdef0123456789abcdef"
 
@@ -126,6 +127,85 @@ createdBy: arn:aws:sts::123456789012:assumed-role/Admin
         assert result.exit_code == 0
 
 
+def test_cli_fleet_get_with_queue_id(fresh_deadline_config):
+    """
+    Confirm that the CLI interface prints out the expected fleets, given mock data
+    and a queue id parameter.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").get_queue.return_value = MOCK_QUEUES_LIST[0]
+        session_mock().client("deadline").get_fleet.side_effect = deepcopy(MOCK_FLEETS_LIST)
+        session_mock().client("deadline").list_queue_fleet_associations.return_value = {
+            "queueFleetAssociations": [
+                {
+                    "queueId": MOCK_QUEUES_LIST[0]["queueId"],
+                    "fleetId": MOCK_FLEETS_LIST[0]["fleetId"],
+                    "status": "ACTIVE",
+                },
+                {
+                    "queueId": MOCK_QUEUES_LIST[0]["queueId"],
+                    "fleetId": MOCK_FLEETS_LIST[1]["fleetId"],
+                    "status": "ACTIVE",
+                },
+            ]
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(deadline_cli.cli, ["fleet", "get"])
+
+        assert (
+            result.output
+            == """Showing all fleets (2 total) associated with queue: Testing Queue
+
+fleetId: fleet-0123456789abcdef0123456789abcdef
+farmId: farm-0123456789abcdefabcdefabcdefabcd
+description: The best fleet.
+displayName: MadFleet
+status: ACTIVE
+platform: EC2_SPOT
+workerRequirements:
+  vCpus:
+    min: 2
+    max: 4
+  memInGiB:
+    min: 8
+    max: 16
+autoScalerCapacities:
+  min: 0
+  max: 10
+createdAt: '2022-11-22T06:37:36+00:00'
+createdBy: arn:aws:sts::123456789012:assumed-role/Admin
+queueFleetAssociationStatus: ACTIVE
+
+
+fleetId: fleet-0223456789abcdef0223456789abcdef
+farmId: farm-0123456789abcdefabcdefabcdefabcd
+description: The maddest fleet.
+displayName: MadderFleet
+status: ACTIVE
+platform: EC2_SPOT
+workerRequirements:
+  vCpus:
+    min: 2
+    max: 4
+  memInGiB:
+    min: 8
+    max: 16
+autoScalerCapacities:
+  min: 0
+  max: 50
+createdAt: '2022-11-22T06:37:36+00:00'
+createdBy: arn:aws:sts::123456789012:assumed-role/Admin
+queueFleetAssociationStatus: ACTIVE
+
+"""
+        )
+        assert result.exit_code == 0
+
+
 def test_cli_fleet_get_override_profile(fresh_deadline_config):
     """
     Confirms that the --profile option overrides the option to boto3.Session.
@@ -152,6 +232,24 @@ def test_cli_fleet_get_override_profile(fresh_deadline_config):
         assert result.exit_code == 0
 
 
+def test_cli_fleet_get_both_fleet_id_and_queue_id_provided(fresh_deadline_config):
+    """
+    Confirm that the CLI interface fails when both fleet and queue id are provided
+    """
+    config.set_setting("defaults.farm_id", "farm-overriddenid")
+
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").get_fleet.return_value = MOCK_FLEETS_LIST[0]
+
+        runner = CliRunner()
+        result = runner.invoke(
+            deadline_cli.cli, ["fleet", "get", "--fleet-id", "fleetid", "--queue-id", "queueid"]
+        )
+
+        assert "Only one of the --fleet-id and --queue-id options may be provided." in result.output
+        assert result.exit_code != 0
+
+
 def test_cli_fleet_get_no_fleet_id_provided(fresh_deadline_config):
     """
     Confirm that the CLI interface fails when no fleet id is provided
@@ -164,7 +262,9 @@ def test_cli_fleet_get_no_fleet_id_provided(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(deadline_cli.cli, ["fleet", "get"])
 
-        assert "Missing option '--fleet-id'" in result.output
+        assert (
+            "Missing '--fleet-id', '--queue-id', or default Queue ID configuration" in result.output
+        )
         assert result.exit_code != 0
 
 

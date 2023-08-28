@@ -34,7 +34,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 9
+    assert len(settings.keys()) == 10
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -93,13 +93,16 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.job_history_dir", "~/alternate/job_history")
     config.set_setting("settings.deadline_endpoint_url", "https://some-url-value")
     config.set_setting("defaults.farm_id", "farm-82934h23k4j23kjh")
+    config.set_setting("settings.storage_profile_id", "sp-12345abcde12345")
     config.set_setting("defaults.queue_id", "queue-389348u234jhk34")
-    config.set_setting("defaults.storage_profile_id", "sp-12345abcde12345")
+    config.set_setting("defaults.job_id", "job-239u40234jkl234nkl23")
     config.set_setting("settings.auto_accept", "False")
     config.set_setting("settings.log_level", "DEBUG")
 
     runner = CliRunner()
     result = runner.invoke(deadline_cli.cli, ["config", "show"])
+
+    print(result.output)
 
     assert result.exit_code == 0
 
@@ -109,6 +112,8 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert result.output.count("False") == 1
     assert "https://some-url-value" in result.output
     assert "farm-82934h23k4j23kjh" in result.output
+    assert "queue-389348u234jhk34" in result.output
+    assert "job-239u40234jkl234nkl23" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
     assert "settings.log_level:\n   DEBUG" in result.output

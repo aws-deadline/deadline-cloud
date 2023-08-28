@@ -31,7 +31,7 @@ def show_job_bundle_submitter(
     input_job_bundle_dir: str = "", parent=None, f=Qt.WindowFlags()
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
-    Opens a Amazon Deadline Cloud job submission dialog for the provided job bundle.
+    Opens an Amazon Deadline Cloud job submission dialog for the provided job bundle.
 
     Pass f=Qt.Tool if running it within an application context and want it
     to stay on top.
@@ -90,8 +90,8 @@ def show_job_bundle_submitter(
         parameters_values: List[Dict[str, Any]] = [
             {"name": "deadline:priority", "value": settings.priority},
             {"name": "deadline:targetTaskRunStatus", "value": settings.initial_status},
-            {"name": "deadline:maxFailedTasksCount", "value": settings.failed_tasks_limit},
-            {"name": "deadline:maxRetriesPerTask", "value": settings.task_retry_limit},
+            {"name": "deadline:maxFailedTasksCount", "value": settings.max_failed_tasks_count},
+            {"name": "deadline:maxRetriesPerTask", "value": settings.max_retries_per_task},
         ]
 
         if asset_references:

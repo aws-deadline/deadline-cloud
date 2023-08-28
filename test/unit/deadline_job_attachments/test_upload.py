@@ -385,6 +385,7 @@ class TestUpload:
                     },
                     {
                         "rootPath": f"{output_d}",
+                        "osType": OperatingSystemFamily.get_os_family("windows"),
                         "outputRelativeDirectories": [
                             ".",
                         ],

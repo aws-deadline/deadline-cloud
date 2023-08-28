@@ -12,20 +12,7 @@ from click.testing import CliRunner
 from deadline.client import api, config
 from deadline.client.cli import deadline_cli
 
-from ..shared_constants import MOCK_FARM_ID
-
-MOCK_QUEUES_LIST = [
-    {
-        "queueId": "queue-0123456789abcdef0123456789abcdef",
-        "name": "Testing Queue",
-        "description": "",
-    },
-    {
-        "queueId": "queue-0123456789abcdef0123456789abcdeg",
-        "name": "Another Queue",
-        "description": "With a description!",
-    },
-]
+from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUES_LIST
 
 
 def test_cli_queue_list(fresh_deadline_config):

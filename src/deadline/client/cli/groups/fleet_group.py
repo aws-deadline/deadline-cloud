@@ -51,19 +51,56 @@ def fleet_list(**args):
 @cli_fleet.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.", required=True)
+@click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.")
+@click.option("--queue-id", help="If provided, gets all Fleets associated with the Queue.")
 @handle_error
-def fleet_get(fleet_id, **args):
+def fleet_get(fleet_id, queue_id, **args):
     """
-    Get the details of a Amazon Deadline Cloud Fleet.
+    Get the details of an Amazon Deadline Cloud Fleet.
     """
+    if fleet_id and queue_id:
+        raise DeadlineOperationError(
+            "Only one of the --fleet-id and --queue-id options may be provided."
+        )
+
     # Get a temporary config object with the standard options handled
     config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    if not fleet_id:
+        queue_id = config_file.get_setting("defaults.queue_id", config=config)
+        if not queue_id:
+            raise click.UsageError(
+                "Missing '--fleet-id', '--queue-id', or default Queue ID configuration"
+            )
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
-    response.pop("ResponseMetadata", None)
 
-    click.echo(cli_object_repr(response))
+    if fleet_id:
+        response = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
+        response.pop("ResponseMetadata", None)
+
+        click.echo(cli_object_repr(response))
+    else:
+        response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+        queue_name = response["displayName"]
+
+        response = api._call_paginated_deadline_list_api(
+            deadline.list_queue_fleet_associations,
+            "queueFleetAssociations",
+            farmId=farm_id,
+            queueId=queue_id,
+        )
+        response.pop("ResponseMetadata", None)
+        qfa_list = response["queueFleetAssociations"]
+
+        click.echo(
+            f"Showing all fleets ({len(qfa_list)} total) associated with queue: {queue_name}"
+        )
+        for qfa in qfa_list:
+            response = deadline.get_fleet(farmId=farm_id, fleetId=qfa["fleetId"])
+            response.pop("ResponseMetadata", None)
+            response["queueFleetAssociationStatus"] = qfa["status"]
+
+            click.echo("")
+            click.echo(cli_object_repr(response))

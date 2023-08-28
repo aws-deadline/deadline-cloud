@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Set
 
 from deadline.client import api
 from deadline.client.exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from deadline.client.config import get_setting
+from deadline.client.config import get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
@@ -99,7 +99,7 @@ def create_job_from_job_bundle(
         "templateType": file_type,
     }
 
-    storage_profile_id = get_setting("defaults.storage_profile_id", config=config)
+    storage_profile_id = get_setting("settings.storage_profile_id", config=config)
     if storage_profile_id:
         create_job_args["storageProfileId"] = storage_profile_id
 
@@ -171,6 +171,12 @@ def create_job_from_job_bundle(
     logger.debug(f"CreateJob Response {create_job_response}")
 
     if create_job_response and "jobId" in create_job_response:
+        job_id = create_job_response["jobId"]
+
+        # If using the default config, set the default job id so it holds the
+        # most-recently submitted job.
+        if config is None:
+            set_setting("defaults.job_id", job_id)
 
         def _default_create_job_result_callback() -> bool:
             return True
@@ -178,7 +184,6 @@ def create_job_from_job_bundle(
         if not create_job_result_callback:
             create_job_result_callback = _default_create_job_result_callback
 
-        job_id = create_job_response["jobId"]
         success, status_message = wait_for_create_job_to_complete(
             create_job_args["farmId"],
             create_job_args["queueId"],

@@ -92,7 +92,7 @@ class Attachments:
     # The list of required assests per asset root
     manifests: List[ManifestProperties] = field(default_factory=list)
     # Method to use when loading assets required for a job
-    assetLoadingMethod: AssetLoadingMethod = AssetLoadingMethod.PRELOAD
+    assetLoadingMethod: str = AssetLoadingMethod.PRELOAD.value
 
 
 @dataclass

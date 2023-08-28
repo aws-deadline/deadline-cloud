@@ -52,7 +52,7 @@ class DeadlineCredentialsStatusWidget(QWidget):
        widget.deadline_api_available: result of api.check_deadline_api_available()
 
     To display the status of a non-default Amazon Deadline Cloud configuration, pass in
-    a Amazon Deadline Cloud configuration object to config, call set_config to change it.
+    an Amazon Deadline Cloud configuration object to config, call set_config to change it.
     """
 
     # This signal is sent when an AWS credential changes (e.g. config file)

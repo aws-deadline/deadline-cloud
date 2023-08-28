@@ -4,11 +4,9 @@
 
 import json
 import shutil
-import sys
 from math import trunc
 from pathlib import Path
 from typing import Optional
-from unittest import mock
 from unittest.mock import MagicMock, call, mock_open, patch
 
 import boto3
@@ -30,8 +28,6 @@ from deadline.job_attachments.utils import OperatingSystemFamily, human_readable
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 
 
-# TODO: Remove the skip once we support Windows for AssetSync
-@pytest.mark.skipif(sys.platform == "win32", reason="Asset Sync doesn't currently support Windows")
 class TestAssetSync:
     @pytest.fixture(autouse=True)
     def before_test(
@@ -82,14 +78,6 @@ class TestAssetSync:
         calls = [call(1, False) for _ in range(1, 10)]
         calls.append(call(1, True))
         mock_progress_tracker_callback.assert_has_calls(calls)
-
-    # TODO: Remove this test once we support Windows for AssetSync
-    @mock.patch("sys.platform", "win32")
-    def test_init_fails_on_windows(self, farm_id: str) -> None:
-        """Asserts an error is raised when trying to create an AssetSync
-        instance on a Windows OS"""
-        with pytest.raises(NotImplementedError):
-            AssetSync(farm_id)
 
     @pytest.mark.parametrize(
         ("file_size", "expected_output"),
@@ -144,7 +132,7 @@ class TestAssetSync:
         default_job.attachments = attachments_no_inputs
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
-        local_root = f"{session_dir}/{dest_dir}"
+        local_root = str(Path(session_dir) / dest_dir)
 
         # WHEN
         with patch(
@@ -191,10 +179,6 @@ class TestAssetSync:
             )
             assert summary_statistics == expected_summary_statistics
 
-    # TODO: Mock the FS so we can test this on Windows
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="Doesn't run on Windows since we're not mocking FS"
-    )
     @pytest.mark.parametrize(
         ("job_fixture_name"),
         [
@@ -223,7 +207,7 @@ class TestAssetSync:
         default_queue.jobAttachmentSettings = s3_settings
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
-        local_root = f"{session_dir}/{dest_dir}"
+        local_root = str(Path(session_dir) / dest_dir)
         assert job.attachments
 
         # WHEN
@@ -267,10 +251,6 @@ class TestAssetSync:
                 }
             ]
 
-    # TODO: Mock the FS so we can test this on Windows
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="Doesn't run on Windows since we're not mocking FS"
-    )
     @pytest.mark.parametrize(
         ("s3_settings_fixture_name"),
         [
@@ -291,7 +271,7 @@ class TestAssetSync:
         default_queue.jobAttachmentSettings = s3_settings
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
-        local_root = f"{session_dir}/{dest_dir}"
+        local_root = str(Path(session_dir) / dest_dir)
         assert default_job.attachments
 
         step_output_root = "/home/outputs_roots"
@@ -340,17 +320,13 @@ class TestAssetSync:
                 },
             ]
 
-    # TODO: Mock the FS so we can test this on Windows
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="Doesn't run on Windows since we're not mocking FS"
-    )
     @pytest.mark.parametrize(
         ("s3_settings_fixture_name"),
         [
             ("default_job_attachment_s3_settings"),
         ],
     )
-    def test_sync_inputs_with_step_dependencies_same_root_vfs(
+    def test_sync_inputs_with_step_dependencies_same_root_vfs_on_posix(
         self,
         tmp_path: Path,
         default_queue: Queue,
@@ -367,7 +343,7 @@ class TestAssetSync:
         default_queue.jobAttachmentSettings = s3_settings
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
-        local_root = f"{session_dir}/{dest_dir}"
+        local_root = str(Path(session_dir) / dest_dir)
         assert job.attachments
 
         test_manifest = decode_manifest(json.dumps(test_manifest_two))
@@ -392,6 +368,8 @@ class TestAssetSync:
         ) as merge_manifests_mock, patch(
             f"{deadline.__package__}.job_attachments.download.write_manifest_to_temp_file",
             return_value="tmp_manifest",
+        ), patch(
+            "sys.platform", "linux"
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 

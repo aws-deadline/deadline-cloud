@@ -1,4 +1,4 @@
-# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
 tests the deadline.client.api functions relating to storage profiles
