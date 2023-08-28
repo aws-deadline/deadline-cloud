@@ -125,8 +125,8 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         parameters_values = [
             {"name": "deadline:priority", "value": settings.priority},
             {"name": "deadline:targetTaskRunStatus", "value": settings.initial_status},
-            {"name": "deadline:maxFailedTasksCount", "value": settings.failed_tasks_limit},
-            {"name": "deadline:maxRetriesPerTask", "value": settings.task_retry_limit},
+            {"name": "deadline:maxFailedTasksCount", "value": settings.max_failed_tasks_count},
+            {"name": "deadline:maxRetriesPerTask", "value": settings.max_retries_per_task},
         ]
 
         with open(

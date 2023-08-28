@@ -282,19 +282,19 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                         "outputRelativeDirectories": ["."],
                     },
                 ],
-                "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
+                "assetLoadingMethod": AssetLoadingMethod.PRELOAD.value,
             },
             # The job parameter values are the second thing this test needs to verify,
             # confirming that the parameters were processed according to their types.
             parameters={
                 "FileNoneDefault": {
                     "path": os.path.join(
-                        temp_assets_dir, "file/inside/asset-dir-filenonedefault.txt"
+                        temp_assets_dir, "file", "inside", "asset-dir-filenonedefault.txt"
                     ),
                 },
                 "FileNone": {
                     "path": os.path.normpath(
-                        temp_assets_dir + "/file/inside/asset-dir-filenone.txt"
+                        os.path.join(temp_assets_dir, "file", "inside", "asset-dir-filenone.txt")
                     )
                 },
                 "FileOut": {"path": os.path.normpath(os.path.abspath("file/inside/cwd.txt"))},
@@ -307,15 +307,23 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                     )
                 },
                 "DirNoneDefault": {
-                    "path": os.path.join(temp_assets_dir, "dir/inside/asset-dir-dirnonedefault"),
+                    "path": os.path.join(
+                        temp_assets_dir, "dir", "inside", "asset-dir-dirnonedefault"
+                    ),
                 },
                 "DirNone": {
-                    "path": os.path.join(temp_assets_dir, "./dir/inside/asset-dir-dirnone")
+                    "path": os.path.join(temp_assets_dir, "dir", "inside", "asset-dir-dirnone")
                 },
-                "DirIn": {"path": os.path.normpath(temp_job_bundle_dir + "/dir/inside/job_bundle")},
+                "DirIn": {
+                    "path": os.path.normpath(
+                        os.path.join(temp_job_bundle_dir, "dir", "inside", "job_bundle")
+                    )
+                },
                 "DirOut": {"path": os.path.normpath(os.path.abspath("dir/inside/cwd-dirout"))},
                 "DirInout": {
-                    "path": os.path.normpath(temp_assets_dir + "/./dir/inside/asset-dir-dirinout")
+                    "path": os.path.normpath(
+                        os.path.join(temp_assets_dir, "dir", "inside", "asset-dir-dirinout")
+                    )
                 },
             },
         )

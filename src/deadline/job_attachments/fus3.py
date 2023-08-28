@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 import threading
 from signal import SIGTERM
-from typing import List, Union
+from typing import List, Union, Optional
 
 from .errors import Fus3ExecutableMissingError, Fus3FailedToMountError
 
@@ -23,11 +23,28 @@ FUS3_PID_FILE_NAME = "fus3_pids.txt"
 
 
 class Fus3ProcessManager(object):
-    fus3_path = None
-    library_path = None
-    cwd_path = None
+    fus3_path: Optional[str] = None
+    library_path: Optional[str] = None
+    cwd_path: Optional[str] = None
 
-    def __init__(self, asset_bucket, region, manifest_path, mount_point, cas_prefix=None):
+    _mount_point: str
+    _fus3_proc: Optional[subprocess.Popen]
+    _fus3_thread: Optional[threading.Thread]
+    _mount_temp_directory: Optional[str]
+    _run_path: Optional[str]
+    _asset_bucket: str
+    _region: str
+    _manifest_path: str
+    _cas_prefix: Optional[str]
+
+    def __init__(
+        self,
+        asset_bucket: str,
+        region: str,
+        manifest_path: str,
+        mount_point: str,
+        cas_prefix: Optional[str] = None,
+    ):
         # TODO: Once Windows pathmapping is implemented we can remove this
         if sys.platform == "win32":
             raise NotImplementedError("Windows is not currently supported for Job Attachments")
@@ -238,7 +255,7 @@ class Fus3ProcessManager(object):
         Start our fus3 process
         :return: fus3 process id
         """
-        self._run_path = self.get_cwd()
+        self._run_path = str(self.get_cwd())
         log.info(f"Using run_path {self._run_path}")
         log.info(f"Using mount_point {self._mount_point}")
         self.create_mount_point(self._mount_point)

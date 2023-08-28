@@ -50,7 +50,7 @@ def farm_list(**args):
 @handle_error
 def farm_get(**args):
     """
-    Get the details of a Amazon Deadline Cloud farm.
+    Get the details of an Amazon Deadline Cloud farm.
 
     If farm ID is not provided, returns the configured default farm.
     """

@@ -72,11 +72,11 @@ def apply_cli_options_to_config(
     *, config: Optional[ConfigParser] = None, required_options: Set[str] = set(), **args
 ) -> Optional[ConfigParser]:
     """
-    Modifies a Amazon Deadline Cloud config object to apply standard option names to it, such as
+    Modifies an Amazon Deadline Cloud config object to apply standard option names to it, such as
     the AWS profile, Amazon Deadline Cloud Farm, or Amazon Deadline Cloud Queue to use.
 
     Args:
-        config (ConfigParser, optional): A Amazon Deadline Cloud config, read by config_file.read_config().
+        config (ConfigParser, optional): an Amazon Deadline Cloud config, read by config_file.read_config().
                 If not provided, loads the config from disk.
     """
     # Only work with a custom config if there are standard options provided
@@ -96,12 +96,16 @@ def apply_cli_options_to_config(
         if queue_id:
             config_file.set_setting("defaults.queue_id", queue_id, config=config)
 
+        job_id = args.pop("job_id", None)
+        if job_id:
+            config_file.set_setting("defaults.job_id", job_id, config=config)
+
         auto_accept = args.pop("yes", None)
         if auto_accept:
             config_file.set_setting("settings.auto_accept", "true", config=config)
     else:
         # Remove the standard option names from the args list
-        for name in ["profile", "farm_id", "queue_id"]:
+        for name in ["profile", "farm_id", "queue_id", "job_id"]:
             args.pop(name, None)
 
     # Check that the required options have values
@@ -114,6 +118,11 @@ def apply_cli_options_to_config(
         required_options.remove("queue_id")
         if not config_file.get_setting("defaults.queue_id", config=config):
             raise click.UsageError("Missing '--queue-id' or default Queue ID configuration")
+
+    if "job_id" in required_options:
+        required_options.remove("job_id")
+        if not config_file.get_setting("defaults.job_id", config=config):
+            raise click.UsageError("Missing '--job-id' or default Job ID configuration")
 
     if required_options:
         raise RuntimeError(

@@ -55,7 +55,7 @@ def queue_list(**args):
 @handle_error
 def queue_get(**args):
     """
-    Get the details of a Amazon Deadline Cloud Queue.
+    Get the details of an Amazon Deadline Cloud Queue.
 
     If Queue ID is not provided, returns the configured default Queue.
     """

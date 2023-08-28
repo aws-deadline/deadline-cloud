@@ -9,13 +9,14 @@ on:
 
 jobs:
   Python:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       id-token: write
       contents: read
     strategy:
       matrix:
         python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        os: [ubuntu-latest, windows-latest, macOS-latest]
     env:
       PYTHON: ${{ matrix.python-version }}
       CODEARTIFACT_REGION: "us-west-2"
@@ -25,7 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       if: ${{ !inputs.branch }}
-      
+
     - uses: actions/checkout@v3
       if: ${{ inputs.branch }}
       with:
@@ -36,7 +37,7 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
       with:
@@ -44,6 +45,7 @@ jobs:
         aws-region: us-west-2
 
     - name: Install Hatch
+      shell: bash
       run: |
         CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
         echo "::add-mask::$CODEARTIFACT_AUTH_TOKEN"
@@ -57,4 +59,4 @@ jobs:
       run: hatch build
 
     - name: Run Tests
-      run: hatch run test
+      run: hatch run test -vv

@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from deadline.client import api
 from deadline.client.api import get_boto3_client, get_queue_boto3_session
 from deadline.client.api._session import _modified_logging_level
-from deadline.client.config import config_file, get_setting
+from deadline.client.config import config_file, get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
@@ -89,7 +89,7 @@ def validate_parameters(ctx, param, value):
     "--asset-loading-method",
     help="The method to use for loading assets on the server.  Options are PRELOAD (load assets onto server first then run the job) or ON_DEMAND (load assets as requested).",
     type=click.Choice([e.value for e in AssetLoadingMethod]),
-    default=AssetLoadingMethod.PRELOAD,
+    default=AssetLoadingMethod.PRELOAD.value,
 )
 @click.option(
     "--yes",
@@ -102,6 +102,12 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
     """
     Submits an OpenJobIO job bundle to Amazon Deadline Cloud.
     """
+    # Check Whether the CLI options are modifying any of the default settings that affect
+    # the job id. If not, we'll save the job id submitted as the default job id.
+    if args.get("profile") is None and args.get("farm_id") is None and args.get("queue_id") is None:
+        should_save_job_id = True
+    else:
+        should_save_job_id = False
     # Get a temporary config object with the standard options handled
     config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
@@ -123,7 +129,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
             "templateType": file_type,
         }
 
-        storage_profile_id = get_setting("defaults.storage_profile_id", config=config)
+        storage_profile_id = get_setting("settings.storage_profile_id", config=config)
         if storage_profile_id:
             create_job_args["storageProfileId"] = storage_profile_id
 
@@ -202,12 +208,17 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
         logger.debug(f"CreateJob Response {create_job_response}")
 
         if create_job_response and "jobId" in create_job_response:
+            job_id = create_job_response["jobId"]
             click.echo("Waiting for Job to be created...")
+
+            # If using the default config, set the default job id so it holds the
+            # most-recently submitted job.
+            if should_save_job_id:
+                set_setting("defaults.job_id", job_id)
 
             def _check_create_job_wait_canceled() -> bool:
                 return continue_submission
 
-            job_id = create_job_response["jobId"]
             success, status_message = api.wait_for_create_job_to_complete(
                 create_job_args["farmId"],
                 create_job_args["queueId"],
