@@ -48,7 +48,8 @@ def get_boto3_session(
     force_refresh: bool = False, config: Optional[ConfigParser] = None
 ) -> boto3.Session:
     """
-    Gets a boto3 session for the configured Amazon Deadline Cloud aws profile
+    Gets a boto3 session for the configured Amazon Deadline Cloud aws profile. This may
+    either use a named profile or the default credentials provider chain.
 
     This implementation caches the session object for use across the CLI code,
     so that we can use the following code pattern without repeated calls to
@@ -61,7 +62,12 @@ def get_boto3_session(
     global __cached_boto3_session
     global __cached_boto3_session_profile_name
 
-    profile_name = get_setting("defaults.aws_profile_name", config)
+    profile_name: Optional[str] = get_setting("defaults.aws_profile_name", config)
+
+    # If the default AWS profile name is either not set, or set to "default",
+    # use the default credentials provider chain instead of a named profile.
+    if profile_name in ("", "default"):
+        profile_name = None
 
     # If a config was provided, don't use the Session caching mechanism.
     if config:

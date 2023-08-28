@@ -10,7 +10,6 @@ __all__ = [
     "get_best_profile_for_farm",
     "str2bool",
     "DEFAULT_DEADLINE_ENDPOINT_URL",
-    "DEFAULT_DEADLINE_AWS_PROFILE_NAME",
 ]
 
 import os
@@ -26,8 +25,6 @@ from ..exceptions import DeadlineOperationError
 CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
 # Environment variable that, if set, overrides the value of CONFIG_FILE_PATH
 CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
-# The default Amazon Deadline Cloud SDK AWS profile
-DEFAULT_DEADLINE_AWS_PROFILE_NAME = "AmazonDeadlineCliAccess"
 # The default Amazon Deadline Cloud endpoint URL
 # TODO: This is currently set to our closed-beta endpoint. We need to update this for GA.
 DEFAULT_DEADLINE_ENDPOINT_URL = "https://btpdb6qczg.execute-api.us-west-2.amazonaws.com"
@@ -55,7 +52,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": "",
     },
     "defaults.aws_profile_name": {
-        "default": DEFAULT_DEADLINE_AWS_PROFILE_NAME,
+        "default": "",
         "section_format": "profile-{}",
     },
     "settings.job_history_dir": {
