@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests for the CLI list-farms command.
+Tests for the CLI config command.
 """
 
 import importlib
@@ -34,7 +34,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 8
+    assert len(settings.keys()) == 9
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -94,6 +94,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.deadline_endpoint_url", "https://some-url-value")
     config.set_setting("defaults.farm_id", "farm-82934h23k4j23kjh")
     config.set_setting("defaults.queue_id", "queue-389348u234jhk34")
+    config.set_setting("defaults.storage_profile_id", "sp-12345abcde12345")
     config.set_setting("settings.auto_accept", "False")
     config.set_setting("settings.log_level", "DEBUG")
 

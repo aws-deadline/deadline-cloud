@@ -123,6 +123,10 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
             "templateType": file_type,
         }
 
+        storage_profile_id = get_setting("defaults.storage_profile_id", config=config)
+        if storage_profile_id:
+            create_job_args["storageProfileId"] = storage_profile_id
+
         # The job parameters
         job_bundle_parameters = read_job_bundle_parameters(job_bundle_dir)
 

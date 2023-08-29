@@ -261,6 +261,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
             farm_id = get_setting("defaults.farm_id")
             queue_id = get_setting("defaults.queue_id")
+            storage_profile_id = get_setting("defaults.storage_profile_id")
 
             queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 
@@ -281,6 +282,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.create_job_response = SubmitJobProgressDialog.start_submission(
                 farm_id,
                 queue_id,
+                storage_profile_id,
                 job_bundle_dir,
                 asset_manager,
                 deadline,
