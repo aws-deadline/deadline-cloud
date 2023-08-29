@@ -43,15 +43,15 @@ def test_list_storage_profiles_for_queue_paginated(fresh_deadline_config):
     """Confirm api.list_storage_profiles_for_queue concatenates multiple pages"""
     with patch.object(api._session, "get_boto3_session") as session_mock:
         session_mock().client("deadline").list_storage_profiles_for_queue.side_effect = [
-            {"storage_profiles": STORAGE_PROFILES_LIST[:2], "nextToken": "abc"},
-            {"storage_profiles": STORAGE_PROFILES_LIST[2:3], "nextToken": "def"},
-            {"storage_profiles": STORAGE_PROFILES_LIST[3:]},
+            {"storageProfiles": STORAGE_PROFILES_LIST[:2], "nextToken": "abc"},
+            {"storageProfiles": STORAGE_PROFILES_LIST[2:3], "nextToken": "def"},
+            {"storageProfiles": STORAGE_PROFILES_LIST[3:]},
         ]
 
         # Call the API
         storage_profiles = api.list_storage_profiles_for_queue()
 
-        assert storage_profiles["storage_profiles"] == STORAGE_PROFILES_LIST
+        assert storage_profiles["storageProfiles"] == STORAGE_PROFILES_LIST
 
 
 @pytest.mark.parametrize("pass_principal_id_filter", [True, False])
@@ -63,7 +63,7 @@ def test_list_storage_profiles_for_queue_principal_id(
 
     with patch.object(api._session, "get_boto3_session") as session_mock:
         session_mock().client("deadline").list_storage_profiles_for_queue.side_effect = [
-            {"storage_profiles": STORAGE_PROFILES_LIST},
+            {"storageProfiles": STORAGE_PROFILES_LIST},
         ]
         if user_identities:
             session_mock()._session.get_scoped_config.return_value = {
@@ -78,7 +78,7 @@ def test_list_storage_profiles_for_queue_principal_id(
         else:
             storage_profiles = api.list_storage_profiles_for_queue()
 
-        assert storage_profiles["storage_profiles"] == STORAGE_PROFILES_LIST
+        assert storage_profiles["storageProfiles"] == STORAGE_PROFILES_LIST
 
         if pass_principal_id_filter:
             session_mock().client(
