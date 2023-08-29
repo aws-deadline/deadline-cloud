@@ -27,6 +27,9 @@ def cli_config():
     defaults.queue_id:
         The default queue ID to use for job submissions or CLI operations.
 
+    defaults.storage_profile_id:
+        The default storage profile ID to use for job submission or CLI operations.
+
     settings.job_history_dir:
         The directory in which to create new job bundles for
         submitting to Amazon Deadline Cloud, to produce a history of job submissions.

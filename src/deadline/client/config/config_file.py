@@ -73,6 +73,11 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "depend": "defaults.farm_id",
         "section_format": "{}",
     },
+    "defaults.storage_profile_id": {
+        "default": "",
+        "depend": "defaults.queue_id",
+        "section_format": "{}",
+    },
     "settings.auto_accept": {
         "default": "false",
     },

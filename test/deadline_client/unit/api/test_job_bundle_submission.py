@@ -20,7 +20,12 @@ from deadline.job_attachments.models import ManifestProperties, Attachments
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments.utils import AssetLoadingMethod, OperatingSystemFamily
 
-from ..shared_constants import MOCK_BUCKET_NAME, MOCK_FARM_ID, MOCK_QUEUE_ID
+from ..shared_constants import (
+    MOCK_BUCKET_NAME,
+    MOCK_FARM_ID,
+    MOCK_STORAGE_PROFILE_ID,
+    MOCK_QUEUE_ID,
+)
 
 MOCK_GET_QUEUE_RESPONSE = {
     "queueId": MOCK_QUEUE_ID,
@@ -272,6 +277,8 @@ def test_create_job_from_job_bundle(
 
             config.set_setting("defaults.farm_id", MOCK_FARM_ID)
             config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+            config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+
             # Write the template to the job bundle
             with open(
                 os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
@@ -305,6 +312,7 @@ def test_create_job_from_job_bundle(
             queueId=MOCK_QUEUE_ID,
             template=job_template,
             templateType=job_template_type,
+            storageProfileId=MOCK_STORAGE_PROFILE_ID,
             **expected_create_job_parameters_dict,
         )
 
@@ -434,6 +442,7 @@ def test_create_job_from_job_bundle_job_attachments(
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+        config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -490,6 +499,7 @@ def test_create_job_from_job_bundle_job_attachments(
             queueId=MOCK_QUEUE_ID,
             template=ANY,
             templateType=ANY,
+            storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments={
                 "manifests": [],
                 "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
@@ -514,6 +524,7 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
 
             config.set_setting("defaults.farm_id", MOCK_FARM_ID)
             config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+            config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
             # Write the template to the job bundle
             with open(
@@ -543,6 +554,7 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
                 queueId=MOCK_QUEUE_ID,
                 template=job_template,
                 templateType=job_template_type,
+                storageProfileId=MOCK_STORAGE_PROFILE_ID,
                 priority=50,
             )
 
@@ -582,6 +594,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+        config.set_setting("defaults.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -625,6 +638,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
             queueId=MOCK_QUEUE_ID,
             template=ANY,
             templateType=ANY,
+            storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments={
                 "manifests": [
                     {

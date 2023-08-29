@@ -10,6 +10,7 @@ Example code:
 
 __all__ = ["DeadlineConfigDialog"]
 
+import sys
 import threading
 from configparser import ConfigParser
 from logging import getLogger, root
@@ -152,6 +153,9 @@ class DeadlineWorkstationConfigWidget(QWidget):
     # Emitted when an async refresh_queues_list thread completes,
     # provides (aws_profile_name, farm_id, [(queue_id, queue_name), ...])
     _queue_list_update = Signal(str, str, list)
+    # Emitted when an async refresh_storage_profiles_name_list thread completes,
+    # provides (aws_profile_name, farm_id, queue_id, [storage_profile_id, ...])
+    _storage_profile_list_update = Signal(str, str, list)
     # This signal is sent when any background refresh thread catches an exception,
     # provides (operation_name, BaseException)
     _background_exception = Signal(str, BaseException)
@@ -237,6 +241,18 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
         self.default_queue_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_queue_box_label, self.default_queue_box)
+
+        self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
+        default_storage_profile_box_label = self.labels["defaults.storage_profile_id"] = QLabel(
+            "Default Storage Profile"
+        )
+        self.default_storage_profile_box.box.currentIndexChanged.connect(
+            self.default_storage_profile_name_changed
+        )
+        self.default_storage_profile_box.background_exception.connect(
+            self.handle_background_exception
+        )
+        layout.addRow(default_storage_profile_box_label, self.default_storage_profile_box)
 
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
@@ -360,6 +376,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def refresh_lists(self):
         self.default_farm_box.refresh_list()
         self.default_queue_box.refresh_list()
+        self.default_storage_profile_box.refresh_list()
 
     def refresh(self):
         """
@@ -372,6 +389,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             config_file.set_setting(setting_name, value, self.config)
         self.default_farm_box.set_config(self.config)
         self.default_queue_box.set_config(self.config)
+        self.default_storage_profile_box.set_config(self.config)
 
         with block_signals(self.aws_profiles_box):
             aws_profile_name = config_file.get_setting(
@@ -404,6 +422,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             refresh_callback()
 
         self.default_queue_box.refresh_selected_id()
+        self.default_storage_profile_box.refresh_selected_id()
 
         # Put an orange box around the labels for any settings that are changed
         for setting_name, label in self.labels.items():
@@ -447,6 +466,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.changes["defaults.aws_profile_name"] = value
         self.default_farm_box.clear_list()
         self.default_queue_box.clear_list()
+        self.default_storage_profile_box.clear_list()
         self.refresh()
 
     def job_history_dir_changed(self):
@@ -462,6 +482,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.changes["defaults.farm_id"] = self.default_farm_box.box.itemData(index)
         self.refresh()
         self.default_queue_box.refresh_list()
+        self.default_storage_profile_box.refresh_list()
 
     def deadline_endpoint_url_edited(self):
         deadline_endpoint_url = self.deadline_endpoint_url_edit.text()
@@ -474,6 +495,13 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def default_queue_changed(self, index):
         self.changes["defaults.queue_id"] = self.default_queue_box.box.itemData(index)
+        self.refresh()
+        self.default_storage_profile_box.refresh_list()
+
+    def default_storage_profile_name_changed(self, index):
+        self.changes["defaults.storage_profile_id"] = self.default_storage_profile_box.box.itemData(
+            index
+        )
         self.refresh()
 
 
@@ -621,3 +649,47 @@ class DeadlineQueueListComboBox(_DeadlineResourceListComboBox):
             return sorted([(item["displayName"], item["queueId"]) for item in response["queues"]])
         else:
             return []
+
+
+class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
+    WINDOWS_OS = "windows"
+    MAC_OS = "macos"
+    LINUX_OS = "linux"
+
+    def __init__(self, parent=None):
+        super().__init__(
+            resource_name="Storage Profile",
+            setting_name="defaults.storage_profile_id",
+            parent=parent,
+        )
+
+    def list_resources(self, config: Optional[ConfigParser]):
+        default_farm_id = config_file.get_setting("defaults.farm_id", config=config)
+        default_queue_id = config_file.get_setting("defaults.queue_id", config=config)
+        if default_farm_id and default_queue_id:
+            response = api.list_storage_profiles_for_queue(
+                config=config, farmId=default_farm_id, queueId=default_queue_id
+            )
+            storage_profiles = response.get("storageProfiles", [])
+            return sorted(
+                (item["displayName"], item["storageProfileId"])
+                for item in storage_profiles
+                if self._get_current_os() == item["osFamily"]
+            )
+        else:
+            return []
+
+    def _get_current_os(self) -> str:
+        """
+        Get a string specifying what the OS is, following the format the Deadline storage profile API expects.
+        """
+        if sys.platform.startswith("linux"):
+            return self.LINUX_OS
+
+        if sys.platform.startswith("darwin"):
+            return self.MAC_OS
+
+        if sys.platform.startswith("win"):
+            return self.WINDOWS_OS
+
+        return "Unknown"
