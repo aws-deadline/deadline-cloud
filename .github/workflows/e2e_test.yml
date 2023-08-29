@@ -11,7 +11,7 @@ jobs:
       id-token: write
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v3
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_E2E_ROLE }}
           aws-region: us-west-2
