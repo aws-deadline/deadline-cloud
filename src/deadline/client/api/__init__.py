@@ -9,6 +9,7 @@ __all__ = [
     "get_boto3_client",
     "AwsCredentialsStatus",
     "AwsCredentialsType",
+    "TelemetryClient",
     "check_credentials_status",
     "check_deadline_api_available",
     "get_credentials_type",
@@ -18,6 +19,7 @@ __all__ = [
     "list_fleets",
     "list_storage_profiles_for_queue",
     "get_queue_boto3_session",
+    "get_telemetry_client",
 ]
 
 from configparser import ConfigParser
@@ -37,6 +39,7 @@ from ._session import (
     get_studio_id,
 )
 from ._submit_job_bundle import create_job_from_job_bundle, wait_for_create_job_to_complete
+from ._telemetry import get_telemetry_client, TelemetryClient
 
 logger = getLogger(__name__)
 

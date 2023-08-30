@@ -431,7 +431,9 @@ def test_create_job_from_job_bundle_job_attachments(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
         submission.S3AssetManager, "upload_assets"
-    ) as mock_upload_assets:
+    ) as mock_upload_assets, patch.object(
+        _submit_job_bundle.api, "get_telemetry_client"
+    ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
@@ -574,12 +576,14 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
         submission.S3AssetManager, "upload_assets"
-    ) as mock_upload_assets:
+    ) as mock_upload_assets, patch.object(
+        _submit_job_bundle.api, "get_telemetry_client"
+    ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
         mock_upload_assets.return_value = [
-            SummaryStatistics,
+            SummaryStatistics(),
             Attachments(
                 [
                     ManifestProperties(

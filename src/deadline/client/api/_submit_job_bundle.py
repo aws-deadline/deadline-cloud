@@ -247,6 +247,7 @@ def _hash_attachments(
     output_paths: Set[str],
     storage_profile_id: Optional[str] = None,
     hashing_progress_callback: Optional[Callable] = None,
+    config: Optional[ConfigParser] = None,
 ) -> List[AssetRootManifest]:
     """
     Starts the job attachments hashing and handles the progress reporting
@@ -266,6 +267,7 @@ def _hash_attachments(
         hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
         on_preparing_to_submit=hashing_progress_callback,
     )
+    api.get_telemetry_client(config=config).record_hashing_summary(hashing_summary)
 
     return manifests
 
@@ -274,6 +276,7 @@ def _upload_attachments(
     asset_manager: S3AssetManager,
     manifests: List[AssetRootManifest],
     upload_progress_callback: Optional[Callable] = None,
+    config: Optional[ConfigParser] = None,
 ) -> Dict[str, Any]:
     """
     Starts the job attachments upload and handles the progress reporting callback.
@@ -289,5 +292,6 @@ def _upload_attachments(
     upload_summary, attachment_settings = upload_job_attachments(
         asset_manager, manifests, upload_progress_callback
     )
+    api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
 
     return attachment_settings

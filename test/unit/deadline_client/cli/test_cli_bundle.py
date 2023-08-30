@@ -53,6 +53,8 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
         bundle_group, "_hash_attachments", return_value=[]
     ), patch.object(bundle_group, "get_queue_boto3_session"), patch.object(
         bundle_group, "_upload_attachments"
+    ), patch.object(
+        bundle_group.api, "get_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -172,6 +174,8 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
         bundle_group.api, "get_boto3_session"
     ), patch.object(
         bundle_group, "get_queue_boto3_session"
+    ), patch.object(
+        bundle_group.api, "get_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -327,6 +331,8 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
         bundle_group.api, "get_boto3_session"
     ), patch.object(
         bundle_group, "get_queue_boto3_session"
+    ), patch.object(
+        bundle_group.api, "get_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -394,6 +400,8 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
         bundle_group.api, "get_boto3_session"
     ), patch.object(
         bundle_group, "get_queue_boto3_session"
+    ), patch.object(
+        bundle_group.api, "get_telemetry_client"
     ):
         get_boto3_client_mock().get_queue.return_value = {
             "displayName": "Test Queue",
