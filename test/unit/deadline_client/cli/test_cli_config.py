@@ -34,7 +34,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 10
+    assert len(settings.keys()) == 12
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -98,6 +98,8 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("defaults.job_id", "job-239u40234jkl234nkl23")
     config.set_setting("settings.auto_accept", "False")
     config.set_setting("settings.log_level", "DEBUG")
+    config.set_setting("telemetry.opt_out", "True")
+    config.set_setting("telemetry.identifier", "user-id-123abc-456def")
 
     runner = CliRunner()
     result = runner.invoke(deadline_cli.cli, ["config", "show"])
@@ -110,13 +112,15 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert "EnvVarOverrideProfile" in result.output
     assert "~/alternate/job_history" in result.output
     assert result.output.count("False") == 1
+    assert result.output.count("True") == 1
     assert "https://some-url-value" in result.output
     assert "farm-82934h23k4j23kjh" in result.output
     assert "queue-389348u234jhk34" in result.output
     assert "job-239u40234jkl234nkl23" in result.output
+    assert "settings.log_level:\n   DEBUG" in result.output
+    assert "user-id-123abc-456def" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
-    assert "settings.log_level:\n   DEBUG" in result.output
 
 
 @pytest.mark.parametrize("setting_name,default_value,alternate_value", CONFIG_SETTING_ROUND_TRIP)

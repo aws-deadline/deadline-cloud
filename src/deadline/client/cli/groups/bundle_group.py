@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import signal
+from configparser import ConfigParser
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import click
@@ -176,6 +177,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
                 asset_references.input_filenames,
                 asset_references.output_directories,
                 storage_profile_id=storage_profile_id,
+                config=config,
             )
 
             if (
@@ -192,7 +194,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
                 click.echo("Job submission canceled.")
                 return
 
-            attachment_settings = _upload_attachments(asset_manager, asset_manifests)
+            attachment_settings = _upload_attachments(asset_manager, asset_manifests, config)
 
             attachment_settings["assetLoadingMethod"] = AssetLoadingMethod(asset_loading_method)
             create_job_args["attachments"] = attachment_settings
@@ -293,6 +295,7 @@ def _hash_attachments(
     input_paths: Set[str],
     output_paths: Set[str],
     storage_profile_id: Optional[str] = None,
+    config: Optional[ConfigParser] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
     """
     Starts the job attachments hashing and handles the progress reporting
@@ -315,6 +318,7 @@ def _hash_attachments(
             on_preparing_to_submit=_update_hash_progress,
         )
 
+    api.get_telemetry_client(config=config).record_hashing_summary(hashing_summary)
     click.echo("Hashing Summary:")
     click.echo(
         f"    Hashed {hashing_summary.processed_files} files totaling"
@@ -333,7 +337,9 @@ def _hash_attachments(
 
 
 def _upload_attachments(
-    asset_manager: S3AssetManager, manifests: List[AssetRootManifest]
+    asset_manager: S3AssetManager,
+    manifests: List[AssetRootManifest],
+    config: Optional[ConfigParser] = None,
 ) -> Dict[str, Any]:
     """
     Starts the job attachments upload and handles the progress reporting callback.
@@ -357,6 +363,7 @@ def _upload_attachments(
             asset_manager, manifests, _update_upload_progress
         )
 
+    api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
     click.echo("Upload Summary:")
     click.echo(
         f"    Uploaded {upload_summary.processed_files} files totaling"
