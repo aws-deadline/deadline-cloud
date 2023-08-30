@@ -33,6 +33,7 @@ from .download import (
     mount_vfs_from_manifests,
 )
 from .fus3 import Fus3ProcessManager
+from .errors import AssetSyncError
 from .models import (
     ManifestProperties,
     Attachments,
@@ -127,16 +128,20 @@ class AssetSync:
         self,
         s3_settings: JobAttachmentS3Settings,
         output_manifest: AssetManifest,
-        root_path: str,
         full_output_prefix: str,
+        root_path: str,
+        file_system_location_name: Optional[str] = None,
     ) -> None:
         """Uploads the given output manifest to the given S3 bucket."""
         manifest_bytes = output_manifest.encode().encode("utf-8")
+        manifest_name_prefix = hash_data(f"{file_system_location_name or ''}{root_path}".encode())
         manifest_path = join_s3_paths(
             full_output_prefix,
-            f"{hash_data(str(root_path).encode())}_output.{output_manifest.hashAlg}",
+            f"{manifest_name_prefix}_output.{output_manifest.hashAlg}",
         )
         metadata = {"Metadata": {"asset-root": root_path}}
+        if file_system_location_name:
+            metadata["Metadata"]["file-system-location-name"] = file_system_location_name
 
         self.logger.info(f"Uploading output manifest to {manifest_path}")
 
@@ -255,6 +260,7 @@ class AssetSync:
         queue_id: str,
         job_id: str,
         session_dir: Path,
+        storage_profiles_path_mapping_rules: dict[str, str] = {},
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
@@ -265,13 +271,15 @@ class AssetSync:
             ON_DEMAND: downloads a manifest file and mounts a Virtual File System at the
                        specified asset root corresponding to the manifest contents
 
-
         Args:
             s3_settings: S3-specific Job Attachment settings.
             attachments: an object that holds all input assets for the job.
             queue_id: the ID of the queue.
             job_id: the ID of the job.
             session_dir: the directory that the session is going to use.
+            storage_profiles_path_mapping_rules: A dict of source path -> destination path mappings.
+                If this dict is not empty, it means that the Storage Profile set in the job is
+                different from the one configured in the Fleet performing the input-syncing.
             step_dependencies: the list of Step IDs whose output should be downloaded over the input
                 job attachments.
             on_downloading_files: a function that will be called with a ProgressReportMetadata object
@@ -299,14 +307,30 @@ class AssetSync:
         )
         pathmapping_rules: Dict[str, Dict[str, str]] = {}
 
+        storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
+
         for manifest_properties in attachments.manifests:
-            dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
-            local_root: str = str(session_dir.joinpath(dir_name))
-            pathmapping_rules[dir_name] = {
-                "source_os": manifest_properties.osType.to_path_mapping_os(),
-                "source_path": manifest_properties.rootPath,
-                "destination_path": local_root,
-            }
+            local_root: str = ""
+            if (
+                len(storage_profiles_path_mapping_rules) > 0
+                and manifest_properties.fileSystemLocationName
+            ):
+                if manifest_properties.rootPath in storage_profiles_source_paths:
+                    local_root = storage_profiles_path_mapping_rules[manifest_properties.rootPath]
+                else:
+                    raise AssetSyncError(
+                        "Error occured while attempting to sync input files: "
+                        f"No path mapping rule found for the source path {manifest_properties.rootPath}"
+                    )
+            else:
+                dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+                local_root = str(session_dir.joinpath(dir_name))
+                pathmapping_rules[dir_name] = {
+                    "source_os": manifest_properties.osType.to_path_mapping_os(),
+                    "source_path": manifest_properties.rootPath,
+                    "destination_path": local_root,
+                }
+
             if manifest_properties.inputManifestPath:
                 key = s3_settings.add_root_and_manifest_folder_prefix(
                     manifest_properties.inputManifestPath
@@ -381,6 +405,7 @@ class AssetSync:
         session_action_id: str,
         start_time: float,
         session_dir: Path,
+        storage_profiles_path_mapping_rules: dict[str, str] = {},
         on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     ) -> SummaryStatistics:
         """Uploads any output files specified in the manifest, if found."""
@@ -395,10 +420,28 @@ class AssetSync:
 
         all_output_files: List[OutputFile] = []
 
+        storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
+
         try:
             for manifest_properties in attachments.manifests:
-                dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
-                local_root: Path = session_dir.joinpath(dir_name)
+                local_root: Path = Path()
+                if (
+                    len(storage_profiles_path_mapping_rules) > 0
+                    and manifest_properties.fileSystemLocationName
+                ):
+                    if manifest_properties.rootPath in storage_profiles_source_paths:
+                        local_root = Path(
+                            storage_profiles_path_mapping_rules[manifest_properties.rootPath]
+                        )
+                    else:
+                        raise AssetSyncError(
+                            "Error occured while attempting to sync input files: "
+                            f"No path mapping rule found for the source path {manifest_properties.rootPath}"
+                        )
+                else:
+                    dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+                    local_root = session_dir.joinpath(dir_name)
+
                 output_files: List[OutputFile] = self._get_output_files(
                     manifest_properties.osType.value,
                     manifest_properties,
@@ -420,10 +463,11 @@ class AssetSync:
                         session_action_id=session_action_id_with_time_stamp,
                     )
                     self._upload_output_manifest_to_s3(
-                        s3_settings,
-                        output_manifest,
-                        manifest_properties.rootPath,
-                        full_output_prefix,
+                        s3_settings=s3_settings,
+                        output_manifest=output_manifest,
+                        full_output_prefix=full_output_prefix,
+                        root_path=manifest_properties.rootPath,
+                        file_system_location_name=manifest_properties.fileSystemLocationName,
                     )
                     all_output_files.extend(output_files)
 

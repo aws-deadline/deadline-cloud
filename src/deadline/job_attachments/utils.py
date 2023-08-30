@@ -8,7 +8,7 @@ import sys
 from enum import Enum
 from hashlib import shake_256
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 import uuid
 import yaml
 
@@ -16,6 +16,21 @@ import xxhash
 
 CONFIG_ROOT = ".deadline"
 COMPONENT_NAME = "job_attachments"
+
+
+class FileSystemLocationType(str, Enum):
+    SHARED = "SHARED"
+    LOCAL = "LOCAL"
+
+    @classmethod
+    def get_type(cls, type_string):
+        """
+        Returns the OperatingSystemFamily enum value from the (case-insensitive) OS string.
+        """
+        try:
+            return cls(type_string.upper())
+        except ValueError:
+            raise ValueError(f"Invalid type string: {type_string}")
 
 
 class OperatingSystemFamily(str, Enum):
@@ -167,6 +182,18 @@ def get_default_hash_cache_db_file_dir() -> Optional[str]:
     if default_path:
         default_path = os.path.join(default_path, CONFIG_ROOT, COMPONENT_NAME)
     return default_path
+
+
+def is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
+    """
+    Determines if path1 is relative to path2. This function is to support
+    Python versions that do not have the built-in `Path.is_relative_to()` method.
+    """
+    try:
+        Path(path1).relative_to(Path(path2))
+        return True
+    except ValueError:
+        return False
 
 
 class OJIOToken:

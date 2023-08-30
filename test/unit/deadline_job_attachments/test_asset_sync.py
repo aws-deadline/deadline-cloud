@@ -7,7 +7,7 @@ import shutil
 from math import trunc
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock, call, mock_open, patch
+from unittest.mock import ANY, MagicMock, call, mock_open, patch
 
 import boto3
 from deadline.job_attachments.progress_tracker import ProgressStatus
@@ -17,7 +17,13 @@ from moto import mock_sts
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.download import _progress_logger
-from deadline.job_attachments.models import Job, JobAttachmentS3Settings, Attachments, Queue
+from deadline.job_attachments.models import (
+    Attachments,
+    Job,
+    JobAttachmentS3Settings,
+    ManifestProperties,
+    Queue,
+)
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
@@ -623,3 +629,89 @@ class TestAssetSync:
         ):
             actual = self.default_asset_sync.get_s3_settings("test-farm", default_queue.queueId)
             assert actual == default_job_attachment_s3_settings
+
+    def test_sync_inputs_with_storage_profiles_path_mapping_rules(
+        self,
+        default_queue: Queue,
+        default_job: Job,
+        tmp_path: Path,
+    ):
+        """Tests when a non-empty `storage_profiles_path_mapping_rules` is passed to `sync_inputs`.
+        Check that, for input manifests with an `fileSystemLocationName`, if the root path
+        corresponding to it exists in the `storage_profiles_path_mapping_rules`, the download
+        is attempted to the correct destination path."""
+        # GIVEN
+        default_job.attachments = Attachments(
+            manifests=[
+                ManifestProperties(
+                    rootPath="/tmp",
+                    osType=OperatingSystemFamily.LINUX,
+                    inputManifestPath="manifest_input.xxh128",
+                    inputManifestHash="manifesthash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+                ManifestProperties(
+                    fileSystemLocationName="Movie 1",
+                    rootPath="/home/user/movie1",
+                    osType=OperatingSystemFamily.LINUX,
+                    inputManifestPath="manifest-movie1_input.xxh128",
+                    inputManifestHash="manifestmovie1hash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+            ],
+        )
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(tmp_path.joinpath(dest_dir))
+
+        storage_profiles_path_mapping_rules = {
+            "/home/user/movie1": "/tmp/movie1",
+        }
+
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            side_effect=[
+                f"{local_root}/manifest_input.xxh128",
+                f"{local_root}/manifest-movie1_input.xxh128",
+            ],
+        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
+            return_value="test_manifest_data",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            return_value=DownloadSummaryStatistics(),
+        ) as mock_download_files_from_manifests, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (summary_statistics, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
+                default_queue.jobAttachmentSettings,
+                default_job.attachments,
+                default_queue.queueId,
+                default_job.jobId,
+                tmp_path,
+                storage_profiles_path_mapping_rules,
+                on_downloading_files=mock_on_downloading_files,
+            )
+
+            # THEN
+            assert result_pathmap_rules == [
+                {
+                    "source_os": "POSIX",
+                    "source_path": default_job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+
+            mock_download_files_from_manifests.assert_called_once_with(
+                s3_bucket="test-bucket",
+                manifests_by_root={
+                    f"{local_root}": "test_manifest_data",
+                    "/tmp/movie1": "test_manifest_data",
+                },
+                cas_prefix="assetRoot/Data",
+                session=ANY,
+                on_downloading_files=mock_on_downloading_files,
+            )

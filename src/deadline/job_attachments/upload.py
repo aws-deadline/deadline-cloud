@@ -19,12 +19,6 @@ import boto3
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError
 
-from deadline.job_attachments.progress_tracker import (
-    ProgressStatus,
-    ProgressTracker,
-    SummaryStatistics,
-)
-
 from .asset_manifests import (
     AssetManifest,
     ManifestModel,
@@ -33,6 +27,7 @@ from .asset_manifests import (
     base_manifest,
 )
 from .aws.aws_clients import get_account_id, get_boto3_session, get_s3_client
+from .aws.deadline import get_storage_profile_for_queue
 from .errors import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
@@ -50,12 +45,19 @@ from .models import (
     JobAttachmentS3Settings,
     Attachments,
 )
+from .progress_tracker import (
+    ProgressStatus,
+    ProgressTracker,
+    SummaryStatistics,
+)
 from .utils import (
+    FileSystemLocationType,
     OperatingSystemFamily,
     get_deadline_formatted_os,
     get_os_pure_path,
     hash_data,
     hash_file,
+    is_relative_to,
     join_s3_paths,
 )
 
@@ -86,10 +88,11 @@ class S3AssetUploader:
 
     def upload_assets(
         self,
+        job_attachment_settings: JobAttachmentS3Settings,
         manifest: AssetManifest,
         partial_manifest_prefix: str,
         source_root: Path,
-        job_attachment_settings: JobAttachmentS3Settings,
+        file_system_location_name: Optional[str] = None,
         progress_tracker: Optional[ProgressTracker] = None,
     ) -> tuple[str, str]:
         """
@@ -116,7 +119,10 @@ class S3AssetUploader:
         )
         manifest_bytes = manifest.encode().encode("utf-8")
 
-        manifest_name = f"{hash_data(str(source_root).encode())}_input.{manifest.hashAlg}"
+        manifest_name_prefix = hash_data(
+            f"{file_system_location_name or ''}{str(source_root)}".encode()
+        )
+        manifest_name = f"{manifest_name_prefix}_input.{manifest.hashAlg}"
 
         if partial_manifest_prefix:
             partial_manifest_key = join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -455,6 +461,7 @@ class S3AssetManager:
             asset_uploader = S3AssetUploader(session=session)
 
         self.asset_uploader = asset_uploader
+        self.session = session
 
         self.manifest_version: ManifestVersion = asset_manifest_version
 
@@ -558,11 +565,22 @@ class S3AssetManager:
             )
 
     def _get_asset_groups(
-        self, input_paths: set[str], output_paths: set[str]
+        self,
+        input_paths: set[str],
+        output_paths: set[str],
+        local_type_locations: dict[str, str] = {},
+        shared_type_locations: dict[str, str] = {},
     ) -> list[AssetRootGroup]:
         """
-        Given a list of files, generates a dict of root paths that all files are relative to.
-        Note that paths can be files or directories.
+        For the given input paths and output paths, a list of groups is returned, where paths sharing
+        the same root path are grouped together. Note that paths can be files or directories.
+
+        The returned list satisfies the following conditions:
+        - If a path is relative to any of the paths in the given `shared_type_locations` paths, it is
+          excluded from the list.
+        - The given `local_type_locations` paths can each form a group based on its root path. In other
+          words, if there are paths relative to any of the `local_type_locations` paths, they are grouped
+          together as one.
         """
         groupings: dict[str, AssetRootGroup] = {}
 
@@ -576,30 +594,79 @@ class S3AssetManager:
                     f"Skipping uploading input as it either doesn't exist or is a directory: {abs_path}"
                 )
                 continue
-            # Can't do path.root as it doesn't capture windows root drives
-            top_directory = get_os_pure_path(abs_path).parts[0]
-            if top_directory not in groupings:
-                groupings[top_directory] = AssetRootGroup()
-            groupings[top_directory].inputs.add(abs_path)
 
-        # For outputs, we can do both directory and file paths
+            # Skips the upload if the path is relative to any of the File System Location
+            # of SHARED type that was set in the Job.
+            if any(is_relative_to(abs_path, shared) for shared in shared_type_locations):
+                continue
+
+            # If the path is relative to any of the File System Location of LOCAL type,
+            # groups the files into a single group using the path of that location.
+            matched_root = self._find_matched_root_from_local_type_locations(
+                groupings=groupings,
+                abs_path=abs_path,
+                local_type_locations=local_type_locations,
+            )
+            groupings[matched_root].inputs.add(abs_path)
+
         for _path in output_paths:
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
-            top_directory = get_os_pure_path(abs_path).parts[0]
-            if top_directory not in groupings:
-                groupings[top_directory] = AssetRootGroup()
-            groupings[top_directory].outputs.add(abs_path)
+
+            # Skips the upload if the path is relative to any of the File System Location
+            # of SHARED type that was set in the Job.
+            if any(is_relative_to(abs_path, shared) for shared in shared_type_locations):
+                continue
+
+            # If the path is relative to any of the File System Location of LOCAL type,
+            # groups the files into a single group using the path of that location.
+            matched_root = self._find_matched_root_from_local_type_locations(
+                groupings=groupings,
+                abs_path=abs_path,
+                local_type_locations=local_type_locations,
+            )
+            groupings[matched_root].outputs.add(abs_path)
 
         # Finally, build the list of asset root groups
         for asset_group in groupings.values():
-            root_path: Path = Path(
+            common_path: Path = Path(
                 os.path.commonpath(list(asset_group.inputs | asset_group.outputs))
             )
-            if root_path.is_file():
-                root_path = root_path.parent
-            asset_group.root_path = str(root_path)
+            if common_path.is_file():
+                common_path = common_path.parent
+            asset_group.root_path = str(common_path)
 
         return list(groupings.values())
+
+    def _find_matched_root_from_local_type_locations(
+        self,
+        groupings: dict[str, AssetRootGroup],
+        abs_path: Path,
+        local_type_locations: dict[str, str] = {},
+    ) -> str:
+        """
+        Checks if the given `abs_path` is relative to any of the File System Locations of LOCAL type.
+        If it is, select the most specific File System Location, and add a new grouping keyed by that
+        matched root path (if the key does not exist.) Then, returns the matched root path.
+        If no match is found, returns the top directory of `abs_path` as the key used for grouping.
+        """
+        matched_root = None
+        for root_path in local_type_locations.keys():
+            if is_relative_to(abs_path, root_path) and (
+                matched_root is None or len(root_path) > len(matched_root)
+            ):
+                matched_root = root_path
+
+        if matched_root is not None:
+            if matched_root not in groupings:
+                groupings[matched_root] = AssetRootGroup(
+                    file_system_location_name=local_type_locations[matched_root],
+                )
+            return matched_root
+        else:
+            top_directory = get_os_pure_path(abs_path).parts[0]
+            if top_directory not in groupings:
+                groupings[top_directory] = AssetRootGroup()
+            return top_directory
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
         total_bytes = 0
@@ -640,10 +707,37 @@ class S3AssetManager:
             total_files += len(input_paths)
         return (total_files, total_bytes)
 
+    def _get_file_system_locations_by_type(
+        self,
+        storage_profile_id: str,
+        session: Optional[boto3.Session] = None,
+    ) -> Tuple[dict, dict]:
+        """
+        Given the Storage Profile ID, fetches Storage Profile for Queue object, and
+        extracts and groups path and name pairs from the File System Locations into
+        two dicts - LOCAL and SHARED type, respectively. Returns a tuple of two dicts.
+        """
+        storage_profile_for_queue = get_storage_profile_for_queue(
+            farm_id=self.farm_id,
+            queue_id=self.queue_id,
+            storage_profile_id=storage_profile_id,
+            session=session,
+        )
+
+        local_type_locations: dict[str, str] = {}
+        shared_type_locations: dict[str, str] = {}
+        for fs_loc in storage_profile_for_queue.fileSystemLocations:
+            if fs_loc.type == FileSystemLocationType.LOCAL:
+                local_type_locations[fs_loc.path] = fs_loc.name
+            elif fs_loc.type == FileSystemLocationType.SHARED:
+                shared_type_locations[fs_loc.path] = fs_loc.name
+        return local_type_locations, shared_type_locations
+
     def hash_assets_and_create_manifest(
         self,
         input_paths: list[str],
         output_paths: list[str],
+        storage_profile_id: Optional[str] = None,
         hash_cache_dir: Optional[str] = None,
         on_preparing_to_submit: Optional[Callable[[Any], bool]] = None,
     ) -> tuple[SummaryStatistics, list[AssetRootManifest]]:
@@ -668,10 +762,20 @@ class S3AssetManager:
 
         start_time = time.perf_counter()
 
+        local_type_locations: dict[str, str] = {}
+        shared_type_locations: dict[str, str] = {}
+        if storage_profile_id:
+            (
+                local_type_locations,
+                shared_type_locations,
+            ) = self._get_file_system_locations_by_type(storage_profile_id)
+
         # Group the paths by asset root, removing duplicates and empty strings
         asset_groups: list[AssetRootGroup] = self._get_asset_groups(
             {ip_path for ip_path in input_paths if ip_path},
             {op_path for op_path in output_paths if op_path},
+            local_type_locations,
+            shared_type_locations,
         )
 
         (input_files, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
@@ -690,6 +794,7 @@ class S3AssetManager:
 
             asset_root_manifests.append(
                 AssetRootManifest(
+                    file_system_location_name=group.file_system_location_name,
                     root_path=group.root_path,
                     asset_manifest=asset_manifest,
                     outputs=sorted(list(group.outputs)),
@@ -733,6 +838,7 @@ class S3AssetManager:
             ]
 
             manifest_properties = ManifestProperties(
+                fileSystemLocationName=asset_root_manifest.file_system_location_name,
                 rootPath=asset_root_manifest.root_path,
                 osType=OperatingSystemFamily.get_os_family(get_deadline_formatted_os()),
                 outputRelativeDirectories=output_rel_paths,
@@ -740,13 +846,14 @@ class S3AssetManager:
 
             if asset_root_manifest.asset_manifest:
                 (partial_manifest_key, asest_manifest_hash) = self.asset_uploader.upload_assets(
-                    asset_root_manifest.asset_manifest,
-                    self.job_attachment_settings.partial_manifest_prefix(
+                    job_attachment_settings=self.job_attachment_settings,
+                    manifest=asset_root_manifest.asset_manifest,
+                    partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(
                         self.farm_id, self.queue_id
                     ),
-                    Path(asset_root_manifest.root_path),
-                    self.job_attachment_settings,
-                    progress_tracker,
+                    source_root=Path(asset_root_manifest.root_path),
+                    file_system_location_name=asset_root_manifest.file_system_location_name,
+                    progress_tracker=progress_tracker,
                 )
                 manifest_properties.inputManifestPath = partial_manifest_key
                 manifest_properties.inputManifestHash = asest_manifest_hash
