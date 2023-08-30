@@ -149,6 +149,7 @@ def create_job_from_job_bundle(
             asset_manager,
             asset_references.input_filenames,
             asset_references.output_directories,
+            storage_profile_id,
             hashing_progress_callback,
         )
 
@@ -244,6 +245,7 @@ def _hash_attachments(
     asset_manager: S3AssetManager,
     input_paths: Set[str],
     output_paths: Set[str],
+    storage_profile_id: Optional[str] = None,
     hashing_progress_callback: Optional[Callable] = None,
 ) -> List[AssetRootManifest]:
     """
@@ -260,6 +262,7 @@ def _hash_attachments(
     hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
         input_paths=sorted(input_paths),
         output_paths=sorted(output_paths),
+        storage_profile_id=storage_profile_id,
         hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
         on_preparing_to_submit=hashing_progress_callback,
     )

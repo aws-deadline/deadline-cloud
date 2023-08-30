@@ -11,10 +11,10 @@ from datetime import datetime
 from io import BytesIO
 from logging import DEBUG, WARNING
 from pathlib import Path
+from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock, patch
 
 import boto3
-from deadline.job_attachments.progress_tracker import ProgressStatus
 import py.path
 import pytest
 from boto3.exceptions import S3UploadFailedError
@@ -31,17 +31,22 @@ from deadline.job_attachments.errors import (
     MissingS3RootPrefixError,
 )
 from deadline.job_attachments.models import (
+    Attachments,
+    AssetRootGroup,
+    FileSystemLocation,
     ManifestProperties,
     HashCacheEntry,
     JobAttachmentS3Settings,
-    Attachments,
+    StorageProfileForQueue,
 )
 from deadline.job_attachments.progress_tracker import (
     ProgressReportMetadata,
+    ProgressStatus,
     SummaryStatistics,
 )
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 from deadline.job_attachments.utils import (
+    FileSystemLocationType,
     OperatingSystemFamily,
     human_readable_file_size,
 )
@@ -1656,6 +1661,227 @@ class TestUpload:
                 f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
                 expected_manifest=expected_manifest,
             )
+
+    @pytest.mark.parametrize(
+        "mock_file_system_locations, expected_result",
+        [
+            (
+                [],
+                ({}, {}),
+            ),
+            (
+                [
+                    FileSystemLocation(
+                        name="location-1",
+                        type=FileSystemLocationType.LOCAL,
+                        path="C:\\User\\Movie1",
+                    ),
+                ],
+                ({"C:\\User\\Movie1": "location-1"}, {}),
+            ),
+            (
+                [
+                    FileSystemLocation(
+                        name="location-1",
+                        type=FileSystemLocationType.SHARED,
+                        path="/mnt/shared/movie1",
+                    ),
+                ],
+                ({}, {"/mnt/shared/movie1": "location-1"}),
+            ),
+            (
+                [
+                    FileSystemLocation(
+                        name="location-1",
+                        type=FileSystemLocationType.LOCAL,
+                        path="C:\\User\\Movie1",
+                    ),
+                    FileSystemLocation(
+                        name="location-2",
+                        type=FileSystemLocationType.LOCAL,
+                        path="/home/user1/movie1",
+                    ),
+                    FileSystemLocation(
+                        name="location-3",
+                        type=FileSystemLocationType.SHARED,
+                        path="/mnt/shared/movie1",
+                    ),
+                    FileSystemLocation(
+                        name="location-4",
+                        type=FileSystemLocationType.SHARED,
+                        path="/mnt/shared/etc",
+                    ),
+                ],
+                (
+                    {"C:\\User\\Movie1": "location-1", "/home/user1/movie1": "location-2"},
+                    {"/mnt/shared/movie1": "location-3", "/mnt/shared/etc": "location-4"},
+                ),
+            ),
+        ],
+    )
+    def test_get_file_system_locations_by_type(
+        self,
+        farm_id: str,
+        queue_id: str,
+        mock_file_system_locations: List[FileSystemLocation],
+        expected_result: Tuple[Dict[str, str], Dict[str, str]],
+    ):
+        mock_storage_profile_for_queue = StorageProfileForQueue(
+            storageProfileId="sp-0123456789",
+            displayName="Storage profile 1",
+            osFamily=OperatingSystemFamily.WINDOWS,
+            fileSystemLocations=mock_file_system_locations,
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.get_storage_profile_for_queue",
+            side_effect=[mock_storage_profile_for_queue],
+        ):
+            asset_manager = S3AssetManager(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_attachment_settings=self.job_attachment_s3_settings,
+            )
+
+            result = asset_manager._get_file_system_locations_by_type(
+                storage_profile_id="sp-0123456789"
+            )
+
+            assert result == expected_result
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="This test is for paths in POSIX path format and will be skipped on Windows.",
+    )
+    @patch.object(Path, "exists", return_value=True)
+    @pytest.mark.parametrize(
+        "input_paths, output_paths, local_type_locations, shared_type_locations, expected_result",
+        [
+            (
+                set(),  # input paths
+                set(),  # output paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [],
+            ),
+            (
+                {"/home/username/docs/inputs/input1.txt"},  # input paths
+                {"/home/username/docs/outputs"},  # output paths
+                {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="/home/username/docs",
+                        inputs={
+                            Path("/home/username/docs/inputs/input1.txt"),
+                        },
+                        outputs={
+                            Path("/home/username/docs/outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {"/home/username/movie1/inputs/input1.txt"},  # input paths
+                {"/home/username/movie1/outputs"},  # output paths
+                {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="/home/username/movie1",
+                        inputs={
+                            Path("/home/username/movie1/inputs/input1.txt"),
+                        },
+                        outputs={
+                            Path("/home/username/movie1/outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {"/mnt/shared/movie1/something.txt"},  # input paths
+                {"/home/username/movie1/outputs"},  # output paths
+                {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="/home/username/movie1/outputs",
+                        inputs=set(),
+                        outputs={
+                            Path("/home/username/movie1/outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {
+                    "/home/username/movie1/inputs/input1.txt",
+                    "/home/username/movie1/inputs/input2.txt",
+                    "/home/username/docs/doc1.txt",
+                    "/home/username/docs/doc2.txt",
+                    "/home/username/extra1.txt",
+                    "/mnt/shared/movie1/something.txt",
+                },  # input paths
+                {
+                    "/home/username/movie1/outputs1",
+                    "/home/username/movie1/outputs2",
+                },  # output paths
+                {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="/home/username/movie1",
+                        inputs={
+                            Path("/home/username/movie1/inputs/input1.txt"),
+                            Path("/home/username/movie1/inputs/input2.txt"),
+                        },
+                        outputs={
+                            Path("/home/username/movie1/outputs1"),
+                            Path("/home/username/movie1/outputs2"),
+                        },
+                    ),
+                    AssetRootGroup(
+                        root_path="/home/username",
+                        inputs={
+                            Path("/home/username/docs/doc1.txt"),
+                            Path("/home/username/docs/doc2.txt"),
+                            Path("/home/username/extra1.txt"),
+                        },
+                        outputs=set(),
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_get_asset_groups(
+        self,
+        farm_id: str,
+        queue_id: str,
+        input_paths: Set[str],
+        output_paths: Set[str],
+        local_type_locations: Dict[str, str],
+        shared_type_locations: Dict[str, str],
+        expected_result: List[AssetRootGroup],
+    ):
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+        )
+        result = asset_manager._get_asset_groups(
+            input_paths,
+            output_paths,
+            local_type_locations,
+            shared_type_locations,
+        )
+
+        sorted_result = sorted(result, key=lambda x: x.root_path)
+        sorted_expected_result = sorted(expected_result, key=lambda x: x.root_path)
+
+        assert sorted_result == sorted_expected_result
 
 
 def assert_progress_report_last_callback(

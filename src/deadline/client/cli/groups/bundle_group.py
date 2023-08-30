@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import signal
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import click
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -175,6 +175,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
                 asset_manager,
                 asset_references.input_filenames,
                 asset_references.output_directories,
+                storage_profile_id=storage_profile_id,
             )
 
             if (
@@ -288,7 +289,10 @@ def bundle_gui_submit(job_bundle_dir, **args):
 
 
 def _hash_attachments(
-    asset_manager: S3AssetManager, input_paths: Set[str], output_paths: Set[str]
+    asset_manager: S3AssetManager,
+    input_paths: Set[str],
+    output_paths: Set[str],
+    storage_profile_id: Optional[str] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
     """
     Starts the job attachments hashing and handles the progress reporting
@@ -306,6 +310,7 @@ def _hash_attachments(
         hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
             input_paths=sorted(input_paths),
             output_paths=sorted(output_paths),
+            storage_profile_id=storage_profile_id,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=_update_hash_progress,
         )
