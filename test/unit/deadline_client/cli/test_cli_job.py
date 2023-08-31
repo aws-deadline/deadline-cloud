@@ -82,7 +82,6 @@ def test_cli_job_list(fresh_deadline_config):
   taskRunStatus: RUNNING
   startedAt: 2023-01-27 07:37:53+00:00
   endedAt: 2023-01-27 07:39:17+00:00
-  lifecycleStatus: SUCCEEDED
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
 - displayName: CLI Job
@@ -90,7 +89,6 @@ def test_cli_job_list(fresh_deadline_config):
   taskRunStatus: COMPLETED
   startedAt: 2023-01-27 07:27:06+00:00
   endedAt: 2023-01-27 07:29:51+00:00
-  lifecycleStatus: SUCCEEDED
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:24:22+00:00
 
@@ -126,7 +124,6 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
   taskRunStatus: RUNNING
   startedAt: 2023-01-27 07:37:53+00:00
   endedAt: 2023-01-27 07:39:17+00:00
-  lifecycleStatus: SUCCEEDED
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
 - displayName: CLI Job
@@ -134,7 +131,6 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
   taskRunStatus: COMPLETED
   startedAt: 2023-01-27 07:27:06+00:00
   endedAt: 2023-01-27 07:29:51+00:00
-  lifecycleStatus: SUCCEEDED
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:24:22+00:00
 
