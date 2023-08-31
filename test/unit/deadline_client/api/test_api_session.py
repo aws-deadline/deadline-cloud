@@ -128,7 +128,7 @@ def test_get_queue_boto3_session_cache(fresh_deadline_config):
 
 def test_check_deadline_api_available(fresh_deadline_config):
     with patch.object(api._session, "get_boto3_session") as session_mock:
-        session_mock().client("deadline").list_farms.return_value = {}
+        session_mock().client("deadline").list_farms.return_value = {"farms": []}
         session_mock()._session.get_scoped_config().get.return_value = "some-studio-id"
 
         # Call the function under test
@@ -137,7 +137,7 @@ def test_check_deadline_api_available(fresh_deadline_config):
         assert result is True
         # It should have called list_farms with dry-run to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(
-            dryRun=True, studioId="some-studio-id"
+            maxResults=1, studioId="some-studio-id"
         )
 
 
@@ -152,7 +152,7 @@ def test_check_deadline_api_available_fails(fresh_deadline_config):
         assert result is False
         # It should have called list_farms with dry-run to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(
-            dryRun=True, studioId="some-studio-id"
+            maxResults=1, studioId="some-studio-id"
         )
 
 

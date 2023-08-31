@@ -99,7 +99,7 @@ def validate_parameters(ctx, param, value):
 )
 @click.argument("job_bundle_dir")
 @handle_error
-def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
+def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
     """
     Submits an OpenJobIO job bundle to Amazon Deadline Cloud.
     """
@@ -181,7 +181,9 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, **args):
             )
 
             if (
-                not config_file.str2bool(get_setting("settings.auto_accept", config=config))
+                not (
+                    yes or config_file.str2bool(get_setting("settings.auto_accept", config=config))
+                )
                 and len(asset_references.input_filenames) > 0
                 and not click.confirm(
                     f"Job submission contains {hash_summary.total_files} files "

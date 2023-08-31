@@ -60,7 +60,7 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            list_farms(config=config, dryRun=True)
+            list_farms(config=config, maxResults=1)
             return True
         except Exception:
             logger.exception("Error invoking ListFarms")
