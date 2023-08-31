@@ -91,7 +91,6 @@ def job_list(page_size, item_offset, **args):
                 "taskRunStatus",
                 "startedAt",
                 "endedAt",
-                "lifecycleStatus",
                 "createdBy",
                 "createdAt",
             ]
@@ -128,6 +127,86 @@ def job_get(**args):
     response.pop("ResponseMetadata", None)
 
     click.echo(cli_object_repr(response))
+
+
+@cli_job.command(name="cancel")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The Amazon Deadline Cloud Job to cancel.")
+@click.option(
+    "--mark-as",
+    type=click.Choice(["CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
+    default="CANCELED",
+    help="The run status to mark the job as.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Skip any confirmation prompts",
+)
+@handle_error
+def job_cancel(mark_as: str, yes: bool, **args):
+    """
+    Cancel an Amazon Deadline Cloud Job from running.
+    """
+    # Get a temporary config object with the standard options handled
+    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+
+    mark_as = mark_as.upper()
+
+    deadline = api.get_boto3_client("deadline", config=config)
+
+    # Print a summary of the job to cancel
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    # Remove the zero-count status counts
+    job["taskRunStatusCounts"] = {
+        name: count for name, count in job["taskRunStatusCounts"].items() if count != 0
+    }
+    # Filter the fields to a summary
+    filtered_job = {
+        field: job.get(field, "")
+        for field in [
+            "name",
+            "jobId",
+            "taskRunStatus",
+            "taskRunStatusCounts",
+            "startedAt",
+            "endedAt",
+            "createdBy",
+            "createdAt",
+        ]
+    }
+    click.echo(cli_object_repr(filtered_job))
+
+    # Ask for confirmation about canceling this job.
+    if not (
+        yes or config_file.str2bool(config_file.get_setting("settings.auto_accept", config=config))
+    ):
+        if mark_as == "CANCELED":
+            cancel_message = "Are you sure you want to cancel this job?"
+        else:
+            cancel_message = (
+                f"Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?"
+            )
+        # We explicitly require a yes/no response, as this is an operation that will interrupt the work in progress
+        # on their job.
+        if not click.confirm(
+            cancel_message,
+            default=None,
+        ):
+            click.echo("Job not canceled.")
+            sys.exit(1)
+
+    if mark_as == "CANCELED":
+        click.echo("Canceling job...")
+    else:
+        click.echo(f"Canceling job and marking as {mark_as}...")
+    deadline.update_job(farmId=farm_id, queueId=queue_id, jobId=job_id, targetTaskRunStatus=mark_as)
 
 
 def _download_job_output(
