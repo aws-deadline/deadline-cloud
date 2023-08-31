@@ -425,9 +425,7 @@ class SubmitJobProgressDialog(QDialog):
         Handles the signal sent from the background hashing thread when the
         hashing process has completed.
         """
-        api.get_telemetry_client(config=self._config).record_hashing_summary(
-            hashing_summary, from_gui=True
-        )
+        api.get_telemetry_client().record_hashing_summary(hashing_summary, from_gui=True)
         self.summary_edit.setText(
             f"\nHashing Summary:\n"
             f"    Hashed {hashing_summary.processed_files} files totaling"
@@ -459,9 +457,7 @@ class SubmitJobProgressDialog(QDialog):
         if attachment_settings:
             self._create_job_args["attachments"] = attachment_settings
 
-        api.get_telemetry_client(config=self._config).record_upload_summary(
-            upload_summary, from_gui=True
-        )
+        api.get_telemetry_client().record_upload_summary(upload_summary, from_gui=True)
         self.summary_edit.setText(
             f"{self.summary_edit.toPlainText()}"
             f"\nUpload Summary:\n"
