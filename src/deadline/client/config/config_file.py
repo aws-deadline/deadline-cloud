@@ -94,7 +94,8 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": "false",
     },
     "settings.log_level": {
-        "default": "INFO",
+        "default": "WARNING",
+        "description": "The logging level to use in the CLI and GUIs.",
     },
     "telemetry.opt_out": {"default": "false"},
     "telemetry.identifier": {"default": ""},

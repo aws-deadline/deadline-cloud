@@ -6,12 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from deadline.job_attachments.utils import (
-    OPENJDToken,
-    get_deadline_formatted_os,
-    get_default_hash_cache_db_file_dir,
-    is_relative_to,
-    map_source_path_to_dest_path,
+from deadline.job_attachments._utils import (
+    _get_deadline_formatted_os,
+    _get_default_hash_cache_db_file_dir,
+    _is_relative_to,
 )
 
 
@@ -25,25 +23,7 @@ class TestUtils:
         Tests that the expected OS string is returned
         """
         with patch("sys.platform", sys_os):
-            assert get_deadline_formatted_os() == expected_output
-
-    @pytest.mark.parametrize(
-        ("source_os", "dest_os", "given_path", "expected_path"),
-        [
-            ("windows", "windows", r"C:\my\windows\path", r"C:\my\windows\path"),
-            ("windows", "linux", r"C:\my\windows\path", r"C:\/my/windows/path"),
-            ("linux", "windows", "my/linux/path", r"my\linux\path"),
-            ("linux", "linux", "my/linux/path", "my/linux/path"),
-        ],
-    )
-    def test_map_source_path_to_dest_path(
-        self, source_os: str, dest_os: str, given_path: str, expected_path: str
-    ):
-        """
-        Tests that a given path is mapped correctly
-        """
-        path = map_source_path_to_dest_path(source_os, dest_os, given_path)
-        assert str(path) == expected_path
+            assert _get_deadline_formatted_os() == expected_output
 
     def test_get_default_hash_cache_db_file_dir_env_var_path_exists(self, tmpdir):
         """
@@ -51,18 +31,7 @@ class TestUtils:
         """
         expected_path = tmpdir.join(".deadline").join("job_attachments")
         with patch("os.environ.get", side_effect=[tmpdir]):
-            assert get_default_hash_cache_db_file_dir() == expected_path
-
-    @pytest.mark.parametrize(
-        ("test_token", "serialized_token"),
-        [("mytoken", "{{ mytoken }}")],
-    )
-    def test_OPENJDToken_serializer(self, test_token: str, serialized_token: str):
-        """
-        Tests that the serializer works
-        """
-        token = OPENJDToken(test_token)
-        assert str(token) == serialized_token
+            assert _get_default_hash_cache_db_file_dir() == expected_path
 
     @pytest.mark.skipif(
         sys.platform == "win32",
@@ -86,7 +55,7 @@ class TestUtils:
         """
         Tests if the is_relative_to() works correctly when using Posix paths.
         """
-        assert is_relative_to(path1, path2) == expected
+        assert _is_relative_to(path1, path2) == expected
 
     @pytest.mark.skipif(
         sys.platform != "win32",
@@ -110,4 +79,4 @@ class TestUtils:
         """
         Tests if the is_relative_to() works correctly when using Windows paths.
         """
-        assert is_relative_to(path1, path2) == expected
+        assert _is_relative_to(path1, path2) == expected

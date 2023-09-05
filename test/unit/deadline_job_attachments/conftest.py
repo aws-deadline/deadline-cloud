@@ -28,7 +28,7 @@ from botocore.client import BaseClient  # noqa: E402 isort:skip
 from botocore.stub import Stubber  # noqa: E402 isort:skip
 
 import deadline  # noqa: E402 isort:skip
-from deadline.job_attachments.aws import aws_clients  # noqa: E402 isort:skip
+from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
 from deadline.job_attachments.asset_sync import AssetSync  # noqa: E402 isort:skip
 from deadline.job_attachments.models import (  # noqa: E402 isort:skip
     Attachments,
@@ -37,7 +37,7 @@ from deadline.job_attachments.models import (  # noqa: E402 isort:skip
     JobAttachmentS3Settings,
     Queue,
 )
-from deadline.job_attachments.utils import (  # noqa: E402 isort:skip
+from deadline.job_attachments._utils import (  # noqa: E402 isort:skip
     AssetLoadingMethod,
     OperatingSystemFamily,
 )
@@ -89,7 +89,7 @@ def deadline_stub(boto_config) -> Generator[Stubber, None, None]:
     stubber = Stubber(deadline_client)
 
     with patch(
-        f"{deadline.__package__}.job_attachments.aws.deadline.get_deadline_client",
+        f"{deadline.__package__}.job_attachments._aws.deadline.get_deadline_client",
         return_value=deadline_client,
     ):
         yield stubber
@@ -238,15 +238,6 @@ def variables():
     return {
         "frame": 1,
     }
-
-
-@pytest.fixture
-def default_manifest_str_v2022_06_06() -> str:
-    manifest_file = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "data", "manifest_v2022_06_06.json")
-    )
-    with open(manifest_file) as f:
-        return f.read()
 
 
 @pytest.fixture

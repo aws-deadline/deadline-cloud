@@ -10,18 +10,18 @@ import sys
 from unittest.mock import ANY, MagicMock, patch
 
 import boto3  # type: ignore[import]
-from deadline.job_attachments.utils import (
+from deadline.job_attachments._utils import (
     FileConflictResolution,
     OperatingSystemFamily,
-    get_deadline_formatted_os,
+    _get_deadline_formatted_os,
 )
 from botocore.exceptions import ClientError  # type: ignore[import]
 from click.testing import CliRunner
 from dateutil.tz import tzutc  # type: ignore[import]
 
 from deadline.client import api, config
-from deadline.client.cli import deadline_cli
-from deadline.client.cli.groups import job_group
+from deadline.client.cli import main
+from deadline.client.cli._groups import job_group
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
 from ..api.test_job_bundle_submission import (
@@ -71,7 +71,7 @@ def test_cli_job_list(fresh_deadline_config):
         }
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["job", "list"])
+        result = runner.invoke(main, ["job", "list"])
 
         assert (
             result.output
@@ -111,7 +111,7 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             ["job", "list", "--farm-id", MOCK_FARM_ID, "--queue-id", MOCK_QUEUE_ID],
         )
 
@@ -158,9 +158,7 @@ def test_cli_job_list_override_profile(fresh_deadline_config):
         session_mock.reset_mock()
 
         runner = CliRunner()
-        result = runner.invoke(
-            deadline_cli.cli, ["job", "list", "--profile", "NonDefaultProfileName"]
-        )
+        result = runner.invoke(main, ["job", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
         session_mock.assert_called_once_with(profile_name="NonDefaultProfileName")
@@ -182,7 +180,7 @@ def test_cli_job_list_no_farm_id(fresh_deadline_config):
         }
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["job", "list"])
+        result = runner.invoke(main, ["job", "list"])
 
         assert "Missing '--farm-id' or default Farm ID configuration" in result.output
         assert result.exit_code != 0
@@ -199,7 +197,7 @@ def test_cli_job_list_no_queue_id(fresh_deadline_config):
         }
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["job", "list"])
+        result = runner.invoke(main, ["job", "list"])
 
         assert "Missing '--queue-id' or default Queue ID configuration" in result.output
         assert result.exit_code != 0
@@ -215,7 +213,7 @@ def test_cli_job_list_client_error(fresh_deadline_config):
         )
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["job", "list"])
+        result = runner.invoke(main, ["job", "list"])
 
         assert "Failed to get Jobs" in result.output
         assert "A botocore client error" in result.output
@@ -232,7 +230,7 @@ def test_cli_job_get(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "job",
                 "get",
@@ -304,7 +302,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             },
         ]
 
-        mock_submission_profile_name = get_deadline_formatted_os()
+        mock_submission_profile_name = _get_deadline_formatted_os()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -322,7 +320,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
             input=f"1\n{str(tmp_path)}\ny\n",
         )
@@ -395,7 +393,7 @@ def test_cli_job_dowuload_output_stdout_with_json_format(
             },
         ]
 
-        mock_submission_profile_name = get_deadline_formatted_os()
+        mock_submission_profile_name = _get_deadline_formatted_os()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -413,7 +411,7 @@ def test_cli_job_dowuload_output_stdout_with_json_format(
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "json"],
             input=json.dumps(
                 {"messageType": "pathconfirm", "value": [mock_root_path, str(tmp_path)]}
@@ -459,7 +457,7 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_submission_profile_name = get_deadline_formatted_os()
+        mock_submission_profile_name = _get_deadline_formatted_os()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -477,7 +475,7 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "job",
                 "download-output",

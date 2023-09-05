@@ -9,9 +9,9 @@ import os
 from multiprocessing import Lock
 from typing import Optional
 
-from .errors import JobAttachmentsError
+from .exceptions import JobAttachmentsError
 from .models import HashCacheEntry
-from .utils import get_default_hash_cache_db_file_dir
+from ._utils import _get_default_hash_cache_db_file_dir
 
 CACHE_FILE_NAME = "hash_cache.db"
 
@@ -41,7 +41,7 @@ class HashCache:
             return
 
         if cache_dir is None:
-            cache_dir = get_default_hash_cache_db_file_dir()
+            cache_dir = _get_default_hash_cache_db_file_dir()
         if cache_dir is None:
             raise JobAttachmentsError(
                 "No default hash cache path found. Please provide a hash cache directory."

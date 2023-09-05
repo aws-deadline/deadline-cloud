@@ -7,35 +7,31 @@ from dataclasses import dataclass
 from typing import Any, Type
 
 from .._canonical_json import canonical_path_comparator, manifest_to_canonical_json_string
-from ..base_manifest import AssetManifest as _BaseAssetManifest
-from ..base_manifest import Path as _BasePath
-from ..manifest_model import ManifestModel as _ManifestModelBase
+from ..base_manifest import BaseAssetManifest
+from ..base_manifest import BaseManifestPath
+from ..manifest_model import BaseManifestModel
 from ..versions import ManifestVersion
 
 
 @dataclass
-class Path(_BasePath):
+class ManifestPath(BaseManifestPath):
     """
     Extension for version v2023-03-03 of the asset manifest.
     """
 
-    size: int
-    mtime: int
     manifest_version = ManifestVersion.v2023_03_03
 
     def __init__(self, *, path: str, hash: str, size: int, mtime: int) -> None:
-        super().__init__(path=path, hash=hash)
-        self.size = size
-        self.mtime = mtime
+        super().__init__(path=path, hash=hash, size=size, mtime=mtime)
 
 
 @dataclass
-class AssetManifest(_BaseAssetManifest):
+class AssetManifest(BaseAssetManifest):
     """Version v2023-03-03 of the asset manifest"""
 
     totalSize: int  # pyline: disable=invalid-name
 
-    def __init__(self, *, hash_alg: str, paths: list[_BasePath], total_size: int) -> None:
+    def __init__(self, *, hash_alg: str, paths: list[BaseManifestPath], total_size: int) -> None:
         super().__init__(hash_alg=hash_alg, paths=paths)
         self.totalSize = total_size
         self.manifestVersion = ManifestVersion.v2023_03_03
@@ -49,7 +45,9 @@ class AssetManifest(_BaseAssetManifest):
         return cls(
             hash_alg=manifest_data["hashAlg"],
             paths=[
-                Path(path=path["path"], hash=path["hash"], size=path["size"], mtime=path["mtime"])
+                ManifestPath(
+                    path=path["path"], hash=path["hash"], size=path["size"], mtime=path["mtime"]
+                )
                 for path in manifest_data["paths"]
             ],
             total_size=manifest_data["totalSize"],
@@ -63,11 +61,11 @@ class AssetManifest(_BaseAssetManifest):
         return manifest_to_canonical_json_string(manifest=self)
 
 
-class ManifestModel(_ManifestModelBase):
+class ManifestModel(BaseManifestModel):
     """
     The asset manifest model for v2023-03-03
     """
 
     manifest_version: ManifestVersion = ManifestVersion.v2023_03_03
     AssetManifest: Type[AssetManifest] = AssetManifest
-    Path: Type[Path] = Path
+    Path: Type[ManifestPath] = ManifestPath

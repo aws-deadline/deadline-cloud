@@ -13,10 +13,10 @@ from click.testing import CliRunner
 import pytest
 
 from deadline.client import config
-from deadline.client.cli import deadline_cli
-from deadline.client.cli.groups import bundle_group
+from deadline.client.cli import main
+from deadline.client.cli._groups import bundle_group
 from deadline.client.config.config_file import set_setting
-from deadline.job_attachments.utils import AssetLoadingMethod
+from deadline.job_attachments._utils import AssetLoadingMethod
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 from ..api.test_job_bundle_submission import (
@@ -60,7 +60,7 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["bundle", "submit", temp_job_bundle_dir])
+        result = runner.invoke(main, ["bundle", "submit", temp_job_bundle_dir])
 
         get_boto3_client_mock().create_job.assert_called_with(
             farmId=MOCK_FARM_ID,
@@ -97,7 +97,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
 
             runner = CliRunner()
             result = runner.invoke(
-                deadline_cli.cli,
+                main,
                 [
                     "bundle",
                     "submit",
@@ -191,7 +191,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             params += ["--asset-loading-method", loading_method]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, params)
+        result = runner.invoke(main, params)
 
         expected_loading_method = (
             loading_method
@@ -235,7 +235,7 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
 
             runner = CliRunner()
             result = runner.invoke(
-                deadline_cli.cli,
+                main,
                 [
                     "bundle",
                     "submit",
@@ -282,7 +282,7 @@ def test_cli_bundle_invalid_job_paramter(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "bundle",
                 "submit",
@@ -346,7 +346,7 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
         set_setting("settings.auto_accept", "false")
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "bundle",
                 "submit",
@@ -412,7 +412,7 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
         set_setting("settings.auto_accept", "false")
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "bundle",
                 "submit",

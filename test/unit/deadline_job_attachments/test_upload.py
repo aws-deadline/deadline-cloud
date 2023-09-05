@@ -23,8 +23,8 @@ from botocore.stub import Stubber
 from moto import mock_sts
 
 import deadline
-from deadline.job_attachments.asset_manifests import ManifestModel, ManifestVersion
-from deadline.job_attachments.errors import (
+from deadline.job_attachments.asset_manifests import BaseManifestModel, ManifestVersion
+from deadline.job_attachments.exceptions import (
     AssetSyncError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
@@ -45,10 +45,10 @@ from deadline.job_attachments.progress_tracker import (
     SummaryStatistics,
 )
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
-from deadline.job_attachments.utils import (
+from deadline.job_attachments._utils import (
     FileSystemLocationType,
     OperatingSystemFamily,
-    human_readable_file_size,
+    _human_readable_file_size,
 )
 
 
@@ -75,12 +75,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version,expected_manifest",
         [
-            (
-                ManifestVersion.v2022_06_06,
-                '{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-                '"paths":[{"hash":"d","path":"meta.txt"},{"hash":"a","path":"scene/maya.ma"},'
-                '{"hash":"c","path":"textures/normals/normal.png"},{"hash":"b","path":"textures/texture.png"}]}',
-            ),
             (
                 ManifestVersion.v2023_03_03,
                 '{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
@@ -134,13 +128,13 @@ class TestUpload:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["e", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect={
                 str(scene_file): "a",
                 str(texture_file): "b",
@@ -148,7 +142,7 @@ class TestUpload:
                 str(meta_file): "d",
             }.get,
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             caplog.set_level(DEBUG)
@@ -215,7 +209,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily.get_os_family("linux"),
+                        "osType": OperatingSystemFamily.get_os_family("linux").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": [
@@ -286,11 +280,6 @@ class TestUpload:
         "manifest_version,expected_manifest",
         [
             (
-                ManifestVersion.v2022_06_06,
-                '{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-                '"paths":[{"hash":"a","path":"input.txt"}]}',
-            ),
-            (
                 ManifestVersion.v2023_03_03,
                 '{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
                 '"paths":[{"hash":"a","mtime":1234000000,"path":"input.txt","size":1}],"totalSize":1}',
@@ -322,13 +311,13 @@ class TestUpload:
         cache_dir = tmpdir.mkdir("cache")
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["b", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect={str(input_c): "a"}.get,
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             caplog.set_level(DEBUG)
@@ -383,14 +372,13 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{root_c}",
-                        "osType": OperatingSystemFamily.get_os_family("windows"),
+                        "osType": OperatingSystemFamily.get_os_family("windows").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
                         "inputManifestHash": "manifesthash",
-                        "outputRelativeDirectories": [],
                     },
                     {
                         "rootPath": f"{output_d}",
-                        "osType": OperatingSystemFamily.get_os_family("windows"),
+                        "osType": OperatingSystemFamily.get_os_family("windows").value,
                         "outputRelativeDirectories": [
                             ".",
                         ],
@@ -457,7 +445,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -480,16 +467,16 @@ class TestUpload:
         asset_root = str(tmpdir)
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             caplog.set_level(DEBUG)
@@ -550,7 +537,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily.get_os_family("linux"),
+                        "osType": OperatingSystemFamily.get_os_family("linux").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": ["outputs"],
@@ -614,7 +601,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -635,13 +621,13 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect=lambda *args, **kwargs: "samehash",
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -710,7 +696,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -744,18 +729,18 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=mock_hash_file
+            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=mock_hash_file
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             s3 = boto3.Session(region_name="us-west-2").resource(
@@ -850,7 +835,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -869,19 +853,19 @@ class TestUpload:
         """
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifesto", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             s3 = boto3.Session(region_name="us-west-2").resource(
@@ -980,7 +964,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1002,13 +985,13 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["a", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1056,7 +1039,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{output_dir}",
-                        "osType": OperatingSystemFamily.get_os_family("linux"),
+                        "osType": OperatingSystemFamily.get_os_family("linux").value,
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -1081,7 +1064,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1109,7 +1091,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1136,7 +1117,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1164,7 +1144,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1196,7 +1175,7 @@ class TestUpload:
         """
         with patch(
             f"{deadline.__package__}.job_attachments.upload.ManifestModelRegistry.get_manifest_model",
-            return_value=ManifestModel,
+            return_value=BaseManifestModel,
         ):
             with pytest.raises(
                 NotImplementedError,
@@ -1351,7 +1330,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "manifest_version",
         [
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         ],
     )
@@ -1373,7 +1351,7 @@ class TestUpload:
         hash_cache = MagicMock()
         hash_cache.get_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["b"]):
+        with patch(f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["b"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1407,12 +1385,12 @@ class TestUpload:
         hash_cache = MagicMock()
         hash_cache.get_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
+        with patch(f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
                 job_attachment_settings=self.job_attachment_s3_settings,
-                asset_manifest_version=ManifestVersion.v2022_06_06,
+                asset_manifest_version=ManifestVersion.v2023_03_03,
             )
 
             (is_hashed, size, man_path) = asset_manager._process_input_path(
@@ -1444,13 +1422,13 @@ class TestUpload:
         expected_total_input_bytes = scene_file.size()
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="Linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
+            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]
         ):
             caplog.set_level(WARNING)
 
@@ -1461,7 +1439,7 @@ class TestUpload:
                 farm_id=farm_id,
                 queue_id=queue_id,
                 job_attachment_settings=self.job_attachment_s3_settings,
-                asset_manifest_version=ManifestVersion.v2022_06_06,
+                asset_manifest_version=ManifestVersion.v2023_03_03,
             )
 
             # When
@@ -1514,11 +1492,6 @@ class TestUpload:
         "manifest_version,expected_manifest",
         [
             (
-                ManifestVersion.v2022_06_06,
-                '{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-                '"paths":[{"hash":"a","path":"sym_ip_test.txt"}]}',
-            ),
-            (
                 ManifestVersion.v2023_03_03,
                 '{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
                 '"paths":[{"hash":"a","mtime":1234000000,"path":"sym_ip_test.txt","size":1}],"totalSize":1}',
@@ -1568,15 +1541,15 @@ class TestUpload:
 
         # WHEN
         with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_deadline_formatted_os",
+            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
             return_value="linux",
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
+            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]
         ), patch(
-            f"{deadline.__package__}.job_attachments.models.generate_random_guid",
+            f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1893,7 +1866,7 @@ def assert_progress_report_last_callback(
     """
     Assert that the argument of the last callback (when the progress is 100%) is as expected.
     """
-    readable_total_input_bytes = human_readable_file_size(expected_total_input_bytes)
+    readable_total_input_bytes = _human_readable_file_size(expected_total_input_bytes)
     expected_last_hashing_progress_report = ProgressReportMetadata(
         status=ProgressStatus.PREPARING_IN_PROGRESS,
         progress=100.0,

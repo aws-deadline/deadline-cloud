@@ -104,7 +104,7 @@ class JobTemplateParametersWidget(QWidget):
                 control_type = ControlType[control_type_name]
             except KeyError:
                 raise RuntimeError(
-                    f"Job Template parameter {parameter['name']} specifies unsupported control type {control_type.name}."
+                    f"Job Template parameter {parameter['name']} specifies unsupported control type {control_type_name}."
                 )
 
             if "userInterface" in parameter:

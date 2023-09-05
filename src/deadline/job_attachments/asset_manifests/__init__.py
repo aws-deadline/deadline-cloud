@@ -1,9 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from .base_manifest import AssetManifest, Path
-from .manifest_model import ManifestModel, ManifestModelRegistry
+from .base_manifest import BaseAssetManifest, BaseManifestPath
+from .manifest_model import BaseManifestModel, ManifestModelRegistry
 from .versions import ManifestVersion
 
-__all__ = ["ManifestVersion", "ManifestModelRegistry", "AssetManifest", "ManifestModel", "Path"]
+__all__ = [
+    "ManifestVersion",
+    "ManifestModelRegistry",
+    "BaseAssetManifest",
+    "BaseManifestModel",
+    "BaseManifestPath",
+]
 
 ManifestModelRegistry.register()

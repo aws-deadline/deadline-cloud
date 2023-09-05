@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import threading
+import textwrap
 from typing import Any, Dict, List, Optional, Set
 
 from deadline.client.config import config_file
@@ -39,11 +40,11 @@ from deadline.client.job_bundle.submission import (
     split_parameter_args,
     upload_job_attachments,
 )
-from deadline.job_attachments.errors import AssetSyncCancelledError
+from deadline.job_attachments.exceptions import AssetSyncCancelledError
 from deadline.job_attachments.models import AssetRootManifest
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments.utils import human_readable_file_size
+from deadline.job_attachments._utils import _human_readable_file_size
 
 logger = logging.getLogger(__name__)
 
@@ -429,13 +430,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         api.get_telemetry_client().record_hashing_summary(hashing_summary, from_gui=True)
         self.summary_edit.setText(
-            f"\nHashing Summary:\n"
-            f"    Hashed {hashing_summary.processed_files} files totaling"
-            f" {human_readable_file_size(hashing_summary.processed_bytes)}.\n"
-            f"    Skipped re-hashing {hashing_summary.skipped_files} files totaling"
-            f" {human_readable_file_size(hashing_summary.skipped_bytes)}.\n"
-            f"    Total hashing time of {round(hashing_summary.total_time, ndigits=5)} seconds"
-            f" at {human_readable_file_size(int(hashing_summary.transfer_rate))}/s.\n"
+            f"\nHashing Summary:\n{textwrap.indent(str(hashing_summary), '    ')}"
         )
 
         if (
@@ -465,13 +460,7 @@ class SubmitJobProgressDialog(QDialog):
         api.get_telemetry_client().record_upload_summary(upload_summary, from_gui=True)
         self.summary_edit.setText(
             f"{self.summary_edit.toPlainText()}"
-            f"\nUpload Summary:\n"
-            f"    Uploaded {upload_summary.processed_files} files totaling"
-            f" {human_readable_file_size(upload_summary.processed_bytes)}.\n"
-            f"    Skipped re-uploading {upload_summary.skipped_files} files totaling"
-            f" {human_readable_file_size(upload_summary.skipped_bytes)}.\n"
-            f"    Total upload time of {round(upload_summary.total_time, ndigits=5)} seconds"
-            f" at {human_readable_file_size(int(upload_summary.transfer_rate))}/s.\n"
+            + f"\nUpload Summary:\n{textwrap.indent(str(upload_summary), '    ')}"
         )
 
         self._start_create_job()
@@ -516,7 +505,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         message_box = QMessageBox(self)
         message_box.setText(
-            f"Job submission contains {num_files} files totaling {human_readable_file_size(upload_size)}. "
+            f"Job submission contains {num_files} files totaling {_human_readable_file_size(upload_size)}. "
             "All files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
         message_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)

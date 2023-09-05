@@ -1,6 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-# This file makes "python -m deadline ..." equivalent to "deadline ..."
-from deadline.client.cli.deadline_cli_main import main
+"""
+This file makes "python -m deadline ..." equivalent to "deadline ..."
+"""
+import sys
+from .client.cli import main
 
-main()
+# Override the program name to always be "deadline"
+sys.exit(main())

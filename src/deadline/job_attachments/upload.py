@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from io import BytesIO
 from math import trunc
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Callable, Optional, Tuple, Type, Union
 
 import boto3
@@ -20,15 +20,15 @@ from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError
 
 from .asset_manifests import (
-    AssetManifest,
-    ManifestModel,
+    BaseAssetManifest,
+    BaseManifestModel,
     ManifestModelRegistry,
     ManifestVersion,
     base_manifest,
 )
-from .aws.aws_clients import get_account_id, get_boto3_session, get_s3_client
-from .aws.deadline import get_storage_profile_for_queue
-from .errors import (
+from ._aws.aws_clients import get_account_id, get_boto3_session, get_s3_client
+from ._aws.deadline import get_storage_profile_for_queue
+from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
     AssetSyncError,
@@ -50,15 +50,14 @@ from .progress_tracker import (
     ProgressTracker,
     SummaryStatistics,
 )
-from .utils import (
+from ._utils import (
     FileSystemLocationType,
     OperatingSystemFamily,
-    get_deadline_formatted_os,
-    get_os_pure_path,
-    hash_data,
-    hash_file,
-    is_relative_to,
-    join_s3_paths,
+    _get_deadline_formatted_os,
+    _hash_data,
+    _hash_file,
+    _is_relative_to,
+    _join_s3_paths,
 )
 
 # TODO: full performance analysis to determine the ideal threshold
@@ -89,7 +88,7 @@ class S3AssetUploader:
     def upload_assets(
         self,
         job_attachment_settings: JobAttachmentS3Settings,
-        manifest: AssetManifest,
+        manifest: BaseAssetManifest,
         partial_manifest_prefix: str,
         source_root: Path,
         file_system_location_name: Optional[str] = None,
@@ -119,13 +118,13 @@ class S3AssetUploader:
         )
         manifest_bytes = manifest.encode().encode("utf-8")
 
-        manifest_name_prefix = hash_data(
+        manifest_name_prefix = _hash_data(
             f"{file_system_location_name or ''}{str(source_root)}".encode()
         )
         manifest_name = f"{manifest_name_prefix}_input.{manifest.hashAlg}"
 
         if partial_manifest_prefix:
-            partial_manifest_key = join_s3_paths(partial_manifest_prefix, manifest_name)
+            partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
         else:
             partial_manifest_key = manifest_name
 
@@ -139,11 +138,11 @@ class S3AssetUploader:
             key=full_manifest_key,
         )
 
-        return (partial_manifest_key, hash_data(manifest_bytes))
+        return (partial_manifest_key, _hash_data(manifest_bytes))
 
     def upload_input_files(
         self,
-        manifest: AssetManifest,
+        manifest: BaseAssetManifest,
         s3_bucket: str,
         source_root: Path,
         s3_cas_prefix: str,
@@ -162,12 +161,12 @@ class S3AssetUploader:
         there isn't currently any way of knowing the size of the bucket without iterating through the
         contents of a prefix. For now, we'll just head-object when we have a small number of files.
         """
-        files_to_upload: list[base_manifest.Path] = manifest.paths
+        files_to_upload: list[base_manifest.BaseManifestPath] = manifest.paths
         check_if_in_s3 = True
 
         if len(files_to_upload) >= LIST_OBJECT_THRESHOLD:
             # If different files have the same content (and thus the same hash), they are counted as skipped files.
-            file_dict: dict[str, base_manifest.Path] = {}
+            file_dict: dict[str, base_manifest.BaseManifestPath] = {}
             for file in files_to_upload:
                 if file.hash in file_dict and progress_tracker:
                     progress_tracker.increase_skipped(
@@ -223,7 +222,7 @@ class S3AssetUploader:
 
     def upload_object_to_cas(
         self,
-        file: base_manifest.Path,
+        file: base_manifest.BaseManifestPath,
         s3_bucket: str,
         source_root: Path,
         s3_cas_prefix: str,
@@ -245,7 +244,7 @@ class S3AssetUploader:
 
         local_path = source_root.joinpath(file.path)
         if s3_cas_prefix:
-            s3_upload_key = join_s3_paths(s3_cas_prefix, file.hash)
+            s3_upload_key = _join_s3_paths(s3_cas_prefix, file.hash)
         else:
             s3_upload_key = file.hash
 
@@ -471,14 +470,14 @@ class S3AssetManager:
         root_path: str,
         hash_cache: HashCache,
         progress_tracker: Optional[ProgressTracker] = None,
-    ) -> Tuple[bool, int, base_manifest.Path]:
+    ) -> Tuple[bool, int, base_manifest.BaseManifestPath]:
         # If it's cancelled, raise an AssetSyncCancelledError exception
         if progress_tracker and not progress_tracker.continue_reporting:
             raise AssetSyncCancelledError(
                 "File hashing cancelled.", progress_tracker.get_summary_statistics()
             )
 
-        manifest_model: Type[ManifestModel] = ManifestModelRegistry.get_manifest_model(
+        manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=self.manifest_version
         )
 
@@ -491,12 +490,12 @@ class S3AssetManager:
             # If the file was modified, we need to rehash it
             if actual_modified_time != entry.last_modified_time:
                 entry.last_modified_time = actual_modified_time
-                entry.file_hash = hash_file(full_path)
+                entry.file_hash = _hash_file(full_path)
                 is_new_or_modified = True
         else:
             entry = HashCacheEntry(
                 file_path=full_path,
-                file_hash=hash_file(full_path),
+                file_hash=_hash_file(full_path),
                 last_modified_time=actual_modified_time,
             )
             is_new_or_modified = True
@@ -510,11 +509,10 @@ class S3AssetManager:
             "hash": entry.file_hash,
         }
 
-        if self.manifest_version == ManifestVersion.v2023_03_03:
-            # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
-            # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
-            path_args["mtime"] = trunc(path.stat().st_mtime_ns // 1000)
-            path_args["size"] = file_size
+        # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
+        # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
+        path_args["mtime"] = trunc(path.stat().st_mtime_ns // 1000)
+        path_args["size"] = file_size
 
         return (is_new_or_modified, file_size, manifest_model.Path(**path_args))
 
@@ -524,15 +522,14 @@ class S3AssetManager:
         root_path: str,
         hash_cache: HashCache,
         progress_tracker: Optional[ProgressTracker] = None,
-    ) -> AssetManifest:
-        manifest_model: Type[ManifestModel] = ManifestModelRegistry.get_manifest_model(
+    ) -> BaseAssetManifest:
+        manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=self.manifest_version
         )
         if manifest_model.manifest_version in {
-            ManifestVersion.v2022_06_06,
             ManifestVersion.v2023_03_03,
         }:
-            paths: list[base_manifest.Path] = []
+            paths: list[base_manifest.BaseManifestPath] = []
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(
@@ -555,8 +552,7 @@ class S3AssetManager:
 
             manifest_args: dict[str, Any] = {"hash_alg": self._HASH_ALG, "paths": paths}
 
-            if self.manifest_version == ManifestVersion.v2023_03_03:
-                manifest_args["total_size"] = sum([path.size for path in paths])  # type: ignore[attr-defined]
+            manifest_args["total_size"] = sum([path.size for path in paths])
 
             return manifest_model.AssetManifest(**manifest_args)
         else:
@@ -597,7 +593,7 @@ class S3AssetManager:
 
             # Skips the upload if the path is relative to any of the File System Location
             # of SHARED type that was set in the Job.
-            if any(is_relative_to(abs_path, shared) for shared in shared_type_locations):
+            if any(_is_relative_to(abs_path, shared) for shared in shared_type_locations):
                 continue
 
             # If the path is relative to any of the File System Location of LOCAL type,
@@ -614,7 +610,7 @@ class S3AssetManager:
 
             # Skips the upload if the path is relative to any of the File System Location
             # of SHARED type that was set in the Job.
-            if any(is_relative_to(abs_path, shared) for shared in shared_type_locations):
+            if any(_is_relative_to(abs_path, shared) for shared in shared_type_locations):
                 continue
 
             # If the path is relative to any of the File System Location of LOCAL type,
@@ -651,7 +647,7 @@ class S3AssetManager:
         """
         matched_root = None
         for root_path in local_type_locations.keys():
-            if is_relative_to(abs_path, root_path) and (
+            if _is_relative_to(abs_path, root_path) and (
                 matched_root is None or len(root_path) > len(matched_root)
             ):
                 matched_root = root_path
@@ -663,7 +659,7 @@ class S3AssetManager:
                 )
             return matched_root
         else:
-            top_directory = get_os_pure_path(abs_path).parts[0]
+            top_directory = PurePath(abs_path).parts[0]
             if top_directory not in groupings:
                 groupings[top_directory] = AssetRootGroup()
             return top_directory
@@ -784,7 +780,7 @@ class S3AssetManager:
         asset_root_manifests: list[AssetRootManifest] = []
         for group in asset_groups:
             # Might have output directories, but no inputs for this group
-            asset_manifest: Optional[AssetManifest] = None
+            asset_manifest: Optional[BaseAssetManifest] = None
             if group.inputs:
                 # Create manifest, using local hash cache
                 with HashCache(hash_cache_dir) as hash_cache:
@@ -840,7 +836,7 @@ class S3AssetManager:
             manifest_properties = ManifestProperties(
                 fileSystemLocationName=asset_root_manifest.file_system_location_name,
                 rootPath=asset_root_manifest.root_path,
-                osType=OperatingSystemFamily.get_os_family(get_deadline_formatted_os()),
+                osType=OperatingSystemFamily.get_os_family(_get_deadline_formatted_os()),
                 outputRelativeDirectories=output_rel_paths,
             )
 

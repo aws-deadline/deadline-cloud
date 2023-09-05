@@ -16,7 +16,7 @@ import pytest
 
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
-from deadline.job_attachments.errors import Fus3ExecutableMissingError
+from deadline.job_attachments.exceptions import Fus3ExecutableMissingError
 from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.fus3 import (
     Fus3ProcessManager,

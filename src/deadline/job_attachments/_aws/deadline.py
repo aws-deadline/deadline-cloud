@@ -6,7 +6,7 @@ from typing import Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from ..errors import JobAttachmentsError
+from ..exceptions import JobAttachmentsError
 from ..models import (
     Attachments,
     FileSystemLocation,
@@ -16,7 +16,7 @@ from ..models import (
     Queue,
     StorageProfileForQueue,
 )
-from ..utils import AssetLoadingMethod, FileSystemLocationType, OperatingSystemFamily
+from .._utils import AssetLoadingMethod, FileSystemLocationType, OperatingSystemFamily
 from .aws_clients import get_deadline_client
 
 

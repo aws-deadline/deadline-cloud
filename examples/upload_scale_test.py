@@ -7,7 +7,7 @@ import pathlib
 import sys
 import time
 
-from deadline.job_attachments.aws.deadline import get_queue
+from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.download import download_files_from_manifests, get_manifest_from_s3
 from deadline.job_attachments.upload import S3AssetManager
 

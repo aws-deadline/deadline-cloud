@@ -1,12 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Tests for aws clients"""
-from deadline.job_attachments.aws.aws_clients import (
+from deadline.job_attachments._aws.aws_clients import (
     get_deadline_client,
     get_s3_client,
     get_sts_client,
 )
-from deadline.job_attachments.aws.aws_config import (
+from deadline.job_attachments._aws.aws_config import (
     S3_CONNECT_TIMEOUT_IN_SECS,
     S3_READ_TIMEOUT_IN_SECS,
 )

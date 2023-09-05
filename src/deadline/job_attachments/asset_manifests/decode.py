@@ -9,8 +9,8 @@ from typing import Any, Optional, Tuple
 
 import jsonschema
 
-from ..errors import ManifestDecodeValidationError
-from .base_manifest import AssetManifest
+from ..exceptions import ManifestDecodeValidationError
+from .base_manifest import BaseAssetManifest
 from .manifest_model import ManifestModelRegistry
 from .versions import ManifestVersion
 
@@ -37,7 +37,7 @@ def validate_manifest(
     return True, None
 
 
-def decode_manifest(manifest: str) -> AssetManifest:
+def decode_manifest(manifest: str) -> BaseAssetManifest:
     """
     Takes in a manifest string and returns an Asset Manifest object.
     A ManifestDecodeValidationError will be raised if the manifest version is unknown or

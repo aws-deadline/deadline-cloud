@@ -12,15 +12,11 @@ import pytest
 
 import deadline
 from deadline.job_attachments.asset_manifests import decode, versions
-from deadline.job_attachments.asset_manifests.v2022_06_06 import (
-    AssetManifest as AssetManifest_v2022_06_06,
-)
-from deadline.job_attachments.asset_manifests.v2022_06_06 import Path as Path_v2022_06_06
 from deadline.job_attachments.asset_manifests.v2023_03_03 import (
     AssetManifest as AssetManifest_v2023_03_03,
 )
-from deadline.job_attachments.asset_manifests.v2023_03_03 import Path as Path_v2023_03_03
-from deadline.job_attachments.errors import ManifestDecodeValidationError
+from deadline.job_attachments.asset_manifests.v2023_03_03 import ManifestPath as Path_v2023_03_03
+from deadline.job_attachments.exceptions import ManifestDecodeValidationError
 
 
 @dataclass
@@ -30,11 +26,8 @@ class ManifestParam:
 
 
 @pytest.fixture
-def manifest_params(
-    default_manifest_str_v2022_06_06: str, default_manifest_str_v2023_03_03: str
-) -> list[ManifestParam]:
+def manifest_params(default_manifest_str_v2023_03_03: str) -> list[ManifestParam]:
     return [
-        ManifestParam(default_manifest_str_v2022_06_06, versions.ManifestVersion.v2022_06_06),
         ManifestParam(default_manifest_str_v2023_03_03, versions.ManifestVersion.v2023_03_03),
     ]
 
@@ -90,28 +83,6 @@ def test_validate_manifest_not_valid_schema(manifest_params: list[ManifestParam]
             assert not valid
             assert error_str is not None
             assert error_str.startswith("'bad_type' is not valid under any of the given schemas")
-
-
-def test_decode_manifest_v2022_06_06(default_manifest_str_v2022_06_06: str):
-    """
-    Test that a v2022-06-06 manifest string decodes to an AssetManifest object as expected.
-    """
-    expected_manifest = AssetManifest_v2022_06_06(
-        hash_alg="xxh128",
-        paths=[
-            Path_v2022_06_06(path="\r", hash="Carriage Return"),
-            Path_v2022_06_06(path="1", hash="One"),
-            Path_v2022_06_06(path="another_test_file", hash="c"),
-            Path_v2022_06_06(path="test_dir/test_file", hash="b"),
-            Path_v2022_06_06(path="test_file", hash="a"),
-            Path_v2022_06_06(path="\u0080", hash="Control"),
-            Path_v2022_06_06(path="ö", hash="Latin Small Letter O With Diaeresis"),
-            Path_v2022_06_06(path="€", hash="Euro Sign"),
-            Path_v2022_06_06(path="😀", hash="Emoji: Grinning Face"),
-            Path_v2022_06_06(path="דּ", hash="Hebrew Letter Dalet With Dagesh"),
-        ],
-    )
-    assert decode.decode_manifest(default_manifest_str_v2022_06_06) == expected_manifest
 
 
 def test_decode_manifest_v2023_03_03(default_manifest_str_v2023_03_03: str):

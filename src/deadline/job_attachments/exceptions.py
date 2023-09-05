@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Errors that the Deadline Job Attachments library can raise.
+Exceptions that the Deadline Job Attachments library can raise.
 """
 
 

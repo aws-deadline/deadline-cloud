@@ -12,11 +12,11 @@ import click
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import (
-    PROMPT_WHEN_COMPLETE,
-    handle_error,
-    prompt_at_completion,
+    _PROMPT_WHEN_COMPLETE,
+    _handle_error,
+    _prompt_at_completion,
 )
-from ..deadline_web_url import (
+from .._deadline_web_url import (
     DEADLINE_URL_SCHEME_NAME,
     install_deadline_web_url_handler,
     parse_query_string,
@@ -52,7 +52,7 @@ from .job_group import _download_job_output
     is_flag=True,
     help="With --install or --uninstall, the installation is for all users.",
 )
-@handle_error
+@_handle_error
 @click.pass_context
 def cli_handle_web_url(
     ctx: click.Context,
@@ -79,7 +79,7 @@ def cli_handle_web_url(
             &step-id=<step-id>                      # optional
             &task-id=<task-id>                      # optional
     """
-    ctx.obj[PROMPT_WHEN_COMPLETE] = prompt_when_complete
+    ctx.obj[_PROMPT_WHEN_COMPLETE] = prompt_when_complete
 
     # Determine whether we're handling a URL or installing/uninstalling the Amazon Deadline Cloud URL handler
     if url:
@@ -142,5 +142,5 @@ def cli_handle_web_url(
             "At least one of a URL, --install, or --uninstall must be provided."
         )
 
-    prompt_at_completion(ctx)
+    _prompt_at_completion(ctx)
     sys.exit(0)

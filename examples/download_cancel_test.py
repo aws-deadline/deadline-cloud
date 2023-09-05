@@ -8,9 +8,9 @@ import time
 from threading import Thread
 
 from deadline.job_attachments.asset_sync import AssetSync
-from deadline.job_attachments.aws.deadline import get_job, get_queue
+from deadline.job_attachments._aws.deadline import get_job, get_queue
 from deadline.job_attachments.download import OutputDownloader
-from deadline.job_attachments.errors import AssetSyncCancelledError
+from deadline.job_attachments.exceptions import AssetSyncCancelledError
 
 """
 A testing script to simulate cancellation of (1) syncing inputs, and (2) downloading outputs.

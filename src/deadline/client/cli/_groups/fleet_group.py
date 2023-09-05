@@ -10,11 +10,11 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import apply_cli_options_to_config, cli_object_repr, handle_error
+from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
 
 
 @click.group(name="fleet")
-@handle_error
+@_handle_error
 def cli_fleet():
     """
     Commands to work with Amazon Deadline Cloud Fleet resources.
@@ -24,13 +24,13 @@ def cli_fleet():
 @cli_fleet.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@handle_error
+@_handle_error
 def fleet_list(**args):
     """
     Lists the available Fleets in Amazon Deadline Cloud.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
@@ -45,7 +45,7 @@ def fleet_list(**args):
         for fleet in response["fleets"]
     ]
 
-    click.echo(cli_object_repr(structured_fleet_list))
+    click.echo(_cli_object_repr(structured_fleet_list))
 
 
 @cli_fleet.command(name="get")
@@ -53,7 +53,7 @@ def fleet_list(**args):
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.")
 @click.option("--queue-id", help="If provided, gets all Fleets associated with the Queue.")
-@handle_error
+@_handle_error
 def fleet_get(fleet_id, queue_id, **args):
     """
     Get the details of an Amazon Deadline Cloud Fleet.
@@ -64,7 +64,7 @@ def fleet_get(fleet_id, queue_id, **args):
         )
 
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     if not fleet_id:
@@ -80,7 +80,7 @@ def fleet_get(fleet_id, queue_id, **args):
         response = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
         response.pop("ResponseMetadata", None)
 
-        click.echo(cli_object_repr(response))
+        click.echo(_cli_object_repr(response))
     else:
         response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
         queue_name = response["displayName"]
@@ -103,4 +103,4 @@ def fleet_get(fleet_id, queue_id, **args):
             response["queueFleetAssociationStatus"] = qfa["status"]
 
             click.echo("")
-            click.echo(cli_object_repr(response))
+            click.echo(_cli_object_repr(response))

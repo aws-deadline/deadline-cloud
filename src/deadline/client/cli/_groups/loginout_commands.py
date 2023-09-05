@@ -10,7 +10,7 @@ import click
 from ... import api
 from ...api._session import AwsCredentialsType
 from ...config import config_file
-from .._common import handle_error
+from .._common import _handle_error
 
 
 def _cli_on_pending_authorization(**kwargs):
@@ -19,11 +19,11 @@ def _cli_on_pending_authorization(**kwargs):
     """
 
     if kwargs["credential_type"] == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
-        click.echo("Opening Deadline Cloud Monitor. Please login before returning here.")
+        click.echo("Opening Deadline Cloud Monitor. Please login and then return here.")
 
 
 @click.command(name="login")
-@handle_error
+@_handle_error
 def cli_login():
     """
     Logs in to the Amazon Deadline Cloud configured AWS profile.
@@ -43,11 +43,11 @@ def cli_login():
 
 
 @click.command(name="logout")
-@handle_error
+@_handle_error
 def cli_logout():
     """
-    Logs out of the Amazon Deadline Cloud configured AWS profile.
+    Logs out of the Deadline Cloud Monitor configured AWS profile.
     """
     api.logout()
 
-    click.echo("Successfully logged out of all AWS sessions")
+    click.echo("Successfully logged out of all Deadline Cloud Monitor AWS profiles")

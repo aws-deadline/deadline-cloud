@@ -18,16 +18,16 @@ from pytest import LogCaptureFixture, TempPathFactory
 
 from deadline.job_attachments import asset_sync, download, upload
 from deadline.job_attachments.asset_manifests import ManifestVersion
-from deadline.job_attachments.aws.deadline import get_queue
-from deadline.job_attachments.errors import AssetSyncError, JobAttachmentsS3ClientError
+from deadline.job_attachments._aws.deadline import get_queue
+from deadline.job_attachments.exceptions import AssetSyncError, JobAttachmentsS3ClientError
 from deadline.job_attachments.models import ManifestProperties, Attachments
 from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.job_attachments.utils import (
+from deadline.job_attachments._utils import (
     OperatingSystemFamily,
-    get_deadline_formatted_os,
-    get_unique_dest_dir_name,
-    hash_data,
-    hash_file,
+    _get_deadline_formatted_os,
+    _get_unique_dest_dir_name,
+    _hash_data,
+    _hash_file,
 )
 
 
@@ -45,7 +45,7 @@ class JobAttachmentTest:
     OUTPUT_PATH = ASSET_ROOT / "outputs"
     INPUT_PATH = ASSET_ROOT / "inputs"
     SCENE_MA_PATH = INPUT_PATH / "scene.ma"
-    SCENE_MA_HASH = hash_file(str(SCENE_MA_PATH))
+    SCENE_MA_HASH = _hash_file(str(SCENE_MA_PATH))
     BRICK_PNG_PATH = INPUT_PATH / "textures" / "brick.png"
     CLOTH_PNG_PATH = INPUT_PATH / "textures" / "cloth.png"
     FIRST_RENDER_OUTPUT_PATH = Path("outputs/render0000.exr")
@@ -84,7 +84,7 @@ class JobAttachmentTest:
         self.manifest_version = manifest_version
 
 
-@pytest.fixture(scope="session", params=[ManifestVersion.v2023_03_03, ManifestVersion.v2022_06_06])
+@pytest.fixture(scope="session", params=[ManifestVersion.v2023_03_03])
 def job_attachment_test(
     deploy_job_attachment_resources: JobAttachmentManager,
     tmp_path_factory: TempPathFactory,
@@ -212,8 +212,8 @@ def upload_input_files_one_asset_in_cas(
     )
 
     # THEN
-    brick_png_hash = hash_file(str(job_attachment_test.BRICK_PNG_PATH))
-    cloth_png_hash = hash_file(str(job_attachment_test.CLOTH_PNG_PATH))
+    brick_png_hash = _hash_file(str(job_attachment_test.BRICK_PNG_PATH))
+    cloth_png_hash = _hash_file(str(job_attachment_test.CLOTH_PNG_PATH))
 
     brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}"
     cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}"
@@ -359,7 +359,7 @@ def sync_inputs(
         on_downloading_files=on_downloading_files,
     )
 
-    dest_dir = get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
+    dest_dir = _get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
 
     # THEN
     assert Path(session_dir / dest_dir / job_attachment_test.SCENE_MA_PATH).exists()
@@ -792,11 +792,11 @@ def sync_outputs(
     object_key_set = set(obj.key for obj in object_summary_iterator)
 
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_to_be_synced_step0_task0))}"
+        f"{job_attachment_settings.full_cas_prefix()}/{_hash_file(str(file_to_be_synced_step0_task0))}"
         in object_key_set
     )
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_not_to_be_synced))}"
+        f"{job_attachment_settings.full_cas_prefix()}/{_hash_file(str(file_not_to_be_synced))}"
         not in object_key_set
     )
 
@@ -857,7 +857,7 @@ def test_sync_inputs_with_step_dependencies(
         on_downloading_files=on_downloading_files,
     )
 
-    dest_dir = get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
+    dest_dir = _get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
 
     # THEN
     # Check if the inputs specified in job settings were downlownded
@@ -1037,7 +1037,7 @@ def upload_input_files_no_input_paths(
     )
 
     # THEN
-    mock_submission_profile_name = get_deadline_formatted_os()
+    mock_submission_profile_name = _get_deadline_formatted_os()
     assert attachments.manifests == [
         ManifestProperties(
             rootPath=str(job_attachment_test.OUTPUT_PATH),
@@ -1099,9 +1099,9 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     if manifests[0].asset_manifest is None:
         raise TypeError("Asset manifest must be set for this test.")
 
-    mock_submission_profile_name = get_deadline_formatted_os()
-    asset_root_hash = hash_data(str(job_attachment_test.INPUT_PATH).encode())
-    manifest_hash = hash_data(bytes(manifests[0].asset_manifest.encode(), "utf-8"))
+    mock_submission_profile_name = _get_deadline_formatted_os()
+    asset_root_hash = _hash_data(str(job_attachment_test.INPUT_PATH).encode())
+    manifest_hash = _hash_data(bytes(manifests[0].asset_manifest.encode(), "utf-8"))
 
     assert len(attachments.manifests) == 1
     assert attachments.manifests[0].fileSystemLocationName is None
