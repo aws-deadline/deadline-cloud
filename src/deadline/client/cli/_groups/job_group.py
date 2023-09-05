@@ -22,14 +22,14 @@ from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
 )
-from deadline.job_attachments.utils import FileConflictResolution, human_readable_file_size
+from deadline.job_attachments._utils import FileConflictResolution, _human_readable_file_size
 
-from deadline.job_attachments.utils import OperatingSystemFamily, get_deadline_formatted_os
+from deadline.job_attachments._utils import OperatingSystemFamily, _get_deadline_formatted_os
 
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import apply_cli_options_to_config, cli_object_repr, handle_error
+from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
 
 JSON_MSG_TYPE_TITLE = "title"
 JSON_MSG_TYPE_PATH = "path"
@@ -40,7 +40,7 @@ JSON_MSG_TYPE_ERROR = "error"
 
 
 @click.group(name="job")
-@handle_error
+@_handle_error
 def cli_job():
     """
     Commands to work with Amazon Deadline Cloud Jobs.
@@ -53,13 +53,13 @@ def cli_job():
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
 @click.option("--page-size", default=5, help="The number of items shown in the page.")
 @click.option("--item-offset", default=0, help="The starting offset of the items.")
-@handle_error
+@_handle_error
 def job_list(page_size, item_offset, **args):
     """
     Lists the Jobs in an Amazon Deadline Cloud Queue.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
@@ -102,7 +102,7 @@ def job_list(page_size, item_offset, **args):
         f"Displaying {len(structured_job_list)} of {total_results} Jobs starting at {item_offset}"
     )
     click.echo()
-    click.echo(cli_object_repr(structured_job_list))
+    click.echo(_cli_object_repr(structured_job_list))
 
 
 @cli_job.command(name="get")
@@ -110,13 +110,15 @@ def job_list(page_size, item_offset, **args):
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
 @click.option("--job-id", help="The Amazon Deadline Cloud Job to get.")
-@handle_error
+@_handle_error
 def job_get(**args):
     """
     Get the details of an Amazon Deadline Cloud Job.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
@@ -126,7 +128,7 @@ def job_get(**args):
     response = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
     response.pop("ResponseMetadata", None)
 
-    click.echo(cli_object_repr(response))
+    click.echo(_cli_object_repr(response))
 
 
 @cli_job.command(name="cancel")
@@ -145,13 +147,15 @@ def job_get(**args):
     is_flag=True,
     help="Skip any confirmation prompts",
 )
-@handle_error
+@_handle_error
 def job_cancel(mark_as: str, yes: bool, **args):
     """
     Cancel an Amazon Deadline Cloud Job from running.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
@@ -181,7 +185,7 @@ def job_cancel(mark_as: str, yes: bool, **args):
             "createdAt",
         ]
     }
-    click.echo(cli_object_repr(filtered_job))
+    click.echo(_cli_object_repr(filtered_job))
 
     # Ask for confirmation about canceling this job.
     if not (
@@ -443,9 +447,9 @@ def _get_download_summary_message(
         return (
             "Download Summary:\n"
             f"    Downloaded {download_summary.processed_files} files totaling"
-            f" {human_readable_file_size(download_summary.processed_bytes)}.\n"
+            f" {_human_readable_file_size(download_summary.processed_bytes)}.\n"
             f"    Total download time of {round(download_summary.total_time, ndigits=5)} seconds"
-            f" at {human_readable_file_size(int(download_summary.transfer_rate))}/s.\n"
+            f" at {_human_readable_file_size(int(download_summary.transfer_rate))}/s.\n"
             f"    Download locations (file counts):\n        {paths_joined}"
         )
 
@@ -499,7 +503,7 @@ def _is_current_os_windows() -> bool:
     """
     Checks whether the current OS is Windows.
     """
-    return get_deadline_formatted_os() == OperatingSystemFamily.WINDOWS.value
+    return _get_deadline_formatted_os() == OperatingSystemFamily.WINDOWS.value
 
 
 def _is_path_in_windows_format(path_str: str) -> bool:
@@ -559,7 +563,7 @@ def _is_path_in_windows_format(path_str: str) -> bool:
     "JSON: Displays messages in JSON line format, so that the info can be easily "
     "parsed/consumed by custom scripts.",
 )
-@handle_error
+@_handle_error
 def job_download_output(step_id, task_id, conflict_resolution, output, **args):
     """
     Download the output attached to an Amazon Deadline Cloud Job.
@@ -567,7 +571,9 @@ def job_download_output(step_id, task_id, conflict_resolution, output, **args):
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id", "job_id"}, **args)
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)

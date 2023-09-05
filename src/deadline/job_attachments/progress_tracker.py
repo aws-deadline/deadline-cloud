@@ -9,7 +9,7 @@ from enum import Enum
 from threading import Lock
 from typing import Callable, Dict, Optional
 
-from deadline.job_attachments.utils import human_readable_file_size
+from deadline.job_attachments._utils import _human_readable_file_size
 
 DURATION_BETWEEN_CALLS = 1  # in seconds
 FILES_IN_CHUNK = 50
@@ -52,6 +52,16 @@ class SummaryStatistics:
         self.transfer_rate = self.processed_bytes / self.total_time if self.total_time else 0.0
 
         return self
+
+    def __str__(self):
+        return (
+            f"Processed {self.processed_files} files totaling"
+            + f" {_human_readable_file_size(self.processed_bytes)}.\n"
+            + f"Skipped re-processing {self.skipped_files} files totaling"
+            + f" {_human_readable_file_size(self.skipped_bytes)}.\n"
+            + f"Total processing time of {round(self.total_time, ndigits=5)} seconds"
+            + f" at {_human_readable_file_size(int(self.transfer_rate))}/s.\n"
+        )
 
 
 @dataclass
@@ -241,7 +251,7 @@ class ProgressTracker:
         )
         progress_message = (
             f"{self.status.verb_in_message}"
-            f" {human_readable_file_size(completed_bytes)} / {human_readable_file_size(self.total_bytes)}"
+            f" {_human_readable_file_size(completed_bytes)} / {_human_readable_file_size(self.total_bytes)}"
             f" of {self.total_files} file{'' if self.total_files == 1 else 's'}"
         )
 

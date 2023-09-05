@@ -6,7 +6,7 @@ import pathlib
 import sys
 import time
 
-from deadline.job_attachments.aws.deadline import get_queue
+from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.download import OutputDownloader
 
 """

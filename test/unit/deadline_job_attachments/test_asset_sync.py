@@ -29,7 +29,7 @@ from deadline.job_attachments.progress_tracker import (
     ProgressReportMetadata,
     SummaryStatistics,
 )
-from deadline.job_attachments.utils import OperatingSystemFamily, human_readable_file_size
+from deadline.job_attachments._utils import OperatingSystemFamily, _human_readable_file_size
 
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 
@@ -124,7 +124,7 @@ class TestAssetSync:
         """
         Test that given a file size in bytes, the expected human readable file size is output.
         """
-        assert human_readable_file_size(file_size) == expected_output
+        assert _human_readable_file_size(file_size) == expected_output
 
     def test_sync_inputs_no_inputs_successful(
         self,
@@ -145,7 +145,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
@@ -227,7 +227,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
@@ -294,7 +294,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir, step_dest_dir],
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
@@ -362,7 +362,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             return_value=dest_dir,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
@@ -476,15 +476,15 @@ class TestAssetSync:
 
         # WHEN
         with patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.hash_file",
+            f"{deadline.__package__}.job_attachments.asset_sync._hash_file",
             side_effect=["hash1", "hash2"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.hash_data", side_effect=["hash3"]
+            f"{deadline.__package__}.job_attachments.asset_sync._hash_data", side_effect=["hash3"]
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[local_root],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.float_to_iso_string",
+            f"{deadline.__package__}.job_attachments.asset_sync._float_to_iso_datetime_string",
             side_effect=["2023-07-13T14:35:26.123456Z"],
         ):
             mock_on_uploading_files = MagicMock(return_value=True)
@@ -547,7 +547,7 @@ class TestAssetSync:
                 f'"totalSize":{expected_total_bytes}}}',
             )
 
-            readable_total_input_bytes = human_readable_file_size(expected_total_bytes)
+            readable_total_input_bytes = _human_readable_file_size(expected_total_bytes)
             expected_last_progress_report = ProgressReportMetadata(
                 status=ProgressStatus.UPLOAD_IN_PROGRESS,
                 progress=100.0,
@@ -681,7 +681,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             return_value=DownloadSummaryStatistics(),
         ) as mock_download_files_from_manifests, patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.get_unique_dest_dir_name",
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
         ):
             mock_on_downloading_files = MagicMock(return_value=True)

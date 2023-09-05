@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from click.testing import CliRunner
 
 from deadline.client import api, config
-from deadline.client.cli import deadline_cli
+from deadline.client.cli import main
 
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID, MOCK_QUEUES_LIST
 
@@ -56,7 +56,7 @@ def test_cli_fleet_list(fresh_deadline_config):
         session_mock().client("deadline").list_fleets.return_value = {"fleets": MOCK_FLEETS_LIST}
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["fleet", "list"])
+        result = runner.invoke(main, ["fleet", "list"])
 
         assert (
             result.output
@@ -79,7 +79,7 @@ def test_cli_fleet_list_client_error(fresh_deadline_config):
         )
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["fleet", "list"])
+        result = runner.invoke(main, ["fleet", "list"])
 
         assert "Failed to get Fleets" in result.output
         assert "A botocore client error" in result.output
@@ -96,7 +96,7 @@ def test_cli_fleet_get(fresh_deadline_config):
         session_mock().client("deadline").get_fleet.return_value = MOCK_FLEETS_LIST[0]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["fleet", "get", "--fleet-id", MOCK_FLEET_ID])
+        result = runner.invoke(main, ["fleet", "get", "--fleet-id", MOCK_FLEET_ID])
 
         assert (
             result.output
@@ -154,7 +154,7 @@ def test_cli_fleet_get_with_queue_id(fresh_deadline_config):
         }
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["fleet", "get"])
+        result = runner.invoke(main, ["fleet", "get"])
 
         assert (
             result.output
@@ -221,7 +221,7 @@ def test_cli_fleet_get_override_profile(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             ["fleet", "get", "--profile", "NonDefaultProfileName", "--fleet-id", MOCK_FLEET_ID],
         )
 
@@ -243,7 +243,7 @@ def test_cli_fleet_get_both_fleet_id_and_queue_id_provided(fresh_deadline_config
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli, ["fleet", "get", "--fleet-id", "fleetid", "--queue-id", "queueid"]
+            main, ["fleet", "get", "--fleet-id", "fleetid", "--queue-id", "queueid"]
         )
 
         assert "Only one of the --fleet-id and --queue-id options may be provided." in result.output
@@ -260,7 +260,7 @@ def test_cli_fleet_get_no_fleet_id_provided(fresh_deadline_config):
         session_mock().client("deadline").get_fleet.return_value = MOCK_FLEETS_LIST[0]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["fleet", "get"])
+        result = runner.invoke(main, ["fleet", "get"])
 
         assert (
             "Missing '--fleet-id', '--queue-id', or default Queue ID configuration" in result.output
@@ -278,7 +278,7 @@ def test_cli_fleet_get_explicit_farm_id(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             ["fleet", "get", "--farm-id", MOCK_FARM_ID, "--fleet-id", MOCK_FLEET_ID],
         )
 

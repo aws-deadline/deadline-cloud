@@ -19,12 +19,13 @@ from ._session import (
     AwsCredentialsStatus,
 )
 from ..config import get_setting
+from ..exceptions import DeadlineOperationError
 import time
 
 logger = getLogger(__name__)
 
 
-class UnsupportedProfileTypeForLoginLogout(Exception):
+class UnsupportedProfileTypeForLoginLogout(DeadlineOperationError):
     pass
 
 
@@ -47,7 +48,7 @@ def _login_deadline_cloud_monitor(
             args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE
         )
     except FileNotFoundError:
-        raise Exception(
+        raise DeadlineOperationError(
             f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
         )
     if on_pending_authorization:
@@ -71,7 +72,7 @@ def _login_deadline_cloud_monitor(
                 f"Deadline Cloud Monitor was not able to log into the {profile_name} profile: "
             )
             out = p.stdout.read().decode("utf-8") if p.stdout else ""
-            raise Exception(f"{err_prefix}: {out}")
+            raise DeadlineOperationError(f"{err_prefix}:\n{out}")
 
         time.sleep(0.5)
 
@@ -82,12 +83,9 @@ def login(
     config: Optional[ConfigParser] = None,
 ) -> str:
     """
-    Logs in to the provided session if supported.
+    For AWS profiles created by Deadline Cloud Monitor, logs in to provide access to Deadline Cloud.
 
-    This method supports Deadline Cloud Monitor
-    If Amazon Deadline Cloud doesn't know how to login to the the requested session Profile UnsupportedProfileTypeForLoginLogout is thrown
-
-     Args:
+    Args:
         on_pending_authorization (Callable): A callback that receives method-specific information to continue login.
             All methods: 'credential_type' parameter of type AwsCredentialsType
             For Deadline Cloud Monitor: No additional parameters
@@ -101,14 +99,13 @@ def login(
             on_pending_authorization, on_cancellation_check, config
         )
     raise UnsupportedProfileTypeForLoginLogout(
-        "This action is only valid for Deadline Cloud Monitor Profiles"
+        "Logging in is only supported for AWS Profiles created by Deadline Cloud Monitor."
     )
 
 
 def logout(config: Optional[ConfigParser] = None) -> str:
     """
-    Logs out of supported credential providers
-    For Deadline Cloud Monitor, closes any running instance of Deadline Cloud Monitor for the current profile
+    For AWS profiles created by Deadline Cloud Monitor, logs out of Deadline Cloud.
 
      Args:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
@@ -127,11 +124,11 @@ def logout(config: Optional[ConfigParser] = None) -> str:
         try:
             output = subprocess.check_output(args)
         except FileNotFoundError:
-            raise Exception(
+            raise DeadlineOperationError(
                 f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
             )
         except subprocess.CalledProcessError as e:
-            raise Exception(
+            raise DeadlineOperationError(
                 f"Deadline Cloud Monitor was unable to logout the profile {profile_name}. Return code {e.returncode}: {e.output}"
             )
 
@@ -139,5 +136,5 @@ def logout(config: Optional[ConfigParser] = None) -> str:
         invalidate_boto3_session_cache()
         return output.decode("utf8")
     raise UnsupportedProfileTypeForLoginLogout(
-        "This action is only valid for Deadline Cloud Monitor Profiles"
+        "Logging out is only supported for AWS Profiles created by Deadline Cloud Monitor."
     )

@@ -11,18 +11,22 @@ from .versions import ManifestVersion
 
 
 @dataclass
-class Path(ABC):
+class BaseManifestPath(ABC):
     """
     Data class for paths in the Asset Manifest
     """
 
     path: str
     hash: str
+    size: int
+    mtime: int
     manifest_version: ClassVar[ManifestVersion]
 
-    def __init__(self, *, path: str, hash: str) -> None:
+    def __init__(self, *, path: str, hash: str, size: int, mtime: int) -> None:
         self.path = path
         self.hash = hash
+        self.size = size
+        self.mtime = mtime
 
     def __eq__(self, other: object) -> bool:
         """
@@ -31,23 +35,23 @@ class Path(ABC):
         :param other:
         :return: True if all fields are equal, False otherwise.
         """
-        if not isinstance(other, Path):
+        if not isinstance(other, BaseManifestPath):
             return NotImplemented
         return fields(self) == fields(other)
 
 
 @dataclass
-class AssetManifest(ABC):
+class BaseAssetManifest(ABC):
     """Base class for the Asset Manifest."""
 
     hashAlg: str  # pylint: disable=invalid-name
-    paths: list[Path]
+    paths: list[BaseManifestPath]
     manifestVersion: ManifestVersion
 
     def __init__(
         self,
         *,
-        paths: list[Path],
+        paths: list[BaseManifestPath],
         hash_alg: str,
     ):
         self.paths = paths
@@ -55,7 +59,7 @@ class AssetManifest(ABC):
 
     @classmethod
     @abstractmethod
-    def decode(cls, *, manifest_data: dict[str, Any]) -> AssetManifest:  # pragma: no cover
+    def decode(cls, *, manifest_data: dict[str, Any]) -> BaseAssetManifest:  # pragma: no cover
         """Turn a dictionary for a manifest into an AssetManifest object"""
         raise NotImplementedError("Asset Manifest base class does not implement decode")
 

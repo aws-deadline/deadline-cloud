@@ -20,10 +20,15 @@ from .progress_tracker import (
 )
 
 from .asset_manifests.decode import decode_manifest
-from .asset_manifests import AssetManifest, ManifestModel, ManifestModelRegistry, ManifestVersion
-from .asset_manifests import Path as RelativeFilePath
-from .aws.aws_clients import get_boto3_session
-from .aws.deadline import get_job, get_queue
+from .asset_manifests import (
+    BaseAssetManifest,
+    BaseManifestModel,
+    ManifestModelRegistry,
+    ManifestVersion,
+)
+from .asset_manifests import BaseManifestPath as RelativeFilePath
+from ._aws.aws_clients import get_boto3_session
+from ._aws.deadline import get_job, get_queue
 from .download import (
     _progress_logger,
     merge_asset_manifests,
@@ -33,7 +38,7 @@ from .download import (
     mount_vfs_from_manifests,
 )
 from .fus3 import Fus3ProcessManager
-from .errors import AssetSyncError
+from .exceptions import AssetSyncError
 from .models import (
     ManifestProperties,
     Attachments,
@@ -41,15 +46,13 @@ from .models import (
     OutputFile,
 )
 from .upload import S3AssetUploader
-from .utils import (
+from ._utils import (
     AssetLoadingMethod,
-    float_to_iso_string,
-    get_deadline_formatted_os,
-    get_unique_dest_dir_name,
-    hash_data,
-    hash_file,
-    join_s3_paths,
-    map_source_path_to_dest_path,
+    _float_to_iso_datetime_string,
+    _get_unique_dest_dir_name,
+    _hash_data,
+    _hash_file,
+    _join_s3_paths,
 )
 
 logger = getLogger("deadline.job_attachments")
@@ -83,7 +86,7 @@ class AssetSync:
 
         self.deadline_endpoint_url = deadline_endpoint_url
         self.s3_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
-        self.manifest_model: Type[ManifestModel] = ManifestModelRegistry.get_manifest_model(
+        self.manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
 
@@ -126,15 +129,15 @@ class AssetSync:
     def _upload_output_manifest_to_s3(
         self,
         s3_settings: JobAttachmentS3Settings,
-        output_manifest: AssetManifest,
+        output_manifest: BaseAssetManifest,
         full_output_prefix: str,
         root_path: str,
         file_system_location_name: Optional[str] = None,
     ) -> None:
         """Uploads the given output manifest to the given S3 bucket."""
         manifest_bytes = output_manifest.encode().encode("utf-8")
-        manifest_name_prefix = hash_data(f"{file_system_location_name or ''}{root_path}".encode())
-        manifest_path = join_s3_paths(
+        manifest_name_prefix = _hash_data(f"{file_system_location_name or ''}{root_path}".encode())
+        manifest_path = _join_s3_paths(
             full_output_prefix,
             f"{manifest_name_prefix}_output.{output_manifest.hashAlg}",
         )
@@ -151,26 +154,24 @@ class AssetSync:
             extra_args=metadata,
         )
 
-    def _generate_output_manifest(self, outputs: List[OutputFile]) -> AssetManifest:
+    def _generate_output_manifest(self, outputs: List[OutputFile]) -> BaseAssetManifest:
         paths: list[RelativeFilePath] = []
         for output in outputs:
             path_args: dict[str, Any] = {
                 "hash": output.file_hash,
                 "path": output.rel_path,
             }
-            if self.manifest_model.manifest_version == ManifestVersion.v2023_03_03:
-                path_args["size"] = output.file_size
-                # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
-                # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
-                path_args["mtime"] = trunc(Path(output.full_path).stat().st_mtime_ns // 1000)
+            path_args["size"] = output.file_size
+            # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
+            # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
+            path_args["mtime"] = trunc(Path(output.full_path).stat().st_mtime_ns // 1000)
             paths.append(self.manifest_model.Path(**path_args))
 
         asset_manifest_args: dict[str, Any] = {
             "paths": paths,
             "hash_alg": self._HASH_ALG,
         }
-        if self.manifest_model.manifest_version == ManifestVersion.v2023_03_03:
-            asset_manifest_args["total_size"] = sum([output.file_size for output in outputs])
+        asset_manifest_args["total_size"] = sum([output.file_size for output in outputs])
 
         return self.manifest_model.AssetManifest(**asset_manifest_args)  # type: ignore[call-arg]
 
@@ -190,10 +191,7 @@ class AssetSync:
 
         for output_dir in manifest_properties.outputRelativeDirectories or []:
             # Don't fail if output dir hasn't been created yet; another task might be working on it
-            output_pure_path = map_source_path_to_dest_path(
-                source_profile, get_deadline_formatted_os(), output_dir
-            )
-            output_root: Path = local_root.joinpath(output_pure_path)
+            output_root: Path = local_root / output_dir
             if not output_root.is_dir():
                 continue
 
@@ -205,10 +203,10 @@ class AssetSync:
                     and file_path.lstat().st_mtime >= start_time
                 ):
                     file_size = file_path.lstat().st_size
-                    file_hash = hash_file(str(file_path))
+                    file_hash = _hash_file(str(file_path))
 
                     if s3_settings.full_cas_prefix():
-                        s3_key = join_s3_paths(s3_settings.full_cas_prefix(), file_hash)
+                        s3_key = _join_s3_paths(s3_settings.full_cas_prefix(), file_hash)
                     else:
                         s3_key = file_hash
                     in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
@@ -300,9 +298,9 @@ class AssetSync:
             self.logger.info(f"No attachments configured for Job {job_id}, no inputs to sync.")
             return (SummaryStatistics(), [])
 
-        grouped_manifests_by_root: DefaultDict[str, list[tuple[AssetManifest, str]]] = DefaultDict(
-            list
-        )
+        grouped_manifests_by_root: DefaultDict[
+            str, list[tuple[BaseAssetManifest, str]]
+        ] = DefaultDict(list)
         pathmapping_rules: Dict[str, Dict[str, str]] = {}
 
         storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
@@ -321,7 +319,7 @@ class AssetSync:
                         f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                     )
             else:
-                dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+                dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
                 local_root = str(session_dir.joinpath(dir_name))
                 pathmapping_rules[dir_name] = {
                     "source_os": manifest_properties.osType.to_path_mapping_os(),
@@ -354,12 +352,12 @@ class AssetSync:
                     session=self.session,
                 )
                 for root, manifests in manifests_by_root.items():
-                    dir_name = get_unique_dest_dir_name(root)
+                    dir_name = _get_unique_dest_dir_name(root)
                     local_root = str(session_dir.joinpath(dir_name))
                     grouped_manifests_by_root[local_root].extend(manifests)
 
         # Merge the manifests in each root into a single manifest
-        merged_manifests_by_root: dict[str, AssetManifest] = dict()
+        merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
         for root, manifests in grouped_manifests_by_root.items():
             merged_manifest = merge_asset_manifests([manifest[0] for manifest in manifests])
 
@@ -436,7 +434,7 @@ class AssetSync:
                             f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                         )
                 else:
-                    dir_name: str = get_unique_dest_dir_name(manifest_properties.rootPath)
+                    dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
                     local_root = session_dir.joinpath(dir_name)
 
                 output_files: List[OutputFile] = self._get_output_files(
@@ -449,7 +447,7 @@ class AssetSync:
                 if output_files:
                     output_manifest = self._generate_output_manifest(output_files)
                     session_action_id_with_time_stamp = (
-                        f"{float_to_iso_string(start_time)}_{session_action_id}"
+                        f"{_float_to_iso_datetime_string(start_time)}_{session_action_id}"
                     )
                     full_output_prefix = s3_settings.full_output_prefix(
                         farm_id=self.farm_id,

@@ -10,9 +10,7 @@ from click.testing import CliRunner
 
 from deadline.client import api, config
 
-# from deadline.client.api import _loginout
-
-from deadline.client.cli import deadline_cli
+from deadline.client.cli import main
 
 
 def test_cli_deadline_cloud_monitor_login(fresh_deadline_config):
@@ -42,7 +40,7 @@ def test_cli_deadline_cloud_monitor_login(fresh_deadline_config):
         check_output_mock.return_value = bytes("Successfully logged out", "utf8")
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["login"])
+        result = runner.invoke(main, ["login"])
 
         assert result.exit_code == 0, result.output
 
@@ -63,7 +61,7 @@ def test_cli_deadline_cloud_monitor_login(fresh_deadline_config):
 
         # Now lets logout
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["logout"])
+        result = runner.invoke(main, ["logout"])
 
         check_output_mock.assert_called_once_with(
             ["/bin/DeadlineCloudMonitor", "logout", "--profile", "sandbox-us-west-2"]

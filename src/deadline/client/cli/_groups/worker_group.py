@@ -10,11 +10,11 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import apply_cli_options_to_config, cli_object_repr, handle_error
+from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
 
 
 @click.group(name="worker")
-@handle_error
+@_handle_error
 def cli_worker():
     """
     Commands to work with Amazon Deadline Cloud Workers.
@@ -27,13 +27,13 @@ def cli_worker():
 @click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.", required=True)
 @click.option("--page-size", default=5, help="The number of items shown in the page.")
 @click.option("--item-offset", default=0, help="The starting offset of the items.")
-@handle_error
+@_handle_error
 def worker_list(page_size, item_offset, fleet_id, **args):
     """
     Lists the Workers in an Amazon Deadline Cloud Fleet.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
@@ -57,7 +57,7 @@ def worker_list(page_size, item_offset, fleet_id, **args):
         f"Displaying {len(structured_worker_list)} of {total_results} workers starting at {item_offset}"
     )
     click.echo()
-    click.echo(cli_object_repr(structured_worker_list))
+    click.echo(_cli_object_repr(structured_worker_list))
 
 
 @cli_worker.command(name="get")
@@ -65,13 +65,13 @@ def worker_list(page_size, item_offset, fleet_id, **args):
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.", required=True)
 @click.option("--worker-id", help="The Amazon Deadline Cloud Worker to get.", required=True)
-@handle_error
+@_handle_error
 def worker_get(fleet_id, worker_id, **args):
     """
     Get the details of an Amazon Deadline Cloud worker.
     """
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
 
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
@@ -79,4 +79,4 @@ def worker_get(fleet_id, worker_id, **args):
     response = deadline.get_worker(farmId=farm_id, fleetId=fleet_id, workerId=worker_id)
     response.pop("ResponseMetadata", None)
 
-    click.echo(cli_object_repr(response))
+    click.echo(_cli_object_repr(response))

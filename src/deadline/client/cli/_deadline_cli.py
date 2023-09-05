@@ -11,16 +11,16 @@ import click
 
 from .. import version
 from ..config import get_setting, get_setting_default
-from ._common import PROMPT_WHEN_COMPLETE
-from .groups.bundle_group import cli_bundle
-from .groups.config_group import cli_config
-from .groups.farm_group import cli_farm
-from .groups.fleet_group import cli_fleet
-from .groups.handle_web_url_command import cli_handle_web_url
-from .groups.job_group import cli_job
-from .groups.loginout_commands import cli_login, cli_logout
-from .groups.queue_group import cli_queue
-from .groups.worker_group import cli_worker
+from ._common import _PROMPT_WHEN_COMPLETE
+from ._groups.bundle_group import cli_bundle
+from ._groups.config_group import cli_config
+from ._groups.farm_group import cli_farm
+from ._groups.fleet_group import cli_fleet
+from ._groups.handle_web_url_command import cli_handle_web_url
+from ._groups.job_group import cli_job
+from ._groups.loginout_commands import cli_login, cli_logout
+from ._groups.queue_group import cli_queue
+from ._groups.worker_group import cli_worker
 
 logger = getLogger(__name__)
 
@@ -45,7 +45,7 @@ else:
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
-@click.version_option(version)
+@click.version_option(version=version, prog_name="deadline")
 @click.option(
     "--log-level",
     type=click.Choice(_DEADLINE_LOG_LEVELS, case_sensitive=False),
@@ -53,27 +53,27 @@ else:
     help="Set the logging level.",
 )
 @click.pass_context
-def cli(ctx: click.Context, log_level: str):
+def main(ctx: click.Context, log_level: str):
     """
     The Amazon Deadline Cloud CLI provides functionality to work with the Amazon Amazon Deadline Cloud
     closed beta service.
     """
-    logging.basicConfig(level=logging.getLevelName(log_level))
+    logging.basicConfig(level=log_level)
     if log_level == "DEBUG":
         logger.debug("Debug logging is on")
 
     ctx.ensure_object(dict)
     # By default don't prompt when the operation is complete
-    ctx.obj[PROMPT_WHEN_COMPLETE] = False
+    ctx.obj[_PROMPT_WHEN_COMPLETE] = False
 
 
-cli.add_command(cli_bundle)
-cli.add_command(cli_config)
-cli.add_command(cli_farm)
-cli.add_command(cli_fleet)
-cli.add_command(cli_handle_web_url)
-cli.add_command(cli_job)
-cli.add_command(cli_login)
-cli.add_command(cli_logout)
-cli.add_command(cli_queue)
-cli.add_command(cli_worker)
+main.add_command(cli_bundle)
+main.add_command(cli_config)
+main.add_command(cli_farm)
+main.add_command(cli_fleet)
+main.add_command(cli_handle_web_url)
+main.add_command(cli_job)
+main.add_command(cli_login)
+main.add_command(cli_logout)
+main.add_command(cli_queue)
+main.add_command(cli_worker)

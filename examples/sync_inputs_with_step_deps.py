@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import time
 
 from deadline.job_attachments.asset_sync import AssetSync
-from deadline.job_attachments.aws.deadline import get_job, get_queue
+from deadline.job_attachments._aws.deadline import get_job, get_queue
 
 """
 A script to manually test that input syncing is functioning well in scenarios where

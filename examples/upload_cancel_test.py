@@ -7,8 +7,8 @@ import pathlib
 import time
 from threading import Thread
 
-from deadline.job_attachments.aws.deadline import get_queue
-from deadline.job_attachments.errors import AssetSyncCancelledError
+from deadline.job_attachments._aws.deadline import get_queue
+from deadline.job_attachments.exceptions import AssetSyncCancelledError
 from deadline.job_attachments.upload import S3AssetManager
 
 NUM_SMALL_FILES = 0

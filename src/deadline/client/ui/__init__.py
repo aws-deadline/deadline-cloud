@@ -1,18 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from contextlib import contextmanager
-from logging import root
 from typing import Any
 
-from ..config import get_setting
 from ..exceptions import DeadlineOperationError
-
-
-def entry_point():
-    # Entry point for all UI components, set behavior based on configuration
-    root.setLevel(get_setting("settings.log_level"))
-
-
-entry_point()
 
 
 @contextmanager

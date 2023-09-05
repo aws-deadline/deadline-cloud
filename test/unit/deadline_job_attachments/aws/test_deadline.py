@@ -3,8 +3,8 @@
 """Tests for Deadline AWS calls."""
 import pytest
 
-from deadline.job_attachments.aws.deadline import get_queue
-from deadline.job_attachments.errors import JobAttachmentsError
+from deadline.job_attachments._aws.deadline import get_queue
+from deadline.job_attachments.exceptions import JobAttachmentsError
 from deadline.job_attachments.models import Queue
 
 
