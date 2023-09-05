@@ -6,6 +6,7 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import re
+import shutil
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -39,7 +40,12 @@ from .exceptions import (
 )
 from .fus3 import Fus3ProcessManager
 from .models import JobAttachmentS3Settings, Attachments
-from ._utils import FileConflictResolution, _is_relative_to, _join_s3_paths
+from ._utils import (
+    FileConflictResolution,
+    FileSystemPermissionSettings,
+    _is_relative_to,
+    _join_s3_paths,
+)
 
 logger = getLogger("deadline.job_attachments.download")
 
@@ -335,6 +341,7 @@ def download_file(
 
     s3_key = f"{cas_prefix}/{file.hash}" if cas_prefix else file.hash
 
+    # If the file name already exists, resolve the conflict based on the file_conflict_resolution
     if local_file_name.is_file():
         if file_conflict_resolution == FileConflictResolution.SKIP:
             return (file_bytes, None)
@@ -606,6 +613,7 @@ def download_files_from_manifests(
     s3_bucket: str,
     manifests_by_root: dict[str, BaseAssetManifest],
     cas_prefix: Optional[str] = None,
+    fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
     session: Optional[boto3.Session] = None,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
 ) -> DownloadSummaryStatistics:
@@ -650,10 +658,58 @@ def download_files_from_manifests(
             file_mod_time,
             progress_tracker=progress_tracker,
         )
+
+        if fs_permission_settings is not None:
+            _set_fs_group(
+                file_paths=downloaded_files_paths,
+                local_root=local_download_dir,
+                fs_permission_settings=fs_permission_settings,
+            )
+
         downloaded_files_paths_by_root[local_download_dir].extend(downloaded_files_paths)
 
     progress_tracker.total_time = time.perf_counter() - start_time
     return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
+
+
+def _set_fs_group(
+    file_paths: list[str],
+    local_root: str,
+    fs_permission_settings: FileSystemPermissionSettings,
+) -> None:
+    """
+    Sets file system group ownership and permissions for all files and directories
+    in the given paths, starting from root. It is expected that all `file_paths`
+    point to files, not directories.
+    """
+    os_group = fs_permission_settings.os_group
+    dir_mode = fs_permission_settings.dir_mode
+    file_mode = fs_permission_settings.file_mode
+
+    # Initialize set to track changed path
+    dir_paths_to_change_fs_group = set()
+
+    # 1. Set group ownership and permissions for each file.
+    for file_path in file_paths:
+        # The file path must be relative to the root path (ie. local_root).
+        if not _is_relative_to(file_path, local_root):
+            raise PathOutsideDirectoryError(
+                f"The provided path '{file_path}' is not under the root directory: {local_root}"
+            )
+
+        shutil.chown(Path(file_path), group=os_group)
+        os.chmod(Path(file_path), Path(file_path).stat().st_mode | file_mode)
+
+        # Accumulate unique parent directories for each file
+        path_components = Path(file_path).relative_to(local_root).parents
+        for path_component in path_components:
+            path_to_change = Path(local_root).joinpath(path_component)
+            dir_paths_to_change_fs_group.add(path_to_change)
+
+    # 2. Set group ownership and permissions for the directories in the path starting from root.
+    for path_to_change in dir_paths_to_change_fs_group:
+        shutil.chown(path_to_change, group=os_group)
+        os.chmod(path_to_change, path_to_change.stat().st_mode | dir_mode)
 
 
 def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManifest | None:

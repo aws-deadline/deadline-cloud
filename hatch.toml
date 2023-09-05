@@ -6,6 +6,7 @@ pre-install-commands = [
 [envs.default.scripts]
 sync = "pip install -r requirements-testing.txt"
 test = "pytest --cov-config pyproject.toml {args:test/unit}"
+test_docker = "./scripts/run_sudo_tests.sh --build"
 typing = "mypy {args:src test}"
 style = [
   "ruff {args:.}",
