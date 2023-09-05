@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from click.testing import CliRunner
 
 from deadline.client import api, config
-from deadline.client.cli import deadline_cli
+from deadline.client.cli import main
 
 MOCK_FARMS_LIST = [
     {
@@ -35,7 +35,7 @@ def test_cli_farm_list(fresh_deadline_config):
         session_mock().client("deadline").list_farms.return_value = {"farms": MOCK_FARMS_LIST}
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["farm", "list"])
+        result = runner.invoke(main, ["farm", "list"])
 
         assert (
             result.output
@@ -64,9 +64,7 @@ def test_cli_farm_list_override_profile(fresh_deadline_config):
         session_mock.reset_mock()
 
         runner = CliRunner()
-        result = runner.invoke(
-            deadline_cli.cli, ["farm", "list", "--profile", "NonDefaultProfileName"]
-        )
+        result = runner.invoke(main, ["farm", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
         session_mock.assert_called_with(profile_name="NonDefaultProfileName")
@@ -80,7 +78,7 @@ def test_cli_farm_list_client_error(fresh_deadline_config):
         )
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["farm", "list"])
+        result = runner.invoke(main, ["farm", "list"])
 
         assert "Failed to get Farms" in result.output
         assert "A botocore client error" in result.output
@@ -97,7 +95,7 @@ def test_cli_farm_get(fresh_deadline_config):
         session_mock().client("deadline").get_farm.return_value = MOCK_FARMS_LIST[0]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["farm", "get"])
+        result = runner.invoke(main, ["farm", "get"])
 
         assert (
             result.output
@@ -127,9 +125,7 @@ def test_cli_farm_get_override_profile(fresh_deadline_config):
         session_mock.reset_mock()
 
         runner = CliRunner()
-        result = runner.invoke(
-            deadline_cli.cli, ["farm", "get", "--profile", "NonDefaultProfileName"]
-        )
+        result = runner.invoke(main, ["farm", "get", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
         session_mock.assert_called_once_with(profile_name="NonDefaultProfileName")
@@ -145,7 +141,7 @@ def test_cli_farm_get_no_default_set(fresh_deadline_config):
         session_mock().client("deadline").get_farm.return_value = MOCK_FARMS_LIST[0]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["farm", "get"])
+        result = runner.invoke(main, ["farm", "get"])
 
         assert "Missing '--farm-id' or default Farm ID configuration" in result.output
         assert result.exit_code != 0
@@ -161,7 +157,8 @@ def test_cli_farm_get_explicit_farm_id(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli, ["farm", "get", "--farm-id", "farm-0123456789abcdef0123456789abcdef"]
+            main,
+            ["farm", "get", "--farm-id", "farm-0123456789abcdef0123456789abcdef"],
         )
 
         assert (

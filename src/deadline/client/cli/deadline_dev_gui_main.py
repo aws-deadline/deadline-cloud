@@ -1,8 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
+EXPERIMENTAL
+
 Runs the Deadline Dev GUI. Can be run as a python script file.
 """
+from ..config import get_setting
 
 
 def main() -> None:
@@ -16,9 +19,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.debug:
-        log_level = logging.DEBUG
+        log_level = "DEBUG"
     else:
-        log_level = logging.INFO
+        log_level = get_setting("settings.log_level")
     logging.basicConfig(level=log_level)
 
     app()

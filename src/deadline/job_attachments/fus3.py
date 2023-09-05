@@ -11,7 +11,7 @@ import threading
 from signal import SIGTERM
 from typing import List, Union, Optional
 
-from .errors import Fus3ExecutableMissingError, Fus3FailedToMountError
+from .exceptions import Fus3ExecutableMissingError, Fus3FailedToMountError
 
 log = logging.getLogger(__name__)
 

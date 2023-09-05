@@ -17,14 +17,13 @@ dependencies = [
     # Job Attachments
     "typing_extensions ~= 4.5",
     "xxhash ~= 3.2",
-    "dataclasses-json ~= 0.5",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
     "jsonschema == 4.17.*",
 ]
 
 [project.scripts]
 deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
-deadline = "deadline.client.cli.deadline_cli_main:main"
+deadline = "deadline.client.cli:main"
 
 [tool.hatch.build]
 artifacts = [
@@ -41,12 +40,9 @@ version_scheme = "post-release"
 version-file = "_version.py"
 
 [tool.hatch.build.hooks.custom]
-path = "hatch_version_hook.py"
+path = "hatch_custom_hook.py"
 
-[[tool.hatch.build.hooks.custom.copy_map]]
-sources = [
-  "_version.py",
-]
+[tool.hatch.build.hooks.custom.copy_version_py]
 destinations = [
   "src/deadline/client",
   "src/deadline/job_attachments",

@@ -5,9 +5,8 @@
 import pytest
 
 from deadline.job_attachments.asset_manifests import (
-    ManifestModel,
+    BaseManifestModel,
     ManifestModelRegistry,
-    v2022_06_06,
     v2023_03_03,
 )
 from deadline.job_attachments.asset_manifests.versions import ManifestVersion
@@ -16,11 +15,10 @@ from deadline.job_attachments.asset_manifests.versions import ManifestVersion
 @pytest.mark.parametrize(
     "version,expected_model",
     [
-        (ManifestVersion.v2022_06_06, v2022_06_06.ManifestModel),
         (ManifestVersion.v2023_03_03, v2023_03_03.ManifestModel),
     ],
 )
-def test_get_manifest_model(version: ManifestVersion, expected_model: ManifestModel):
+def test_get_manifest_model(version: ManifestVersion, expected_model: BaseManifestModel):
     """
     Test to ensure that the appropriate manifest model is returned given a manifest version
     """

@@ -7,23 +7,23 @@ import os
 import sys
 from typing import Dict, List
 from unittest.mock import ANY, MagicMock, call, patch
-from deadline.job_attachments.utils import (
+from deadline.job_attachments._utils import (
     FileConflictResolution,
     OperatingSystemFamily,
-    get_deadline_formatted_os,
+    _get_deadline_formatted_os,
 )
 
 import pytest
 from click.testing import CliRunner
 
 from deadline.client import api, config
-from deadline.client.cli import deadline_cli
-from deadline.client.cli.deadline_web_url import (
+from deadline.client.cli import main
+from deadline.client.cli._deadline_web_url import (
     parse_query_string,
     validate_id_format,
     validate_resource_ids,
 )
-from deadline.client.cli.groups import handle_web_url_command, job_group
+from deadline.client.cli._groups import handle_web_url_command, job_group
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
@@ -252,7 +252,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_submission_profile_name = get_deadline_formatted_os()
+        mock_submission_profile_name = _get_deadline_formatted_os()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -271,7 +271,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
         web_url = f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", web_url])
+        result = runner.invoke(main, ["handle-web-url", web_url])
 
         MockOutputDownloader.assert_called_once_with(
             s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
@@ -302,7 +302,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_submission_profile_name = get_deadline_formatted_os()
+        mock_submission_profile_name = _get_deadline_formatted_os()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -324,7 +324,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
         )
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", web_url])
+        result = runner.invoke(main, ["handle-web-url", web_url])
         assert result.exit_code == 0, result.output
 
         MockOutputDownloader.assert_called_once_with(
@@ -346,7 +346,7 @@ def test_cli_handle_web_url_unsupported_protocol_scheme(fresh_deadline_config):
     Tests that an error is returned when an unsupported url is passed to the handle-web-url command
     """
     runner = CliRunner()
-    result = runner.invoke(deadline_cli.cli, ["handle-web-url", "https://sketchy-website.com"])
+    result = runner.invoke(main, ["handle-web-url", "https://sketchy-website.com"])
 
     assert "URL scheme https is not supported." in result.output
     assert result.exit_code != 0
@@ -357,7 +357,7 @@ def test_cli_handle_web_url_command_not_allowlisted(fresh_deadline_config):
     Tests that a command that isn't explicitly allowlisted isn't ran.
     """
     runner = CliRunner()
-    result = runner.invoke(deadline_cli.cli, ["handle-web-url", "deadline://config"])
+    result = runner.invoke(main, ["handle-web-url", "deadline://config"])
 
     assert "Command config is not supported through handle-web-url." in result.output
     assert result.exit_code != 0
@@ -369,7 +369,7 @@ def test_handle_web_url_command_not_allowlisted_with_prompt(fresh_deadline_confi
     """
     runner = CliRunner()
     result = runner.invoke(
-        deadline_cli.cli,
+        main,
         ["handle-web-url", "deadline://config", "--prompt-when-complete"],
         input="\n",
     )
@@ -396,7 +396,7 @@ def test_handle_web_url_missing_required_args(
     """
     runner = CliRunner()
     result = runner.invoke(
-        deadline_cli.cli,
+        main,
         [
             "handle-web-url",
             url,
@@ -416,7 +416,7 @@ def test_handle_web_url_incorrect_install_option(fresh_deadline_config, install_
     """
     runner = CliRunner()
     result = runner.invoke(
-        deadline_cli.cli,
+        main,
         ["handle-web-url", "deadline://config", install_option],
     )
 
@@ -433,7 +433,7 @@ def test_handle_web_url_both_install_and_uninstall(fresh_deadline_config):
     """
     runner = CliRunner()
     result = runner.invoke(
-        deadline_cli.cli,
+        main,
         ["handle-web-url", "--install", "--uninstall"],
     )
 
@@ -447,7 +447,7 @@ def test_handle_web_url_require_url_or_install_option(fresh_deadline_config):
     """
     runner = CliRunner()
     result = runner.invoke(
-        deadline_cli.cli,
+        main,
         ["handle-web-url"],
     )
 
@@ -468,7 +468,7 @@ def test_cli_handle_web_url_install(fresh_deadline_config, install_command, all_
         cli_options = ["handle-web-url", f"--{install_command}"]
         if all_users:
             cli_options.append("--all-users")
-        result = runner.invoke(deadline_cli.cli, cli_options)
+        result = runner.invoke(main, cli_options)
 
         mock_install.assert_called_once_with(all_users=all_users)
         assert result.exit_code == 0
@@ -498,7 +498,7 @@ def test_cli_handle_web_url_install_current_user_monkeypatched_windows(
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", "--install"])
+        result = runner.invoke(main, ["handle-web-url", "--install"])
 
         winreg_mock.assert_has_calls(
             [
@@ -546,7 +546,7 @@ def test_cli_handle_web_url_install_all_users_monkeypatched_windows(
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", "--install", "--all-users"])
+        result = runner.invoke(main, ["handle-web-url", "--install", "--all-users"])
 
         winreg_mock.assert_has_calls(
             [
@@ -594,7 +594,7 @@ def test_cli_handle_web_url_uninstall_current_user_monkeypatched_windows(
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", "--uninstall"])
+        result = runner.invoke(main, ["handle-web-url", "--uninstall"])
 
         winreg_mock.assert_has_calls(
             [
@@ -633,7 +633,7 @@ def test_cli_handle_web_url_uninstall_all_users_monkeypatched_windows(
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["handle-web-url", "--uninstall", "--all-users"])
+        result = runner.invoke(main, ["handle-web-url", "--uninstall", "--all-users"])
 
         winreg_mock.assert_has_calls(
             [

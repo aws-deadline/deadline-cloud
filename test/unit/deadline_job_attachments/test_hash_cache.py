@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 import deadline
-from deadline.job_attachments.errors import JobAttachmentsError
+from deadline.job_attachments.exceptions import JobAttachmentsError
 from deadline.job_attachments.hash_cache import CACHE_FILE_NAME, HashCache
 from deadline.job_attachments.models import HashCacheEntry
 
@@ -22,7 +22,7 @@ class TestHashCache:
         Tests that when no cache file path is given, the default is used.
         """
         with patch(
-            f"{deadline.__package__}.job_attachments.hash_cache.get_default_hash_cache_db_file_dir",
+            f"{deadline.__package__}.job_attachments.hash_cache._get_default_hash_cache_db_file_dir",
             side_effect=[tmpdir],
         ):
             hc = HashCache()

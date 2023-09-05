@@ -26,11 +26,10 @@ from deadline.job_attachments.progress_tracker import (
     ProgressTracker,
 )
 
-from .asset_manifests.base_manifest import AssetManifest, Path as RelativeFilePath
+from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
 from .asset_manifests.decode import decode_manifest
-from .asset_manifests.versions import ManifestVersion
-from .aws.aws_clients import get_account_id, get_s3_client
-from .errors import (
+from ._aws.aws_clients import get_account_id, get_s3_client
+from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
     JobAttachmentsS3ClientError,
@@ -40,7 +39,7 @@ from .errors import (
 )
 from .fus3 import Fus3ProcessManager
 from .models import JobAttachmentS3Settings, Attachments
-from .utils import FileConflictResolution, is_relative_to, join_s3_paths
+from ._utils import FileConflictResolution, _is_relative_to, _join_s3_paths
 
 logger = getLogger("deadline.job_attachments.download")
 
@@ -192,7 +191,7 @@ def get_job_input_paths_by_asset_root(
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
             paths_list = assets[manifest_properties.rootPath]
-            key = join_s3_paths(manifest_properties.inputManifestPath)
+            key = _join_s3_paths(manifest_properties.inputManifestPath)
 
             manifest = get_manifest_from_s3(
                 manifest_key=key,
@@ -202,8 +201,7 @@ def get_job_input_paths_by_asset_root(
             with open(manifest) as manifest_file:
                 asset_manifest = decode_manifest(manifest_file.read())
                 paths_list.extend(asset_manifest.paths)
-                if asset_manifest.manifestVersion == ManifestVersion.v2023_03_03:
-                    total_bytes += asset_manifest.totalSize  # type: ignore[attr-defined]
+                total_bytes += asset_manifest.totalSize  # type: ignore[attr-defined]
 
     return (total_bytes, assets)
 
@@ -276,12 +274,7 @@ def download_files_in_directory(
     total_bytes = 0
     for files in all_paths_hashes.values():
         files_list = [file for file in files if file.path.startswith(directory_path + "/")]
-        files_size = sum(
-            [
-                file.size if file.manifest_version == ManifestVersion.v2023_03_03 else 0  # type: ignore[attr-defined]
-                for file in files_list
-            ]
-        )
+        files_size = sum([file.size for file in files_list])
         total_bytes += files_size
         files_to_download.extend(files_list)
 
@@ -332,13 +325,10 @@ def download_file(
     if not s3_client:
         s3_client = get_s3_client(session=session)
 
-    if file.manifest_version == ManifestVersion.v2023_03_03:
-        #  The modified time in the manifest is in microseconds, but utime requires the time be expressed in seconds.
-        modified_time_override = file.mtime / 1000000  # type: ignore[attr-defined]
-    elif not modified_time_override:
-        modified_time_override = datetime.now().timestamp()
+    #  The modified time in the manifest is in microseconds, but utime requires the time be expressed in seconds.
+    modified_time_override = file.mtime / 1000000  # type: ignore[attr-defined]
 
-    file_bytes = file.size if file.manifest_version == ManifestVersion.v2023_03_03 else 0  # type: ignore[attr-defined]
+    file_bytes = file.size
 
     # Python will handle the path seperator '/' correctly on every platform.
     local_file_name = Path(local_download_dir).joinpath(file.path)
@@ -564,8 +554,7 @@ def get_job_output_paths_by_asset_root(
         # manifest path isn't needed here, so a variable isn't necessary
         for manifest, _ in manifests:
             outputs[root].extend(manifest.paths)
-            if manifest.manifestVersion == ManifestVersion.v2023_03_03:
-                total_bytes += manifest.totalSize  # type: ignore[attr-defined]
+            total_bytes += manifest.totalSize  # type: ignore[attr-defined]
 
     return (total_bytes, outputs)
 
@@ -579,12 +568,12 @@ def get_output_manifests_by_asset_root(
     task_id: Optional[str] = None,
     session_action_id: Optional[str] = None,
     session: Optional[boto3.Session] = None,
-) -> dict[str, list[tuple[AssetManifest, str]]]:
+) -> dict[str, list[tuple[BaseAssetManifest, str]]]:
     """
     For a given job/step/task, gets a map from each root path to a corresponding list of
     output manifests.
     """
-    outputs: DefaultDict[str, list[tuple[AssetManifest, str]]] = DefaultDict(list)
+    outputs: DefaultDict[str, list[tuple[BaseAssetManifest, str]]] = DefaultDict(list)
     manifest_prefix: str = _get_output_manifest_prefix(
         s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id
     )
@@ -615,7 +604,7 @@ def get_output_manifests_by_asset_root(
 
 def download_files_from_manifests(
     s3_bucket: str,
-    manifests_by_root: dict[str, AssetManifest],
+    manifests_by_root: dict[str, BaseAssetManifest],
     cas_prefix: Optional[str] = None,
     session: Optional[boto3.Session] = None,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
@@ -643,8 +632,7 @@ def download_files_from_manifests(
     total_files = 0
     for manifest in manifests_by_root.values():
         total_files += len(manifest.paths)
-        if manifest.manifestVersion == ManifestVersion.v2023_03_03:
-            total_size += manifest.totalSize  # type: ignore[attr-defined]
+        total_size += manifest.totalSize  # type: ignore[attr-defined]
     progress_tracker = ProgressTracker(ProgressStatus.DOWNLOAD_IN_PROGRESS, on_downloading_files)
     progress_tracker.set_total_files(total_files, total_size)
     start_time = time.perf_counter()
@@ -668,7 +656,7 @@ def download_files_from_manifests(
     return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
 
 
-def merge_asset_manifests(manifests: list[AssetManifest]) -> AssetManifest | None:
+def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManifest | None:
     """Merge files from multiple manifests into a single list, ensuring that each filename
     is unique by keeping the one from the last encountered manifest. (Thus, the steps'
     outputs are downloaded over the input job attachments.)
@@ -692,7 +680,6 @@ def merge_asset_manifests(manifests: list[AssetManifest]) -> AssetManifest | Non
     hash_alg: str = first_manifest.hashAlg
     merged_paths: dict[str, RelativeFilePath] = dict()
     total_size: int = 0
-    all_manifests_v2023_03_03 = True
 
     # Loop each manifest
     for manifest in manifests:
@@ -701,24 +688,20 @@ def merge_asset_manifests(manifests: list[AssetManifest]) -> AssetManifest | Non
                 f"Merging manifests with different hash algorithms is not supported.  {manifest.hashAlg} does not match {hash_alg}"
             )
 
-        if manifest.manifestVersion != ManifestVersion.v2023_03_03:
-            all_manifests_v2023_03_03 = False
-
         for path in manifest.paths:
             merged_paths[path.path] = path
 
     manifest_args: dict[str, Any] = {"hash_alg": hash_alg, "paths": list(merged_paths.values())}
 
-    if all_manifests_v2023_03_03:
-        total_size = sum([path.size for path in merged_paths.values()])  # type: ignore
-        manifest_args["total_size"] = total_size
+    total_size = sum([path.size for path in merged_paths.values()])  # type: ignore
+    manifest_args["total_size"] = total_size
 
-    output_manifest: AssetManifest = first_manifest.__class__(**manifest_args)
+    output_manifest: BaseAssetManifest = first_manifest.__class__(**manifest_args)
 
     return output_manifest
 
 
-def write_manifest_to_temp_file(manifest: AssetManifest) -> str:
+def write_manifest_to_temp_file(manifest: BaseAssetManifest) -> str:
     with NamedTemporaryFile(
         suffix=".json", prefix="deadline-merged-manifest-", delete=False, mode="w"
     ) as file:
@@ -728,7 +711,7 @@ def write_manifest_to_temp_file(manifest: AssetManifest) -> str:
 
 def mount_vfs_from_manifests(
     s3_bucket: str,
-    manifests_by_root: dict[str, AssetManifest],
+    manifests_by_root: dict[str, BaseAssetManifest],
     boto3_session: boto3.Session,
     session_dir: Path,
     cas_prefix: Optional[str] = None,
@@ -772,7 +755,7 @@ def _ensure_paths_within_directory(root_path: str, paths_relative_to_root: list[
 
     for path in paths_relative_to_root:
         resolved_path = Path(root_path, path).resolve()
-        if not is_relative_to(resolved_path, Path(root_path).resolve()):
+        if not _is_relative_to(resolved_path, Path(root_path).resolve()):
             raise PathOutsideDirectoryError(
                 f"The provided path is not under the root directory: {path}"
             )

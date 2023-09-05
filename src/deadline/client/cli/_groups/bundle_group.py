@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import signal
+import textwrap
 from configparser import ConfigParser
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -26,17 +27,17 @@ from deadline.client.job_bundle.submission import (
     split_parameter_args,
     upload_job_attachments,
 )
-from deadline.job_attachments.errors import AssetSyncError, AssetSyncCancelledError
+from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
     AssetRootManifest,
     JobAttachmentS3Settings,
 )
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments.utils import human_readable_file_size, AssetLoadingMethod
+from deadline.job_attachments._utils import _human_readable_file_size, AssetLoadingMethod
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from .._common import apply_cli_options_to_config, handle_error
+from .._common import _apply_cli_options_to_config, _handle_error
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ signal.signal(signal.SIGINT, _handle_sigint)
 
 
 @click.group(name="bundle")
-@handle_error
+@_handle_error
 def cli_bundle():
     """
     Commands to work with Open Job Description job bundles.
@@ -97,7 +98,7 @@ def validate_parameters(ctx, param, value):
     help="Skip any confirmation prompts",
 )
 @click.argument("job_bundle_dir")
-@handle_error
+@_handle_error
 def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
     """
     Submits an Open Job Description job bundle to Amazon Deadline Cloud.
@@ -109,7 +110,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
     else:
         should_save_job_id = False
     # Get a temporary config object with the standard options handled
-    config = apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
     try:
         deadline = get_boto3_client("deadline", config=config)
@@ -190,7 +191,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
                 and len(asset_references.input_filenames) > 0
                 and not click.confirm(
                     f"Job submission contains {hash_summary.total_files} files "
-                    f"totaling {human_readable_file_size(hash_summary.total_bytes)}. "
+                    f"totaling {_human_readable_file_size(hash_summary.total_bytes)}. "
                     "All files will be uploaded to S3 if they are not already present in the job attachments bucket. "
                     "Do you wish to proceed?",
                     default=True,
@@ -267,7 +268,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
 @cli_bundle.command(name="gui-submit")
 @click.argument("job_bundle_dir", required=False)
-@handle_error
+@_handle_error
 def bundle_gui_submit(job_bundle_dir, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
@@ -325,18 +326,7 @@ def _hash_attachments(
 
     api.get_telemetry_client(config=config).record_hashing_summary(hashing_summary)
     click.echo("Hashing Summary:")
-    click.echo(
-        f"    Hashed {hashing_summary.processed_files} files totaling"
-        f" {human_readable_file_size(hashing_summary.processed_bytes)}."
-    )
-    click.echo(
-        f"    Skipped re-hashing {hashing_summary.skipped_files} files totaling"
-        f" {human_readable_file_size(hashing_summary.skipped_bytes)}."
-    )
-    click.echo(
-        f"    Total hashing time of {round(hashing_summary.total_time, ndigits=5)} seconds"
-        f" at {human_readable_file_size(int(hashing_summary.transfer_rate))}/s."
-    )
+    click.echo(textwrap.indent(str(hashing_summary), "    "))
 
     return hashing_summary, manifests
 
@@ -370,17 +360,6 @@ def _upload_attachments(
 
     api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
     click.echo("Upload Summary:")
-    click.echo(
-        f"    Uploaded {upload_summary.processed_files} files totaling"
-        f" {human_readable_file_size(upload_summary.processed_bytes)}."
-    )
-    click.echo(
-        f"    Skipped re-uploading {upload_summary.skipped_files} files totaling"
-        f" {human_readable_file_size(upload_summary.skipped_bytes)}."
-    )
-    click.echo(
-        f"    Total upload time of {round(upload_summary.total_time, ndigits=5)} seconds"
-        f" at {human_readable_file_size(int(upload_summary.transfer_rate))}/s."
-    )
+    click.echo(textwrap.indent(str(upload_summary), "    "))
 
     return attachment_settings

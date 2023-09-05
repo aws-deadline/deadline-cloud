@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from click.testing import CliRunner
 
 from deadline.client import api, config
-from deadline.client.cli import deadline_cli
+from deadline.client.cli import main
 
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUES_LIST
 
@@ -26,7 +26,7 @@ def test_cli_queue_list(fresh_deadline_config):
         session_mock().client("deadline").list_queues.return_value = {"queues": MOCK_QUEUES_LIST}
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["queue", "list"])
+        result = runner.invoke(main, ["queue", "list"])
 
         assert (
             result.output
@@ -49,7 +49,7 @@ def test_cli_queue_list_explicit_farm_id(fresh_deadline_config):
         session_mock().client("deadline").list_queues.return_value = {"queues": MOCK_QUEUES_LIST}
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["queue", "list", "--farm-id", MOCK_FARM_ID])
+        result = runner.invoke(main, ["queue", "list", "--farm-id", MOCK_FARM_ID])
 
         assert (
             result.output
@@ -77,9 +77,7 @@ def test_cli_queue_list_override_profile(fresh_deadline_config):
         session_mock.reset_mock()
 
         runner = CliRunner()
-        result = runner.invoke(
-            deadline_cli.cli, ["queue", "list", "--profile", "NonDefaultProfileName"]
-        )
+        result = runner.invoke(main, ["queue", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
         session_mock.assert_called_with(profile_name="NonDefaultProfileName")
@@ -91,7 +89,7 @@ def test_cli_queue_list_no_farm_id(fresh_deadline_config):
         session_mock().client("deadline").list_queues.return_value = {"queues": MOCK_QUEUES_LIST}
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["queue", "list"])
+        result = runner.invoke(main, ["queue", "list"])
 
         assert "Missing '--farm-id' or default Farm ID configuration" in result.output
         assert result.exit_code != 0
@@ -106,7 +104,7 @@ def test_cli_queue_list_client_error(fresh_deadline_config):
         )
 
         runner = CliRunner()
-        result = runner.invoke(deadline_cli.cli, ["queue", "list"])
+        result = runner.invoke(main, ["queue", "list"])
 
         assert "Failed to get Queues" in result.output
         assert "A botocore client error" in result.output
@@ -123,7 +121,7 @@ def test_cli_queue_get(fresh_deadline_config):
 
         runner = CliRunner()
         result = runner.invoke(
-            deadline_cli.cli,
+            main,
             [
                 "queue",
                 "get",

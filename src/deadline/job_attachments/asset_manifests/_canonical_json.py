@@ -6,10 +6,10 @@ from __future__ import annotations
 import dataclasses
 import json
 
-from .base_manifest import AssetManifest, Path
+from .base_manifest import BaseAssetManifest, BaseManifestPath
 
 
-def canonical_path_comparator(path: Path):
+def canonical_path_comparator(path: BaseManifestPath):
     """
     Comparator for sorting paths.
     """
@@ -18,7 +18,7 @@ def canonical_path_comparator(path: Path):
     return path.path.encode("utf-16_be")
 
 
-def manifest_to_canonical_json_string(manifest: AssetManifest) -> str:
+def manifest_to_canonical_json_string(manifest: BaseAssetManifest) -> str:
     """
     Return a canonicalized JSON string based on the following:
     * The JSON file *MUST* adhere to the JSON canonicalization guidelines

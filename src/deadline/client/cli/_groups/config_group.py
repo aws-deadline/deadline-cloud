@@ -7,11 +7,11 @@ All the `deadline config` commands.
 import click
 
 from ...config import config_file
-from .._common import handle_error
+from .._common import _handle_error
 
 
 @click.group(name="config")
-@handle_error
+@_handle_error
 def cli_config():
     """
     Manage Amazon Deadline Cloud's workstation configuration.
@@ -52,7 +52,7 @@ def cli_config():
 
 
 @cli_config.command(name="show")
-@handle_error
+@_handle_error
 def config_show():
     """
     Show Amazon Deadline Cloud's current workstation configuration settings.
@@ -73,7 +73,7 @@ def config_show():
 
 
 @cli_config.command(name="gui")
-@handle_error
+@_handle_error
 def config_gui():
     """
     Open the workstation configuration settings GUI.
@@ -89,7 +89,7 @@ def config_gui():
 @cli_config.command(name="set")
 @click.argument("setting_name")
 @click.argument("value")
-@handle_error
+@_handle_error
 def config_set(setting_name, value):
     """
     Sets an Amazon Deadline Cloud workstation configuration setting.
@@ -102,7 +102,7 @@ def config_set(setting_name, value):
 
 @cli_config.command(name="get")
 @click.argument("setting_name")
-@handle_error
+@_handle_error
 def config_get(setting_name):
     """
     Gets an Amazon Deadline Cloud workstation configuration setting.

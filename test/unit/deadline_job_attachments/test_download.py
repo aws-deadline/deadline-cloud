@@ -20,11 +20,12 @@ from moto import mock_sts
 
 import deadline
 from deadline.job_attachments.asset_manifests.base_manifest import (
-    AssetManifest,
-    Path as BaseManifestPath,
+    BaseAssetManifest,
+    BaseManifestPath as BaseManifestPath,
 )
-from deadline.job_attachments.asset_manifests.v2022_06_06 import Path as ManifestPathv2022_06_06
-from deadline.job_attachments.asset_manifests.v2023_03_03 import Path as ManifestPathv2023_03_03
+from deadline.job_attachments.asset_manifests.v2023_03_03 import (
+    ManifestPath as ManifestPathv2023_03_03,
+)
 from deadline.job_attachments.asset_manifests.versions import ManifestVersion
 from deadline.job_attachments.download import (
     OutputDownloader,
@@ -40,7 +41,7 @@ from deadline.job_attachments.download import (
     _get_asset_root_from_s3,
     _get_tasks_manifests_keys_from_s3,
 )
-from deadline.job_attachments.errors import (
+from deadline.job_attachments.exceptions import (
     JobAttachmentsError,
     JobAttachmentsS3ClientError,
     MissingAssetRootError,
@@ -52,7 +53,7 @@ from deadline.job_attachments.progress_tracker import (
     ProgressReportMetadata,
     ProgressStatus,
 )
-from deadline.job_attachments.utils import FileConflictResolution, human_readable_file_size
+from deadline.job_attachments._utils import FileConflictResolution, _human_readable_file_size
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 
 
@@ -60,55 +61,6 @@ from deadline.job_attachments.asset_manifests.decode import decode_manifest
 class Manifest:
     prefix: str
     manifests: bytes
-
-
-MANIFESTS_v2022_06_06: List[Manifest] = [
-    Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest1_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test1","path":"test1.txt"},{"hash":"test2","path":"test/test2.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest2_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test3","path":"test/test3.txt"},{"hash":"test4","path":"test4.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-1/task-1-1/session-action-1/manifest2_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test3","path":"test/test33.txt"},{"hash":"test4","path":"test44.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-1/task-1-11/session-action-9/manifest7_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        rb'"paths":[{"hash":"test13","path":"test13.txt"},{"hash":"test14","path":"test/test14.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-1/task-1-2/session-action-9/manifest3_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test5","path":"test5.txt"},{"hash":"test6","path":"test/test6.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-2/task-2-3/session-action-9/manifest4_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test7","path":"test7.txt"},{"hash":"test8","path":"test/test8.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-2/task-2-3/session-action-9/manifest5_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test9","path":"test/test9.txt"},{"hash":"test10","path":"test10.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-2/task-2-3/session-action-1/manifest5_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":[{"hash":"test9","path":"test/test99.txt"},{"hash":"test10","path":"test100.txt"}]}',
-    ),
-    Manifest(
-        "job-1/step-2/task-2-4/session-action-9/manifest6_output.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        rb'"paths":[{"hash":"test11","path":"test11.txt"},{"hash":"test12","path":"test/test12.txt"}]}',
-    ),
-]
 
 
 MANIFESTS_v2022_03_03: List[Manifest] = [
@@ -179,24 +131,8 @@ MANIFESTS_v2022_03_03: List[Manifest] = [
 
 
 MANIFEST_VERSION_TO_MANIFESTS: dict[ManifestVersion, List[Manifest]] = {
-    ManifestVersion.v2022_06_06: MANIFESTS_v2022_06_06,
     ManifestVersion.v2023_03_03: MANIFESTS_v2022_03_03,
 }
-
-
-INPUT_ASSET_MANIFESTS_V2022_06_06: List[Manifest] = [
-    Manifest(
-        "Inputs/0000/manifest_input.xxh128",
-        b'{"hashAlg":"xxh128","manifestVersion":"2022-06-06",'
-        b'"paths":['
-        b'{"hash":"input1","path":"inputs/input1.txt"},'
-        b'{"hash":"input2","path":"inputs/subdir/input2.txt"},'
-        b'{"hash":"input3","path":"inputs/subdir/input3.txt"},'
-        b'{"hash":"input4","path":"inputs/subdir/subdir2/input4.txt"},'
-        b'{"hash":"input5","path":"inputs/input5.txt"}'
-        b"]}",
-    ),
-]
 
 
 INPUT_ASSET_MANIFESTS_V2023_03_03: List[Manifest] = [
@@ -215,7 +151,6 @@ INPUT_ASSET_MANIFESTS_V2023_03_03: List[Manifest] = [
 
 
 MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS: dict[ManifestVersion, List[Manifest]] = {
-    ManifestVersion.v2022_06_06: INPUT_ASSET_MANIFESTS_V2022_06_06,
     ManifestVersion.v2023_03_03: INPUT_ASSET_MANIFESTS_V2023_03_03,
 }
 
@@ -411,7 +346,7 @@ def assert_progress_tracker_values(
     expected_total_bytes: int,
     mock_on_downloading_files: MagicMock,
 ):
-    readable_total_input_bytes = human_readable_file_size(expected_total_bytes)
+    readable_total_input_bytes = _human_readable_file_size(expected_total_bytes)
     expected_files_set = set().union(*expected_files.values())
     file_counts_by_root_directory = {root: len(paths) for root, paths in expected_files.items()}
 
@@ -496,7 +431,13 @@ def assert_get_job_input_paths_by_asset_root(
         f"{deadline.__package__}.job_attachments.download.get_job_output_paths_by_asset_root",
         return_value=(
             0,
-            {"/tmp": [ManifestPathv2022_06_06(path="outputs/output.txt", hash="outputhash")]},
+            {
+                "/tmp": [
+                    ManifestPathv2023_03_03(
+                        path="outputs/output.txt", hash="outputhash", size=100, mtime=1234567
+                    )
+                ]
+            },
         ),
     ):
         (total_bytes, assets) = get_job_input_paths_by_asset_root(
@@ -505,8 +446,7 @@ def assert_get_job_input_paths_by_asset_root(
         )
     assert assets == expected_files
 
-    if manifest_version == ManifestVersion.v2023_03_03:
-        assert total_bytes == expected_total_bytes
+    assert total_bytes == expected_total_bytes
 
 
 def assert_get_job_output_paths_by_asset_root(
@@ -529,8 +469,7 @@ def assert_get_job_output_paths_by_asset_root(
         )
     assert outputs == expected_files
 
-    if manifest_version == ManifestVersion.v2023_03_03:
-        assert total_bytes == expected_total_bytes
+    assert total_bytes == expected_total_bytes
 
 
 def assert_get_job_output_paths_by_asset_root_when_no_asset_root_throws_error(
@@ -575,9 +514,7 @@ def assert_get_job_input_output_paths_by_asset_root(
         assert total_bytes == expected_total_bytes
 
 
-@pytest.mark.parametrize(
-    "manifest_version", [ManifestVersion.v2022_06_06, ManifestVersion.v2023_03_03]
-)
+@pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
 class TestFullDownload:
     """
     Tests for downloads from cas.
@@ -658,13 +595,6 @@ class TestFullDownload:
             f"Manifests/{farm_id}/{queue_id}/job-1/junk2.json",
         )
 
-    INPUT_MANIFEST_PATHS_BY_ASSET_ROOT_v2022_06_06: list[BaseManifestPath] = [
-        ManifestPathv2022_06_06(path="inputs/input1.txt", hash="input1"),
-        ManifestPathv2022_06_06(path="inputs/subdir/input2.txt", hash="input2"),
-        ManifestPathv2022_06_06(path="inputs/subdir/input3.txt", hash="input3"),
-        ManifestPathv2022_06_06(path="inputs/subdir/subdir2/input4.txt", hash="input4"),
-        ManifestPathv2022_06_06(path="inputs/input5.txt", hash="input5"),
-    ]
     INPUT_MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03: list[BaseManifestPath] = [
         ManifestPathv2023_03_03(path="inputs/input1.txt", hash="input1", size=1, mtime=1234000000),
         ManifestPathv2023_03_03(
@@ -680,7 +610,6 @@ class TestFullDownload:
     ]
     INPUT_MANIFEST_VERSION_TO_ASSET_ROOT_PATHS: dict[ManifestVersion, list[BaseManifestPath]] = {
         ManifestVersion.v2023_03_03: INPUT_MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03,
-        ManifestVersion.v2022_06_06: INPUT_MANIFEST_PATHS_BY_ASSET_ROOT_v2022_06_06,
     }
 
     @mock_sts
@@ -694,22 +623,6 @@ class TestFullDownload:
             manifest_version,
         )
 
-    MANIFEST_PATHS_BY_ASSET_ROOT_v2022_06_06: list[BaseManifestPath] = [
-        ManifestPathv2022_06_06(path="test1.txt", hash="test1"),
-        ManifestPathv2022_06_06(path="test/test2.txt", hash="test2"),
-        ManifestPathv2022_06_06(path="test/test3.txt", hash="test3"),
-        ManifestPathv2022_06_06(path="test4.txt", hash="test4"),
-        ManifestPathv2022_06_06(path="test13.txt", hash="test13"),
-        ManifestPathv2022_06_06(path="test/test14.txt", hash="test14"),
-        ManifestPathv2022_06_06(path="test5.txt", hash="test5"),
-        ManifestPathv2022_06_06(path="test/test6.txt", hash="test6"),
-        ManifestPathv2022_06_06(path="test7.txt", hash="test7"),
-        ManifestPathv2022_06_06(path="test/test8.txt", hash="test8"),
-        ManifestPathv2022_06_06(path="test/test9.txt", hash="test9"),
-        ManifestPathv2022_06_06(path="test10.txt", hash="test10"),
-        ManifestPathv2022_06_06(path="test11.txt", hash="test11"),
-        ManifestPathv2022_06_06(path="test/test12.txt", hash="test12"),
-    ]
     MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03: list[BaseManifestPath] = [
         ManifestPathv2023_03_03(path="test1.txt", hash="test1", size=1, mtime=1234000000),
         ManifestPathv2023_03_03(path="test/test2.txt", hash="test2", size=1, mtime=1234000000),
@@ -728,7 +641,6 @@ class TestFullDownload:
     ]
     MANIFEST_VERSION_TO_ASSET_ROOT_PATHS: dict[ManifestVersion, list[BaseManifestPath]] = {
         ManifestVersion.v2023_03_03: MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03,
-        ManifestVersion.v2022_06_06: MANIFEST_PATHS_BY_ASSET_ROOT_v2022_06_06,
     }
 
     @mock_sts
@@ -1493,9 +1405,7 @@ class TestFullDownload:
                 ) in str(exc.value)
 
 
-@pytest.mark.parametrize(
-    "manifest_version", [ManifestVersion.v2022_06_06, ManifestVersion.v2023_03_03]
-)
+@pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
 class TestFullDownloadPrefixesWithSlashes:
     """
     Tests for downloads from cas when the queue prefixes are created.
@@ -1745,7 +1655,7 @@ def test_merge_asset_manifests_different_hashes(
     """
     Test that merging two manifests with different hash algorithms raises an exception
     """
-    manifests: list[AssetManifest] = [
+    manifests: list[BaseAssetManifest] = [
         decode_manifest(json.dumps(test_manifest_one)),
         decode_manifest(json.dumps(test_manifest_two)),
     ]
@@ -1781,7 +1691,7 @@ def test_download_files_from_manifests(
     test_manifest_one: dict,
     test_manifest_two: dict,
 ):
-    manifests: list[AssetManifest] = [
+    manifests: list[BaseAssetManifest] = [
         decode_manifest(json.dumps(test_manifest_one)),
         decode_manifest(json.dumps(test_manifest_two)),
     ]

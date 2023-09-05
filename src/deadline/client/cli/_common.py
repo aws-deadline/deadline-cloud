@@ -4,11 +4,11 @@
 Functionality common to all the CLI groups.
 """
 __all__ = [
-    "PROMPT_WHEN_COMPLETE",
-    "prompt_at_completion",
-    "handle_error",
-    "apply_cli_options_to_config",
-    "cli_object_repr",
+    "_PROMPT_WHEN_COMPLETE",
+    "_prompt_at_completion",
+    "_handle_error",
+    "_apply_cli_options_to_config",
+    "_cli_object_repr",
 ]
 
 import sys
@@ -21,21 +21,21 @@ from ..config import config_file
 from ..exceptions import DeadlineOperationError
 from ..job_bundle import deadline_yaml_dump
 
-PROMPT_WHEN_COMPLETE = "PROMPT_WHEN_COMPLETE"
+_PROMPT_WHEN_COMPLETE = "PROMPT_WHEN_COMPLETE"
 
 
-def prompt_at_completion(ctx: click.Context):
+def _prompt_at_completion(ctx: click.Context):
     """
     If the click context has PROMPT_WHEN_COMPLETE set to True,
     prints out a prompt and waits for keyboard input.
     """
-    if ctx.obj[PROMPT_WHEN_COMPLETE]:
+    if ctx.obj[_PROMPT_WHEN_COMPLETE]:
         click.prompt(
             "Press Enter To Exit", prompt_suffix="", show_default=False, hide_input=True, default=""
         )
 
 
-def handle_error(func: Callable) -> Callable:
+def _handle_error(func: Callable) -> Callable:
     """
     Decorator that catches any exceptions raised in the passed in function,
     and handles their default printout.
@@ -49,7 +49,7 @@ def handle_error(func: Callable) -> Callable:
             # The message from DeadlineOperationError is printed
             # out verbatim.
             click.echo(str(e))
-            prompt_at_completion(ctx)
+            _prompt_at_completion(ctx)
             sys.exit(1)
         except click.ClickException:
             # Let click exceptions fall through
@@ -61,14 +61,14 @@ def handle_error(func: Callable) -> Callable:
             import traceback
 
             traceback.print_exc()
-            prompt_at_completion(ctx)
+            _prompt_at_completion(ctx)
             sys.exit(1)
 
     wraps.__doc__ = func.__doc__
     return wraps
 
 
-def apply_cli_options_to_config(
+def _apply_cli_options_to_config(
     *, config: Optional[ConfigParser] = None, required_options: Set[str] = set(), **args
 ) -> Optional[ConfigParser]:
     """
@@ -159,7 +159,7 @@ def _fix_multiline_strings(obj: Any) -> Any:
         return obj
 
 
-def cli_object_repr(obj: Any):
+def _cli_object_repr(obj: Any):
     """
     Transforms an API response object into a string, for printing as
     CLI output. This formats the output as YAML, using the "|"-style

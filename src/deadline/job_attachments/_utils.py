@@ -6,12 +6,29 @@ import os
 import sys
 from enum import Enum
 from hashlib import shake_256
-from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Optional, Tuple, Union
 import uuid
-import yaml
 
 import xxhash
+
+__all__ = [
+    "FileSystemLocationType",
+    "OperatingSystemFamily",
+    "_hash_file",
+    "_hash_data",
+    "_join_s3_paths",
+    "_generate_random_guid",
+    "_float_to_iso_datetime_string",
+    "_human_readable_file_size",
+    "_get_deadline_formatted_os",
+    "_get_unique_dest_dir_name",
+    "_get_bucket_and_object_key",
+    "_get_default_hash_cache_db_file_dir",
+    "_is_relative_to",
+    "AssetLoadingMethod",
+    "FileConflictResolution",
+]
 
 CONFIG_ROOT = ".deadline"
 COMPONENT_NAME = "job_attachments"
@@ -54,7 +71,7 @@ class OperatingSystemFamily(str, Enum):
             return "POSIX"
 
 
-def hash_file(file_path: str) -> str:
+def _hash_file(file_path: str) -> str:
     with open(file_path, "rb") as file:
         hasher = xxhash.xxh3_128()
         while True:
@@ -65,21 +82,21 @@ def hash_file(file_path: str) -> str:
         return hasher.hexdigest()
 
 
-def hash_data(data: bytes) -> str:
+def _hash_data(data: bytes) -> str:
     hasher = xxhash.xxh3_128()
     hasher.update(data)
     return hasher.hexdigest()
 
 
-def join_s3_paths(root: str, *args: str):
+def _join_s3_paths(root: str, *args: str):
     return "/".join([root, *args])
 
 
-def generate_random_guid():
+def _generate_random_guid():
     return str(uuid.uuid4()).replace("-", "")
 
 
-def float_to_iso_string(time: float):
+def _float_to_iso_datetime_string(time: float):
     seconds = int(time)
     microseconds = int((time - seconds) * 1000000)
 
@@ -89,7 +106,7 @@ def float_to_iso_string(time: float):
     return iso_string
 
 
-def human_readable_file_size(size_in_bytes: int) -> str:
+def _human_readable_file_size(size_in_bytes: int) -> str:
     """
     Convert a size in bytes to something human readable. For example 1000 bytes will be converted
     to 1 KB. Sizes close enough to a postfix threshold will be rounded up to the next threshold.
@@ -115,7 +132,7 @@ def human_readable_file_size(size_in_bytes: int) -> str:
     return f"{rounded} {postfixes[-1]}"
 
 
-def get_deadline_formatted_os() -> str:
+def _get_deadline_formatted_os() -> str:
     """
     Get a string specifying what the OS is, following the format the Deadline API expects.
     """
@@ -131,7 +148,7 @@ def get_deadline_formatted_os() -> str:
     return "Unknown"
 
 
-def get_unique_dest_dir_name(source_root: str) -> str:
+def _get_unique_dest_dir_name(source_root: str) -> str:
     # Note: this is a quick naive way to attempt to prevent colliding
     # relative paths across manifests without adding too much
     # length to the filepaths. length = 2n where n is the number
@@ -139,40 +156,13 @@ def get_unique_dest_dir_name(source_root: str) -> str:
     return f"assetroot-{shake_256(source_root.encode()).hexdigest(10)}"
 
 
-def map_source_path_to_dest_path(source_os: str, dest_os: str, path_str: str) -> PurePath:
-    """
-    Given a path from a source machine, convert it to an equivalent path on the destination OS.
-    """
-    path: PurePath
-    if source_os.lower() == OperatingSystemFamily.WINDOWS.value:
-        path = PureWindowsPath(path_str)
-    else:
-        path = PurePosixPath(path_str)
-    parts = path.parts
-
-    if dest_os.lower() == OperatingSystemFamily.WINDOWS.value:
-        return PureWindowsPath(*parts)
-    else:
-        return PurePosixPath(*parts)
-
-
-def get_os_pure_path(path: Path) -> PurePath:
-    """
-    Given a path object, converts it to a pathlib PurePath of the correct OS type.
-    """
-    if get_deadline_formatted_os() == OperatingSystemFamily.WINDOWS.value:
-        return PureWindowsPath(path)
-    else:
-        return PurePosixPath(path)
-
-
-def get_bucket_and_object_key(s3_path: str) -> Tuple[str, str]:
+def _get_bucket_and_object_key(s3_path: str) -> Tuple[str, str]:
     """Returns the bucket name and object key from the S3 URI"""
     bucket, key = s3_path.replace("s3://", "").split("/", maxsplit=1)
     return bucket, key
 
 
-def get_default_hash_cache_db_file_dir() -> Optional[str]:
+def _get_default_hash_cache_db_file_dir() -> Optional[str]:
     """
     Gets the expected directory for the hash cache database file based on OS environment variables.
     If a directory cannot be found, defaults to the working directory.
@@ -183,32 +173,16 @@ def get_default_hash_cache_db_file_dir() -> Optional[str]:
     return default_path
 
 
-def is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
+def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
     """
     Determines if path1 is relative to path2. This function is to support
-    Python versions that do not have the built-in `Path.is_relative_to()` method.
+    Python versions (3.7 and 3.8) that do not have the built-in `Path.is_relative_to()` method.
     """
     try:
         Path(path1).relative_to(Path(path2))
         return True
     except ValueError:
         return False
-
-
-class OPENJDToken:
-    def __init__(self, token: str) -> None:
-        self.token = token
-
-    def __str__(self) -> str:
-        return "{{ " + self.token + " }}"
-
-
-# add OPENJDToken to the YAML representer
-def openjd_token_representer(dumper: yaml.Dumper, token: OPENJDToken) -> yaml.Node:
-    return dumper.represent_data(str(token))
-
-
-yaml.add_representer(OPENJDToken, openjd_token_representer)
 
 
 # Behavior to adopt when loading job assets
