@@ -1,14 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import datetime
-from functools import wraps
 import io
 import os
 import sys
 from enum import Enum
 from hashlib import shake_256
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 import uuid
 import yaml
 
@@ -228,43 +227,3 @@ class FileConflictResolution(Enum):
     @classmethod
     def from_index(cls, index: int):
         return cls(index)
-
-
-def log_and_reraise_exception(prefix_mssage: Optional[str] = None) -> Callable:
-    """
-    A decorator for logging exceptions and re-raising them in instance methods.
-    This decorator expects the class to have a 'logger' attribute. If not,
-    an AttributeError will be raised.
-
-    Usage:
-        class MyClass:
-            def __init__(self):
-                self.logger = ...
-
-            @log_and_reraise_exception("Error in some_methid: ")
-            def some_method(self):
-                ...
-
-        my_instance = MyClass()
-        my_instance.some_method() # Logs the exception and re-raises it.
-
-    Args:
-        prefix_mssage: A message to prefix the exception message with.
-    """
-
-    def decorator(func: Callable):
-        @wraps(func)
-        def wrapper(instance, *args, **kwargs):
-            if not hasattr(instance, "logger"):
-                raise AttributeError(
-                    "The class using log_and_reraise_exception must have a 'logger' attribute."
-                )
-            try:
-                return func(instance, *args, **kwargs)
-            except Exception as e:
-                instance.logger.exception(f"{prefix_mssage} - {str(e)}")
-                raise e
-
-        return wrapper
-
-    return decorator

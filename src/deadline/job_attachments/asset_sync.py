@@ -49,11 +49,10 @@ from .utils import (
     hash_data,
     hash_file,
     join_s3_paths,
-    log_and_reraise_exception,
     map_source_path_to_dest_path,
 )
 
-logger = getLogger(__name__)
+logger = getLogger("deadline.job_attachments")
 
 
 class AssetSync:
@@ -252,7 +251,6 @@ class AssetSync:
         )
         return job.attachments if job and job.attachments else None
 
-    @log_and_reraise_exception(prefix_mssage="Error syncing inputs for Job.")
     def sync_inputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
@@ -393,7 +391,6 @@ class AssetSync:
             summary_statistics = download_summary_statistics.convert_to_summary_statistics()
         return (summary_statistics, list(pathmapping_rules.values()))
 
-    @log_and_reraise_exception(prefix_mssage="Error syncing outputs for Job.")
     def sync_outputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
