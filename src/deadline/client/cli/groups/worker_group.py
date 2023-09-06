@@ -40,22 +40,7 @@ def worker_list(page_size, item_offset, fleet_id, **args):
     deadline = api.get_boto3_client("deadline", config=config)
     try:
         response = deadline.search_workers(
-            farmId=farm_id,
-            fleetIds=[fleet_id],
-            itemOffset=item_offset,
-            pageSize=page_size,
-            filterExpressions={
-                "filters": [
-                    {
-                        "stringFilter": {
-                            "name": "STATUS",
-                            "value": "DELETED",
-                            "operator": "NOT_EQUAL",
-                        }
-                    },
-                ],
-                "operator": "AND",
-            },
+            farmId=farm_id, fleetIds=[fleet_id], itemOffset=item_offset, pageSize=page_size
         )
     except ClientError as exc:
         raise DeadlineOperationError(f"Failed to get Workers from Deadline:\n{exc}") from exc
