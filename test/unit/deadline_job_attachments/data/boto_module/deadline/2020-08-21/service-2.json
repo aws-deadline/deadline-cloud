@@ -1,7 +1,7 @@
 {
   "version": "2.0",
   "metadata": {
-    "apiVersion": "2020-08-21",
+    "apiVersion": "2023-10-12",
     "endpointPrefix": "btpdb6qczg.execute-api",
     "jsonVersion": "1.1",
     "protocol": "rest-json",
@@ -9,14 +9,14 @@
     "serviceId": "deadline",
     "signatureVersion": "v4",
     "signingName": "deadline",
-    "uid": "deadline-2020-08-21"
+    "uid": "deadline-2023-10-12"
   },
   "operations": {
     "AssociateMemberToFarm": {
       "name": "AssociateMemberToFarm",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/farms/{farmId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -27,7 +27,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -39,10 +39,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -51,7 +51,7 @@
       "name": "AssociateMemberToFleet",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -62,7 +62,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -74,10 +74,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -86,7 +86,7 @@
       "name": "AssociateMemberToJob",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -97,7 +97,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -109,10 +109,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -121,7 +121,7 @@
       "name": "AssociateMemberToQueue",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -132,7 +132,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -144,10 +144,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -156,7 +156,7 @@
       "name": "AssumeFleetRoleForRead",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/read-roles",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/read-roles",
         "responseCode": 200
       },
       "input": {
@@ -167,6 +167,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -174,9 +177,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -187,7 +187,7 @@
       "name": "AssumeFleetRoleForWorker",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/fleet-roles",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/fleet-roles",
         "responseCode": 200
       },
       "input": {
@@ -198,6 +198,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -207,13 +210,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ]
     },
@@ -221,7 +221,7 @@
       "name": "AssumeQueueRoleForRead",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/read-roles",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/read-roles",
         "responseCode": 200
       },
       "input": {
@@ -232,6 +232,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -239,9 +242,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -252,7 +252,7 @@
       "name": "AssumeQueueRoleForUser",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/user-roles",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/user-roles",
         "responseCode": 200
       },
       "input": {
@@ -263,6 +263,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -270,9 +273,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -283,7 +283,7 @@
       "name": "AssumeQueueRoleForWorker",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/queue-roles",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/queue-roles",
         "responseCode": 200
       },
       "input": {
@@ -294,6 +294,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -303,13 +306,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ]
     },
@@ -317,7 +317,7 @@
       "name": "BatchGetJobEntity",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/batchGetJobEntity",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/batchGetJobEntity",
         "responseCode": 200
       },
       "input": {
@@ -328,6 +328,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -335,9 +338,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -348,7 +348,7 @@
       "name": "CopyJobTemplate",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/template",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/template",
         "responseCode": 200
       },
       "input": {
@@ -359,6 +359,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -366,9 +369,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -379,7 +379,7 @@
       "name": "CreateBudget",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/budgets",
+        "requestUri": "/2023-10-12/farms/{farmId}/budgets",
         "responseCode": 200
       },
       "input": {
@@ -390,7 +390,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -402,10 +402,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -414,7 +414,7 @@
       "name": "CreateFarm",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms",
+        "requestUri": "/2023-10-12/farms",
         "responseCode": 200
       },
       "input": {
@@ -425,7 +425,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -437,10 +437,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -449,7 +449,7 @@
       "name": "CreateFleet",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets",
         "responseCode": 200
       },
       "input": {
@@ -460,7 +460,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -472,10 +472,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -484,7 +484,7 @@
       "name": "CreateJob",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs",
         "responseCode": 201
       },
       "input": {
@@ -495,7 +495,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -507,10 +507,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -519,7 +519,7 @@
       "name": "CreateLicenseEndpoint",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/license-endpoints",
+        "requestUri": "/2023-10-12/license-endpoints",
         "responseCode": 200
       },
       "input": {
@@ -530,7 +530,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -539,13 +539,13 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
         },
         {
-          "shape": "ConflictException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -554,7 +554,7 @@
       "name": "CreateQueue",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues",
         "responseCode": 200
       },
       "input": {
@@ -565,7 +565,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -577,10 +577,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -589,7 +589,7 @@
       "name": "CreateQueueEnvironment",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/environments",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/environments",
         "responseCode": 200
       },
       "input": {
@@ -600,7 +600,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -612,10 +612,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -624,7 +624,7 @@
       "name": "CreateQueueFleetAssociation",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/farms/{farmId}/queue-fleet-associations",
+        "requestUri": "/2023-10-12/farms/{farmId}/queue-fleet-associations",
         "responseCode": 200
       },
       "input": {
@@ -635,6 +635,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -642,9 +645,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -656,7 +656,7 @@
       "name": "CreateStorageProfile",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/storage-profiles",
+        "requestUri": "/2023-10-12/farms/{farmId}/storage-profiles",
         "responseCode": 200
       },
       "input": {
@@ -667,7 +667,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -679,10 +679,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -691,7 +691,7 @@
       "name": "CreateWorker",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers",
         "responseCode": 200
       },
       "input": {
@@ -702,6 +702,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -711,13 +714,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -726,7 +726,7 @@
       "name": "DeleteBudget",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/budgets/{budgetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/budgets/{budgetId}",
         "responseCode": 200
       },
       "input": {
@@ -737,6 +737,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -744,9 +747,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -758,7 +758,7 @@
       "name": "DeleteFarm",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}",
+        "requestUri": "/2023-10-12/farms/{farmId}",
         "responseCode": 200
       },
       "input": {
@@ -769,6 +769,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -776,9 +779,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -790,7 +790,7 @@
       "name": "DeleteFleet",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -801,6 +801,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -810,13 +813,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -825,7 +825,7 @@
       "name": "DeleteLicenseEndpoint",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/license-endpoints/{licenseEndpointId}",
+        "requestUri": "/2023-10-12/license-endpoints/{licenseEndpointId}",
         "responseCode": 200
       },
       "input": {
@@ -836,6 +836,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -845,13 +848,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -860,7 +860,7 @@
       "name": "DeleteMeteredProduct",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/license-endpoints/{licenseEndpointId}/metered-products/{productId}",
+        "requestUri": "/2023-10-12/license-endpoints/{licenseEndpointId}/metered-products/{productId}",
         "responseCode": 200
       },
       "input": {
@@ -871,6 +871,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -878,9 +881,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -892,7 +892,7 @@
       "name": "DeleteQueue",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}",
         "responseCode": 200
       },
       "input": {
@@ -903,6 +903,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -912,13 +915,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -927,7 +927,7 @@
       "name": "DeleteQueueEnvironment",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
         "responseCode": 200
       },
       "input": {
@@ -938,13 +938,13 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -956,7 +956,7 @@
       "name": "DeleteQueueFleetAssociation",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -967,6 +967,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -976,13 +979,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -991,7 +991,7 @@
       "name": "DeleteStorageProfile",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/storage-profiles/{storageProfileId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/storage-profiles/{storageProfileId}",
         "responseCode": 200
       },
       "input": {
@@ -1002,13 +1002,13 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1020,7 +1020,7 @@
       "name": "DeleteWorker",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
         "responseCode": 200
       },
       "input": {
@@ -1031,6 +1031,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1040,13 +1043,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -1055,7 +1055,7 @@
       "name": "DisassociateMemberFromFarm",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -1066,6 +1066,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1073,9 +1076,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1087,7 +1087,7 @@
       "name": "DisassociateMemberFromFleet",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -1098,6 +1098,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1107,13 +1110,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -1122,7 +1122,7 @@
       "name": "DisassociateMemberFromJob",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -1133,6 +1133,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1140,9 +1143,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1154,7 +1154,7 @@
       "name": "DisassociateMemberFromQueue",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/members/{principalId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/members/{principalId}",
         "responseCode": 200
       },
       "input": {
@@ -1165,6 +1165,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1174,13 +1177,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -1189,7 +1189,7 @@
       "name": "GetAggregatedStatisticsForSessions",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/usage",
+        "requestUri": "/2023-10-12/farms/{farmId}/usage",
         "responseCode": 200
       },
       "input": {
@@ -1200,6 +1200,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1207,9 +1210,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1220,7 +1220,7 @@
       "name": "GetBudget",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/budgets/{budgetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/budgets/{budgetId}",
         "responseCode": 200
       },
       "input": {
@@ -1231,6 +1231,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1238,9 +1241,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1251,7 +1251,7 @@
       "name": "GetFarm",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}",
+        "requestUri": "/2023-10-12/farms/{farmId}",
         "responseCode": 200
       },
       "input": {
@@ -1262,6 +1262,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1269,9 +1272,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1282,7 +1282,7 @@
       "name": "GetFleet",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -1293,6 +1293,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1300,9 +1303,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1313,7 +1313,7 @@
       "name": "GetJob",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}",
         "responseCode": 200
       },
       "input": {
@@ -1324,6 +1324,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1331,9 +1334,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1344,7 +1344,7 @@
       "name": "GetLicenseEndpoint",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/license-endpoints/{licenseEndpointId}",
+        "requestUri": "/2023-10-12/license-endpoints/{licenseEndpointId}",
         "responseCode": 200
       },
       "input": {
@@ -1355,6 +1355,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1362,9 +1365,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1375,7 +1375,7 @@
       "name": "GetQueue",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}",
         "responseCode": 200
       },
       "input": {
@@ -1386,6 +1386,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1393,9 +1396,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1406,7 +1406,7 @@
       "name": "GetQueueEnvironment",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
         "responseCode": 200
       },
       "input": {
@@ -1417,6 +1417,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1424,9 +1427,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1437,7 +1437,7 @@
       "name": "GetQueueFleetAssociation",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -1448,6 +1448,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1455,9 +1458,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1468,7 +1468,7 @@
       "name": "GetSession",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}",
         "responseCode": 200
       },
       "input": {
@@ -1479,6 +1479,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1486,9 +1489,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1499,7 +1499,7 @@
       "name": "GetSessionAction",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessionactions/{sessionActionId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessionactions/{sessionActionId}",
         "responseCode": 200
       },
       "input": {
@@ -1510,6 +1510,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1517,9 +1520,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1530,7 +1530,7 @@
       "name": "GetStep",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}",
         "responseCode": 200
       },
       "input": {
@@ -1541,6 +1541,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1548,9 +1551,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1561,7 +1561,7 @@
       "name": "GetStorageProfile",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/storage-profiles/{storageProfileId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/storage-profiles/{storageProfileId}",
         "responseCode": 200
       },
       "input": {
@@ -1572,6 +1572,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1579,9 +1582,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1592,7 +1592,7 @@
       "name": "GetStorageProfileForQueue",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/storage-profiles/{storageProfileId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/storage-profiles/{storageProfileId}",
         "responseCode": 200
       },
       "input": {
@@ -1603,6 +1603,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1610,9 +1613,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1623,7 +1623,7 @@
       "name": "GetTask",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
         "responseCode": 200
       },
       "input": {
@@ -1634,6 +1634,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1641,9 +1644,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1654,7 +1654,7 @@
       "name": "GetWorker",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
         "responseCode": 200
       },
       "input": {
@@ -1665,6 +1665,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1672,9 +1675,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1685,7 +1685,7 @@
       "name": "ListAvailableMeteredProducts",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/metered-products",
+        "requestUri": "/2023-10-12/metered-products",
         "responseCode": 200
       },
       "input": {
@@ -1707,7 +1707,7 @@
       "name": "ListBudgets",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/budgets",
+        "requestUri": "/2023-10-12/farms/{farmId}/budgets",
         "responseCode": 200
       },
       "input": {
@@ -1718,6 +1718,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1725,9 +1728,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1738,7 +1738,7 @@
       "name": "ListFarmMembers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/members",
+        "requestUri": "/2023-10-12/farms/{farmId}/members",
         "responseCode": 200
       },
       "input": {
@@ -1749,6 +1749,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1756,9 +1759,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1769,7 +1769,7 @@
       "name": "ListFarms",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms",
+        "requestUri": "/2023-10-12/farms",
         "responseCode": 200
       },
       "input": {
@@ -1780,13 +1780,13 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1797,7 +1797,7 @@
       "name": "ListFleetMembers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/members",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/members",
         "responseCode": 200
       },
       "input": {
@@ -1808,6 +1808,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1815,9 +1818,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1828,7 +1828,7 @@
       "name": "ListFleets",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets",
         "responseCode": 200
       },
       "input": {
@@ -1839,6 +1839,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1846,9 +1849,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1859,7 +1859,7 @@
       "name": "ListJobMembers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/members",
         "responseCode": 200
       },
       "input": {
@@ -1870,6 +1870,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1877,9 +1880,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1890,7 +1890,7 @@
       "name": "ListJobs",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs",
         "responseCode": 200
       },
       "input": {
@@ -1901,6 +1901,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1908,9 +1911,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1921,7 +1921,7 @@
       "name": "ListLicenseEndpoints",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/license-endpoints",
+        "requestUri": "/2023-10-12/license-endpoints",
         "responseCode": 200
       },
       "input": {
@@ -1932,6 +1932,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1939,9 +1942,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1952,7 +1952,7 @@
       "name": "ListMeteredProducts",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/license-endpoints/{licenseEndpointId}/metered-products",
+        "requestUri": "/2023-10-12/license-endpoints/{licenseEndpointId}/metered-products",
         "responseCode": 200
       },
       "input": {
@@ -1963,6 +1963,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -1970,9 +1973,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -1983,7 +1983,7 @@
       "name": "ListQueueEnvironments",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/environments",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/environments",
         "responseCode": 200
       },
       "input": {
@@ -1994,6 +1994,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2001,9 +2004,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2014,7 +2014,7 @@
       "name": "ListQueueFleetAssociations",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queue-fleet-associations",
+        "requestUri": "/2023-10-12/farms/{farmId}/queue-fleet-associations",
         "responseCode": 200
       },
       "input": {
@@ -2025,6 +2025,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2032,9 +2035,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         }
       ]
     },
@@ -2042,7 +2042,7 @@
       "name": "ListQueueMembers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/members",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/members",
         "responseCode": 200
       },
       "input": {
@@ -2053,6 +2053,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2060,9 +2063,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2073,7 +2073,7 @@
       "name": "ListQueues",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues",
         "responseCode": 200
       },
       "input": {
@@ -2084,6 +2084,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2091,9 +2094,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2104,7 +2104,7 @@
       "name": "ListSessionActions",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessionactions",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessionactions",
         "responseCode": 200
       },
       "input": {
@@ -2115,6 +2115,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2122,9 +2125,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2135,7 +2135,7 @@
       "name": "ListSessions",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions",
         "responseCode": 200
       },
       "input": {
@@ -2146,6 +2146,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2153,9 +2156,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2166,7 +2166,7 @@
       "name": "ListStepConsumers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/consumers",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/consumers",
         "responseCode": 200
       },
       "input": {
@@ -2177,6 +2177,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2184,9 +2187,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2197,7 +2197,7 @@
       "name": "ListStepDependencies",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/dependencies",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/dependencies",
         "responseCode": 200
       },
       "input": {
@@ -2208,6 +2208,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2215,9 +2218,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2228,7 +2228,7 @@
       "name": "ListSteps",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps",
         "responseCode": 200
       },
       "input": {
@@ -2239,6 +2239,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2246,9 +2249,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2259,7 +2259,7 @@
       "name": "ListStorageProfiles",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/storage-profiles",
+        "requestUri": "/2023-10-12/farms/{farmId}/storage-profiles",
         "responseCode": 200
       },
       "input": {
@@ -2270,6 +2270,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2277,9 +2280,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2290,7 +2290,7 @@
       "name": "ListStorageProfilesForQueue",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/storage-profiles",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/storage-profiles",
         "responseCode": 200
       },
       "input": {
@@ -2301,6 +2301,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2308,9 +2311,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2321,7 +2321,7 @@
       "name": "ListTagsForResource",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/tags/{resourceArn}",
+        "requestUri": "/2023-10-12/tags/{resourceArn}",
         "responseCode": 200
       },
       "input": {
@@ -2332,6 +2332,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2339,9 +2342,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2352,7 +2352,7 @@
       "name": "ListTasks",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks",
         "responseCode": 200
       },
       "input": {
@@ -2363,6 +2363,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2370,9 +2373,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2383,7 +2383,7 @@
       "name": "ListWorkerSessions",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/sessions",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/sessions",
         "responseCode": 200
       },
       "input": {
@@ -2394,6 +2394,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2401,9 +2404,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2414,7 +2414,7 @@
       "name": "ListWorkers",
       "http": {
         "method": "GET",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers",
         "responseCode": 200
       },
       "input": {
@@ -2425,6 +2425,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2432,9 +2435,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2445,7 +2445,7 @@
       "name": "PutMeteredProduct",
       "http": {
         "method": "PUT",
-        "requestUri": "/2020-08-21/license-endpoints/{licenseEndpointId}/metered-products/{productId}",
+        "requestUri": "/2023-10-12/license-endpoints/{licenseEndpointId}/metered-products/{productId}",
         "responseCode": 200
       },
       "input": {
@@ -2456,6 +2456,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2463,9 +2466,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2477,7 +2477,7 @@
       "name": "SearchJobs",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/search/jobs",
+        "requestUri": "/2023-10-12/farms/{farmId}/search/jobs",
         "responseCode": 200
       },
       "input": {
@@ -2488,6 +2488,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2495,9 +2498,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2508,7 +2508,7 @@
       "name": "SearchSteps",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/search/steps",
+        "requestUri": "/2023-10-12/farms/{farmId}/search/steps",
         "responseCode": 200
       },
       "input": {
@@ -2519,6 +2519,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2526,9 +2529,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2539,7 +2539,7 @@
       "name": "SearchTasks",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/search/tasks",
+        "requestUri": "/2023-10-12/farms/{farmId}/search/tasks",
         "responseCode": 200
       },
       "input": {
@@ -2550,6 +2550,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2557,9 +2560,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2570,7 +2570,7 @@
       "name": "SearchWorkers",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/farms/{farmId}/search/workers",
+        "requestUri": "/2023-10-12/farms/{farmId}/search/workers",
         "responseCode": 200
       },
       "input": {
@@ -2581,6 +2581,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2588,9 +2591,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2601,7 +2601,7 @@
       "name": "TagResource",
       "http": {
         "method": "POST",
-        "requestUri": "/2020-08-21/tags/{resourceArn}",
+        "requestUri": "/2023-10-12/tags/{resourceArn}",
         "responseCode": 204
       },
       "input": {
@@ -2612,6 +2612,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2621,13 +2624,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ]
     },
@@ -2635,7 +2635,7 @@
       "name": "UntagResource",
       "http": {
         "method": "DELETE",
-        "requestUri": "/2020-08-21/tags/{resourceArn}",
+        "requestUri": "/2023-10-12/tags/{resourceArn}",
         "responseCode": 204
       },
       "input": {
@@ -2646,6 +2646,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2655,13 +2658,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -2670,7 +2670,7 @@
       "name": "UpdateBudget",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/budgets/{budgetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/budgets/{budgetId}",
         "responseCode": 200
       },
       "input": {
@@ -2681,6 +2681,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2688,9 +2691,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2702,7 +2702,7 @@
       "name": "UpdateFarm",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}",
+        "requestUri": "/2023-10-12/farms/{farmId}",
         "responseCode": 200
       },
       "input": {
@@ -2713,6 +2713,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2720,9 +2723,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2734,7 +2734,7 @@
       "name": "UpdateFleet",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -2745,7 +2745,7 @@
       },
       "errors": [
         {
-          "shape": "ServiceQuotaExceededException"
+          "shape": "AccessDeniedException"
         },
         {
           "shape": "InternalServerErrorException"
@@ -2757,10 +2757,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ValidationException"
         },
         {
-          "shape": "ValidationException"
+          "shape": "ServiceQuotaExceededException"
         }
       ],
       "idempotent": true
@@ -2769,7 +2769,7 @@
       "name": "UpdateJob",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}",
         "responseCode": 200
       },
       "input": {
@@ -2780,6 +2780,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2789,13 +2792,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -2804,7 +2804,7 @@
       "name": "UpdateQueue",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}",
         "responseCode": 200
       },
       "input": {
@@ -2815,6 +2815,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2822,9 +2825,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2836,7 +2836,7 @@
       "name": "UpdateQueueEnvironment",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}",
         "responseCode": 200
       },
       "input": {
@@ -2847,6 +2847,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2854,9 +2857,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2867,7 +2867,7 @@
       "name": "UpdateQueueFleetAssociation",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queue-fleet-associations/{queueId}/{fleetId}",
         "responseCode": 200
       },
       "input": {
@@ -2878,6 +2878,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2885,9 +2888,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2899,7 +2899,7 @@
       "name": "UpdateSession",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}",
         "responseCode": 200
       },
       "input": {
@@ -2910,6 +2910,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2917,9 +2920,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2931,7 +2931,7 @@
       "name": "UpdateStep",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}",
         "responseCode": 200
       },
       "input": {
@@ -2942,6 +2942,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2951,13 +2954,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -2966,7 +2966,7 @@
       "name": "UpdateStorageProfile",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/storage-profiles/{storageProfileId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/storage-profiles/{storageProfileId}",
         "responseCode": 200
       },
       "input": {
@@ -2977,6 +2977,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -2984,9 +2987,6 @@
         },
         {
           "shape": "ThrottlingException"
-        },
-        {
-          "shape": "AccessDeniedException"
         },
         {
           "shape": "ValidationException"
@@ -2998,7 +2998,7 @@
       "name": "UpdateTask",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
         "responseCode": 200
       },
       "input": {
@@ -3009,6 +3009,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -3018,13 +3021,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -3033,7 +3033,7 @@
       "name": "UpdateWorker",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}",
         "responseCode": 200
       },
       "input": {
@@ -3044,6 +3044,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -3053,13 +3056,10 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
+          "shape": "ConflictException"
         },
         {
           "shape": "ValidationException"
-        },
-        {
-          "shape": "ConflictException"
         }
       ],
       "idempotent": true
@@ -3068,7 +3068,7 @@
       "name": "UpdateWorkerSchedule",
       "http": {
         "method": "PATCH",
-        "requestUri": "/2020-08-21/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/schedule",
+        "requestUri": "/2023-10-12/farms/{farmId}/fleets/{fleetId}/workers/{workerId}/schedule",
         "responseCode": 200
       },
       "input": {
@@ -3079,6 +3079,9 @@
       },
       "errors": [
         {
+          "shape": "AccessDeniedException"
+        },
+        {
           "shape": "InternalServerErrorException"
         },
         {
@@ -3088,9 +3091,6 @@
           "shape": "ThrottlingException"
         },
         {
-          "shape": "AccessDeniedException"
-        },
-        {
           "shape": "ValidationException"
         }
       ],
@@ -3098,46 +3098,6 @@
     }
   },
   "shapes": {
-    "AcceleratorCountRange": {
-      "type": "structure",
-      "required": [
-        "min"
-      ],
-      "members": {
-        "min": {
-          "shape": "MinZeroMaxInteger"
-        },
-        "max": {
-          "shape": "MinZeroMaxInteger"
-        }
-      }
-    },
-    "AcceleratorTotalMemoryMiBRange": {
-      "type": "structure",
-      "required": [
-        "min"
-      ],
-      "members": {
-        "min": {
-          "shape": "MinZeroMaxInteger"
-        },
-        "max": {
-          "shape": "MinZeroMaxInteger"
-        }
-      }
-    },
-    "AcceleratorType": {
-      "type": "string",
-      "enum": [
-        "gpu"
-      ]
-    },
-    "AcceleratorTypes": {
-      "type": "list",
-      "member": {
-        "shape": "AcceleratorType"
-      }
-    },
     "AccessDeniedException": {
       "type": "structure",
       "required": [
@@ -3309,7 +3269,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "dryRun": {
@@ -3333,8 +3293,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -3350,7 +3310,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "dryRun": {
@@ -3379,8 +3339,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -3397,7 +3357,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "dryRun": {
@@ -3431,8 +3391,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -3448,7 +3408,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "dryRun": {
@@ -3477,8 +3437,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -3760,7 +3720,7 @@
         "shape": "JobEntity"
       },
       "max": 25,
-      "min": 1
+      "min": 0
     },
     "BatchGetJobEntityRequest": {
       "type": "structure",
@@ -4170,9 +4130,6 @@
           "location": "header",
           "locationName": "X-Amz-Client-Token"
         },
-        "tags": {
-          "shape": "Tags"
-        },
         "displayName": {
           "shape": "ResourceName"
         },
@@ -4184,6 +4141,9 @@
         },
         "studioId": {
           "shape": "StudioId"
+        },
+        "tags": {
+          "shape": "Tags"
         }
       }
     },
@@ -4218,9 +4178,6 @@
           "location": "header",
           "locationName": "X-Amz-Client-Token"
         },
-        "tags": {
-          "shape": "Tags"
-        },
         "farmId": {
           "shape": "FarmId",
           "location": "uri",
@@ -4237,6 +4194,9 @@
         },
         "configuration": {
           "shape": "FleetConfiguration"
+        },
+        "tags": {
+          "shape": "Tags"
         }
       }
     },
@@ -4348,9 +4308,6 @@
           "location": "header",
           "locationName": "X-Amz-Client-Token"
         },
-        "tags": {
-          "shape": "Tags"
-        },
         "vpcId": {
           "shape": "VpcId"
         },
@@ -4359,6 +4316,9 @@
         },
         "securityGroupIds": {
           "shape": "CreateLicenseEndpointRequestSecurityGroupIdsList"
+        },
+        "tags": {
+          "shape": "Tags"
         }
       }
     },
@@ -4490,9 +4450,6 @@
           "location": "header",
           "locationName": "X-Amz-Client-Token"
         },
-        "tags": {
-          "shape": "Tags"
-        },
         "farmId": {
           "shape": "FarmId",
           "location": "uri",
@@ -4506,6 +4463,9 @@
         },
         "status": {
           "shape": "QueueStatus"
+        },
+        "defaultBudgetAction": {
+          "shape": "DefaultQueueBudgetAction"
         },
         "jobAttachmentSettings": {
           "shape": "JobAttachmentSettings"
@@ -4521,6 +4481,9 @@
         },
         "allowedStorageProfileIds": {
           "shape": "AllowedStorageProfileIds"
+        },
+        "tags": {
+          "shape": "Tags"
         }
       }
     },
@@ -4671,15 +4634,6 @@
         "cpuArchitectureType": {
           "shape": "CpuArchitectureType"
         },
-        "acceleratorTypes": {
-          "shape": "AcceleratorTypes"
-        },
-        "acceleratorCount": {
-          "shape": "AcceleratorCountRange"
-        },
-        "acceleratorTotalMemoryMiB": {
-          "shape": "AcceleratorTotalMemoryMiBRange"
-        },
         "customAmounts": {
           "shape": "FleetAmountCapabilityList"
         },
@@ -4706,6 +4660,14 @@
           "shape": "SyntheticTimestamp_date_time"
         }
       }
+    },
+    "DefaultQueueBudgetAction": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "STOP_SCHEDULING_AND_COMPLETE_TASKS",
+        "STOP_SCHEDULING_AND_CANCEL_TASKS"
+      ]
     },
     "DeleteBudgetRequest": {
       "type": "structure",
@@ -5384,7 +5346,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "farmId": {
@@ -5399,8 +5361,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -5608,7 +5570,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "farmId": {
@@ -5626,8 +5588,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -6356,6 +6318,7 @@
         "displayName",
         "farmId",
         "status",
+        "defaultBudgetAction",
         "createdAt",
         "createdBy"
       ],
@@ -6374,6 +6337,12 @@
         },
         "status": {
           "shape": "QueueStatus"
+        },
+        "defaultBudgetAction": {
+          "shape": "DefaultQueueBudgetAction"
+        },
+        "blockedReason": {
+          "shape": "QueueBlockedReason"
         },
         "jobAttachmentSettings": {
           "shape": "JobAttachmentSettings"
@@ -7223,7 +7192,8 @@
         "InternalServerException",
         "ValidationException",
         "ResourceNotFoundException",
-        "MaxPayloadSizeExceeded"
+        "MaxPayloadSizeExceeded",
+        "ConflictException"
       ]
     },
     "JobEntityIdentifiers": {
@@ -7278,7 +7248,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "farmId": {
@@ -7299,8 +7269,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -7362,9 +7332,6 @@
         },
         "queueId": {
           "shape": "QueueId"
-        },
-        "displayName": {
-          "shape": "JobName"
         },
         "name": {
           "shape": "JobName"
@@ -8957,7 +8924,7 @@
       "max": 2147483647,
       "min": 0
     },
-    "MemberPersona": {
+    "MembershipLevel": {
       "type": "string",
       "enum": [
         "VIEWER",
@@ -9121,7 +9088,7 @@
       "required": [
         "sourceOs",
         "sourcePath",
-        "desintationPath"
+        "destinationPath"
       ],
       "members": {
         "sourceOs": {
@@ -9130,7 +9097,7 @@
         "sourcePath": {
           "shape": "String"
         },
-        "desintationPath": {
+        "destinationPath": {
           "shape": "String"
         }
       }
@@ -9235,6 +9202,13 @@
       "type": "structure",
       "members": {}
     },
+    "QueueBlockedReason": {
+      "type": "string",
+      "enum": [
+        "NO_BUDGET_CONFIGURED",
+        "BUDGET_THRESHOLD_REACHED"
+      ]
+    },
     "QueueEnvironmentId": {
       "type": "string",
       "pattern": "queueenv-[0-9a-f]{32}"
@@ -9268,8 +9242,8 @@
       "type": "string",
       "enum": [
         "ACTIVE",
-        "FINISH_WORK",
-        "CANCEL_WORK",
+        "STOP_SCHEDULING_AND_COMPLETE_TASKS",
+        "STOP_SCHEDULING_AND_CANCEL_TASKS",
         "STOPPED"
       ]
     },
@@ -9324,7 +9298,7 @@
         "principalId",
         "principalType",
         "identityStoreId",
-        "persona"
+        "membershipLevel"
       ],
       "members": {
         "farmId": {
@@ -9342,8 +9316,8 @@
         "identityStoreId": {
           "shape": "IdentityStoreId"
         },
-        "persona": {
-          "shape": "MemberPersona"
+        "membershipLevel": {
+          "shape": "MembershipLevel"
         }
       }
     },
@@ -9357,7 +9331,8 @@
       "type": "string",
       "enum": [
         "ACTIVE",
-        "SCHEDULING"
+        "SCHEDULING",
+        "SCHEDULING_BLOCKED"
       ]
     },
     "QueueSummaries": {
@@ -9373,6 +9348,7 @@
         "queueId",
         "displayName",
         "status",
+        "defaultBudgetAction",
         "createdAt",
         "createdBy"
       ],
@@ -9391,6 +9367,12 @@
         },
         "status": {
           "shape": "QueueStatus"
+        },
+        "defaultBudgetAction": {
+          "shape": "DefaultQueueBudgetAction"
+        },
+        "blockedReason": {
+          "shape": "QueueBlockedReason"
         },
         "createdAt": {
           "shape": "CreatedAt"
@@ -9956,15 +9938,6 @@
         },
         "rootEbsVolume": {
           "shape": "Ec2EbsVolume"
-        },
-        "acceleratorTypes": {
-          "shape": "AcceleratorTypes"
-        },
-        "acceleratorCount": {
-          "shape": "AcceleratorCountRange"
-        },
-        "acceleratorTotalMemoryMiB": {
-          "shape": "AcceleratorTotalMemoryMiBRange"
         },
         "allowedInstanceTypes": {
           "shape": "InstanceTypes"
@@ -10545,9 +10518,6 @@
         },
         "queueId": {
           "shape": "QueueId"
-        },
-        "displayName": {
-          "shape": "StepName"
         },
         "name": {
           "shape": "StepName"
@@ -11361,6 +11331,9 @@
         "status": {
           "shape": "QueueStatus"
         },
+        "defaultBudgetAction": {
+          "shape": "DefaultQueueBudgetAction"
+        },
         "jobAttachmentSettings": {
           "shape": "JobAttachmentSettings"
         },
@@ -11370,10 +11343,10 @@
         "jobsRunAs": {
           "shape": "JobsRunAs"
         },
-        "requiredFileSystemLocationsToAdd": {
+        "requiredFileSystemLocationNamesToAdd": {
           "shape": "RequiredFileSystemLocationNames"
         },
-        "requiredFileSystemLocationsToRemove": {
+        "requiredFileSystemLocationNamesToRemove": {
           "shape": "RequiredFileSystemLocationNames"
         },
         "allowedStorageProfileIdsToAdd": {

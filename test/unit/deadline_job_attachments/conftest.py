@@ -332,6 +332,7 @@ def create_get_queue_response(response_metadata) -> Callable[[Queue], dict[str, 
             "2023-07-13 14:35:26.123456", "%Y-%m-%d %H:%M:%S.%f"
         )
         response["createdBy"] = "job attachments tests"
+        response["defaultBudgetAction"] = "None"
 
         return response
 
