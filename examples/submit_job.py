@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 import boto3
-from openjd.model.template import SchemaVersion, TemplateModelRegistry
+from openjobio.model.template import SchemaVersion, TemplateModelRegistry
 
 from deadline.job_attachments.aws.deadline import get_queue
 from deadline.job_attachments.upload import S3AssetManager

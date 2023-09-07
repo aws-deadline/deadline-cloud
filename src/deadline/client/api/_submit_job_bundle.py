@@ -45,7 +45,7 @@ def create_job_from_job_bundle(
 
     A job bundle has the following directory structure:
 
-    /template.json|yaml (required): An Open Job Description job template that specifies the work to be done. Job parameters
+    /template.json|yaml (required): An OpenJobIO job template that specifies the work to be done. Job parameters
             are embedded here.
     /parameter_values.yson|yaml (optional): If provided, these are parameter values for the job template and for
             the render farm. Amazon Deadline Cloud-specific parameters are like "deadline:priority".

@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from deadline.job_attachments.utils import OPENJDToken
+from deadline.job_attachments.utils import OJIOToken
 
 
 def parse_frame_range(frame_string: str) -> list[int]:
@@ -90,9 +90,9 @@ delete = {k for k in before if k not in after}
 
 for k, v in put.items():
     print(f"updating {k}={v}")
-    print(f"openjd_env: {k}={v}")
+    print(f"openjobio_env: {k}={v}")
 for k in delete:
-    print(f"openjd_unset_env: {k}")
+    print(f"openjobio_unset_env: {k}")
 """
 
 
@@ -104,10 +104,10 @@ def get_rez_environment() -> dict[str, Any]:
         "script": {
             "actions": {
                 "onEnter": {
-                    "command": str(OPENJDToken("Env.File.Enter")),
+                    "command": str(OJIOToken("Env.File.Enter")),
                 },
                 "onExit": {
-                    "command": str(OPENJDToken("Env.File.Exit")),
+                    "command": str(OJIOToken("Env.File.Exit")),
                 },
             },
             "embeddedFiles": [

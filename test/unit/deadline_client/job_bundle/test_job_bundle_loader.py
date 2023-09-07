@@ -16,10 +16,10 @@ from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle.loader import parse_yaml_or_json_content
 from deadline.client.job_bundle.parameters import read_job_bundle_parameters
 
-JOB_TEMPLATE_WITH_PARAMETERS_2023_09 = """
-specificationVersion: 'jobtemplate-2023-09'
+JOB_TEMPLATE_WITH_PARAMETERS_2022_09_01 = """
+specificationVersion: '2022-09-01'
 name: CLI Job
-parameterDefinitions:
+parameters:
 - name: LineEditControl
   type: STRING
   userInterface:
@@ -125,10 +125,10 @@ READ_JOB_BUNDLE_PARAMETERS_RESULT = """
     "template_data,parameter_values,expected_result",
     [
         pytest.param(
-            JOB_TEMPLATE_WITH_PARAMETERS_2023_09,
+            JOB_TEMPLATE_WITH_PARAMETERS_2022_09_01,
             PARAMETER_VALUES,
             READ_JOB_BUNDLE_PARAMETERS_RESULT,
-            id="jobtemplate-2023-09",
+            id="2022-09-01",
         ),
     ],
 )
