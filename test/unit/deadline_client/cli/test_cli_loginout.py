@@ -15,18 +15,18 @@ from deadline.client import api, config
 from deadline.client.cli import deadline_cli
 
 
-def test_cli_cloud_companion_login(fresh_deadline_config):
+def test_cli_deadline_cloud_monitor_login(fresh_deadline_config):
     """
-    Confirm that the CLI login/logout command invokes Cloud Companion as expected
+    Confirm that the CLI login/logout command invokes Deadline Cloud Monitor as expected
     """
     scoped_config = {
-        "credential_process": "/bin/NimbleCloudCompanion get-credentials --profile sandbox-us-west-2",
+        "credential_process": "/bin/DeadlineCloudMonitor get-credentials --profile sandbox-us-west-2",
         "studio_id": "us-west-2:stid-1g9neezauta8ease",
         "region": "us-west-2",
     }
 
     profile_name = "sandbox-us-west-2"
-    config.set_setting("cloud-companion.path", "/bin/NimbleCloudCompanion")
+    config.set_setting("deadline-cloud-monitor.path", "/bin/DeadlineCloudMonitor")
     config.set_setting("defaults.aws_profile_name", profile_name)
 
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
@@ -47,7 +47,7 @@ def test_cli_cloud_companion_login(fresh_deadline_config):
         assert result.exit_code == 0, result.output
 
         popen_mock.assert_called_once_with(
-            ["/bin/NimbleCloudCompanion", "login", "--profile", "sandbox-us-west-2"],
+            ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.PIPE,
@@ -55,7 +55,10 @@ def test_cli_cloud_companion_login(fresh_deadline_config):
 
         assert result.exit_code == 0
 
-        assert "Successfully logged in: Cloud Companion Profile: sandbox-us-west-2" in result.output
+        assert (
+            "Successfully logged in: Deadline Cloud Monitor Profile: sandbox-us-west-2"
+            in result.output
+        )
         assert result.exit_code == 0
 
         # Now lets logout
@@ -63,7 +66,7 @@ def test_cli_cloud_companion_login(fresh_deadline_config):
         result = runner.invoke(deadline_cli.cli, ["logout"])
 
         check_output_mock.assert_called_once_with(
-            ["/bin/NimbleCloudCompanion", "logout", "--profile", "sandbox-us-west-2"]
+            ["/bin/DeadlineCloudMonitor", "logout", "--profile", "sandbox-us-west-2"]
         )
 
         assert "Successfully logged out" in result.output
