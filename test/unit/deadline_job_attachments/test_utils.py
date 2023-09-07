@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from deadline.job_attachments.utils import (
-    OPENJDToken,
+    OJIOToken,
     get_deadline_formatted_os,
     get_default_hash_cache_db_file_dir,
     is_relative_to,
@@ -57,11 +57,11 @@ class TestUtils:
         ("test_token", "serialized_token"),
         [("mytoken", "{{ mytoken }}")],
     )
-    def test_OPENJDToken_serializer(self, test_token: str, serialized_token: str):
+    def test_OJIOToken_serializer(self, test_token: str, serialized_token: str):
         """
         Tests that the serializer works
         """
-        token = OPENJDToken(test_token)
+        token = OJIOToken(test_token)
         assert str(token) == serialized_token
 
     @pytest.mark.skipif(

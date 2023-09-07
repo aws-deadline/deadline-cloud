@@ -62,9 +62,9 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
             )
 
         job_template: Dict[str, Any] = {
-            "specificationVersion": "jobtemplate-2023-09",
+            "specificationVersion": "2022-09-01",
             "name": settings.name,
-            "parameterDefinitions": [
+            "parameters": [
                 {
                     "name": "DataDir",
                     "type": "PATH",
@@ -95,7 +95,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         job_template["steps"] = [step]
         if settings.use_array_parameter:
             job_array_parameter_name = f"{settings.array_parameter_name}Values"
-            job_template["parameterDefinitions"].append(
+            job_template["parameters"].append(
                 {
                     "name": job_array_parameter_name,
                     "type": "STRING",
@@ -103,7 +103,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
                 }
             )
             step["parameterSpace"] = {
-                "taskParameterDefinitions": [
+                "parameters": [
                     {
                         "name": settings.array_parameter_name,
                         "type": "INT",
