@@ -35,7 +35,7 @@ __cached_queue_id_for_queue_session = None
 class AwsCredentialsType(Enum):
     NOT_VALID = 0
     HOST_PROVIDED = 2
-    CLOUD_COMPANION_LOGIN = 3
+    DEADLINE_CLOUD_MONITOR_LOGIN = 3
 
 
 class AwsCredentialsStatus(Enum):
@@ -118,7 +118,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
 
 def get_credentials_type(config: Optional[ConfigParser] = None) -> AwsCredentialsType:
     """
-    Returns CLOUD_COMPANION_LOGIN if Cloud Companion wrote the credentials, HOST_PROVIDED otherwise.
+    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud Monitor wrote the credentials, HOST_PROVIDED otherwise.
 
     Args:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
@@ -131,7 +131,7 @@ def get_credentials_type(config: Optional[ConfigParser] = None) -> AwsCredential
         return AwsCredentialsType.NOT_VALID
     if "studio_id" in profile_config:
         # CTDX adds some Nimble-specific keys here which we can use to know that this came from CTDX
-        return AwsCredentialsType.CLOUD_COMPANION_LOGIN
+        return AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
     else:
         return AwsCredentialsType.HOST_PROVIDED
 
@@ -140,7 +140,7 @@ def get_user_and_identity_store_id(
     config: Optional[ConfigParser] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
-    If logged in with Nimble Studio Cloud Companion, returns a tuple
+    If logged in with Nimble Studio Deadline Cloud Monitor, returns a tuple
     (user_id, identity_store_id), otherwise returns None.
     """
     session = get_boto3_session(config=config)
@@ -156,7 +156,7 @@ def get_studio_id(
     config: Optional[ConfigParser] = None,
 ) -> Optional[str]:
     """
-    If logged in with Nimble Studio Cloud Companion, returns Studio Id, otherwise returns None.
+    If logged in with Nimble Studio Deadline Cloud Monitor, returns Studio Id, otherwise returns None.
     """
     session = get_boto3_session(config=config)
     profile_config = session._session.get_scoped_config()
@@ -279,7 +279,7 @@ def check_credentials_status(config: Optional[ConfigParser] = None) -> AwsCreden
     Returns AwsCredentialsStatus enum value:
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
-      - NEEDS_LOGIN if a Cloud Companion login is required.
+      - NEEDS_LOGIN if a Deadline Cloud Monitor login is required.
     """
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
@@ -287,10 +287,10 @@ def check_credentials_status(config: Optional[ConfigParser] = None) -> AwsCreden
             get_boto3_session(config=config).client("sts").get_caller_identity()
             return AwsCredentialsStatus.AUTHENTICATED
         except Exception:
-            # We assume that the presence of a CloudCompanion profile
+            # We assume that the presence of a Deadline Cloud Monitor profile
             # means we will know everything necessary to start it and login.
 
-            if get_credentials_type(config) == AwsCredentialsType.CLOUD_COMPANION_LOGIN:
+            if get_credentials_type(config) == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
                 return AwsCredentialsStatus.NEEDS_LOGIN
             return AwsCredentialsStatus.CONFIGURATION_ERROR
 

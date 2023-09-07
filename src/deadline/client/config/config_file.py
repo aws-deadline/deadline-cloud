@@ -47,9 +47,9 @@ __config_mtime = None
 #             section [profile-{profileName} default]
 # "section_format" - How its value gets formatted into config file sections.
 SETTINGS: Dict[str, Dict[str, Any]] = {
-    "cloud-companion.path": {
+    "deadline-cloud-monitor.path": {
         "default": "",
-        "description": "The filesystem path to Cloud Companion, set during login process.",
+        "description": "The filesystem path to Deadline Cloud Monitor, set during login process.",
     },
     "defaults.aws_profile_name": {
         "default": "",
