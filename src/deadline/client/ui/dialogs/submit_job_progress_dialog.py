@@ -12,6 +12,8 @@ import os
 import threading
 from typing import Any, Dict, List, Optional, Set
 
+from deadline.client.config import config_file
+
 from botocore.client import BaseClient  # type: ignore[import]
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtGui import QCloseEvent
@@ -456,6 +458,9 @@ class SubmitJobProgressDialog(QDialog):
         """
         if attachment_settings:
             self._create_job_args["attachments"] = attachment_settings
+            self._create_job_args["attachments"]["assetLoadingMethod"] = config_file.get_setting(
+                "defaults.job_attachments_file_system"
+            )
 
         api.get_telemetry_client().record_upload_summary(upload_summary, from_gui=True)
         self.summary_edit.setText(

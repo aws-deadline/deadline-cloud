@@ -194,7 +194,9 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
         result = runner.invoke(deadline_cli.cli, params)
 
         expected_loading_method = (
-            loading_method if loading_method is not None else AssetLoadingMethod.PRELOAD
+            loading_method
+            if loading_method is not None
+            else config.get_setting("defaults.job_attachments_file_system")
         )
 
         get_boto3_client_mock().create_job.assert_called_with(

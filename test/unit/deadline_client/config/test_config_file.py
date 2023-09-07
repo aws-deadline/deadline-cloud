@@ -26,6 +26,7 @@ CONFIG_SETTING_ROUND_TRIP = [
         "https://some-other-url",
     ),
     ("defaults.farm_id", "", "farm-82934h23k4j23kjh"),
+    ("defaults.job_attachments_file_system", "PRELOAD", "ON_DEMAND"),
 ]
 
 
