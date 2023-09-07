@@ -38,10 +38,10 @@ class JobTemplateParametersWidget(QWidget):
     Widget that takes the set of parameters from a job template, and generated
     a UI form to edit them with.
 
-    OpenJobIO has optional UI metadata for each parameter specified under "userInterface".
+    Open Job Description has optional UI metadata for each parameter specified under "userInterface".
 
     Args:
-        initial_job_parameters (Dict[str, Any]): OpenJobIO parameters block.
+        initial_job_parameters (Dict[str, Any]): Open Job Description parameters block.
         parent: The parent Qt Widget.
     """
 
@@ -80,7 +80,7 @@ class JobTemplateParametersWidget(QWidget):
                 if "userInterface" in parameter:
                     control_type_name = parameter["userInterface"].get("control", "")
 
-                # If not explicitly provided, determine the default control type name based on the OJIO specification
+                # If not explicitly provided, determine the default control type name based on the OPENJD specification
                 if not control_type_name:
                     if parameter.get("allowedValues"):
                         control_type_name = "DROPDOWN_LIST"
@@ -189,46 +189,46 @@ class _JobTemplateWidget(QWidget):
         self.job_template_parameter = parameter
 
         # Validate that the template parameter has the right type and fields
-        if parameter["type"] not in self.OJIO_TYPES:
-            if len(self.OJIO_TYPES) == 1:
+        if parameter["type"] not in self.OPENJD_TYPES:
+            if len(self.OPENJD_TYPES) == 1:
                 raise RuntimeError(
                     f"Job Template parameter {parameter['name']} with control "
-                    + f"{self.OJIO_CONTROL_TYPE} has type {parameter['type']} but "
-                    + f"must have type {self.OJIO_TYPES[0]}."
+                    + f"{self.OPENJD_CONTROL_TYPE} has type {parameter['type']} but "
+                    + f"must have type {self.OPENJD_TYPES[0]}."
                 )
             else:
                 raise RuntimeError(
                     f"Job Template parameter {parameter['name']} with control "
-                    + f"{self.OJIO_CONTROL_TYPE} has type {parameter['type']} but "
-                    + f"must have one of type: {[v[0] for v in self.OJIO_TYPES]}"
+                    + f"{self.OPENJD_CONTROL_TYPE} has type {parameter['type']} but "
+                    + f"must have one of type: {[v[0] for v in self.OPENJD_TYPES]}"
                 )
 
-        for field in self.OJIO_REQUIRED_PARAMETER_FIELDS:
+        for field in self.OPENJD_REQUIRED_PARAMETER_FIELDS:
             if field not in parameter:
                 raise RuntimeError(
                     f"Job Template parameter {parameter['name']} with control "
-                    + f"{self.OJIO_CONTROL_TYPE} is missing required field '{field}'."
+                    + f"{self.OPENJD_CONTROL_TYPE} is missing required field '{field}'."
                 )
-        for field in self.OJIO_DISALLOWED_PARAMETER_FIELDS:
+        for field in self.OPENJD_DISALLOWED_PARAMETER_FIELDS:
             if field in parameter:
                 raise RuntimeError(
                     f"Job Template parameter {parameter['name']} with control "
-                    + f"{self.OJIO_CONTROL_TYPE} must not provide field '{field}'."
+                    + f"{self.OPENJD_CONTROL_TYPE} must not provide field '{field}'."
                 )
 
         self._build_ui(parameter)
 
         # Set the initial value to the first of the value, default or a type default
-        value = parameter.get("value", parameter.get("default", self.OJIO_DEFAULT_VALUE))
+        value = parameter.get("value", parameter.get("default", self.OPENJD_DEFAULT_VALUE))
         self.set_value(value)
 
 
 class _JobTemplateLineEditWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.LINE_EDIT
-    OJIO_TYPES: List[str] = ["STRING"]
-    OJIO_DEFAULT_VALUE: str = ""
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.LINE_EDIT
+    OPENJD_TYPES: List[str] = ["STRING"]
+    OPENJD_DEFAULT_VALUE: str = ""
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
         # Create the edit widget
@@ -268,11 +268,11 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
 
 
 class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.MULTILINE_EDIT
-    OJIO_TYPES: List[str] = ["STRING"]
-    OJIO_DEFAULT_VALUE: str = ""
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.MULTILINE_EDIT
+    OPENJD_TYPES: List[str] = ["STRING"]
+    OPENJD_DEFAULT_VALUE: str = ""
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
     IS_VERTICAL_EXPANDING: bool = True
 
     def _build_ui(self, parameter):
@@ -314,11 +314,11 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.INT_SPIN_BOX
-    OJIO_TYPES: List[str] = ["INT"]
-    OJIO_DEFAULT_VALUE: int = 0
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.INT_SPIN_BOX
+    OPENJD_TYPES: List[str] = ["INT"]
+    OPENJD_DEFAULT_VALUE: int = 0
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
         # Create the edit widget
@@ -385,11 +385,11 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
 
 
 class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.FLOAT_SPIN_BOX
-    OJIO_TYPES: List[str] = ["FLOAT"]
-    OJIO_DEFAULT_VALUE: float = 0.0
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.FLOAT_SPIN_BOX
+    OPENJD_TYPES: List[str] = ["FLOAT"]
+    OPENJD_DEFAULT_VALUE: float = 0.0
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
         # Create the edit widget
@@ -463,15 +463,15 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
 
 
 class _JobTemplateDropdownListWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.DROPDOWN_LIST
-    OJIO_TYPES: List[str] = [
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.DROPDOWN_LIST
+    OPENJD_TYPES: List[str] = [
         "STRING",
         "INT",
         "FLOAT",
         "PATH",
     ]
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["minValue", "maxValue", "allowedPattern"]
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["minValue", "maxValue", "allowedPattern"]
 
     def _build_ui(self, parameter):
         # Create the edit widget
@@ -489,7 +489,7 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
             self.edit_control.addItem(str(value), value)
 
         # Default to the first item in the list
-        self.OJIO_DEFAULT_VALUE = parameter["allowedValues"][0]
+        self.OPENJD_DEFAULT_VALUE = parameter["allowedValues"][0]
 
         # Add the decription as a tooltip if provided
         if "description" in parameter:
@@ -509,10 +509,10 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
 
 
 class _JobTemplateBaseFileWidget(_JobTemplateWidget):
-    OJIO_TYPES: List[str] = ["PATH"]
-    OJIO_DEFAULT_VALUE: str = ""
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_TYPES: List[str] = ["PATH"]
+    OPENJD_DEFAULT_VALUE: str = ""
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
         # Get the filters
@@ -566,21 +566,21 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
 
 
 class _JobTemplateInputFileWidget(_JobTemplateBaseFileWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.CHOOSE_INPUT_FILE
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_INPUT_FILE
     FILE_PICKER_WIDGET = InputFilePickerWidget
 
 
 class _JobTemplateOutputFileWidget(_JobTemplateBaseFileWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.CHOOSE_OUTPUT_FILE
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_OUTPUT_FILE
     FILE_PICKER_WIDGET = OutputFilePickerWidget
 
 
 class _JobTemplateDirectoryWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.CHOOSE_DIRECTORY
-    OJIO_TYPES: List[str] = ["PATH"]
-    OJIO_DEFAULT_VALUE: str = ""
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = []
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_DIRECTORY
+    OPENJD_TYPES: List[str] = ["PATH"]
+    OPENJD_DEFAULT_VALUE: str = ""
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
         # Create the edit widget
@@ -616,11 +616,11 @@ ALLOWED_VALUES_FOR_CHECK_BOX = (["TRUE", "FALSE"], ["YES", "NO"], ["ON", "OFF"],
 
 
 class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX
-    OJIO_TYPES: List[str] = ["STRING"]
-    OJIO_DEFAULT_VALUE: str = "false"
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = [
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX
+    OPENJD_TYPES: List[str] = ["STRING"]
+    OPENJD_DEFAULT_VALUE: str = "false"
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = [
         "maxValue",
         "minValue",
     ]
@@ -675,16 +675,16 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
 
 
 class _JobTemplateHiddenWidget(_JobTemplateWidget):
-    OJIO_CONTROL_TYPE: ControlType = ControlType.HIDDEN
-    OJIO_TYPES: List[str] = [
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.HIDDEN
+    OPENJD_TYPES: List[str] = [
         "PATH",
         "INT",
         "FLOAT",
         "STRING",
     ]
-    OJIO_DEFAULT_VALUE: str = ""  # All hidden fields require a default value to be provided
-    OJIO_REQUIRED_PARAMETER_FIELDS: List[str] = ["default"]
-    OJIO_DISALLOWED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DEFAULT_VALUE: str = ""  # All hidden fields require a default value to be provided
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["default"]
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = []
 
     def __init__(self, parent: QWidget, parameter: Dict[str, Any]):
         super().__init__(parent, parameter)

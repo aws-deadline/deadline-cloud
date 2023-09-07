@@ -56,7 +56,7 @@ signal.signal(signal.SIGINT, _handle_sigint)
 @handle_error
 def cli_bundle():
     """
-    Commands to work with OpenJobIO job bundles.
+    Commands to work with Open Job Description job bundles.
     """
 
 
@@ -101,7 +101,7 @@ def validate_parameters(ctx, param, value):
 @handle_error
 def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
     """
-    Submits an OpenJobIO job bundle to Amazon Deadline Cloud.
+    Submits an Open Job Description job bundle to Amazon Deadline Cloud.
     """
     # Check Whether the CLI options are modifying any of the default settings that affect
     # the job id. If not, we'll save the job id submitted as the default job id.
@@ -267,7 +267,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 @handle_error
 def bundle_gui_submit(job_bundle_dir, **args):
     """
-    Opens GUI to submit an OpenJobIO job bundle to Amazon Deadline Cloud.
+    Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
     """
     from ...ui import gui_context_for_cli
 
