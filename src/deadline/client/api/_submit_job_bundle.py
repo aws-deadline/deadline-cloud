@@ -271,7 +271,9 @@ def _hash_attachments(
         hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
         on_preparing_to_submit=hashing_progress_callback,
     )
-    api.get_telemetry_client(config=config).record_hashing_summary(hashing_summary)
+    api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
+        hashing_summary
+    )
 
     return manifests
 
@@ -296,6 +298,8 @@ def _upload_attachments(
     upload_summary, attachment_settings = asset_manager.upload_assets(
         manifests, upload_progress_callback
     )
-    api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
+    api.get_deadline_cloud_library_telemetry_client(config=config).record_upload_summary(
+        upload_summary
+    )
 
     return attachment_settings.to_dict()
