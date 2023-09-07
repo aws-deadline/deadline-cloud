@@ -1,4 +1,4 @@
-specificationVersion: 'jobtemplate-2023-09'
+specificationVersion: '2022-09-01'
 name: Blender scene submission
 parameters:
   - name: Frames

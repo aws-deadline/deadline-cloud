@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests the deadline.client.api functions for submitting Open Job Description job bundles,
+Tests the deadline.client.api functions for submitting OpenJobIO job bundles,
 where there are PATH parameters that carry assetReference IN/OUT metadata.
 """
 
@@ -27,9 +27,9 @@ from .test_job_bundle_submission import (
 JOB_BUNDLE_RELATIVE_FILE_PATH = "./file/inside/job_bundle.txt"
 JOB_BUNDLE_RELATIVE_DIR_PATH = "./dir/inside/job_bundle"
 JOB_TEMPLATE_ALL_ASSET_REF_VARIANTS = f"""
-specificationVersion: 'jobtemplate-2023-09'
+specificationVersion: '2022-09-01'
 name: Job Template to test all assetReference variants.
-parameterDefinitions:
+parameters:
 - name: FileNoneDefault
   type: PATH
   objectType: FILE

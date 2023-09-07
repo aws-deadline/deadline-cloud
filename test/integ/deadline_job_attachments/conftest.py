@@ -13,14 +13,12 @@ def default_job_template() -> str:
     return json.dumps(
         {
             "name": "custom-job",
-            "specificationVersion": "jobtemplate-2023-09",
+            "specificationVersion": "2022-09-01",
             "steps": [
                 {
                     "name": "custom-step",
                     "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {"name": "frame", "type": "INT", "range": ["0", "1"]}
-                        ]
+                        "parameters": [{"name": "frame", "type": "INT", "range": ["0", "1"]}]
                     },
                     "script": {
                         "actions": {"onRun": {"command": "{{ Task.File.run }}"}},
@@ -37,9 +35,7 @@ def default_job_template() -> str:
                 {
                     "name": "custom-step-2",
                     "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {"name": "frame", "type": "INT", "range": ["0"]}
-                        ]
+                        "parameters": [{"name": "frame", "type": "INT", "range": ["0"]}]
                     },
                     "script": {
                         "actions": {"onRun": {"command": "{{ Task.File.run }}"}},
@@ -66,14 +62,12 @@ def default_job_template_one_task_one_step() -> str:
     return json.dumps(
         {
             "name": "custom-job",
-            "specificationVersion": "jobtemplate-2023-09",
+            "specificationVersion": "2022-09-01",
             "steps": [
                 {
                     "name": "custom-step",
                     "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {"name": "frame", "type": "INT", "range": ["0"]}
-                        ]
+                        "parameters": [{"name": "frame", "type": "INT", "range": ["0"]}]
                     },
                     "script": {
                         "actions": {"onRun": {"command": "{{ Task.File.run }}"}},
