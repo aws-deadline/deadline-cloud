@@ -88,7 +88,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     Confirm that the CLI interface prints out all the configuration
     file data, when the configuration is default
     """
-    config.set_setting("cloud-companion.path", "/User/auser/bin/CloudCompanion")
+    config.set_setting("deadline-cloud-monitor.path", "/User/auser/bin/DeadlineCloudMonitor")
     config.set_setting("defaults.aws_profile_name", "EnvVarOverrideProfile")
     config.set_setting("settings.job_history_dir", "~/alternate/job_history")
     config.set_setting("settings.deadline_endpoint_url", "https://some-url-value")

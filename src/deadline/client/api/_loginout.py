@@ -28,17 +28,17 @@ class UnsupportedProfileTypeForLoginLogout(Exception):
     pass
 
 
-def _login_cloud_companion(
+def _login_deadline_cloud_monitor(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
     config: Optional[ConfigParser] = None,
 ):
-    # Cloud Companion writes the absolute path to itself to the config file
-    cloud_companion_path = get_setting("cloud-companion.path", config=config)
+    # Deadline Cloud Monitor writes the absolute path to itself to the config file
+    deadline_cloud_monitor_path = get_setting("deadline-cloud-monitor.path", config=config)
     profile_name = get_setting("defaults.aws_profile_name", config=config)
-    args = [cloud_companion_path, "login", "--profile", profile_name]
+    args = [deadline_cloud_monitor_path, "login", "--profile", profile_name]
 
-    # Open CloudCompanion, non-blocking the user will keep CloudCompanion running in the background.
+    # Open Deadline Cloud Monitor, non-blocking the user will keep Deadline Cloud Monitor running in the background.
     try:
         # We don't hookup to stdin but do this to avoid issues on windows
         # See https://docs.python.org/3/library/subprocess.html#subprocess.STARTUPINFO.lpAttributeList
@@ -48,26 +48,28 @@ def _login_cloud_companion(
         )
     except FileNotFoundError:
         raise Exception(
-            f"Could not find Cloud Companion at {cloud_companion_path}. Please ensure Cloud Companion is installed correctly and setup the {profile_name} profile again."
+            f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
         )
     if on_pending_authorization:
-        on_pending_authorization(credential_type=AwsCredentialsType.CLOUD_COMPANION_LOGIN)
+        on_pending_authorization(credential_type=AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN)
     # And wait for the user to complete login
     while True:
-        # Cloud Companion is a GUI app that will keep on running
+        # Deadline Cloud Monitor is a GUI app that will keep on running
         # So we sit here and test that profile for validity until it works
         if check_credentials_status(config) == AwsCredentialsStatus.AUTHENTICATED:
-            return f"Cloud Companion Profile: {profile_name}"
+            return f"Deadline Cloud Monitor Profile: {profile_name}"
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
                 p.kill()
                 raise Exception()
         if p.poll():
-            # Cloud Companion has stopped, we assume it returned us an error on one line on stderr
-            # but let's be specific about Cloud Companion failing incase the error is non-obvious
+            # Deadline Cloud Monitor has stopped, we assume it returned us an error on one line on stderr
+            # but let's be specific about Deadline Cloud Monitor failing incase the error is non-obvious
             # and let's tack on stdout incase it helps
-            err_prefix = f"Cloud Companion was not able to log into the {profile_name} profile: "
+            err_prefix = (
+                f"Deadline Cloud Monitor was not able to log into the {profile_name} profile: "
+            )
             out = p.stdout.read().decode("utf-8") if p.stdout else ""
             raise Exception(f"{err_prefix}: {out}")
 
@@ -82,58 +84,60 @@ def login(
     """
     Logs in to the provided session if supported.
 
-    This method supports Nimble Cloud Companion
+    This method supports Deadline Cloud Monitor
     If Amazon Deadline Cloud doesn't know how to login to the the requested session Profile UnsupportedProfileTypeForLoginLogout is thrown
 
      Args:
         on_pending_authorization (Callable): A callback that receives method-specific information to continue login.
             All methods: 'credential_type' parameter of type AwsCredentialsType
-            For Cloud Companion: No additional parameters
+            For Deadline Cloud Monitor: No additional parameters
         on_cancellation_check (Callable): A callback that allows the operation to cancel before login completes
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
     """
     credentials_type = get_credentials_type(config)
-    if credentials_type == AwsCredentialsType.CLOUD_COMPANION_LOGIN:
-        return _login_cloud_companion(on_pending_authorization, on_cancellation_check, config)
+    if credentials_type == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+        return _login_deadline_cloud_monitor(
+            on_pending_authorization, on_cancellation_check, config
+        )
     raise UnsupportedProfileTypeForLoginLogout(
-        "This action is only valid for Nimble Cloud Companion Profiles"
+        "This action is only valid for Deadline Cloud Monitor Profiles"
     )
 
 
 def logout(config: Optional[ConfigParser] = None) -> str:
     """
     Logs out of supported credential providers
-    For Nimble Cloud Companion, closes any running instance of Cloud Companion for the current profile
+    For Deadline Cloud Monitor, closes any running instance of Deadline Cloud Monitor for the current profile
 
      Args:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
     """
     credentials_type = get_credentials_type(config)
-    if credentials_type == AwsCredentialsType.CLOUD_COMPANION_LOGIN:
-        # Cloud Companion writes the absolute path to itself to the config file
-        cloud_companion_path = get_setting("cloud-companion.path", config=config)
+    if credentials_type == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+        # Deadline Cloud Monitor writes the absolute path to itself to the config file
+        deadline_cloud_monitor_path = get_setting("deadline-cloud-monitor.path", config=config)
         profile_name = get_setting("defaults.aws_profile_name", config=config)
-        args = [cloud_companion_path, "logout", "--profile", profile_name]
+        args = [deadline_cloud_monitor_path, "logout", "--profile", profile_name]
 
-        # Open CloudCompanion, blocking
-        # Unlike login, that opens the regular Cloud Companion GUI, logout is a CLI command that clears the profile
+        # Open Deadline Cloud Monitor, blocking
+        # Unlike login, that opens the regular Deadline Cloud Monitor GUI, logout is a CLI command that clears the profile
         # This makes it easier as we can execute and look at the return cdoe
         try:
             output = subprocess.check_output(args)
         except FileNotFoundError:
             raise Exception(
-                f"Could not find Cloud Companion at {cloud_companion_path}. Please ensure Cloud Companion is installed correctly and setup the {profile_name} profile again."
+                f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
             )
         except subprocess.CalledProcessError as e:
             raise Exception(
-                f"Cloud Companion was unable to logout the profile {profile_name}. Return code {e.returncode}: {e.output}"
+                f"Deadline Cloud Monitor was unable to logout the profile {profile_name}. Return code {e.returncode}: {e.output}"
             )
 
         # Force a refresh of the cached boto3 Session
         invalidate_boto3_session_cache()
         return output.decode("utf8")
     raise UnsupportedProfileTypeForLoginLogout(
-        "This action is only valid for Nimble Cloud Companion Profiles"
+        "This action is only valid for Deadline Cloud Monitor Profiles"
     )

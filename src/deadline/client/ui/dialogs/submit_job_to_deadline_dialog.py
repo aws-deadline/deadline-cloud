@@ -87,12 +87,12 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def refresh_deadline_settings(self):
         # Enable/disable the Login and Logout buttons based on whether
-        # the configured profile is for Cloud Companion
+        # the configured profile is for Deadline Cloud Monitor
         self.login_button.setEnabled(
-            self.creds_status_box.creds_type == api.AwsCredentialsType.CLOUD_COMPANION_LOGIN
+            self.creds_status_box.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
         )
         self.logout_button.setEnabled(
-            self.creds_status_box.creds_type == api.AwsCredentialsType.CLOUD_COMPANION_LOGIN
+            self.creds_status_box.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
         )
         # Enable/disable the Submit button based on whether the
         # Amazon Deadline Cloud API is accessible and the farm+queue are configured.

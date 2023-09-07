@@ -105,9 +105,9 @@ class DeadlineLoginDialog(QMessageBox):
         try:
 
             def on_pending_authorization(**kwargs):
-                if kwargs["credential_type"] == AwsCredentialsType.CLOUD_COMPANION_LOGIN:
+                if kwargs["credential_type"] == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
                     self.login_thread_message.emit(
-                        "Opening Cloud Companion. Please login before returning here."
+                        "Opening Deadline Cloud Monitor. Please login before returning here."
                     )
 
             def on_cancellation_check():
