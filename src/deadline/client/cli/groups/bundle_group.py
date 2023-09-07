@@ -88,9 +88,8 @@ def validate_parameters(ctx, param, value):
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
 @click.option(
     "--asset-loading-method",
-    help="The method to use for loading assets on the server.  Options are PRELOAD (load assets onto server first then run the job) or ON_DEMAND (load assets as requested).",
+    help="The method to use for loading assets on the server (Overrides the default set in config file).  Options are PRELOAD (load assets onto server first then run the job) or ON_DEMAND (load assets as requested).",
     type=click.Choice([e.value for e in AssetLoadingMethod]),
-    default=AssetLoadingMethod.PRELOAD.value,
 )
 @click.option(
     "--yes",
@@ -116,6 +115,10 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         deadline = get_boto3_client("deadline", config=config)
         farm_id = get_setting("defaults.farm_id", config=config)
         queue_id = get_setting("defaults.queue_id", config=config)
+        if asset_loading_method is None:
+            asset_loading_method = get_setting(
+                "defaults.job_attachments_file_system", config=config
+            )
 
         queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
         click.echo(f"Submitting to Queue: {queue['displayName']}")
