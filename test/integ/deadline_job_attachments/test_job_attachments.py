@@ -2,22 +2,24 @@
 
 """Integration tests for Job Attachments."""
 import logging
+import os
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock
+
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
+import boto3
 import pytest
-from deadline_test_scaffolding.job_attachment_manager import JobAttachmentManager
-from botocore.exceptions import ClientError
+from deadline_test_fixtures.job_attachment_manager import JobAttachmentManager
 from pytest import LogCaptureFixture, TempPathFactory
 
 from deadline.job_attachments import asset_sync, download, upload
 from deadline.job_attachments.asset_manifests import ManifestVersion
 from deadline.job_attachments.aws.deadline import get_queue
-from deadline.job_attachments.errors import AssetSyncError
+from deadline.job_attachments.errors import AssetSyncError, JobAttachmentsS3ClientError
 from deadline.job_attachments.models import ManifestProperties, Attachments
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments.utils import (
@@ -61,26 +63,23 @@ class JobAttachmentTest:
         """
         self.job_attachment_resources = deploy_job_attachment_resources
 
-        if self.job_attachment_resources.deadline_manager.queue_id is None:
-            raise TypeError("The Queue was not properly created when initalizing resources.")
-
-        self.queue_id = self.job_attachment_resources.deadline_manager.queue_id
-        self.queue_with_no_settings = (
-            self.job_attachment_resources.deadline_manager.create_additional_queue(
-                displayName="no-settings-queue"
-            )["queueId"]
-        )
-
-        if self.job_attachment_resources.deadline_manager.farm_id is None:
+        if self.job_attachment_resources.farm is None:
             raise TypeError("The Farm was not properly created when initalizing resources.")
+        if (
+            self.job_attachment_resources.queue is None
+            or self.job_attachment_resources.queue_with_no_settings is None
+        ):
+            raise TypeError("The Queues were not properly created when initalizing resources.")
 
-        self.farm_id = self.job_attachment_resources.deadline_manager.farm_id
+        self.farm_id = self.job_attachment_resources.farm.id
+        self.queue_id = self.job_attachment_resources.queue.id
+        self.queue_with_no_settings = self.job_attachment_resources.queue_with_no_settings.id
 
-        self.bucket = self.job_attachment_resources.bucket
-        self.deadline_client = self.job_attachment_resources.deadline_manager.deadline_client
-        self.deadline_endpoint = self.job_attachment_resources.deadline_manager.deadline_endpoint
+        self.bucket = boto3.resource("s3").Bucket(self.job_attachment_resources.bucket_name)
+        self.deadline_client = self.job_attachment_resources.deadline_client
+        self.deadline_endpoint = os.getenv("DEADLINE_ENDPOINT")
         self.hash_cache_dir = tmp_path_factory.mktemp("hash_cache")
-        self.session = self.job_attachment_resources.deadline_manager.session
+        self.session = boto3.Session()
 
         self.manifest_version = manifest_version
 
@@ -519,7 +518,7 @@ def test_sync_outputs_no_job_attachment_settings_in_job(
     # IF
     caplog.set_level(logging.INFO)
 
-    waiter = job_attachment_test.deadline_client.get_waiter("job_created")
+    waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
     waiter.wait(
         jobId=sync_inputs_no_job_attachment_settings_in_job.job_id,
         queueId=job_attachment_test.queue_id,
@@ -578,7 +577,7 @@ def test_sync_outputs_no_job_attachment_s3_settings(
     # IF
     caplog.set_level(logging.INFO)
 
-    waiter = job_attachment_test.deadline_client.get_waiter("job_created")
+    waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
     waiter.wait(
         jobId=sync_inputs_no_job_attachment_s3_settings.job_id,
         queueId=job_attachment_test.queue_with_no_settings,
@@ -656,7 +655,7 @@ def sync_outputs(
     if job_attachment_settings is None:
         raise Exception("Job attachment settings must be set for this test.")
 
-    waiter = job_attachment_test.deadline_client.get_waiter("job_created")
+    waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
     waiter.wait(
         jobId=sync_inputs.job_id,
         queueId=job_attachment_test.queue_id,
@@ -1105,7 +1104,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     manifest_hash = hash_data(bytes(manifests[0].asset_manifest.encode(), "utf-8"))
 
     assert len(attachments.manifests) == 1
-    assert attachments.manifests[0].fileSystemLocationName == ""
+    assert attachments.manifests[0].fileSystemLocationName is None
     assert attachments.manifests[0].rootPath == str(job_attachment_test.INPUT_PATH)
     assert attachments.manifests[0].osType == OperatingSystemFamily.get_os_family(
         mock_submission_profile_name
@@ -1113,7 +1112,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     assert attachments.manifests[0].outputRelativeDirectories == []
     assert attachments.manifests[0].inputManifestPath is not None
     assert attachments.manifests[0].inputManifestPath.startswith(
-        f"{job_attachment_test.ROOT_PREFIX}/Manifests/{job_attachment_test.farm_id}/{job_attachment_test.queue_id}/Inputs/"
+        f"{job_attachment_test.farm_id}/{job_attachment_test.queue_id}/Inputs/"
     )
     assert attachments.manifests[0].inputManifestPath.endswith(f"/{asset_root_hash}_input.xxh128")
     assert attachments.manifests[0].inputManifestHash == manifest_hash
@@ -1190,7 +1189,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
 
     # WHEN
     with pytest.raises(
-        AssetSyncError, match=f"Access Denied when accessing the S3 bucket {external_bucket}"
+        AssetSyncError, match=f"Error checking if object exists in bucket '{external_bucket}'"
     ):
         (_, manifests) = asset_manager.hash_assets_and_create_manifest(
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
@@ -1235,7 +1234,10 @@ def test_sync_inputs_bucket_wrong_account(
         return True
 
     # WHEN
-    with pytest.raises(ClientError) as excinfo:
+    with pytest.raises(
+        JobAttachmentsS3ClientError,
+        match=f"Error downloading binary file in bucket '{external_bucket}'",
+    ):
         syncer.sync_inputs(
             job_attachment_settings,
             upload_input_files_one_asset_in_cas.attachments,
@@ -1244,8 +1246,6 @@ def test_sync_inputs_bucket_wrong_account(
             session_dir,
             on_downloading_files=on_downloading_files,
         )
-
-    assert excinfo.value.response["ResponseMetadata"]["HTTPStatusCode"] == 403
 
 
 @pytest.mark.integ
@@ -1263,7 +1263,7 @@ def test_sync_outputs_bucket_wrong_account(
         rootPrefix=job_attachment_test.ROOT_PREFIX,
     )
 
-    waiter = job_attachment_test.deadline_client.get_waiter("job_created")
+    waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
     waiter.wait(
         jobId=sync_inputs.job_id,
         queueId=job_attachment_test.queue_id,
@@ -1317,7 +1317,7 @@ def test_sync_outputs_bucket_wrong_account(
 
     # WHEN
     with pytest.raises(
-        AssetSyncError, match=f"Access Denied when accessing the S3 bucket {external_bucket}"
+        AssetSyncError, match=f"Error checking if object exists in bucket '{external_bucket}'"
     ):
         sync_inputs.asset_syncer.sync_outputs(
             s3_settings=job_attachment_settings,
@@ -1351,7 +1351,10 @@ def test_download_outputs_bucket_wrong_account(
     )
 
     # WHEN
-    with pytest.raises(ClientError) as excinfo:
+    with pytest.raises(
+        JobAttachmentsS3ClientError,
+        match=f"Error listing bucket contents in bucket '{external_bucket}'",
+    ):
         job_output_downloader = download.OutputDownloader(
             s3_settings=job_attachment_settings,
             farm_id=job_attachment_test.farm_id,
@@ -1361,5 +1364,3 @@ def test_download_outputs_bucket_wrong_account(
             task_id=sync_outputs.step0_task0_id,
         )
         job_output_downloader.download_job_output()
-
-    assert excinfo.value.response["ResponseMetadata"]["HTTPStatusCode"] == 403
