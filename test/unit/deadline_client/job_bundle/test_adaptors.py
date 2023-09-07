@@ -12,9 +12,11 @@ FAKE_ENVIRONMENT = {"fake": "environment"}
 STEP = {
     "name": "MyStep",
     "parameterSpace": {
-        "parameters": [{"name": "Frame", "range": "{{ Param.Frames }}", "type": "INT"}]
+        "taskParameterDefinitions": [
+            {"name": "Frame", "range": "{{ Param.Frames }}", "type": "INT"}
+        ]
     },
-    "environments": [FAKE_ENVIRONMENT],
+    "jobEnvironments": [FAKE_ENVIRONMENT],
     "script": {
         "embeddedFiles": [
             {"name": "runData", "type": "TEXT", "data": "frame: {{ Task.Param.Frame }}"},

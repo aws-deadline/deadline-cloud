@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests the deadline.client.api functions for submitting OpenJobIO job bundles.
+Tests the deadline.client.api functions for submitting Open Job Description job bundles.
 """
 
 import json
@@ -60,9 +60,9 @@ MOCK_JOB_TEMPLATE_CASES = {
         "JSON",
         """
 {
- "specificationVersion": "2022-09-01",
+ "specificationVersion": "jobtemplate-2023-09",
  "name": "CLI Job",
- "parameters": [
+ "parameterDefinitions": [
   {
     "name": "priority",
     "type": "INT",
@@ -100,9 +100,9 @@ MOCK_JOB_TEMPLATE_CASES = {
     "MINIMAL_YAML": (
         "YAML",
         """
-specificationVersion: '2022-09-01'
+specificationVersion: 'jobtemplate-2023-09'
 name: CLI Job
-parameters:
+parameterDefinitions:
 - name: priority
   type: INT
   default: 10
