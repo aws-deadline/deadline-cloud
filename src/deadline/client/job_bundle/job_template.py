@@ -6,7 +6,7 @@ import enum
 
 class ControlType(enum.Enum):
     """
-    Defines all the valid GUI control types that are supported in an OpenJobIO
+    Defines all the valid GUI control types that are supported in an Open Job Description
     job template parameter's "userInterface" property.
     """
 
