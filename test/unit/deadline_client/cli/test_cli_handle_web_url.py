@@ -11,7 +11,7 @@ from unittest.mock import ANY, MagicMock, call, patch
 import pytest
 from click.testing import CliRunner
 
-from deadline.client import api, config
+from deadline.client import api
 from deadline.client.cli import main
 from deadline.client.cli._deadline_web_url import (
     parse_query_string,
@@ -242,49 +242,51 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
     """
-    config.set_setting("settings.deadline_endpoint_url", "fake-url-endpoint")
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "fake-endpoint-url"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ):
-        mock_download = MagicMock()
-        MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+        with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+            job_group, "OutputDownloader"
+        ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
+            api, "get_queue_user_boto3_session"
+        ):
+            mock_download = MagicMock()
+            MockOutputDownloader.return_value.download_job_output = mock_download
+            mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
-        boto3_client_mock().get_job.return_value = {
-            "name": "Mock Job",
-            "attachments": {
-                "manifests": [
-                    {
-                        "rootPath": "/root/path",
-                        "rootPathFormat": PathFormat(mock_host_path_format_name),
-                        "outputRelativeDirectories": ["."],
-                    }
-                ],
-            },
-        }
-        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+            boto3_client_mock().get_job.return_value = {
+                "name": "Mock Job",
+                "attachments": {
+                    "manifests": [
+                        {
+                            "rootPath": "/root/path",
+                            "rootPathFormat": PathFormat(mock_host_path_format_name),
+                            "outputRelativeDirectories": ["."],
+                        }
+                    ],
+                },
+            }
+            boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
 
-        web_url = f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
+            web_url = f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
 
-        runner = CliRunner()
-        result = runner.invoke(main, ["handle-web-url", web_url])
+            runner = CliRunner()
+            result = runner.invoke(main, ["handle-web-url", web_url])
 
-        MockOutputDownloader.assert_called_once_with(
-            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
-            farm_id=MOCK_FARM_ID,
-            queue_id=MOCK_QUEUE_ID,
-            job_id=MOCK_JOB_ID,
-            step_id=None,
-            task_id=None,
-            session=ANY,
-        )
-        mock_download.assert_called_once_with(
-            file_conflict_resolution=FileConflictResolution.CREATE_COPY, on_downloading_files=ANY
-        )
-        assert result.exit_code == 0
+            MockOutputDownloader.assert_called_once_with(
+                s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+                farm_id=MOCK_FARM_ID,
+                queue_id=MOCK_QUEUE_ID,
+                job_id=MOCK_JOB_ID,
+                step_id=None,
+                task_id=None,
+                session=ANY,
+            )
+            mock_download.assert_called_once_with(
+                file_conflict_resolution=FileConflictResolution.CREATE_COPY,
+                on_downloading_files=ANY,
+            )
+            assert result.exit_code == 0
 
 
 def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_config):
@@ -292,52 +294,54 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
     """
-    config.set_setting("settings.deadline_endpoint_url", "fake-url-endpoint")
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "fake-endpoint-url"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ):
-        mock_download = MagicMock()
-        MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+        with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+            job_group, "OutputDownloader"
+        ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
+            api, "get_queue_user_boto3_session"
+        ):
+            mock_download = MagicMock()
+            MockOutputDownloader.return_value.download_job_output = mock_download
+            mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
-        boto3_client_mock().get_job.return_value = {
-            "name": "Mock Job",
-            "attachments": {
-                "manifests": [
-                    {
-                        "rootPath": "/root/path",
-                        "rootPathFormat": PathFormat(mock_host_path_format_name),
-                        "outputRelativeDirectories": ["."],
-                    }
-                ],
-            },
-        }
-        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+            boto3_client_mock().get_job.return_value = {
+                "name": "Mock Job",
+                "attachments": {
+                    "manifests": [
+                        {
+                            "rootPath": "/root/path",
+                            "rootPathFormat": PathFormat(mock_host_path_format_name),
+                            "outputRelativeDirectories": ["."],
+                        }
+                    ],
+                },
+            }
+            boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
 
-        web_url = (
-            f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
-            + f"&step-id={MOCK_STEP_ID}&task-id={MOCK_TASK_ID}&profile={MOCK_PROFILE_NAME}"
-        )
+            web_url = (
+                f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
+                + f"&step-id={MOCK_STEP_ID}&task-id={MOCK_TASK_ID}&profile={MOCK_PROFILE_NAME}"
+            )
 
-        runner = CliRunner()
-        result = runner.invoke(main, ["handle-web-url", web_url])
-        assert result.exit_code == 0, result.output
+            runner = CliRunner()
+            result = runner.invoke(main, ["handle-web-url", web_url])
+            assert result.exit_code == 0, result.output
 
-        MockOutputDownloader.assert_called_once_with(
-            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
-            farm_id=MOCK_FARM_ID,
-            queue_id=MOCK_QUEUE_ID,
-            job_id=MOCK_JOB_ID,
-            step_id=MOCK_STEP_ID,
-            task_id=MOCK_TASK_ID,
-            session=ANY,
-        )
-        mock_download.assert_called_once_with(
-            file_conflict_resolution=FileConflictResolution.CREATE_COPY, on_downloading_files=ANY
-        )
+            MockOutputDownloader.assert_called_once_with(
+                s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+                farm_id=MOCK_FARM_ID,
+                queue_id=MOCK_QUEUE_ID,
+                job_id=MOCK_JOB_ID,
+                step_id=MOCK_STEP_ID,
+                task_id=MOCK_TASK_ID,
+                session=ANY,
+            )
+            mock_download.assert_called_once_with(
+                file_conflict_resolution=FileConflictResolution.CREATE_COPY,
+                on_downloading_files=ANY,
+            )
 
 
 def test_cli_handle_web_url_unsupported_protocol_scheme(fresh_deadline_config):

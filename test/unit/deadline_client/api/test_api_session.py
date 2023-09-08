@@ -184,25 +184,27 @@ def test_check_deadline_api_available_fails(fresh_deadline_config):
 def test_get_boto3_client_deadline(fresh_deadline_config):
     """Confirm that api.get_boto3_client uses the endpoint url for the deadline client"""
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-    config.set_setting("settings.deadline_endpoint_url", "some-endpoint-url")
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "some-endpoint-url"
+        with patch.object(api._session, "get_boto3_session") as session_mock:
+            # Testing this function
+            api.get_boto3_client("deadline")
 
-    with patch.object(api._session, "get_boto3_session") as session_mock:
-        # Testing this function
-        api.get_boto3_client("deadline")
-
-        session_mock().client.assert_called_once_with("deadline", endpoint_url="some-endpoint-url")
+            session_mock().client.assert_called_once_with(
+                "deadline", endpoint_url="some-endpoint-url"
+            )
 
 
 def test_get_boto3_client_other(fresh_deadline_config):
     """Confirm that api.get_boto3_client doesn't use the endpoint url for other clients"""
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-    config.set_setting("settings.deadline_endpoint_url", "some-endpoint-url")
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "some-endpoint-url"
+        with patch.object(api._session, "get_boto3_session") as session_mock:
+            # Testing this function
+            api.get_boto3_client("s3")
 
-    with patch.object(api._session, "get_boto3_session") as session_mock:
-        # Testing this function
-        api.get_boto3_client("s3")
-
-        session_mock().client.assert_called_once_with("s3")
+            session_mock().client.assert_called_once_with("s3")
 
 
 class FakeClient:
