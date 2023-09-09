@@ -123,7 +123,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[dict[str, Any]]:
         if not isinstance(version, str):
             raise DeadlineOperationError("Job Template's 'specificationVersion' must be a string.")
         schema_version = version
-        if schema_version not in ["2022-09-01"]:
+        if schema_version not in ["jobtemplate-2023-09"]:
             raise DeadlineOperationError(
                 f"The Job Bundle's Job Template has an unsupported specificationVersion: {schema_version}"
             )
@@ -131,7 +131,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[dict[str, Any]]:
     # Start with the template parameters
     template_parameters = {}
     if isinstance(template, dict):
-        template_parameters = template.get("parameters", {})
+        template_parameters = template.get("parameterDefinitions", {})
 
     if template_parameters:
         # parameters are a list of objects. Convert it to a map
