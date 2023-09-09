@@ -1,8 +1,8 @@
-name: Release Publish
+name: "Release Publish: run pipeline/publish.sh in CodeBuild"
 on:
   workflow_dispatch:
 
-jobs:  
+jobs:
   Publish:
       runs-on: ubuntu-latest
       environment: release

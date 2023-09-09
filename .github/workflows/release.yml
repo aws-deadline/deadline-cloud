@@ -1,18 +1,32 @@
-name: Release
+name: "Release: create version tag, push to release branch and CodeArtifact"
 
 on:
   workflow_dispatch:
     inputs:
+      release_source:
+        type: choice
+        description: "Source for the release (mainline or mainline-<version chosen>)"
+        required: true
+        options:
+        - mainline
+        - v0.22.x
       version_to_publish:
-        description: "Version to be release"
+        description: "Version to be released"
         required: false
 
+env:
+  # Note: These values can't be used in the "with: ref: ..." clauses, so this code is duplicated there.
+  mainline_branch: ${{ inputs.release_source == 'mainline' && 'mainline' || format('mainline-{}', inputs.release_source) }}
+  release_branch: ${{ inputs.release_source == 'mainline' && 'release' || format('release-{}', inputs.release_source) }}
+
 jobs:
+
   TestMainline:
-    name: Test Mainline
+    name: Test Mainline/Source Branch
     uses: ./.github/workflows/reuse_python_build.yml
     with:
-      branch: mainline
+      # This is either mainline or mainline-v<version>
+      ref: ${{ inputs.release_source == 'mainline' && 'mainline' || format('mainline-{}', inputs.release_source) }}
     secrets: inherit
 
   Merge:
@@ -23,7 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          ref: release
+          # This is either release or release-v<version>
+          ref: ${{ inputs.release_source == 'mainline' && 'release' || format('release-{}', inputs.release_source) }}
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
       - name: Set Git config
@@ -31,22 +46,23 @@ jobs:
           git config --local user.email "client-software-ci@amazon.com"
           git config --local user.name "client-software-ci"
       - name: Update Release
-        run: git merge --ff-only origin/mainline -v
+        run: git merge --ff-only origin/${{ env.mainline_branch }} -v
       - name: Push new release
         if: ${{ inputs.version_to_publish}}
         run: |
           git tag -a ${{ inputs.version_to_publish }} -m "Release ${{ inputs.version_to_publish }}"
-          git push origin release ${{ inputs.version_to_publish }}
+          git push origin ${{ env.release_branch }} ${{ inputs.version_to_publish }}
       - name: Push post release
         if: ${{ !inputs.version_to_publish}}
-        run: git push origin release
+        run: git push origin ${{ env.release_branch }}
 
   TestRelease:
     needs: Merge
     name: Test Release
     uses: ./.github/workflows/reuse_python_build.yml
     with:
-      branch: release
+      # This is either release or release-v<version>
+      ref: ${{ inputs.release_source == 'mainline' && 'release' || format('release-{}', inputs.release_source) }}
     secrets: inherit
 
   PublishMirror:
@@ -65,7 +81,8 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v3
         with:
-          ref: release
+          # This is either release or release-v<version>
+          ref: ${{ inputs.release_source == 'mainline' && 'release' || format('release-{}', inputs.release_source) }}
           fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v4

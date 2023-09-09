@@ -3,7 +3,8 @@ name: Python Build
 on:
   workflow_call:
     inputs:
-      branch:
+      ref:
+        description: "If provided, the branch or tag to build. Otherwise, uses the event's default."
         required: false
         type: string
 
@@ -25,12 +26,12 @@ jobs:
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
     - uses: actions/checkout@v3
-      if: ${{ !inputs.branch }}
+      if: ${{ !inputs.ref }}
 
     - uses: actions/checkout@v3
-      if: ${{ inputs.branch }}
+      if: ${{ inputs.ref }}
       with:
-        ref: ${{ inputs.branch }}
+        ref: ${{ inputs.ref }}
         fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python-version }}
