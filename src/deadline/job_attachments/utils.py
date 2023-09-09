@@ -195,7 +195,7 @@ def is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
         return False
 
 
-class OJIOToken:
+class OPENJDToken:
     def __init__(self, token: str) -> None:
         self.token = token
 
@@ -203,12 +203,12 @@ class OJIOToken:
         return "{{ " + self.token + " }}"
 
 
-# add OJIOToken to the YAML representer
-def ojio_token_representer(dumper: yaml.Dumper, token: OJIOToken) -> yaml.Node:
+# add OPENJDToken to the YAML representer
+def openjd_token_representer(dumper: yaml.Dumper, token: OPENJDToken) -> yaml.Node:
     return dumper.represent_data(str(token))
 
 
-yaml.add_representer(OJIOToken, ojio_token_representer)
+yaml.add_representer(OPENJDToken, openjd_token_representer)
 
 
 # Behavior to adopt when loading job assets
