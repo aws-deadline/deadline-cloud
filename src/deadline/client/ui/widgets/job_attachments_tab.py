@@ -133,7 +133,9 @@ class JobAttachmentsWidget(QWidget):
 
         self.attachments_controls = self._build_attachment_controls()
 
-    def _build_attachment_controls(self) -> list[tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]]:
+    def _build_attachment_controls(
+        self,
+    ) -> list[tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]]:
         # Put all the controls in a list of tuples for structured processing
         return [
             (
@@ -157,7 +159,7 @@ class JobAttachmentsWidget(QWidget):
         ]
 
     def refresh(self, auto_detected_attachments, attachments):
-        """ Refresh the job attachment lists """
+        """Refresh the job attachment lists"""
         self.auto_detected_attachments = auto_detected_attachments
         self.attachments = attachments
         self.attachments_controls = self._build_attachment_controls()
