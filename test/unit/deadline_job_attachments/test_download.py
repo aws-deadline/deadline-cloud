@@ -361,11 +361,9 @@ def assert_progress_tracker_values(
     file_counts_by_root_directory = {root: len(paths) for root, paths in expected_files.items()}
 
     if manifest_version == ManifestVersion.v2023_03_03:
-        expected_last_progress_report = ProgressReportMetadata(
-            status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
-            progress=100.0,
-            progressMessage=f"Downloaded {readable_total_input_bytes} / {readable_total_input_bytes}"
-            + f" of {len(expected_files_set)} files",
+        expected_progress_message_part = (
+            f"Downloaded {readable_total_input_bytes} / {readable_total_input_bytes}"
+            f" of {len(expected_files_set)} files (Transfer rate: "
         )
         expected_summary_statistics = DownloadSummaryStatistics(
             total_time=summary_statistics.total_time,
@@ -381,10 +379,8 @@ def assert_progress_tracker_values(
     else:
         # If the manifest version does not support `size` and `total_size` properties,
         # the progress is tracked in the number of files instead of bytes.
-        expected_last_progress_report = ProgressReportMetadata(
-            status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
-            progress=100.0,
-            progressMessage=f"Downloaded {len(expected_files_set)}/{len(expected_files_set)} files",
+        expected_progress_message_part = (
+            f"Downloaded {len(expected_files_set)}/{len(expected_files_set)} files"
         )
         expected_summary_statistics = DownloadSummaryStatistics(
             total_time=summary_statistics.total_time,
@@ -398,7 +394,12 @@ def assert_progress_tracker_values(
             file_counts_by_root_directory=file_counts_by_root_directory,
         )
 
-    mock_on_downloading_files.assert_called_with(expected_last_progress_report)
+    actual_args, _ = mock_on_downloading_files.call_args
+    actual_last_progress_report = actual_args[0]
+    assert actual_last_progress_report.status == ProgressStatus.DOWNLOAD_IN_PROGRESS
+    assert actual_last_progress_report.progress == 100.0
+    assert expected_progress_message_part in actual_last_progress_report.progressMessage
+
     for attribute in fields(expected_summary_statistics):
         assert getattr(summary_statistics, attribute.name) == getattr(
             expected_summary_statistics, attribute.name
