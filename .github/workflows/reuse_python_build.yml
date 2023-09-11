@@ -24,10 +24,10 @@ jobs:
       CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       if: ${{ !inputs.branch }}
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       if: ${{ inputs.branch }}
       with:
         ref: ${{ inputs.branch }}
