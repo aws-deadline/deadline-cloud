@@ -131,10 +131,11 @@ class JobAttachmentsWidget(QWidget):
         output_directories_layout.addWidget(self.output_directories_controls)
         output_directories_layout.addWidget(self.output_directories)
 
+        self.attachments_controls = self._build_attachment_controls()
+
+    def _build_attachment_controls(self) -> list[tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]]:
         # Put all the controls in a list of tuples for structured processing
-        self.attachments_controls: list[
-            tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]
-        ] = [
+        return [
             (
                 self.auto_detected_attachments.input_filenames,
                 self.attachments.input_filenames,
@@ -154,6 +155,13 @@ class JobAttachmentsWidget(QWidget):
                 self.output_directories_controls,
             ),
         ]
+
+    def refresh(self, auto_detected_attachments, attachments):
+        """ Refresh the job attachment lists """
+        self.auto_detected_attachments = auto_detected_attachments
+        self.attachments = attachments
+        self.attachments_controls = self._build_attachment_controls()
+        self._populate_attachment_lists()
 
     def _set_attachments_list(
         self, list_widget: QListWidget, auto_detected_paths: set[str], paths: set[str]

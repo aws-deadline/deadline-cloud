@@ -97,6 +97,11 @@ class SubmitJobToDeadlineDialog(QDialog):
     def sizeHint(self):
         return QSize(540, 600)
 
+    def refresh(self, auto_detected_attachments: FlatAssetReferences, attachments: FlatAssetReferences):
+        # Refresh the UI components
+        self.refresh_deadline_settings()
+        self.job_attachments.refresh(auto_detected_attachments, attachments)
+
     def refresh_deadline_settings(self):
         # Enable/disable the Login and Logout buttons based on whether
         # the configured profile is for Deadline Cloud Monitor
