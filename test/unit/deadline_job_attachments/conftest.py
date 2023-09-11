@@ -455,3 +455,35 @@ def fixture_merged_manifest():
         ],
         "totalSize": 70,
     }
+
+
+def has_posix_target_user() -> bool:
+    """Returns if the testing environment exported the env variables for doing
+    cross-account posix target-user tests.
+    """
+    return (
+        os.environ.get("DEADLINE_JOB_ATTACHMENT_TEST_SUDO_TARGET_USER") is not None
+        and os.environ.get("DEADLINE_JOB_ATTACHMENT_TEST_SUDO_TARGET_GROUP") is not None
+    )
+
+
+def has_posix_disjoint_user() -> bool:
+    """Returns if the testing environment exported the env variables for doing
+    cross-account posix disjoint-user tests.
+    """
+    return (
+        os.environ.get("DEADLINE_JOB_ATTACHMENT_TEST_SUDO_DISJOINT_USER") is not None
+        and os.environ.get("DEADLINE_JOB_ATTACHMENT_TEST_SUDO_DISJOINT_GROUP") is not None
+    )
+
+
+@pytest.fixture(scope="function")
+def posix_target_group() -> str:
+    # Intentionally fail if the var is not defined.
+    return os.environ["DEADLINE_JOB_ATTACHMENT_TEST_SUDO_TARGET_GROUP"]
+
+
+@pytest.fixture(scope="function")
+def posix_disjoint_group() -> str:
+    # Intentionally fail if the var is not defined.
+    return os.environ["DEADLINE_JOB_ATTACHMENT_TEST_SUDO_DISJOINT_GROUP"]

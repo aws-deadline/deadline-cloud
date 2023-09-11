@@ -48,6 +48,7 @@ from .models import (
 from .upload import S3AssetUploader
 from ._utils import (
     AssetLoadingMethod,
+    FileSystemPermissionSettings,
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
     _hash_data,
@@ -256,6 +257,7 @@ class AssetSync:
         queue_id: str,
         job_id: str,
         session_dir: Path,
+        fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         storage_profiles_path_mapping_rules: dict[str, str] = {},
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
@@ -273,6 +275,8 @@ class AssetSync:
             queue_id: the ID of the queue.
             job_id: the ID of the job.
             session_dir: the directory that the session is going to use.
+            fs_permission_settings: An instance defining group ownership and permission modes
+                to be set on the downloaded (synchronized) input files and directories.
             storage_profiles_path_mapping_rules: A dict of source path -> destination path mappings.
                 If this dict is not empty, it means that the Storage Profile set in the job is
                 different from the one configured in the Fleet performing the input-syncing.
@@ -328,11 +332,11 @@ class AssetSync:
                 }
 
             if manifest_properties.inputManifestPath:
-                key = s3_settings.add_root_and_manifest_folder_prefix(
+                manifest_s3_key = s3_settings.add_root_and_manifest_folder_prefix(
                     manifest_properties.inputManifestPath
                 )
                 manifest_path = get_manifest_from_s3(
-                    manifest_key=key,
+                    manifest_key=manifest_s3_key,
                     s3_bucket=s3_settings.s3BucketName,
                     session=self.session,
                 )
@@ -382,6 +386,7 @@ class AssetSync:
                 s3_bucket=s3_settings.s3BucketName,
                 manifests_by_root=merged_manifests_by_root,
                 cas_prefix=s3_settings.full_cas_prefix(),
+                fs_permission_settings=fs_permission_settings,
                 session=self.session,
                 on_downloading_files=on_downloading_files,
             )

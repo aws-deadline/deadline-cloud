@@ -687,12 +687,12 @@ class TestAssetSync:
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (summary_statistics, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
-                default_queue.jobAttachmentSettings,
-                default_job.attachments,
-                default_queue.queueId,
-                default_job.jobId,
-                tmp_path,
-                storage_profiles_path_mapping_rules,
+                s3_settings=default_queue.jobAttachmentSettings,
+                attachments=default_job.attachments,
+                queue_id=default_queue.queueId,
+                job_id=default_job.jobId,
+                session_dir=tmp_path,
+                storage_profiles_path_mapping_rules=storage_profiles_path_mapping_rules,
                 on_downloading_files=mock_on_downloading_files,
             )
 
@@ -712,6 +712,7 @@ class TestAssetSync:
                     "/tmp/movie1": "test_manifest_data",
                 },
                 cas_prefix="assetRoot/Data",
+                fs_permission_settings=None,
                 session=ANY,
                 on_downloading_files=mock_on_downloading_files,
             )

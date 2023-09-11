@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+from dataclasses import dataclass
 import datetime
 import io
 import os
@@ -201,3 +202,21 @@ class FileConflictResolution(Enum):
     @classmethod
     def from_index(cls, index: int):
         return cls(index)
+
+
+@dataclass
+class FileSystemPermissionSettings:
+    """
+    A data class representing file system permission-related information.
+    The specified permission modes will be bitwise-OR'ed with the directory
+    or file's existing permissions.
+
+    Attributes:
+        os_group (str): The target operating system group for ownership.
+        dir_mode (int): The permission mode to be applied to directories.
+        file_mode (int): The permission mode to be applied to files.
+    """
+
+    os_group: str
+    dir_mode: int
+    file_mode: int

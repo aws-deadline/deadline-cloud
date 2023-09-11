@@ -3,13 +3,17 @@
 """Tests for downloading files from the Job Attachment CAS."""
 from __future__ import annotations
 
+import os
+import shutil
+
+from collections import Counter
 from dataclasses import dataclass, fields
 from io import BytesIO
 import json
 from pathlib import Path
 import sys
 from typing import Any, Callable, List
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import boto3
 from botocore.exceptions import ClientError
@@ -53,8 +57,14 @@ from deadline.job_attachments.progress_tracker import (
     ProgressReportMetadata,
     ProgressStatus,
 )
-from deadline.job_attachments._utils import FileConflictResolution, _human_readable_file_size
+from deadline.job_attachments._utils import (
+    FileConflictResolution,
+    FileSystemPermissionSettings,
+    _human_readable_file_size,
+)
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
+
+from .conftest import has_posix_target_user, has_posix_disjoint_user
 
 
 @dataclass
@@ -514,6 +524,7 @@ def assert_get_job_input_output_paths_by_asset_root(
         assert total_bytes == expected_total_bytes
 
 
+@pytest.mark.docker
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
 class TestFullDownload:
     """
@@ -679,6 +690,171 @@ class TestFullDownload:
             19,
             manifest_version,
         )
+
+    @mock_sts
+    def test_download_files_from_manifests_with_fs_permission_settings(
+        self,
+        tmp_path: Path,
+        manifest_version: ManifestVersion,
+    ):
+        """
+        Tests whether the files listed in the given manifest are downloaded correctly from the
+        S3 bucket. Also, verifies that the functions for changing file ownership and permissions
+        (i.e., chown, chmod) are correctly called with the given file system permission settings.
+        """
+
+        mannifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+            0
+        ].manifests.decode("utf-8")
+        manifest = decode_manifest(mannifest_str)
+
+        manifests_by_root = {str(tmp_path): manifest}
+        fs_permission_settings = FileSystemPermissionSettings(
+            os_group="test-group",
+            dir_mode=0o20,
+            file_mode=0o20,
+        )
+        mock_on_downloading_files = MagicMock(return_value=True)
+
+        # IF
+        with patch("shutil.chown") as mock_chown, patch("os.chmod") as mock_chmod:
+            _ = download_files_from_manifests(
+                s3_bucket=self.job_attachment_settings.s3BucketName,
+                manifests_by_root=manifests_by_root,
+                cas_prefix=self.job_attachment_settings.full_cas_prefix(),
+                fs_permission_settings=fs_permission_settings,
+                on_downloading_files=mock_on_downloading_files,
+            )
+
+        # THEN
+        expected_files = [
+            tmp_path / "inputs/input1.txt",
+            tmp_path / "inputs/subdir/input2.txt",
+            tmp_path / "inputs/subdir/input3.txt",
+            tmp_path / "inputs/subdir/subdir2/input4.txt",
+            tmp_path / "inputs/input5.txt",
+        ]
+
+        expected_changed_paths = [
+            tmp_path / "inputs/input1.txt",
+            tmp_path,
+            tmp_path / "inputs",
+            tmp_path / "inputs/subdir/input2.txt",
+            tmp_path / "inputs/subdir",
+            tmp_path / "inputs/subdir/input3.txt",
+            tmp_path / "inputs/subdir/subdir2/input4.txt",
+            tmp_path / "inputs/subdir/subdir2",
+            tmp_path / "inputs/input5.txt",
+        ]
+
+        chown_expected_calls = [
+            str(call(path, group="test-group")) for path in expected_changed_paths
+        ]
+        chown_actual_calls = [str(call_args) for call_args in mock_chown.call_args_list]
+        assert Counter(chown_actual_calls) == Counter(chown_expected_calls)
+
+        chmod_expected_calls = [
+            str(call(path, path.stat().st_mode | 0o20)) for path in expected_changed_paths
+        ]
+        chmod_actual_calls = [str(call_args) for call_args in mock_chmod.call_args_list]
+        assert Counter(chmod_actual_calls) == Counter(chmod_expected_calls)
+
+        # Ensure that only the expected files are there and no extras.
+        assert set(expected_files) == set(
+            [path for path in tmp_path.glob("**/*") if path.is_file()]
+        )
+
+    @mock_sts
+    @pytest.mark.xfail(
+        not (has_posix_target_user() and has_posix_disjoint_user()),
+        reason="Must be running inside of the sudo_environment testing container.",
+    )
+    def test_download_files_from_manifests_have_correct_group(
+        self,
+        tmp_path: Path,
+        manifest_version: ManifestVersion,
+        posix_target_group: str,
+        posix_disjoint_group: str,
+    ):
+        """
+        Tests whether the file system ownership and permissions of the files downloaded using the given
+        manifest are correctly changed.
+        """
+
+        # Creates some files that were not downloaded through Job Attachment.
+        Path(tmp_path / "inputs/subdir/subdir2").mkdir(parents=True, exist_ok=True)
+        random_paths = [
+            tmp_path / "not_asset.txt",
+            tmp_path / "inputs/not_asset.txt",
+            tmp_path / "inputs/subdir/not_asset.txt",
+            tmp_path / "inputs/subdir/subdir2/not_asset.txt",
+        ]
+        for path in random_paths:
+            with open(str(path), "w") as f:
+                f.write("I am not an asset file")
+
+        mannifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+            0
+        ].manifests.decode("utf-8")
+        manifest = decode_manifest(mannifest_str)
+        manifests_by_root = {str(tmp_path): manifest}
+
+        fs_permission_settings = FileSystemPermissionSettings(
+            os_group=posix_target_group,
+            dir_mode=0o20,
+            file_mode=0o20,
+        )
+
+        mock_on_downloading_files = MagicMock(return_value=True)
+
+        # IF
+        _ = download_files_from_manifests(
+            s3_bucket=self.job_attachment_settings.s3BucketName,
+            manifests_by_root=manifests_by_root,
+            cas_prefix=self.job_attachment_settings.full_cas_prefix(),
+            fs_permission_settings=fs_permission_settings,
+            on_downloading_files=mock_on_downloading_files,
+        )
+
+        # THEN
+        expected_changed_paths = [
+            tmp_path / "inputs/input1.txt",
+            tmp_path,
+            tmp_path / "inputs",
+            tmp_path / "inputs/subdir/input2.txt",
+            tmp_path / "inputs/subdir",
+            tmp_path / "inputs/subdir/input3.txt",
+            tmp_path / "inputs/subdir/subdir2/input4.txt",
+            tmp_path / "inputs/subdir/subdir2",
+            tmp_path / "inputs/input5.txt",
+        ]
+
+        # Verify that the group ownership and permissions of files downloaded through Job Attachment
+        # have been appropriately modified.
+        # Also, confirm that a permission error occurs when attempting to change the group ownership
+        # of those files to a group other than the target group.
+        for path in expected_changed_paths:
+            file_stat = os.stat(str(path))
+            updated_mode = file_stat.st_mode
+            assert updated_mode == updated_mode | 0o20
+
+            if os.name == "posix":
+                import grp
+
+                updated_group_name = grp.getgrgid(file_stat.st_gid).gr_name  # type: ignore
+                assert updated_group_name == posix_target_group
+
+            with pytest.raises(PermissionError):
+                shutil.chown(path, group=posix_disjoint_group)
+
+        # For the files that were not downloaded through Job Attachment, confirm that the group ownership
+        # has not been changed to the target group.
+        if os.name == "posix":
+            import grp
+
+            for path in random_paths:
+                group_name = grp.getgrgid(os.stat(str(path)).st_gid).gr_name  # type: ignore
+                assert group_name != posix_target_group
 
     @mock_sts
     def test_download_task_output(
