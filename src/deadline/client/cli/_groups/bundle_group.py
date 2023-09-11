@@ -29,7 +29,7 @@ from deadline.client.job_bundle.submission import (
 )
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     AssetRootManifest,
     JobAttachmentS3Settings,
 )
@@ -89,9 +89,9 @@ def validate_parameters(ctx, param, value):
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
 @click.option(
-    "--asset-loading-method",
-    help="The method to use for loading assets on the server (Overrides the default set in config file).  Options are PRELOAD (load assets onto server first then run the job) or ON_DEMAND (load assets as requested).",
-    type=click.Choice([e.value for e in AssetLoadingMethod]),
+    "--job-attachments-file-system",
+    help="The method to use for loading assets on the server (Overrides the default set in config file).  Options are COPIED (load assets onto server first then run the job) or VIRTUAL (load assets as requested).",
+    type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
     "--yes",
@@ -100,7 +100,7 @@ def validate_parameters(ctx, param, value):
 )
 @click.argument("job_bundle_dir")
 @_handle_error
-def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
+def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, **args):
     """
     Submits an Open Job Description job bundle to Amazon Deadline Cloud.
     """
@@ -117,8 +117,8 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         deadline = get_boto3_client("deadline", config=config)
         farm_id = get_setting("defaults.farm_id", config=config)
         queue_id = get_setting("defaults.queue_id", config=config)
-        if asset_loading_method is None:
-            asset_loading_method = get_setting(
+        if job_attachments_file_system is None:
+            job_attachments_file_system = get_setting(
                 "defaults.job_attachments_file_system", config=config
             )
 
@@ -212,7 +212,9 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
             attachment_settings = _upload_attachments(asset_manager, asset_manifests, config)
 
-            attachment_settings["assetLoadingMethod"] = AssetLoadingMethod(asset_loading_method)
+            attachment_settings["fileSystem"] = JobAttachmentsFileSystem(
+                job_attachments_file_system
+            )
             create_job_args["attachments"] = attachment_settings
 
         create_job_args.update(app_parameters_formatted)

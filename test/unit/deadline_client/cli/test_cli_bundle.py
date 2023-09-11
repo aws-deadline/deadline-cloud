@@ -17,7 +17,7 @@ from deadline.client.api import _queue_parameters
 from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
 from deadline.client.config.config_file import set_setting
-from deadline.job_attachments.models import AssetLoadingMethod
+from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 from ..api.test_job_bundle_submission import (
@@ -196,7 +196,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
         assert result.exit_code == 0
 
 
-@pytest.mark.parametrize("loading_method", [e.value for e in AssetLoadingMethod] + [None])
+@pytest.mark.parametrize("loading_method", [e.value for e in JobAttachmentsFileSystem] + [None])
 def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir, loading_method):
     """
     Verify that asset loading method set on CLI are passed to the CreateJob call
@@ -268,7 +268,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
 
         # None case represents not setting the parameter
         if loading_method is not None:
-            params += ["--asset-loading-method", loading_method]
+            params += ["--job-attachments-file-system", loading_method]
 
         runner = CliRunner()
         result = runner.invoke(main, params)
@@ -286,7 +286,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             parameters=MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][2]["parameters"],  # type: ignore
             template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
             templateType="JSON",
-            attachments={"assetLoadingMethod": expected_loading_method},
+            attachments={"fileSystem": expected_loading_method},
         )
         assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
         assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output

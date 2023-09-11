@@ -448,7 +448,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         if attachment_settings:
             self._create_job_args["attachments"] = attachment_settings
-            self._create_job_args["attachments"]["assetLoadingMethod"] = config_file.get_setting(
+            self._create_job_args["attachments"]["fileSystem"] = config_file.get_setting(
                 "defaults.job_attachments_file_system"
             )
 

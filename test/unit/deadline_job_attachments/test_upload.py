@@ -204,7 +204,7 @@ class TestUpload:
 
             assert attachments == expected_attachments
             assert attachments.to_dict() == {  # type: ignore
-                "assetLoadingMethod": "PRELOAD",
+                "fileSystem": "COPIED",
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
@@ -369,7 +369,7 @@ class TestUpload:
 
             assert attachments == expected_attachments
             assert attachments.to_dict() == {  # type: ignore
-                "assetLoadingMethod": "PRELOAD",
+                "fileSystem": "COPIED",
                 "manifests": [
                     {
                         "rootPath": f"{root_c}",
@@ -535,7 +535,7 @@ class TestUpload:
 
             assert attachments == expected_attachments
             assert attachments.to_dict() == {  # type: ignore
-                "assetLoadingMethod": "PRELOAD",
+                "fileSystem": "COPIED",
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
@@ -1041,7 +1041,7 @@ class TestUpload:
 
             assert attachments == expected_attachments
             assert attachments.to_dict() == {  # type: ignore
-                "assetLoadingMethod": "PRELOAD",
+                "fileSystem": "COPIED",
                 "manifests": [
                     {
                         "rootPath": f"{output_dir}",

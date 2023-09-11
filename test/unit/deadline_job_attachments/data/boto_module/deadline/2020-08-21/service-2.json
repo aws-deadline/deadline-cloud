@@ -3100,9 +3100,7 @@
   "shapes": {
     "AccessDeniedException": {
       "type": "structure",
-      "required": [
-        "message"
-      ],
+      "required": ["message"],
       "members": {
         "message": {
           "shape": "String"
@@ -3135,18 +3133,13 @@
       "min": 1,
       "pattern": "([a-zA-Z][a-zA-Z0-9]{0,63}:)?amount(\\.[a-zA-Z][a-zA-Z0-9]{0,63})+"
     },
-    "AssetLoadingMethod": {
+    "JobAttachmentsFileSystem": {
       "type": "string",
-      "enum": [
-        "PRELOAD",
-        "ON_DEMAND"
-      ]
+      "enum": ["COPIED", "VIRTUAL"]
     },
     "AssignedEnvironmentEnterSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -3155,9 +3148,7 @@
     },
     "AssignedEnvironmentExitSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -3166,12 +3157,7 @@
     },
     "AssignedSession": {
       "type": "structure",
-      "required": [
-        "queueId",
-        "jobId",
-        "sessionActions",
-        "logConfiguration"
-      ],
+      "required": ["queueId", "jobId", "sessionActions", "logConfiguration"],
       "members": {
         "queueId": {
           "shape": "QueueId"
@@ -3189,10 +3175,7 @@
     },
     "AssignedSessionAction": {
       "type": "structure",
-      "required": [
-        "sessionActionId",
-        "definition"
-      ],
+      "required": ["sessionActionId", "definition"],
       "members": {
         "sessionActionId": {
           "shape": "SessionActionId"
@@ -3245,11 +3228,7 @@
     },
     "AssignedTaskRunSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "taskId",
-        "stepId",
-        "parameters"
-      ],
+      "required": ["taskId", "stepId", "parameters"],
       "members": {
         "taskId": {
           "shape": "TaskId"
@@ -3448,10 +3427,7 @@
     },
     "AssumeFleetRoleForReadRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3472,9 +3448,7 @@
     },
     "AssumeFleetRoleForReadResponse": {
       "type": "structure",
-      "required": [
-        "credentials"
-      ],
+      "required": ["credentials"],
       "members": {
         "credentials": {
           "shape": "IamCredentials"
@@ -3484,11 +3458,7 @@
     },
     "AssumeFleetRoleForWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3514,9 +3484,7 @@
     },
     "AssumeFleetRoleForWorkerResponse": {
       "type": "structure",
-      "required": [
-        "credentials"
-      ],
+      "required": ["credentials"],
       "members": {
         "credentials": {
           "shape": "IamCredentials"
@@ -3526,10 +3494,7 @@
     },
     "AssumeQueueRoleForReadRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3550,9 +3515,7 @@
     },
     "AssumeQueueRoleForReadResponse": {
       "type": "structure",
-      "required": [
-        "credentials"
-      ],
+      "required": ["credentials"],
       "members": {
         "credentials": {
           "shape": "IamCredentials"
@@ -3562,10 +3525,7 @@
     },
     "AssumeQueueRoleForUserRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3586,9 +3546,7 @@
     },
     "AssumeQueueRoleForUserResponse": {
       "type": "structure",
-      "required": [
-        "credentials"
-      ],
+      "required": ["credentials"],
       "members": {
         "credentials": {
           "shape": "IamCredentials"
@@ -3598,12 +3556,7 @@
     },
     "AssumeQueueRoleForWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId",
-        "queueId"
-      ],
+      "required": ["farmId", "fleetId", "workerId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3643,15 +3596,13 @@
     },
     "Attachments": {
       "type": "structure",
-      "required": [
-        "manifests"
-      ],
+      "required": ["manifests"],
       "members": {
         "manifests": {
           "shape": "ManifestPropertiesList"
         },
-        "assetLoadingMethod": {
-          "shape": "AssetLoadingMethod"
+        "fileSystem": {
+          "shape": "JobAttachmentsFileSystem"
         }
       }
     },
@@ -3677,10 +3628,7 @@
     },
     "AutoScalingConfiguration": {
       "type": "structure",
-      "required": [
-        "mode",
-        "maxFleetSize"
-      ],
+      "required": ["mode", "maxFleetSize"],
       "members": {
         "mode": {
           "shape": "AutoScalingMode"
@@ -3695,18 +3643,11 @@
     },
     "AutoScalingMode": {
       "type": "string",
-      "enum": [
-        "NO_SCALING",
-        "EVENT_BASED_AUTO_SCALING"
-      ]
+      "enum": ["NO_SCALING", "EVENT_BASED_AUTO_SCALING"]
     },
     "AutoScalingStatus": {
       "type": "string",
-      "enum": [
-        "GROWING",
-        "STEADY",
-        "SHRINKING"
-      ]
+      "enum": ["GROWING", "STEADY", "SHRINKING"]
     },
     "BatchGetJobEntityErrors": {
       "type": "list",
@@ -3724,12 +3665,7 @@
     },
     "BatchGetJobEntityRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId",
-        "identifiers"
-      ],
+      "required": ["farmId", "fleetId", "workerId", "identifiers"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -3758,10 +3694,7 @@
     },
     "BatchGetJobEntityResponse": {
       "type": "structure",
-      "required": [
-        "entities",
-        "errors"
-      ],
+      "required": ["entities", "errors"],
       "members": {
         "entities": {
           "shape": "BatchGetJobEntityList"
@@ -3778,10 +3711,7 @@
     },
     "BudgetActionToAdd": {
       "type": "structure",
-      "required": [
-        "type",
-        "thresholdPercentage"
-      ],
+      "required": ["type", "thresholdPercentage"],
       "members": {
         "type": {
           "shape": "BudgetActionType"
@@ -3796,10 +3726,7 @@
     },
     "BudgetActionToRemove": {
       "type": "structure",
-      "required": [
-        "type",
-        "thresholdPercentage"
-      ],
+      "required": ["type", "thresholdPercentage"],
       "members": {
         "type": {
           "shape": "BudgetActionType"
@@ -3847,10 +3774,7 @@
     },
     "BudgetStatus": {
       "type": "string",
-      "enum": [
-        "ACTIVE",
-        "INACTIVE"
-      ]
+      "enum": ["ACTIVE", "INACTIVE"]
     },
     "BudgetSummaries": {
       "type": "list",
@@ -3948,12 +3872,7 @@
     },
     "ConflictException": {
       "type": "structure",
-      "required": [
-        "message",
-        "reason",
-        "resourceId",
-        "resourceType"
-      ],
+      "required": ["message", "reason", "resourceId", "resourceType"],
       "members": {
         "message": {
           "shape": "String"
@@ -3994,9 +3913,7 @@
     },
     "ConsumedUsages": {
       "type": "structure",
-      "required": [
-        "approximateDollarsUsage"
-      ],
+      "required": ["approximateDollarsUsage"],
       "members": {
         "approximateDollarsUsage": {
           "shape": "Float"
@@ -4005,12 +3922,7 @@
     },
     "CopyJobTemplateRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "jobId",
-        "queueId",
-        "targetS3Location"
-      ],
+      "required": ["farmId", "jobId", "queueId", "targetS3Location"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4039,9 +3951,7 @@
     },
     "CopyJobTemplateResponse": {
       "type": "structure",
-      "required": [
-        "templateType"
-      ],
+      "required": ["templateType"],
       "members": {
         "templateType": {
           "shape": "JobTemplateType"
@@ -4050,10 +3960,7 @@
     },
     "CpuArchitectureType": {
       "type": "string",
-      "enum": [
-        "x86_64",
-        "arm64"
-      ]
+      "enum": ["x86_64", "arm64"]
     },
     "CreateBudgetRequest": {
       "type": "structure",
@@ -4104,9 +4011,7 @@
     },
     "CreateBudgetResponse": {
       "type": "structure",
-      "required": [
-        "budgetId"
-      ],
+      "required": ["budgetId"],
       "members": {
         "budgetId": {
           "shape": "BudgetId"
@@ -4115,9 +4020,7 @@
     },
     "CreateFarmRequest": {
       "type": "structure",
-      "required": [
-        "displayName"
-      ],
+      "required": ["displayName"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4149,9 +4052,7 @@
     },
     "CreateFarmResponse": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "farmId": {
           "shape": "FarmId"
@@ -4160,12 +4061,7 @@
     },
     "CreateFleetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "displayName",
-        "roleArn",
-        "configuration"
-      ],
+      "required": ["farmId", "displayName", "roleArn", "configuration"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4202,9 +4098,7 @@
     },
     "CreateFleetResponse": {
       "type": "structure",
-      "required": [
-        "fleetId"
-      ],
+      "required": ["fleetId"],
       "members": {
         "fleetId": {
           "shape": "FleetId"
@@ -4213,13 +4107,7 @@
     },
     "CreateJobRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "template",
-        "templateType",
-        "priority"
-      ],
+      "required": ["farmId", "queueId", "template", "templateType", "priority"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4273,9 +4161,7 @@
     },
     "CreateJobResponse": {
       "type": "structure",
-      "required": [
-        "jobId"
-      ],
+      "required": ["jobId"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -4284,18 +4170,11 @@
     },
     "CreateJobTargetTaskRunStatus": {
       "type": "string",
-      "enum": [
-        "READY",
-        "SUSPENDED"
-      ]
+      "enum": ["READY", "SUSPENDED"]
     },
     "CreateLicenseEndpointRequest": {
       "type": "structure",
-      "required": [
-        "vpcId",
-        "subnetIds",
-        "securityGroupIds"
-      ],
+      "required": ["vpcId", "subnetIds", "securityGroupIds"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4340,9 +4219,7 @@
     },
     "CreateLicenseEndpointResponse": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId"
-      ],
+      "required": ["licenseEndpointId"],
       "members": {
         "licenseEndpointId": {
           "shape": "LicenseEndpointId"
@@ -4351,13 +4228,7 @@
     },
     "CreateQueueEnvironmentRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "priority",
-        "templateType",
-        "template"
-      ],
+      "required": ["farmId", "queueId", "priority", "templateType", "template"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4393,9 +4264,7 @@
     },
     "CreateQueueEnvironmentResponse": {
       "type": "structure",
-      "required": [
-        "queueEnvironmentId"
-      ],
+      "required": ["queueEnvironmentId"],
       "members": {
         "queueEnvironmentId": {
           "shape": "QueueEnvironmentId"
@@ -4404,11 +4273,7 @@
     },
     "CreateQueueFleetAssociationRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "fleetId"
-      ],
+      "required": ["farmId", "queueId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4434,10 +4299,7 @@
     },
     "CreateQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "displayName"
-      ],
+      "required": ["farmId", "displayName"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4489,9 +4351,7 @@
     },
     "CreateQueueResponse": {
       "type": "structure",
-      "required": [
-        "queueId"
-      ],
+      "required": ["queueId"],
       "members": {
         "queueId": {
           "shape": "QueueId"
@@ -4500,11 +4360,7 @@
     },
     "CreateStorageProfileRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "displayName",
-        "osFamily"
-      ],
+      "required": ["farmId", "displayName", "osFamily"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4535,9 +4391,7 @@
     },
     "CreateStorageProfileResponse": {
       "type": "structure",
-      "required": [
-        "storageProfileId"
-      ],
+      "required": ["storageProfileId"],
       "members": {
         "storageProfileId": {
           "shape": "StorageProfileId"
@@ -4546,10 +4400,7 @@
     },
     "CreateWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4579,9 +4430,7 @@
     },
     "CreateWorkerResponse": {
       "type": "structure",
-      "required": [
-        "workerId"
-      ],
+      "required": ["workerId"],
       "members": {
         "workerId": {
           "shape": "WorkerId"
@@ -4597,10 +4446,7 @@
     },
     "CustomerManagedFleetConfiguration": {
       "type": "structure",
-      "required": [
-        "autoScalingConfiguration",
-        "workerRequirements"
-      ],
+      "required": ["autoScalingConfiguration", "workerRequirements"],
       "members": {
         "autoScalingConfiguration": {
           "shape": "AutoScalingConfiguration"
@@ -4615,12 +4461,7 @@
     },
     "CustomerManagedWorkerRequirements": {
       "type": "structure",
-      "required": [
-        "vCpuCount",
-        "memoryMiB",
-        "osFamily",
-        "cpuArchitectureType"
-      ],
+      "required": ["vCpuCount", "memoryMiB", "osFamily", "cpuArchitectureType"],
       "members": {
         "vCpuCount": {
           "shape": "VCpuCountRange"
@@ -4644,11 +4485,7 @@
     },
     "DateTimeFilterExpression": {
       "type": "structure",
-      "required": [
-        "name",
-        "operator",
-        "dateTime"
-      ],
+      "required": ["name", "operator", "dateTime"],
       "members": {
         "name": {
           "shape": "String"
@@ -4671,10 +4508,7 @@
     },
     "DeleteBudgetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "budgetId"
-      ],
+      "required": ["farmId", "budgetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4699,9 +4533,7 @@
     },
     "DeleteFarmRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4721,10 +4553,7 @@
     },
     "DeleteFleetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4755,9 +4584,7 @@
     },
     "DeleteLicenseEndpointRequest": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId"
-      ],
+      "required": ["licenseEndpointId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4777,10 +4604,7 @@
     },
     "DeleteMeteredProductRequest": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId",
-        "productId"
-      ],
+      "required": ["licenseEndpointId", "productId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4805,11 +4629,7 @@
     },
     "DeleteQueueEnvironmentRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "queueEnvironmentId"
-      ],
+      "required": ["farmId", "queueId", "queueEnvironmentId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4839,11 +4659,7 @@
     },
     "DeleteQueueFleetAssociationRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "fleetId"
-      ],
+      "required": ["farmId", "queueId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4873,10 +4689,7 @@
     },
     "DeleteQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4901,10 +4714,7 @@
     },
     "DeleteStorageProfileRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "storageProfileId"
-      ],
+      "required": ["farmId", "storageProfileId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4929,11 +4739,7 @@
     },
     "DeleteWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -4969,10 +4775,7 @@
     },
     "DependencyConsumerResolutionStatus": {
       "type": "string",
-      "enum": [
-        "RESOLVED",
-        "UNRESOLVED"
-      ]
+      "enum": ["RESOLVED", "UNRESOLVED"]
     },
     "DependencyCounts": {
       "type": "structure",
@@ -5004,16 +4807,11 @@
     },
     "DesiredWorkerStatus": {
       "type": "string",
-      "enum": [
-        "STOPPED"
-      ]
+      "enum": ["STOPPED"]
     },
     "DisassociateMemberFromFarmRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "principalId"
-      ],
+      "required": ["farmId", "principalId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5038,11 +4836,7 @@
     },
     "DisassociateMemberFromFleetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "principalId"
-      ],
+      "required": ["farmId", "fleetId", "principalId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5072,12 +4866,7 @@
     },
     "DisassociateMemberFromJobRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "principalId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "principalId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5112,11 +4901,7 @@
     },
     "DisassociateMemberFromQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "principalId"
-      ],
+      "required": ["farmId", "queueId", "principalId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5189,10 +4974,7 @@
     },
     "Ec2MarketType": {
       "type": "string",
-      "enum": [
-        "on-demand",
-        "spot"
-      ]
+      "enum": ["on-demand", "spot"]
     },
     "EndedAt": {
       "type": "timestamp",
@@ -5204,12 +4986,7 @@
     },
     "EnvironmentDetailsEntity": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "environmentId",
-        "schemaVersion",
-        "template"
-      ],
+      "required": ["jobId", "environmentId", "schemaVersion", "template"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -5227,12 +5004,7 @@
     },
     "EnvironmentDetailsError": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "environmentId",
-        "code",
-        "message"
-      ],
+      "required": ["jobId", "environmentId", "code", "message"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -5250,10 +5022,7 @@
     },
     "EnvironmentDetailsIdentifiers": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "environmentId"
-      ],
+      "required": ["jobId", "environmentId"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -5265,9 +5034,7 @@
     },
     "EnvironmentEnterSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -5276,9 +5043,7 @@
     },
     "EnvironmentEnterSessionActionDefinitionSummary": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -5287,9 +5052,7 @@
     },
     "EnvironmentExitSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -5298,9 +5061,7 @@
     },
     "EnvironmentExitSessionActionDefinitionSummary": {
       "type": "structure",
-      "required": [
-        "environmentId"
-      ],
+      "required": ["environmentId"],
       "members": {
         "environmentId": {
           "shape": "EnvironmentId"
@@ -5321,10 +5082,7 @@
     },
     "EnvironmentTemplateType": {
       "type": "string",
-      "enum": [
-        "JSON",
-        "YAML"
-      ]
+      "enum": ["JSON", "YAML"]
     },
     "ExceptionContext": {
       "type": "map",
@@ -5380,12 +5138,7 @@
     },
     "FarmSummary": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "displayName",
-        "createdAt",
-        "createdBy"
-      ],
+      "required": ["farmId", "displayName", "createdAt", "createdBy"],
       "members": {
         "farmId": {
           "shape": "FarmId"
@@ -5418,10 +5171,7 @@
     },
     "FieldSortExpression": {
       "type": "structure",
-      "required": [
-        "sortOrder",
-        "name"
-      ],
+      "required": ["sortOrder", "name"],
       "members": {
         "sortOrder": {
           "shape": "SortOrder"
@@ -5433,11 +5183,7 @@
     },
     "FileSystemLocation": {
       "type": "structure",
-      "required": [
-        "name",
-        "path",
-        "type"
-      ],
+      "required": ["name", "path", "type"],
       "members": {
         "name": {
           "shape": "FileSystemLocationName"
@@ -5458,10 +5204,7 @@
     },
     "FileSystemLocationType": {
       "type": "string",
-      "enum": [
-        "SHARED",
-        "LOCAL"
-      ]
+      "enum": ["SHARED", "LOCAL"]
     },
     "FileSystemLocationsList": {
       "type": "list",
@@ -5473,10 +5216,7 @@
     },
     "FixedBudgetSchedule": {
       "type": "structure",
-      "required": [
-        "startTime",
-        "endTime"
-      ],
+      "required": ["startTime", "endTime"],
       "members": {
         "startTime": {
           "shape": "StartsAt"
@@ -5488,10 +5228,7 @@
     },
     "FleetAmountCapability": {
       "type": "structure",
-      "required": [
-        "name",
-        "min"
-      ],
+      "required": ["name", "min"],
       "members": {
         "name": {
           "shape": "AmountCapabilityName"
@@ -5514,10 +5251,7 @@
     },
     "FleetAttributeCapability": {
       "type": "structure",
-      "required": [
-        "name",
-        "values"
-      ],
+      "required": ["name", "values"],
       "members": {
         "name": {
           "shape": "AttributeCapabilityName"
@@ -5681,13 +5415,7 @@
     },
     "GetAggregatedStatisticsForSessionsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "startTime",
-        "endTime",
-        "groupBy",
-        "statistics"
-      ],
+      "required": ["farmId", "startTime", "endTime", "groupBy", "statistics"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5745,9 +5473,7 @@
     },
     "GetAggregatedStatisticsForSessionsResponse": {
       "type": "structure",
-      "required": [
-        "statistics"
-      ],
+      "required": ["statistics"],
       "members": {
         "statistics": {
           "shape": "StatisticsList"
@@ -5759,10 +5485,7 @@
     },
     "GetBudgetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "budgetId"
-      ],
+      "required": ["farmId", "budgetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5842,9 +5565,7 @@
     },
     "GetFarmRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -5899,10 +5620,7 @@
     },
     "GetFleetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6002,11 +5720,7 @@
     },
     "GetJobRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "jobId",
-        "queueId"
-      ],
+      "required": ["farmId", "jobId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6106,9 +5820,7 @@
     },
     "GetLicenseEndpointRequest": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId"
-      ],
+      "required": ["licenseEndpointId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6124,11 +5836,7 @@
     },
     "GetLicenseEndpointResponse": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId",
-        "status",
-        "statusMessage"
-      ],
+      "required": ["licenseEndpointId", "status", "statusMessage"],
       "members": {
         "licenseEndpointId": {
           "shape": "LicenseEndpointId"
@@ -6155,11 +5863,7 @@
     },
     "GetQueueEnvironmentRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "queueEnvironmentId"
-      ],
+      "required": ["farmId", "queueId", "queueEnvironmentId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6226,11 +5930,7 @@
     },
     "GetQueueFleetAssociationRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "fleetId"
-      ],
+      "required": ["farmId", "queueId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6256,13 +5956,7 @@
     },
     "GetQueueFleetAssociationResponse": {
       "type": "structure",
-      "required": [
-        "queueId",
-        "fleetId",
-        "status",
-        "createdAt",
-        "createdBy"
-      ],
+      "required": ["queueId", "fleetId", "status", "createdAt", "createdBy"],
       "members": {
         "queueId": {
           "shape": "QueueId"
@@ -6289,10 +5983,7 @@
     },
     "GetQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6375,12 +6066,7 @@
     },
     "GetSessionActionRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "sessionActionId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "sessionActionId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6411,12 +6097,7 @@
     },
     "GetSessionActionResponse": {
       "type": "structure",
-      "required": [
-        "sessionActionId",
-        "status",
-        "sessionId",
-        "definition"
-      ],
+      "required": ["sessionActionId", "status", "sessionId", "definition"],
       "members": {
         "sessionActionId": {
           "shape": "SessionActionId"
@@ -6449,12 +6130,7 @@
     },
     "GetSessionRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "sessionId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "sessionId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6534,12 +6210,7 @@
     },
     "GetStepRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "stepId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "stepId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6632,11 +6303,7 @@
     },
     "GetStorageProfileForQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "storageProfileId"
-      ],
+      "required": ["farmId", "queueId", "storageProfileId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6662,11 +6329,7 @@
     },
     "GetStorageProfileForQueueResponse": {
       "type": "structure",
-      "required": [
-        "storageProfileId",
-        "displayName",
-        "osFamily"
-      ],
+      "required": ["storageProfileId", "displayName", "osFamily"],
       "members": {
         "storageProfileId": {
           "shape": "StorageProfileId"
@@ -6684,10 +6347,7 @@
     },
     "GetStorageProfileRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "storageProfileId"
-      ],
+      "required": ["farmId", "storageProfileId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6744,13 +6404,7 @@
     },
     "GetTaskRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "stepId",
-        "taskId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "stepId", "taskId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6786,12 +6440,7 @@
     },
     "GetTaskResponse": {
       "type": "structure",
-      "required": [
-        "taskId",
-        "createdAt",
-        "createdBy",
-        "runStatus"
-      ],
+      "required": ["taskId", "createdAt", "createdBy", "runStatus"],
       "members": {
         "taskId": {
           "shape": "TaskId"
@@ -6833,11 +6482,7 @@
     },
     "GetWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -6986,9 +6631,7 @@
     },
     "InternalServerErrorException": {
       "type": "structure",
-      "required": [
-        "message"
-      ],
+      "required": ["message"],
       "members": {
         "message": {
           "shape": "String"
@@ -7041,10 +6684,7 @@
     },
     "JobAttachmentDetailsEntity": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "attachments"
-      ],
+      "required": ["jobId", "attachments"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7056,11 +6696,7 @@
     },
     "JobAttachmentDetailsError": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "code",
-        "message"
-      ],
+      "required": ["jobId", "code", "message"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7075,9 +6711,7 @@
     },
     "JobAttachmentDetailsIdentifiers": {
       "type": "structure",
-      "required": [
-        "jobId"
-      ],
+      "required": ["jobId"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7086,10 +6720,7 @@
     },
     "JobAttachmentSettings": {
       "type": "structure",
-      "required": [
-        "s3BucketName",
-        "rootPrefix"
-      ],
+      "required": ["s3BucketName", "rootPrefix"],
       "members": {
         "s3BucketName": {
           "shape": "S3BucketName"
@@ -7106,11 +6737,7 @@
     },
     "JobDetailsEntity": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "logGroupName",
-        "schemaVersion"
-      ],
+      "required": ["jobId", "logGroupName", "schemaVersion"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7140,11 +6767,7 @@
     },
     "JobDetailsError": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "code",
-        "message"
-      ],
+      "required": ["jobId", "code", "message"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7159,9 +6782,7 @@
     },
     "JobDetailsIdentifiers": {
       "type": "structure",
-      "required": [
-        "jobId"
-      ],
+      "required": ["jobId"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -7447,13 +7068,7 @@
     },
     "JobTargetTaskRunStatus": {
       "type": "string",
-      "enum": [
-        "READY",
-        "FAILED",
-        "SUCCEEDED",
-        "CANCELED",
-        "SUSPENDED"
-      ]
+      "enum": ["READY", "FAILED", "SUCCEEDED", "CANCELED", "SUSPENDED"]
     },
     "JobTemplate": {
       "type": "string",
@@ -7462,10 +7077,7 @@
     },
     "JobTemplateType": {
       "type": "string",
-      "enum": [
-        "JSON",
-        "YAML"
-      ]
+      "enum": ["JSON", "YAML"]
     },
     "JobsRunAs": {
       "type": "structure",
@@ -7485,12 +7097,7 @@
     },
     "LicenseEndpointStatus": {
       "type": "string",
-      "enum": [
-        "CREATE_IN_PROGRESS",
-        "DELETE_IN_PROGRESS",
-        "READY",
-        "NOT_READY"
-      ]
+      "enum": ["CREATE_IN_PROGRESS", "DELETE_IN_PROGRESS", "READY", "NOT_READY"]
     },
     "LicenseEndpointSummaries": {
       "type": "list",
@@ -7546,9 +7153,7 @@
     },
     "ListAvailableMeteredProductsResponse": {
       "type": "structure",
-      "required": [
-        "meteredProducts"
-      ],
+      "required": ["meteredProducts"],
       "members": {
         "meteredProducts": {
           "shape": "MeteredProductSummaryList"
@@ -7560,9 +7165,7 @@
     },
     "ListBudgetsRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7593,9 +7196,7 @@
     },
     "ListBudgetsResponse": {
       "type": "structure",
-      "required": [
-        "budgets"
-      ],
+      "required": ["budgets"],
       "members": {
         "nextToken": {
           "shape": "String"
@@ -7607,9 +7208,7 @@
     },
     "ListFarmMembersRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7635,9 +7234,7 @@
     },
     "ListFarmMembersResponse": {
       "type": "structure",
-      "required": [
-        "members"
-      ],
+      "required": ["members"],
       "members": {
         "members": {
           "shape": "FarmMembers"
@@ -7679,9 +7276,7 @@
     },
     "ListFarmsResponse": {
       "type": "structure",
-      "required": [
-        "farms"
-      ],
+      "required": ["farms"],
       "members": {
         "nextToken": {
           "shape": "String"
@@ -7693,10 +7288,7 @@
     },
     "ListFleetMembersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7727,9 +7319,7 @@
     },
     "ListFleetMembersResponse": {
       "type": "structure",
-      "required": [
-        "members"
-      ],
+      "required": ["members"],
       "members": {
         "members": {
           "shape": "FleetMembers"
@@ -7741,9 +7331,7 @@
     },
     "ListFleetsRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7784,9 +7372,7 @@
     },
     "ListFleetsResponse": {
       "type": "structure",
-      "required": [
-        "fleets"
-      ],
+      "required": ["fleets"],
       "members": {
         "fleets": {
           "shape": "FleetSummaries"
@@ -7798,11 +7384,7 @@
     },
     "ListJobMembersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId"
-      ],
+      "required": ["farmId", "queueId", "jobId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7838,9 +7420,7 @@
     },
     "ListJobMembersResponse": {
       "type": "structure",
-      "required": [
-        "members"
-      ],
+      "required": ["members"],
       "members": {
         "members": {
           "shape": "JobMembers"
@@ -7852,10 +7432,7 @@
     },
     "ListJobsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7891,9 +7468,7 @@
     },
     "ListJobsResponse": {
       "type": "structure",
-      "required": [
-        "jobs"
-      ],
+      "required": ["jobs"],
       "members": {
         "jobs": {
           "shape": "JobSummaries"
@@ -7925,9 +7500,7 @@
     },
     "ListLicenseEndpointsResponse": {
       "type": "structure",
-      "required": [
-        "licenseEndpoints"
-      ],
+      "required": ["licenseEndpoints"],
       "members": {
         "licenseEndpoints": {
           "shape": "LicenseEndpointSummaries"
@@ -7939,9 +7512,7 @@
     },
     "ListMeteredProductsRequest": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId"
-      ],
+      "required": ["licenseEndpointId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -7967,9 +7538,7 @@
     },
     "ListMeteredProductsResponse": {
       "type": "structure",
-      "required": [
-        "meteredProducts"
-      ],
+      "required": ["meteredProducts"],
       "members": {
         "meteredProducts": {
           "shape": "MeteredProductSummaryList"
@@ -7981,10 +7550,7 @@
     },
     "ListQueueEnvironmentsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8015,9 +7581,7 @@
     },
     "ListQueueEnvironmentsResponse": {
       "type": "structure",
-      "required": [
-        "environments"
-      ],
+      "required": ["environments"],
       "members": {
         "environments": {
           "shape": "QueueEnvironmentSummaries"
@@ -8029,9 +7593,7 @@
     },
     "ListQueueFleetAssociationsRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8073,9 +7635,7 @@
     },
     "ListQueueFleetAssociationsResponse": {
       "type": "structure",
-      "required": [
-        "queueFleetAssociations"
-      ],
+      "required": ["queueFleetAssociations"],
       "members": {
         "queueFleetAssociations": {
           "shape": "QueueFleetAssociationSummaries"
@@ -8087,10 +7647,7 @@
     },
     "ListQueueMembersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8121,9 +7678,7 @@
     },
     "ListQueueMembersResponse": {
       "type": "structure",
-      "required": [
-        "members"
-      ],
+      "required": ["members"],
       "members": {
         "members": {
           "shape": "QueueMemberList"
@@ -8135,9 +7690,7 @@
     },
     "ListQueuesRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8173,9 +7726,7 @@
     },
     "ListQueuesResponse": {
       "type": "structure",
-      "required": [
-        "queues"
-      ],
+      "required": ["queues"],
       "members": {
         "queues": {
           "shape": "QueueSummaries"
@@ -8187,11 +7738,7 @@
     },
     "ListSessionActionsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId"
-      ],
+      "required": ["farmId", "queueId", "jobId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8237,9 +7784,7 @@
     },
     "ListSessionActionsResponse": {
       "type": "structure",
-      "required": [
-        "sessionactions"
-      ],
+      "required": ["sessionactions"],
       "members": {
         "sessionactions": {
           "shape": "SessionActionSummaries"
@@ -8251,11 +7796,7 @@
     },
     "ListSessionsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId"
-      ],
+      "required": ["farmId", "queueId", "jobId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8291,9 +7832,7 @@
     },
     "ListSessionsResponse": {
       "type": "structure",
-      "required": [
-        "sessions"
-      ],
+      "required": ["sessions"],
       "members": {
         "sessions": {
           "shape": "SessionSummaries"
@@ -8305,12 +7844,7 @@
     },
     "ListStepConsumersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "stepId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "stepId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8357,9 +7891,7 @@
     },
     "ListStepConsumersResponse": {
       "type": "structure",
-      "required": [
-        "consumers"
-      ],
+      "required": ["consumers"],
       "members": {
         "consumers": {
           "shape": "StepConsumers"
@@ -8371,12 +7903,7 @@
     },
     "ListStepDependenciesRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "stepId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "stepId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8423,9 +7950,7 @@
     },
     "ListStepDependenciesResponse": {
       "type": "structure",
-      "required": [
-        "dependencies"
-      ],
+      "required": ["dependencies"],
       "members": {
         "dependencies": {
           "shape": "StepDependencies"
@@ -8437,11 +7962,7 @@
     },
     "ListStepsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId"
-      ],
+      "required": ["farmId", "queueId", "jobId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8477,9 +7998,7 @@
     },
     "ListStepsResponse": {
       "type": "structure",
-      "required": [
-        "steps"
-      ],
+      "required": ["steps"],
       "members": {
         "steps": {
           "shape": "StepSummaries"
@@ -8491,10 +8010,7 @@
     },
     "ListStorageProfilesForQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8525,9 +8041,7 @@
     },
     "ListStorageProfilesForQueueResponse": {
       "type": "structure",
-      "required": [
-        "storageProfiles"
-      ],
+      "required": ["storageProfiles"],
       "members": {
         "storageProfiles": {
           "shape": "StorageProfileSummaries"
@@ -8539,9 +8053,7 @@
     },
     "ListStorageProfilesRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8567,9 +8079,7 @@
     },
     "ListStorageProfilesResponse": {
       "type": "structure",
-      "required": [
-        "storageProfiles"
-      ],
+      "required": ["storageProfiles"],
       "members": {
         "storageProfiles": {
           "shape": "StorageProfileSummaries"
@@ -8581,9 +8091,7 @@
     },
     "ListTagsForResourceRequest": {
       "type": "structure",
-      "required": [
-        "resourceArn"
-      ],
+      "required": ["resourceArn"],
       "members": {
         "resourceArn": {
           "shape": "String",
@@ -8602,12 +8110,7 @@
     },
     "ListTasksRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId",
-        "stepId"
-      ],
+      "required": ["farmId", "queueId", "jobId", "stepId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8648,9 +8151,7 @@
     },
     "ListTasksResponse": {
       "type": "structure",
-      "required": [
-        "tasks"
-      ],
+      "required": ["tasks"],
       "members": {
         "tasks": {
           "shape": "TaskSummaries"
@@ -8701,11 +8202,7 @@
     },
     "ListWorkerSessionsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8741,9 +8238,7 @@
     },
     "ListWorkerSessionsResponse": {
       "type": "structure",
-      "required": [
-        "sessions"
-      ],
+      "required": ["sessions"],
       "members": {
         "sessions": {
           "shape": "ListWorkerSessionSummaries"
@@ -8755,10 +8250,7 @@
     },
     "ListWorkersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -8789,9 +8281,7 @@
     },
     "ListWorkersResponse": {
       "type": "structure",
-      "required": [
-        "workers"
-      ],
+      "required": ["workers"],
       "members": {
         "nextToken": {
           "shape": "String"
@@ -8803,9 +8293,7 @@
     },
     "LogConfiguration": {
       "type": "structure",
-      "required": [
-        "logDriver"
-      ],
+      "required": ["logDriver"],
       "members": {
         "logDriver": {
           "shape": "LogDriver"
@@ -8851,17 +8339,11 @@
     },
     "LogicalOperator": {
       "type": "string",
-      "enum": [
-        "AND",
-        "OR"
-      ]
+      "enum": ["AND", "OR"]
     },
     "ManifestProperties": {
       "type": "structure",
-      "required": [
-        "rootPath",
-        "osType"
-      ],
+      "required": ["rootPath", "osType"],
       "members": {
         "fileSystemLocationName": {
           "shape": "FileSystemLocationName"
@@ -8926,12 +8408,7 @@
     },
     "MembershipLevel": {
       "type": "string",
-      "enum": [
-        "VIEWER",
-        "CONTRIBUTOR",
-        "OWNER",
-        "MANAGER"
-      ]
+      "enum": ["VIEWER", "CONTRIBUTOR", "OWNER", "MANAGER"]
     },
     "MemoryAmountMiB": {
       "type": "integer",
@@ -8941,9 +8418,7 @@
     },
     "MemoryMiBRange": {
       "type": "structure",
-      "required": [
-        "min"
-      ],
+      "required": ["min"],
       "members": {
         "min": {
           "shape": "MemoryAmountMiB"
@@ -8959,12 +8434,7 @@
     },
     "MeteredProductSummary": {
       "type": "structure",
-      "required": [
-        "productId",
-        "family",
-        "vendor",
-        "port"
-      ],
+      "required": ["productId", "family", "vendor", "port"],
       "members": {
         "productId": {
           "shape": "MeteredProductId"
@@ -9006,11 +8476,7 @@
     },
     "OperatingSystemFamily": {
       "type": "string",
-      "enum": [
-        "windows",
-        "linux",
-        "macos"
-      ]
+      "enum": ["windows", "linux", "macos"]
     },
     "OutputRelativeDirectoriesList": {
       "type": "list",
@@ -9027,11 +8493,7 @@
     },
     "ParameterFilterExpression": {
       "type": "structure",
-      "required": [
-        "name",
-        "operator",
-        "value"
-      ],
+      "required": ["name", "operator", "value"],
       "members": {
         "name": {
           "shape": "String"
@@ -9046,10 +8508,7 @@
     },
     "ParameterSortExpression": {
       "type": "structure",
-      "required": [
-        "sortOrder",
-        "name"
-      ],
+      "required": ["sortOrder", "name"],
       "members": {
         "sortOrder": {
           "shape": "SortOrder"
@@ -9061,9 +8520,7 @@
     },
     "ParameterSpace": {
       "type": "structure",
-      "required": [
-        "parameters"
-      ],
+      "required": ["parameters"],
       "members": {
         "parameters": {
           "shape": "StepParameterList"
@@ -9085,11 +8542,7 @@
     },
     "PathMappingRule": {
       "type": "structure",
-      "required": [
-        "sourceOs",
-        "sourcePath",
-        "destinationPath"
-      ],
+      "required": ["sourceOs", "sourcePath", "destinationPath"],
       "members": {
         "sourceOs": {
           "shape": "SourceOs"
@@ -9115,12 +8568,7 @@
     },
     "Period": {
       "type": "string",
-      "enum": [
-        "HOURLY",
-        "DAILY",
-        "WEEKLY",
-        "MONTHLY"
-      ]
+      "enum": ["HOURLY", "DAILY", "WEEKLY", "MONTHLY"]
     },
     "PortNumber": {
       "type": "integer",
@@ -9130,10 +8578,7 @@
     },
     "PosixUser": {
       "type": "structure",
-      "required": [
-        "user",
-        "group"
-      ],
+      "required": ["user", "group"],
       "members": {
         "user": {
           "shape": "PosixUserUserString"
@@ -9157,10 +8602,7 @@
     },
     "PrincipalType": {
       "type": "string",
-      "enum": [
-        "USER",
-        "GROUP"
-      ]
+      "enum": ["USER", "GROUP"]
     },
     "Priority": {
       "type": "integer",
@@ -9176,10 +8618,7 @@
     },
     "PutMeteredProductRequest": {
       "type": "structure",
-      "required": [
-        "licenseEndpointId",
-        "productId"
-      ],
+      "required": ["licenseEndpointId", "productId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -9204,10 +8643,7 @@
     },
     "QueueBlockedReason": {
       "type": "string",
-      "enum": [
-        "NO_BUDGET_CONFIGURED",
-        "BUDGET_THRESHOLD_REACHED"
-      ]
+      "enum": ["NO_BUDGET_CONFIGURED", "BUDGET_THRESHOLD_REACHED"]
     },
     "QueueEnvironmentId": {
       "type": "string",
@@ -9221,11 +8657,7 @@
     },
     "QueueEnvironmentSummary": {
       "type": "structure",
-      "required": [
-        "queueEnvironmentId",
-        "name",
-        "priority"
-      ],
+      "required": ["queueEnvironmentId", "name", "priority"],
       "members": {
         "queueEnvironmentId": {
           "shape": "QueueEnvironmentId"
@@ -9255,13 +8687,7 @@
     },
     "QueueFleetAssociationSummary": {
       "type": "structure",
-      "required": [
-        "queueId",
-        "fleetId",
-        "status",
-        "createdAt",
-        "createdBy"
-      ],
+      "required": ["queueId", "fleetId", "status", "createdAt", "createdBy"],
       "members": {
         "queueId": {
           "shape": "QueueId"
@@ -9329,11 +8755,7 @@
     },
     "QueueStatus": {
       "type": "string",
-      "enum": [
-        "ACTIVE",
-        "SCHEDULING",
-        "SCHEDULING_BLOCKED"
-      ]
+      "enum": ["ACTIVE", "SCHEDULING", "SCHEDULING_BLOCKED"]
     },
     "QueueSummaries": {
       "type": "list",
@@ -9403,11 +8825,7 @@
     },
     "ResourceNotFoundException": {
       "type": "structure",
-      "required": [
-        "message",
-        "resourceId",
-        "resourceType"
-      ],
+      "required": ["message", "resourceId", "resourceType"],
       "members": {
         "message": {
           "shape": "String"
@@ -9430,10 +8848,7 @@
     },
     "ResponseBudgetAction": {
       "type": "structure",
-      "required": [
-        "type",
-        "thresholdPercentage"
-      ],
+      "required": ["type", "thresholdPercentage"],
       "members": {
         "type": {
           "shape": "BudgetActionType"
@@ -9467,10 +8882,7 @@
     },
     "S3Location": {
       "type": "structure",
-      "required": [
-        "bucketName",
-        "key"
-      ],
+      "required": ["bucketName", "key"],
       "members": {
         "bucketName": {
           "shape": "S3BucketName"
@@ -9516,10 +8928,7 @@
     },
     "SearchGroupedFilterExpressions": {
       "type": "structure",
-      "required": [
-        "filters",
-        "operator"
-      ],
+      "required": ["filters", "operator"],
       "members": {
         "filters": {
           "shape": "SearchFilterExpressions"
@@ -9531,11 +8940,7 @@
     },
     "SearchJobsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueIds",
-        "itemOffset"
-      ],
+      "required": ["farmId", "queueIds", "itemOffset"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -9586,10 +8991,7 @@
     },
     "SearchJobsResponse": {
       "type": "structure",
-      "required": [
-        "jobs",
-        "totalResults"
-      ],
+      "required": ["jobs", "totalResults"],
       "members": {
         "jobs": {
           "shape": "JobSearchSummaries"
@@ -9627,11 +9029,7 @@
     },
     "SearchStepsRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueIds",
-        "itemOffset"
-      ],
+      "required": ["farmId", "queueIds", "itemOffset"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -9685,10 +9083,7 @@
     },
     "SearchStepsResponse": {
       "type": "structure",
-      "required": [
-        "steps",
-        "totalResults"
-      ],
+      "required": ["steps", "totalResults"],
       "members": {
         "steps": {
           "shape": "StepSearchSummaries"
@@ -9703,11 +9098,7 @@
     },
     "SearchTasksRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueIds",
-        "itemOffset"
-      ],
+      "required": ["farmId", "queueIds", "itemOffset"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -9761,10 +9152,7 @@
     },
     "SearchTasksResponse": {
       "type": "structure",
-      "required": [
-        "tasks",
-        "totalResults"
-      ],
+      "required": ["tasks", "totalResults"],
       "members": {
         "tasks": {
           "shape": "TaskSearchSummaries"
@@ -9784,9 +9172,7 @@
     },
     "SearchTermFilterExpression": {
       "type": "structure",
-      "required": [
-        "searchTerm"
-      ],
+      "required": ["searchTerm"],
       "members": {
         "searchTerm": {
           "shape": "SearchTerm"
@@ -9795,11 +9181,7 @@
     },
     "SearchWorkersRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetIds",
-        "itemOffset"
-      ],
+      "required": ["farmId", "fleetIds", "itemOffset"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -9850,10 +9232,7 @@
     },
     "SearchWorkersResponse": {
       "type": "structure",
-      "required": [
-        "workers",
-        "totalResults"
-      ],
+      "required": ["workers", "totalResults"],
       "members": {
         "workers": {
           "shape": "WorkerSearchSummaries"
@@ -9906,9 +9285,7 @@
     },
     "ServiceManagedEc2InstanceMarketOptions": {
       "type": "structure",
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "members": {
         "type": {
           "shape": "Ec2MarketType"
@@ -9917,12 +9294,7 @@
     },
     "ServiceManagedEc2InstanceRequirements": {
       "type": "structure",
-      "required": [
-        "vCpuCount",
-        "memoryMiB",
-        "osFamily",
-        "cpuArchitectureType"
-      ],
+      "required": ["vCpuCount", "memoryMiB", "osFamily", "cpuArchitectureType"],
       "members": {
         "vCpuCount": {
           "shape": "VCpuCountRange"
@@ -9993,10 +9365,7 @@
     },
     "ServiceQuotaExceededExceptionReason": {
       "type": "string",
-      "enum": [
-        "SERVICE_QUOTA_EXCEEDED_EXCEPTION",
-        "KMS_KEY_LIMIT_EXCEEDED"
-      ]
+      "enum": ["SERVICE_QUOTA_EXCEEDED_EXCEPTION", "KMS_KEY_LIMIT_EXCEEDED"]
     },
     "SessionActionDefinition": {
       "type": "structure",
@@ -10078,11 +9447,7 @@
     },
     "SessionActionSummary": {
       "type": "structure",
-      "required": [
-        "sessionActionId",
-        "status",
-        "definition"
-      ],
+      "required": ["sessionActionId", "status", "definition"],
       "members": {
         "sessionActionId": {
           "shape": "SessionActionId"
@@ -10120,9 +9485,7 @@
     },
     "SessionLifecycleTargetStatus": {
       "type": "string",
-      "enum": [
-        "ENDED"
-      ]
+      "enum": ["ENDED"]
     },
     "SessionSummaries": {
       "type": "list",
@@ -10175,17 +9538,11 @@
     },
     "SortOrder": {
       "type": "string",
-      "enum": [
-        "ASCENDING",
-        "DESCENDING"
-      ]
+      "enum": ["ASCENDING", "DESCENDING"]
     },
     "SourceOs": {
       "type": "string",
-      "enum": [
-        "windows",
-        "posix"
-      ]
+      "enum": ["windows", "posix"]
     },
     "StartedAt": {
       "type": "timestamp",
@@ -10197,11 +9554,7 @@
     },
     "Statistics": {
       "type": "structure",
-      "required": [
-        "count",
-        "costInUsd",
-        "runtimeInSeconds"
-      ],
+      "required": ["count", "costInUsd", "runtimeInSeconds"],
       "members": {
         "queueId": {
           "shape": "QueueId"
@@ -10280,9 +9633,7 @@
     },
     "StepAmountCapability": {
       "type": "structure",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "members": {
         "name": {
           "shape": "AmountCapabilityName"
@@ -10306,9 +9657,7 @@
     },
     "StepAttributeCapability": {
       "type": "structure",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "members": {
         "name": {
           "shape": "AttributeCapabilityName"
@@ -10323,10 +9672,7 @@
     },
     "StepConsumer": {
       "type": "structure",
-      "required": [
-        "stepId",
-        "status"
-      ],
+      "required": ["stepId", "status"],
       "members": {
         "stepId": {
           "shape": "StepId"
@@ -10350,10 +9696,7 @@
     },
     "StepDependency": {
       "type": "structure",
-      "required": [
-        "stepId",
-        "status"
-      ],
+      "required": ["stepId", "status"],
       "members": {
         "stepId": {
           "shape": "StepId"
@@ -10397,12 +9740,7 @@
     },
     "StepDetailsError": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "stepId",
-        "code",
-        "message"
-      ],
+      "required": ["jobId", "stepId", "code", "message"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -10420,10 +9758,7 @@
     },
     "StepDetailsIdentifiers": {
       "type": "structure",
-      "required": [
-        "jobId",
-        "stepId"
-      ],
+      "required": ["jobId", "stepId"],
       "members": {
         "jobId": {
           "shape": "JobId"
@@ -10453,10 +9788,7 @@
     },
     "StepParameter": {
       "type": "structure",
-      "required": [
-        "name",
-        "type"
-      ],
+      "required": ["name", "type"],
       "members": {
         "name": {
           "shape": "StepParameterName"
@@ -10479,19 +9811,11 @@
     },
     "StepParameterType": {
       "type": "string",
-      "enum": [
-        "INT",
-        "FLOAT",
-        "STRING",
-        "PATH"
-      ]
+      "enum": ["INT", "FLOAT", "STRING", "PATH"]
     },
     "StepRequiredCapabilities": {
       "type": "structure",
-      "required": [
-        "attributes",
-        "amounts"
-      ],
+      "required": ["attributes", "amounts"],
       "members": {
         "attributes": {
           "shape": "StepAttributeCapabilities"
@@ -10612,13 +9936,7 @@
     },
     "StepTargetTaskRunStatus": {
       "type": "string",
-      "enum": [
-        "READY",
-        "FAILED",
-        "SUCCEEDED",
-        "CANCELED",
-        "SUSPENDED"
-      ]
+      "enum": ["READY", "FAILED", "SUCCEEDED", "CANCELED", "SUSPENDED"]
     },
     "StorageProfileId": {
       "type": "string",
@@ -10632,11 +9950,7 @@
     },
     "StorageProfileSummary": {
       "type": "structure",
-      "required": [
-        "storageProfileId",
-        "displayName",
-        "osFamily"
-      ],
+      "required": ["storageProfileId", "displayName", "osFamily"],
       "members": {
         "storageProfileId": {
           "shape": "StorageProfileId"
@@ -10659,11 +9973,7 @@
     },
     "StringFilterExpression": {
       "type": "structure",
-      "required": [
-        "name",
-        "operator",
-        "value"
-      ],
+      "required": ["name", "operator", "value"],
       "members": {
         "name": {
           "shape": "String"
@@ -10722,9 +10032,7 @@
     },
     "TagResourceRequest": {
       "type": "structure",
-      "required": [
-        "resourceArn"
-      ],
+      "required": ["resourceArn"],
       "members": {
         "resourceArn": {
           "shape": "String",
@@ -10788,11 +10096,7 @@
     },
     "TaskRunSessionActionDefinition": {
       "type": "structure",
-      "required": [
-        "taskId",
-        "stepId",
-        "parameters"
-      ],
+      "required": ["taskId", "stepId", "parameters"],
       "members": {
         "taskId": {
           "shape": "TaskId"
@@ -10807,10 +10111,7 @@
     },
     "TaskRunSessionActionDefinitionSummary": {
       "type": "structure",
-      "required": [
-        "taskId",
-        "stepId"
-      ],
+      "required": ["taskId", "stepId"],
       "members": {
         "taskId": {
           "shape": "TaskId"
@@ -10893,12 +10194,7 @@
     },
     "TaskSummary": {
       "type": "structure",
-      "required": [
-        "taskId",
-        "createdAt",
-        "createdBy",
-        "runStatus"
-      ],
+      "required": ["taskId", "createdAt", "createdBy", "runStatus"],
       "members": {
         "taskId": {
           "shape": "TaskId"
@@ -10940,13 +10236,7 @@
     },
     "TaskTargetRunStatus": {
       "type": "string",
-      "enum": [
-        "READY",
-        "FAILED",
-        "SUCCEEDED",
-        "CANCELED",
-        "SUSPENDED"
-      ]
+      "enum": ["READY", "FAILED", "SUCCEEDED", "CANCELED", "SUSPENDED"]
     },
     "ThresholdPercentage": {
       "type": "float",
@@ -10956,9 +10246,7 @@
     },
     "ThrottlingException": {
       "type": "structure",
-      "required": [
-        "message"
-      ],
+      "required": ["message"],
       "members": {
         "message": {
           "shape": "String"
@@ -10995,10 +10283,7 @@
     },
     "UntagResourceRequest": {
       "type": "structure",
-      "required": [
-        "resourceArn",
-        "tagKeys"
-      ],
+      "required": ["resourceArn", "tagKeys"],
       "members": {
         "resourceArn": {
           "shape": "String",
@@ -11018,10 +10303,7 @@
     },
     "UpdateBudgetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "budgetId"
-      ],
+      "required": ["farmId", "budgetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11073,9 +10355,7 @@
     },
     "UpdateFarmRequest": {
       "type": "structure",
-      "required": [
-        "farmId"
-      ],
+      "required": ["farmId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11104,10 +10384,7 @@
     },
     "UpdateFleetRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId"
-      ],
+      "required": ["farmId", "fleetId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11150,11 +10427,7 @@
     },
     "UpdateJobRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "jobId"
-      ],
+      "required": ["farmId", "queueId", "jobId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11202,11 +10475,7 @@
     },
     "UpdateQueueEnvironmentRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "queueEnvironmentId"
-      ],
+      "required": ["farmId", "queueId", "queueEnvironmentId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11251,12 +10520,7 @@
     },
     "UpdateQueueFleetAssociationRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId",
-        "fleetId",
-        "status"
-      ],
+      "required": ["farmId", "queueId", "fleetId", "status"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11285,9 +10549,7 @@
     },
     "UpdateQueueFleetAssociationResponse": {
       "type": "structure",
-      "required": [
-        "status"
-      ],
+      "required": ["status"],
       "members": {
         "status": {
           "shape": "QueueFleetAssociationStatus"
@@ -11296,10 +10558,7 @@
     },
     "UpdateQueueRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "queueId"
-      ],
+      "required": ["farmId", "queueId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11463,10 +10722,7 @@
     },
     "UpdateStorageProfileRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "storageProfileId"
-      ],
+      "required": ["farmId", "storageProfileId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11565,11 +10821,7 @@
     },
     "UpdateWorkerRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11617,11 +10869,7 @@
     },
     "UpdateWorkerScheduleRequest": {
       "type": "structure",
-      "required": [
-        "farmId",
-        "fleetId",
-        "workerId"
-      ],
+      "required": ["farmId", "fleetId", "workerId"],
       "members": {
         "dryRun": {
           "shape": "DryRun",
@@ -11714,11 +10962,7 @@
     },
     "UpdatedWorkerStatus": {
       "type": "string",
-      "enum": [
-        "STARTED",
-        "STOPPING",
-        "STOPPED"
-      ]
+      "enum": ["STARTED", "STOPPING", "STOPPED"]
     },
     "UsageGroupBy": {
       "type": "list",
@@ -11742,12 +10986,7 @@
     },
     "UsageStatistic": {
       "type": "string",
-      "enum": [
-        "SUM",
-        "MIN",
-        "MAX",
-        "AVG"
-      ]
+      "enum": ["SUM", "MIN", "MAX", "AVG"]
     },
     "UsageStatistics": {
       "type": "list",
@@ -11768,19 +11007,14 @@
     },
     "UsageType": {
       "type": "string",
-      "enum": [
-        "COMPUTE",
-        "LICENSE"
-      ]
+      "enum": ["COMPUTE", "LICENSE"]
     },
     "UserId": {
       "type": "string"
     },
     "UserJobsFirst": {
       "type": "structure",
-      "required": [
-        "userIdentityId"
-      ],
+      "required": ["userIdentityId"],
       "members": {
         "userIdentityId": {
           "shape": "String"
@@ -11789,9 +11023,7 @@
     },
     "VCpuCountRange": {
       "type": "structure",
-      "required": [
-        "min"
-      ],
+      "required": ["min"],
       "members": {
         "min": {
           "shape": "MinOneMaxTenThousand"
@@ -11803,10 +11035,7 @@
     },
     "ValidationException": {
       "type": "structure",
-      "required": [
-        "message",
-        "reason"
-      ],
+      "required": ["message", "reason"],
       "members": {
         "message": {
           "shape": "String"
@@ -11829,10 +11058,7 @@
     },
     "ValidationExceptionField": {
       "type": "structure",
-      "required": [
-        "name",
-        "message"
-      ],
+      "required": ["name", "message"],
       "members": {
         "name": {
           "shape": "String"
@@ -11865,10 +11091,7 @@
     },
     "WorkerAmountCapability": {
       "type": "structure",
-      "required": [
-        "name",
-        "value"
-      ],
+      "required": ["name", "value"],
       "members": {
         "name": {
           "shape": "AmountCapabilityName"
@@ -11888,10 +11111,7 @@
     },
     "WorkerAttributeCapability": {
       "type": "structure",
-      "required": [
-        "name",
-        "values"
-      ],
+      "required": ["name", "values"],
       "members": {
         "name": {
           "shape": "AttributeCapabilityName"
@@ -11911,10 +11131,7 @@
     },
     "WorkerCapabilities": {
       "type": "structure",
-      "required": [
-        "amounts",
-        "attributes"
-      ],
+      "required": ["amounts", "attributes"],
       "members": {
         "amounts": {
           "shape": "WorkerAmountCapabilityList"
@@ -11926,9 +11143,7 @@
     },
     "WorkerEc2Metadata": {
       "type": "structure",
-      "required": [
-        "instanceType"
-      ],
+      "required": ["instanceType"],
       "members": {
         "instanceType": {
           "shape": "InstanceType"
@@ -11956,10 +11171,7 @@
     },
     "WorkerSearchSummary": {
       "type": "structure",
-      "required": [
-        "createdBy",
-        "createdAt"
-      ],
+      "required": ["createdBy", "createdAt"],
       "members": {
         "fleetId": {
           "shape": "FleetId"

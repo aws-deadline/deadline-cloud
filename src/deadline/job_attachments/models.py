@@ -101,11 +101,11 @@ class PathFormat(str, Enum):
 
 
 # Behavior to adopt when loading job assets
-class AssetLoadingMethod(str, Enum):
+class JobAttachmentsFileSystem(str, Enum):
     # Load all assets at before execution of the job code
-    PRELOAD = "PRELOAD"
+    COPIED = "COPIED"
     # Start job execution immediately and load assets as needed
-    ON_DEMAND = "ON_DEMAND"
+    VIRTUAL = "VIRTUAL"
 
 
 @dataclass
@@ -149,12 +149,12 @@ class Attachments:
     # The list of required assests per asset root
     manifests: List[ManifestProperties] = field(default_factory=list)
     # Method to use when loading assets required for a job
-    assetLoadingMethod: str = AssetLoadingMethod.PRELOAD.value
+    fileSystem: str = JobAttachmentsFileSystem.COPIED.value
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "manifests": [manifest.to_dict() for manifest in self.manifests],
-            "assetLoadingMethod": self.assetLoadingMethod,
+            "fileSystem": self.fileSystem,
         }
 
 
