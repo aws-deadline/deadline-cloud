@@ -122,6 +122,7 @@ looponfailroots = [
 markers = [
     "no_setup: mark that test shouldn't use default setups",
     "integ: tests that run against AWS resources",
+    "docker: marks tests to be run only in a Docker environment",
 ]
 # looponfailroots is deprecated, this removes the deprecation from the test output
 filterwarnings = [
