@@ -41,7 +41,7 @@ from .download import (
 from .fus3 import Fus3ProcessManager
 from .exceptions import AssetSyncError, Fus3ExecutableMissingError
 from .models import (
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     Attachments,
     FileSystemPermissionSettings,
     JobAttachmentS3Settings,
@@ -269,12 +269,11 @@ class AssetSync:
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
-        Depending on the assetLoadingMethod in the Attachments this will perform two
+        Depending on the fileSystem in the Attachments this will perform two
         different behaviors:
-            PRELOAD / None : downloads a manifest file and corresponding input files, if found.
-            ON_DEMAND: downloads a manifest file and mounts a Virtual File System at the
-                       specified asset root corresponding to the manifest contents. This will
-                       fall back to PRELOAD method if the Fus3 executable can't be found.
+            COPIED / None : downloads a manifest file and corresponding input files, if found.
+            VIRTUAL: downloads a manifest file and mounts a Virtual File System at the
+                       specified asset root corresponding to the manifest contents
 
         Args:
             s3_settings: S3-specific Job Attachment settings.
@@ -294,10 +293,10 @@ class AssetSync:
                 cancelled. If it returns True, the download will continue.
 
         Returns:
-            PRELOAD / None : a tuple of (1) final summary statistics for file downloads,
+            COPIED / None : a tuple of (1) final summary statistics for file downloads,
                              and (2) a list of local roots for each asset root, used for
                              path mapping.
-            ON_DEMAND: same as PRELOAD, but the summary statistics will be empty since the
+            VIRTUAL: same as COPIED, but the summary statistics will be empty since the
                        download hasn't started yet.
         """
         if not s3_settings:
@@ -378,7 +377,7 @@ class AssetSync:
         # Download
 
         if (
-            attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value
+            attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
         ):
             try:
@@ -394,7 +393,7 @@ class AssetSync:
                 return (summary_statistics, list(pathmapping_rules.values()))
             except Fus3ExecutableMissingError:
                 logger.error(
-                    f"Virtual File System not found, falling back to {AssetLoadingMethod.PRELOAD} for AssetLoadingMethod."
+                    f"Virtual File System not found, falling back to {JobAttachmentsFileSystem.COPIED} for JobAttachmentsFileSystem."
                 )
 
         download_summary_statistics = download_files_from_manifests(
@@ -496,12 +495,11 @@ class AssetSync:
             else:
                 summary_stats = SummaryStatistics()
         finally:
-            if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value:
+            if attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value:
                 try:
                     Fus3ProcessManager.find_fus3()
                     # Shutdown all running Fus3 processes since task is completed
                     Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
                 except Fus3ExecutableMissingError:
                     logger.error("Virtual File System not found, no processes to kill.")
-
         return summary_stats

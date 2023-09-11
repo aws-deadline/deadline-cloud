@@ -262,7 +262,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             layout,
             "defaults.job_attachments_file_system",
             "Job Attachments FileSystem Options",
-            ["PRELOAD", "ON_DEMAND"],
+            ["COPIED", "VIRTUAL"],
         )
 
     def _build_general_settings_ui(self, group, layout):
