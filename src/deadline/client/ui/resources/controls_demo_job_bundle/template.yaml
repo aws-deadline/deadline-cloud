@@ -1,6 +1,6 @@
 specificationVersion: 'jobtemplate-2023-09'
 name: Job Template GUI Control Showcase
-parameters:
+parameterDefinitions:
   - name: LineEditControl
     type: STRING
     userInterface:
