@@ -17,7 +17,7 @@ from .. import block_signals
 
 
 class _FileWidget(QWidget):
-    # Emitted when the directory changes
+    # Emitted when the file changes
     path_changed = Signal(str)
 
     def __init__(

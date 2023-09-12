@@ -1,4 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+from __future__ import annotations
 
 import json
 import os
@@ -16,7 +17,7 @@ from ..job_bundle import deadline_yaml_dump
 from .dataclasses import CliJobSettings
 from .dialogs.submit_job_to_deadline_dialog import SubmitJobToDeadlineDialog
 from .widgets.cli_job_settings_tab import CliJobSettingsWidget
-from ..job_bundle.submission import FlatAssetReferences
+from ..job_bundle.submission import AssetReferences
 
 logger = getLogger(__name__)
 
@@ -42,9 +43,10 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,
-        settings: CliJobSettings,
         job_bundle_dir: str,
-        asset_references: FlatAssetReferences,
+        settings: CliJobSettings,
+        queue_parameters: list[dict[str, Any]],
+        asset_references: AssetReferences,
     ) -> None:
         """
         Perform a submission when the submit button is pressed
@@ -64,6 +66,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         job_template: Dict[str, Any] = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": settings.name,
+            "description": settings.description,
             "parameterDefinitions": [
                 {
                     "name": "DataDir",
@@ -74,6 +77,8 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
                 }
             ],
         }
+        if not settings.description:
+            del job_template["description"]
         step = {
             "name": "CliScript",
             "script": {
@@ -122,11 +127,9 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
             elif settings.file_format == "JSON":
                 json.dump(job_template, f, sort_keys=False, indent=1)
 
+        # Filter the provided queue parameters to just their values
         parameters_values = [
-            {"name": "deadline:priority", "value": settings.priority},
-            {"name": "deadline:targetTaskRunStatus", "value": settings.initial_status},
-            {"name": "deadline:maxFailedTasksCount", "value": settings.max_failed_tasks_count},
-            {"name": "deadline:maxRetriesPerTask", "value": settings.max_retries_per_task},
+            {"name": param["name"], "value": param["value"]} for param in queue_parameters
         ]
 
         with open(
@@ -151,11 +154,12 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
                     json.dump(asset_references.to_dict(), f, indent=1)
 
     __submitter_dialog = SubmitJobToDeadlineDialog(
-        CliJobSettingsWidget,
-        CliJobSettings(),
-        FlatAssetReferences(),
-        FlatAssetReferences(),
-        on_create_job_bundle_callback,
+        job_setup_widget_type=CliJobSettingsWidget,
+        initial_job_settings=CliJobSettings(),
+        initial_shared_parameter_values={},
+        auto_detected_attachments=AssetReferences(),
+        attachments=AssetReferences(),
+        on_create_job_bundle_callback=on_create_job_bundle_callback,
         parent=parent,
         f=f,
     )

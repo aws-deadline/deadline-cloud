@@ -85,7 +85,7 @@ def fleet_get(fleet_id, queue_id, **args):
         response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
         queue_name = response["displayName"]
 
-        response = api._call_paginated_deadline_list_api(
+        response = api._list_apis._call_paginated_deadline_list_api(
             deadline.list_queue_fleet_associations,
             "queueFleetAssociations",
             farmId=farm_id,

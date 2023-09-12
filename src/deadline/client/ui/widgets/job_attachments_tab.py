@@ -23,7 +23,7 @@ from PySide2.QtWidgets import (  # type: ignore
     QMessageBox,
 )
 
-from ...job_bundle.submission import FlatAssetReferences
+from ...job_bundle.submission import AssetReferences
 from .. import block_signals
 
 logger = getLogger(__name__)
@@ -43,8 +43,8 @@ class JobAttachmentsWidget(QWidget):
 
     def __init__(
         self,
-        auto_detected_attachments: FlatAssetReferences,
-        attachments: FlatAssetReferences,
+        auto_detected_attachments: AssetReferences,
+        attachments: AssetReferences,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -284,7 +284,7 @@ class JobAttachmentsWidget(QWidget):
                 f"The selected directories from the auto-detected list ({len(unremoved_dirs)} items) were not removed.",
             )
 
-    def get_asset_references(self) -> FlatAssetReferences:
+    def get_asset_references(self) -> AssetReferences:
         """
         Creates an asset_references object that can be saved as the
         asset_references.json|yaml file in a Job Bundle.
