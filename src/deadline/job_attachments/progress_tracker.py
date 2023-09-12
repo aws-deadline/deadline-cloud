@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 from collections import Counter
+from logging import Logger, LoggerAdapter
 
 import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from threading import Lock
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 from deadline.job_attachments._utils import _human_readable_file_size
 
-DURATION_BETWEEN_CALLS = 1  # in seconds
-FILES_IN_CHUNK = 50
+CALLBACK_INTERVAL = 1  # in seconds
+MAX_FILES_IN_CHUNK = 50
+LOG_INTERVAL = 300  # in seconds
+LOG_PERCENTAGE_THRESHOLD = 10  # in percentage
 
 
 @dataclass
@@ -146,9 +149,14 @@ class ProgressTracker:
     def __init__(
         self,
         status: ProgressStatus,
+        total_files: int,
+        total_bytes: int,
         on_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
-        interval: int = DURATION_BETWEEN_CALLS,
-        files_in_chunk: int = FILES_IN_CHUNK,
+        callback_interval: int = CALLBACK_INTERVAL,
+        max_files_in_chunk: int = MAX_FILES_IN_CHUNK,
+        logger: Optional[Union[Logger, LoggerAdapter]] = None,
+        log_interval: int = LOG_INTERVAL,
+        log_percentage_threshold: int = LOG_PERCENTAGE_THRESHOLD,
     ) -> None:
         def do_nothing(*args, **kwargs) -> bool:
             return True
@@ -157,23 +165,31 @@ class ProgressTracker:
             on_progress_callback = do_nothing
 
         self.on_progress_callback = on_progress_callback
-        self.interval = interval
-        self.max_files_in_chunk = files_in_chunk
+        self.continue_reporting = True
 
-        self.last_report_time: Optional[float] = None
-        self.files_per_chunk = 1
+        self.reporting_interval = callback_interval
+        self.reporting_files_per_chunk = 1
+        self.max_files_in_chunk = max_files_in_chunk
         self.completed_files_in_chunk = 0
+        self.last_report_time: Optional[float] = None
+        self.last_report_processed_bytes: int = 0
 
-        self.status: ProgressStatus = status
-        self.total_files = 0
-        self.total_bytes = 0
+        self.logger = logger
+        self.log_interval = log_interval
+        self.log_percentage_threshold = log_percentage_threshold
+        self.last_logged_time: Optional[float] = None
+        self.last_logged_completed_bytes: int = 0
+
+        self.status = status
+        self.total_files = total_files
+        self.total_bytes = total_bytes
+        if self.total_files >= self.max_files_in_chunk:
+            self.reporting_files_per_chunk = self.max_files_in_chunk
         self.processed_files = 0
         self.processed_bytes = 0
         self.skipped_files = 0
         self.skipped_bytes = 0
-        self.total_time = 0.0  # time (in fractional seconds) taken to perform hashing or uploading
-
-        self.continue_reporting = True
+        self.total_time = 0.0  # total time (in fractional seconds) taken for the process
 
         self._lock = Lock()
 
@@ -183,10 +199,14 @@ class ProgressTracker:
             so that the progress can be updated with the amount of bytes processed.
             """
             with self._lock:
+                self._initialize_timestamps_if_none()
                 self.processed_bytes += bytes_amount
                 if current_file_done:
                     self.processed_files += 1
                     self.completed_files_in_chunk += 1
+                # Logs progress message to the logger (if exists)
+                self.log_progress_message()
+                # Invokes the callback with current progress data
                 return self.report_progress()
 
         self.track_progress_callback = track_progress
@@ -197,13 +217,28 @@ class ProgressTracker:
         """
         self.total_files = total_files
         self.total_bytes = total_bytes
-        if self.total_files > self.max_files_in_chunk:
-            self.files_per_chunk = self.max_files_in_chunk
+        if self.total_files >= self.max_files_in_chunk:
+            self.reporting_files_per_chunk = self.max_files_in_chunk
+
+    def _initialize_timestamps_if_none(self) -> None:
+        """
+        This is to initialize the `last_report_time` and `last_logged_time` to the
+        current time in alignment with the start of process (i.e., hashing, uploading,
+        or downloading.) These are used to calculate the current hashing or transfer
+        rate for the first progress report, which is the first callback invocation or
+        the first logging.
+        """
+        current_time = time.perf_counter()
+        if self.last_report_time is None:
+            self.last_report_time = current_time
+        if self.last_logged_time is None:
+            self.last_logged_time = current_time
 
     def increase_processed(self, num_files: int = 1, file_bytes: int = 0) -> None:
         """
         Adds the number and size of processed files.
         """
+        self._initialize_timestamps_if_none()
         self.processed_files += num_files
         self.completed_files_in_chunk += num_files
         self.processed_bytes += file_bytes
@@ -219,10 +254,10 @@ class ProgressTracker:
     def report_progress(self) -> bool:
         """
         Invokes the callback with current progress metadata in one of the following cases:
-        1. when called for the first time (when the progress is (1 / # of total files)%), or
-        2. whenever a specific time interval has passed since the most recent call, or
-        3. whenever a specific number of files (a chunk) has been processed, or
-        4. when called at the very end (when the progress is 100%)
+        1. when a specific time interval has passed since the last call, (or since the
+           process started,) or
+        2. when a specific number of files (a chunk) has been processed, or
+        3. when the progress is 100%, (including when all files were skipped during the process.)
 
         Sets the flag `continue_reporting` True if the operation should continue as normal,
         or False to cancel, and returns the flag.
@@ -233,13 +268,14 @@ class ProgressTracker:
         current_time = time.perf_counter()
         if (
             self.last_report_time is None
-            or current_time - self.last_report_time >= self.interval
-            or self.completed_files_in_chunk >= self.files_per_chunk
+            or current_time - self.last_report_time >= self.reporting_interval
+            or self.completed_files_in_chunk >= self.reporting_files_per_chunk
             or self.processed_files + self.skipped_files == self.total_files
         ):
             self.continue_reporting = self.on_progress_callback(
                 self._get_progress_report_metadata()
             )
+            self.last_report_processed_bytes = self.processed_bytes
             self.last_report_time = current_time
             self.completed_files_in_chunk = 0
         return self.continue_reporting
@@ -249,21 +285,24 @@ class ProgressTracker:
         percentage = round(
             completed_bytes / self.total_bytes * 100 if self.total_bytes > 0 else 0, 1
         )
+        seconds_since_last_report = round(
+            time.perf_counter() - self.last_report_time if self.last_report_time else 0, 2
+        )
+        transfer_rate = int(
+            (self.processed_bytes - self.last_report_processed_bytes) / seconds_since_last_report
+            if seconds_since_last_report > 0
+            else 0
+        )
+        transfer_rate_name = "Transfer rate"
+        if self.status == ProgressStatus.PREPARING_IN_PROGRESS:
+            transfer_rate_name = "Hashing speed"
+
         progress_message = (
             f"{self.status.verb_in_message}"
             f" {_human_readable_file_size(completed_bytes)} / {_human_readable_file_size(self.total_bytes)}"
             f" of {self.total_files} file{'' if self.total_files == 1 else 's'}"
+            f" ({transfer_rate_name}: {_human_readable_file_size(transfer_rate)}/s)"
         )
-
-        # If the manifest version does not support `size` and `total_size` properties,
-        # the progress is tracked in the number of files instead of bytes.
-        if self.total_bytes == 0 and self.total_files != 0:
-            completed_files = self.processed_files + self.skipped_files
-            percentage = round(completed_files / self.total_files * 100, 1)
-            progress_message = (
-                f"{self.status.verb_in_message} {completed_files}/{self.total_files}"
-                f" file{'' if self.total_files == 1 else 's'}"
-            )
 
         return ProgressReportMetadata(
             status=self.status,
@@ -299,5 +338,32 @@ class ProgressTracker:
         summary_statistics_dict["file_counts_by_root_directory"] = {
             root: len(paths) for root, paths in downloaded_files_paths_by_root.items()
         }
-
         return DownloadSummaryStatistics(**summary_statistics_dict)
+
+    def log_progress_message(self) -> None:
+        """
+        Logs progress message to the logger (if exists) on specific conditions:
+        1. when the `log_interval` time has passed since the last call, (or since the
+           process started,) or,
+        2. when the tracked progress percentage difference from the last log exceeds
+           the `log_percentage_threshold`, or
+        3. when the process is fully completed (progress percentage reaches 100%).
+        """
+        if self.logger is None:
+            return
+
+        current_time = time.perf_counter()
+        current_completed_bytes = self.processed_bytes + self.skipped_bytes
+        progress_difference = (
+            (current_completed_bytes - self.last_logged_completed_bytes) / self.total_bytes * 100
+        )
+
+        if (
+            self.last_logged_time is None
+            or current_time - self.last_logged_time >= self.log_interval
+            or progress_difference >= self.log_percentage_threshold
+            or self.processed_files + self.skipped_files == self.total_files
+        ):
+            self.logger.info(self._get_progress_report_metadata().progressMessage)
+            self.last_logged_completed_bytes = current_completed_bytes
+            self.last_logged_time = current_time

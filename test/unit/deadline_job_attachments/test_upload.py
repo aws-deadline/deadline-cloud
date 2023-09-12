@@ -40,7 +40,6 @@ from deadline.job_attachments.models import (
     StorageProfileForQueue,
 )
 from deadline.job_attachments.progress_tracker import (
-    ProgressReportMetadata,
     ProgressStatus,
     SummaryStatistics,
 )
@@ -1867,22 +1866,25 @@ def assert_progress_report_last_callback(
     Assert that the argument of the last callback (when the progress is 100%) is as expected.
     """
     readable_total_input_bytes = _human_readable_file_size(expected_total_input_bytes)
-    expected_last_hashing_progress_report = ProgressReportMetadata(
-        status=ProgressStatus.PREPARING_IN_PROGRESS,
-        progress=100.0,
-        progressMessage=f"Processed {readable_total_input_bytes} / {readable_total_input_bytes}"
-        + f" of {num_input_files} file{'' if num_input_files == 1 else 's'}",
-    )
+    actual_args, _ = on_preparing_to_submit.call_args
+    actual_last_hashing_progress_report = actual_args[0]
+    assert actual_last_hashing_progress_report.status == ProgressStatus.PREPARING_IN_PROGRESS
+    assert actual_last_hashing_progress_report.progress == 100.0
+    assert (
+        f"Processed {readable_total_input_bytes} / {readable_total_input_bytes}"
+        f" of {num_input_files} file{'' if num_input_files == 1 else 's'}"
+        " (Hashing speed: "
+    ) in actual_last_hashing_progress_report.progressMessage
 
-    expected_last_upload_progress_report = ProgressReportMetadata(
-        status=ProgressStatus.UPLOAD_IN_PROGRESS,
-        progress=100.0,
-        progressMessage=f"Uploaded {readable_total_input_bytes} / {readable_total_input_bytes}"
-        + f" of {num_input_files} file{'' if num_input_files == 1 else 's'}",
-    )
-
-    on_preparing_to_submit.assert_called_with(expected_last_hashing_progress_report)
-    on_uploading_assets.assert_called_with(expected_last_upload_progress_report)
+    actual_args, _ = on_uploading_assets.call_args
+    actual_last_upload_progress_report = actual_args[0]
+    assert actual_last_upload_progress_report.status == ProgressStatus.UPLOAD_IN_PROGRESS
+    assert actual_last_upload_progress_report.progress == 100.0
+    assert (
+        f"Uploaded {readable_total_input_bytes} / {readable_total_input_bytes}"
+        f" of {num_input_files} file{'' if num_input_files == 1 else 's'}"
+        " (Transfer rate: "
+    ) in actual_last_upload_progress_report.progressMessage
 
 
 def assert_progress_report_summary_statistics(

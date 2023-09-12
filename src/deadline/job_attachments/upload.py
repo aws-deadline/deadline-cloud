@@ -752,10 +752,6 @@ class S3AssetManager:
             a tuple with (1) the summary statistics of the hash operation, and
             (2) a list of AssetRootManifest (a manifest and output paths for each asset root).
         """
-        progress_tracker = ProgressTracker(
-            ProgressStatus.PREPARING_IN_PROGRESS, on_preparing_to_submit
-        )
-
         start_time = time.perf_counter()
 
         local_type_locations: dict[str, str] = {}
@@ -774,8 +770,14 @@ class S3AssetManager:
             shared_type_locations,
         )
 
+        # Sets up progress tracker to report upload progress back to the caller.
         (input_files, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
-        progress_tracker.set_total_files(input_files, input_bytes)
+        progress_tracker = ProgressTracker(
+            status=ProgressStatus.PREPARING_IN_PROGRESS,
+            total_files=input_files,
+            total_bytes=input_bytes,
+            on_progress_callback=on_preparing_to_submit,
+        )
 
         asset_root_manifests: list[AssetRootManifest] = []
         for group in asset_groups:
@@ -818,12 +820,16 @@ class S3AssetManager:
             a tuple with (1) the summary statistics of the upload operation, and
             (2) the S3 path to the asset manifest file.
         """
-        progress_tracker = ProgressTracker(ProgressStatus.UPLOAD_IN_PROGRESS, on_uploading_assets)
+        # Sets up progress tracker to report upload progress back to the caller.
+        (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
+        progress_tracker = ProgressTracker(
+            status=ProgressStatus.UPLOAD_IN_PROGRESS,
+            total_files=input_files,
+            total_bytes=input_bytes,
+            on_progress_callback=on_uploading_assets,
+        )
 
         start_time = time.perf_counter()
-
-        (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
-        progress_tracker.set_total_files(input_files, input_bytes)
 
         manifest_properties_list: list[ManifestProperties] = []
 
