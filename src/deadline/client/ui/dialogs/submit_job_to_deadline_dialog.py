@@ -98,11 +98,24 @@ class SubmitJobToDeadlineDialog(QDialog):
         return QSize(540, 600)
 
     def refresh(
-        self, auto_detected_attachments: FlatAssetReferences, attachments: FlatAssetReferences
+        self,
+        *,
+        job_settings: Optional[Any] = None,
+        auto_detected_attachments: Optional[FlatAssetReferences] = None,
+        attachments: Optional[FlatAssetReferences] = None,
     ):
         # Refresh the UI components
         self.refresh_deadline_settings()
-        self.job_attachments.refresh(auto_detected_attachments, attachments)
+        if (auto_detected_attachments is not None) or (attachments is not None):
+            self.job_attachments.refresh_ui(auto_detected_attachments, attachments)
+
+        if job_settings is not None:
+            self.job_settings_type = type(job_settings)
+            # Refresh shared job settings
+            self.shared_job_settings.refresh_ui(job_settings)
+            # Refresh job specific settings
+            if hasattr(self.job_settings, "refresh_ui"):
+                self.job_settings.refresh_ui(job_settings)
 
     def refresh_deadline_settings(self):
         # Enable/disable the Login and Logout buttons based on whether

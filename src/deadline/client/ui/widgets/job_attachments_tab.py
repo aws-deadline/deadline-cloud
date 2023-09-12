@@ -6,6 +6,7 @@ UI widgets for the Job Attachments tab.
 from __future__ import annotations
 import os
 from logging import getLogger
+from typing import Optional
 
 from PySide2.QtWidgets import (  # type: ignore
     QAbstractItemView,
@@ -158,10 +159,16 @@ class JobAttachmentsWidget(QWidget):
             ),
         ]
 
-    def refresh(self, auto_detected_attachments, attachments):
-        """Refresh the job attachment lists"""
-        self.auto_detected_attachments = auto_detected_attachments
-        self.attachments = attachments
+    def refresh_ui(
+        self,
+        auto_detected_attachments: Optional[FlatAssetReferences],
+        attachments: Optional[FlatAssetReferences],
+    ):
+        """Refresh the job attachment lists if provided"""
+        if auto_detected_attachments:
+            self.auto_detected_attachments = auto_detected_attachments
+        if attachments:
+            self.attachments = attachments
         self.attachments_controls = self._build_attachment_controls()
         self._populate_attachment_lists()
 
