@@ -31,7 +31,7 @@ class Fus3ProcessManager(object):
     _fus3_proc: Optional[subprocess.Popen]
     _fus3_thread: Optional[threading.Thread]
     _mount_temp_directory: Optional[str]
-    _run_path: Optional[str]
+    _run_path: Optional[Union[os.PathLike, str]]
     _asset_bucket: str
     _region: str
     _manifest_path: str
@@ -101,16 +101,18 @@ class Fus3ProcessManager(object):
                 log.info(f"{self.get_mount_point()} not a mount, sleeping...")
                 time.sleep(1)
         log.info(f"Failed to find mount at {self.get_mount_point()}")
-        self.print_log_end()
+        Fus3ProcessManager.print_log_end()
         return False
 
-    def get_logs_folder(self) -> Union[os.PathLike, str]:
+    @classmethod
+    def get_logs_folder(cls) -> Union[os.PathLike, str]:
         """
         Find the folder we expect fus3_ logs to be written to
         """
-        return os.path.join(os.path.dirname(self.find_fus3()), "..", "logs")
+        return os.path.join(os.path.dirname(Fus3ProcessManager.find_fus3()), "..", "logs")
 
-    def print_log_end(self, log_file_name="fus3_log.txt", lines=100, log_level=logging.WARNING):
+    @classmethod
+    def print_log_end(cls, log_file_name="fus3_log.txt", lines=100, log_level=logging.WARNING):
         """
         Print out the end of our VFS Log.  Reads the full log file into memory.  Our VFS logs are size
         capped so this is not an issue for the intended use case.
@@ -119,7 +121,7 @@ class Fus3ProcessManager(object):
         :param lines: Maximum number of lines from the end of the log to print
         :param log_level: Level to print logging as
         """
-        log_file_path = os.path.join(self.get_logs_folder(), log_file_name)
+        log_file_path = os.path.join(Fus3ProcessManager.get_logs_folder(), log_file_name)
         log.log(log_level, f"Printing last {lines} lines from {log_file_path}")
         if not os.path.exists(log_file_path):
             log.warning(f"No log file found at {log_file_path}")
@@ -128,12 +130,13 @@ class Fus3ProcessManager(object):
             for this_line in log_file.readlines()[lines * -1 :]:
                 log.log(log_level, this_line)
 
-    def find_fus3_link_dir(self) -> str:
+    @classmethod
+    def find_fus3_link_dir(cls) -> str:
         """
         Get the path where links to any necessary executables which should be added to the path should live
         :returns: Path to the link folder
         """
-        return os.path.join(os.path.dirname(self.find_fus3()), "..", "link")
+        return os.path.join(os.path.dirname(Fus3ProcessManager.find_fus3()), "..", "link")
 
     def build_launch_command(self, mount_point: Union[os.PathLike, str]) -> List:
         """
@@ -164,7 +167,8 @@ class Fus3ProcessManager(object):
         log.info(f"Got launch command {command}")
         return command
 
-    def find_fus3(self) -> Union[os.PathLike, str]:
+    @classmethod
+    def find_fus3(cls) -> Union[os.PathLike, str]:
         """
         Determine where the fus3 executable we'll be launching lives so we can
         find the correct relative paths around it for LD_LIBRARY_PATH and config files
@@ -201,12 +205,13 @@ class Fus3ProcessManager(object):
         Fus3ProcessManager.fus3_path = found_path
         return found_path  # type: ignore[return-value]
 
-    def get_library_path(self) -> Union[os.PathLike, str]:
+    @classmethod
+    def get_library_path(cls) -> Union[os.PathLike, str]:
         """
         Find our library dependencies which should be at ../lib relative to our executable
         """
         if Fus3ProcessManager.library_path is None:
-            fus3_path = self.find_fus3()
+            fus3_path = Fus3ProcessManager.find_fus3()
             Fus3ProcessManager.library_path = os.path.normpath(
                 os.path.join(os.path.dirname(fus3_path), "../lib")
             )
@@ -216,7 +221,8 @@ class Fus3ProcessManager(object):
     def get_file_path(self, relative_file_name: str) -> Union[os.PathLike, str]:
         return os.path.join(self._mount_point, relative_file_name)
 
-    def create_mount_point(self, mount_point: Union[os.PathLike, str]) -> None:
+    @classmethod
+    def create_mount_point(cls, mount_point: Union[os.PathLike, str]) -> None:
         """
         By default fuse won't create our mount folder, create it if it doesn't exist
         """
@@ -226,27 +232,31 @@ class Fus3ProcessManager(object):
             log.info(f"Modifying permissions of mount point at {mount_point}")
             os.chmod(path=mount_point, mode=0o777)
 
-    def get_cwd(self) -> Union[os.PathLike, str]:
+    @classmethod
+    def get_cwd(cls) -> Union[os.PathLike, str]:
         """
         Determine the cwd we should hand to Popen.
         We expect a config/logging.ini file to exist relative to this folder.
         """
         if Fus3ProcessManager.cwd_path is None:
-            fus3_path = self.find_fus3()
+            fus3_path = Fus3ProcessManager.find_fus3()
             # Use cwd one folder up from bin
             Fus3ProcessManager.cwd_path = os.path.normpath(
                 os.path.join(os.path.dirname(fus3_path), "..")
             )
         return Fus3ProcessManager.cwd_path
 
-    def get_launch_environ(self) -> dict:
+    @classmethod
+    def get_launch_environ(cls) -> dict:
         """
         Get the environment variables we'll pass to the launch command.
         :returns: dictionary of default environment variables with fus3 changes applied
         """
         my_env = {**os.environ}
-        my_env["PATH"] = f"{self.find_fus3_link_dir()}:{os.environ['PATH']}"
-        my_env["LD_LIBRARY_PATH"] = self.get_library_path()  # type: ignore[assignment]
+        my_env[
+            "PATH"
+        ] = f"{Fus3ProcessManager.find_fus3_link_dir()}{os.pathsep}{os.environ['PATH']}"
+        my_env["LD_LIBRARY_PATH"] = Fus3ProcessManager.get_library_path()  # type: ignore[assignment]
 
         return my_env
 
@@ -255,12 +265,12 @@ class Fus3ProcessManager(object):
         Start our fus3 process
         :return: fus3 process id
         """
-        self._run_path = str(self.get_cwd())
+        self._run_path = Fus3ProcessManager.get_cwd()
         log.info(f"Using run_path {self._run_path}")
         log.info(f"Using mount_point {self._mount_point}")
-        self.create_mount_point(self._mount_point)
+        Fus3ProcessManager.create_mount_point(self._mount_point)
         start_command = self.build_launch_command(self._mount_point)
-        launch_env = self.get_launch_environ()
+        launch_env = Fus3ProcessManager.get_launch_environ()
         log.info(f"Launching fus3 with command {start_command}")
         log.info(f"Launching with environment {launch_env}")
 

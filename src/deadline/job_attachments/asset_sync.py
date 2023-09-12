@@ -37,8 +37,9 @@ from .download import (
     get_output_manifests_by_asset_root,
     mount_vfs_from_manifests,
 )
+
 from .fus3 import Fus3ProcessManager
-from .exceptions import AssetSyncError
+from .exceptions import AssetSyncError, Fus3ExecutableMissingError
 from .models import (
     ManifestProperties,
     Attachments,
@@ -272,7 +273,8 @@ class AssetSync:
         different behaviors:
             PRELOAD / None : downloads a manifest file and corresponding input files, if found.
             ON_DEMAND: downloads a manifest file and mounts a Virtual File System at the
-                       specified asset root corresponding to the manifest contents
+                       specified asset root corresponding to the manifest contents. This will
+                       fall back to PRELOAD method if the Fus3 executable can't be found.
 
         Args:
             s3_settings: S3-specific Job Attachment settings.
@@ -374,31 +376,41 @@ class AssetSync:
                 merged_manifests_by_root[root] = merged_manifest
 
         # Download
+
         if (
             attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value
             and sys.platform != "win32"
         ):
-            mount_vfs_from_manifests(
-                s3_bucket=s3_settings.s3BucketName,
-                manifests_by_root=merged_manifests_by_root,
-                boto3_session=self.session,
-                session_dir=session_dir,
-                cas_prefix=s3_settings.full_cas_prefix(),
-            )
-            summary_statistics = SummaryStatistics()
-        else:
-            download_summary_statistics = download_files_from_manifests(
-                s3_bucket=s3_settings.s3BucketName,
-                manifests_by_root=merged_manifests_by_root,
-                cas_prefix=s3_settings.full_cas_prefix(),
-                fs_permission_settings=fs_permission_settings,
-                session=self.session,
-                on_downloading_files=on_downloading_files,
-                logger=self.logger,
-            )
+            try:
+                Fus3ProcessManager.find_fus3()
+                mount_vfs_from_manifests(
+                    s3_bucket=s3_settings.s3BucketName,
+                    manifests_by_root=merged_manifests_by_root,
+                    boto3_session=self.session,
+                    session_dir=session_dir,
+                    cas_prefix=s3_settings.full_cas_prefix(),
+                )
+                summary_statistics = SummaryStatistics()
+                return (summary_statistics, list(pathmapping_rules.values()))
+            except Fus3ExecutableMissingError:
+                logger.error(
+                    f"Virtual File System not found, falling back to {AssetLoadingMethod.PRELOAD} for AssetLoadingMethod."
+                )
 
-            summary_statistics = download_summary_statistics.convert_to_summary_statistics()
-        return (summary_statistics, list(pathmapping_rules.values()))
+        download_summary_statistics = download_files_from_manifests(
+            s3_bucket=s3_settings.s3BucketName,
+            manifests_by_root=merged_manifests_by_root,
+            cas_prefix=s3_settings.full_cas_prefix(),
+            fs_permission_settings=fs_permission_settings,
+            session=self.session,
+            on_downloading_files=on_downloading_files,
+            logger=self.logger,
+        )
+
+        return (
+            download_summary_statistics.convert_to_summary_statistics(),
+            list(pathmapping_rules.values()),
+        )
 
     def sync_outputs(
         self,
@@ -485,7 +497,11 @@ class AssetSync:
                 summary_stats = SummaryStatistics()
         finally:
             if attachments.assetLoadingMethod == AssetLoadingMethod.ON_DEMAND.value:
-                # Shutdown all running Fus3 processes since task is completed
-                Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
+                try:
+                    Fus3ProcessManager.find_fus3()
+                    # Shutdown all running Fus3 processes since task is completed
+                    Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
+                except Fus3ExecutableMissingError:
+                    logger.error("Virtual File System not found, no processes to kill.")
 
         return summary_stats
