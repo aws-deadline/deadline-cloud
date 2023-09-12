@@ -1,6 +1,6 @@
 specificationVersion: 'jobtemplate-2023-09'
 name: Job Bundle - CLI Job Example
-parameters:
+parameterDefinitions:
   - name: BashScript
     type: STRING
     userInterface:

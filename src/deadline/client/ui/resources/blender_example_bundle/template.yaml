@@ -1,6 +1,6 @@
 specificationVersion: 'jobtemplate-2023-09'
 name: Blender scene submission
-parameters:
+parameterDefinitions:
   - name: Frames
     type: STRING
     description: The frames to render.
@@ -31,11 +31,11 @@ parameters:
 steps:
 - name: RenderBlender
   parameterSpace:
-    parameters:
+    taskParameterDefinitions:
     - name: Frame
       type: INT
       range: "{{Param.Frames}}"
-  environments:
+
   script:
     actions:
       onRun:
