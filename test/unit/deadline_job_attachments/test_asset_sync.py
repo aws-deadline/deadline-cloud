@@ -18,6 +18,7 @@ from moto import mock_sts
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.download import _progress_logger
+from deadline.job_attachments.exceptions import Fus3ExecutableMissingError
 from deadline.job_attachments.models import (
     Attachments,
     Job,
@@ -231,6 +232,8 @@ class TestAssetSync:
             side_effect=[dest_dir],
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3"
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
@@ -368,9 +371,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
             return_value={"tmp/": [(test_manifest, "hello")]},
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.start"
-        ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.merge_asset_manifests"
+            f"{deadline.__package__}.job_attachments.asset_sync.merge_asset_manifests",
         ) as merge_manifests_mock, patch(
             f"{deadline.__package__}.job_attachments.download.write_manifest_to_temp_file",
             return_value="tmp_manifest",
@@ -720,3 +721,81 @@ class TestAssetSync:
                 on_downloading_files=mock_on_downloading_files,
                 logger=getLogger("deadline.job_attachments"),
             )
+
+    @pytest.mark.parametrize(
+        ("job_fixture_name"),
+        [
+            ("default_job"),
+            ("vfs_job"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_sync_inputs_successful_using_vfs_fallback(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        job_fixture_name: str,
+        s3_settings_fixture_name: str,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that a valid manifest can be processed to download attachments from S3"""
+        # GIVEN
+        job: Job = request.getfixturevalue(job_fixture_name)
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        assert job.attachments
+
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            side_effect=[f"{local_root}/manifest.json"],
+        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
+            side_effect=["test_manifest_data"],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3",
+            side_effect=Fus3ExecutableMissingError,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ) as mock_mount_vfs, patch(
+            "sys.platform", "linux"
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
+                s3_settings,
+                job.attachments,
+                default_queue.queueId,
+                job.jobId,
+                tmp_path,
+                on_downloading_files=mock_on_downloading_files,
+            )
+
+            # THEN
+            expected_source_os = (
+                "WINDOWS"
+                if job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
+                else "POSIX"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_os": expected_source_os,
+                    "source_path": job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+            mock_mount_vfs.assert_not_called()
