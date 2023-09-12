@@ -101,10 +101,15 @@ class AssetSync:
         Uploads the given output files to the given S3 bucket.
         Sets up `progress_tracker` to report upload progress back to the caller (i.e. worker.)
         """
-        progress_tracker = ProgressTracker(ProgressStatus.UPLOAD_IN_PROGRESS, on_uploading_files)
-
+        # Sets up progress tracker to report upload progress back to the caller.
         total_file_size = sum([file.file_size for file in output_files])
-        progress_tracker.set_total_files(len(output_files), total_file_size)
+        progress_tracker = ProgressTracker(
+            status=ProgressStatus.UPLOAD_IN_PROGRESS,
+            total_files=len(output_files),
+            total_bytes=total_file_size,
+            on_progress_callback=on_uploading_files,
+            logger=self.logger,
+        )
 
         start_time = time.perf_counter()
 
@@ -389,6 +394,7 @@ class AssetSync:
                 fs_permission_settings=fs_permission_settings,
                 session=self.session,
                 on_downloading_files=on_downloading_files,
+                logger=self.logger,
             )
 
             summary_statistics = download_summary_statistics.convert_to_summary_statistics()

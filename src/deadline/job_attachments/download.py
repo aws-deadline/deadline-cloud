@@ -11,10 +11,10 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from itertools import chain
-from logging import getLogger
+from logging import Logger, LoggerAdapter, getLogger
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, DefaultDict, List, Optional, Tuple
+from typing import Any, Callable, DefaultDict, List, Optional, Tuple, Union
 
 import boto3
 from botocore.client import BaseClient
@@ -47,7 +47,7 @@ from ._utils import (
     _join_s3_paths,
 )
 
-logger = getLogger("deadline.job_attachments.download")
+download_logger = getLogger("deadline.job_attachments.download")
 
 
 def get_manifest_from_s3(
@@ -284,9 +284,14 @@ def download_files_in_directory(
         total_bytes += files_size
         files_to_download.extend(files_list)
 
-    # Sets up `progress_tracker` to report download progress back to the caller.
-    progress_tracker = ProgressTracker(ProgressStatus.DOWNLOAD_IN_PROGRESS, on_downloading_files)
-    progress_tracker.set_total_files(len(files_to_download), total_bytes)
+    # Sets up progress tracker to report download progress back to the caller.
+    progress_tracker = ProgressTracker(
+        status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
+        total_files=len(files_to_download),
+        total_bytes=total_bytes,
+        on_progress_callback=on_downloading_files,
+    )
+
     start_time = time.perf_counter()
 
     downloaded_files_paths = _download_files_parallel(
@@ -389,7 +394,7 @@ def download_file(
             message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
         ) from exc
 
-    logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
+    download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
 
     return (file_bytes, local_file_name)
@@ -616,6 +621,7 @@ def download_files_from_manifests(
     fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
     session: Optional[boto3.Session] = None,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    logger: Optional[Union[Logger, LoggerAdapter]] = None,
 ) -> DownloadSummaryStatistics:
     """
     Given manifests, downloads all files from a CAS in each manifest.
@@ -635,14 +641,19 @@ def download_files_from_manifests(
 
     file_mod_time = datetime.now().timestamp()
 
-    # Sets up `progress_tracker` to report download progress back to the caller.
+    # Sets up progress tracker to report download progress back to the caller.
     total_size = 0
     total_files = 0
     for manifest in manifests_by_root.values():
         total_files += len(manifest.paths)
         total_size += manifest.totalSize  # type: ignore[attr-defined]
-    progress_tracker = ProgressTracker(ProgressStatus.DOWNLOAD_IN_PROGRESS, on_downloading_files)
-    progress_tracker.set_total_files(total_files, total_size)
+    progress_tracker = ProgressTracker(
+        status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
+        total_files=total_files,
+        total_bytes=total_size,
+        on_progress_callback=on_downloading_files,
+        logger=logger,
+    )
     start_time = time.perf_counter()
 
     downloaded_files_paths_by_root: DefaultDict[str, list[str]] = DefaultDict(list)
@@ -915,14 +926,14 @@ class OutputDownloader:
         Returns:
             The download summary statistics
         """
-        # Sets up `progress_tracker` to report download progress back to the caller.
+        # Sets up progress tracker to report download progress back to the caller.
         progress_tracker = ProgressTracker(
-            ProgressStatus.DOWNLOAD_IN_PROGRESS, on_downloading_files
+            status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
+            total_files=sum([len(files) for files in self.outputs_by_root.values()]),
+            total_bytes=self.total_bytes_to_download,
+            on_progress_callback=on_downloading_files,
         )
-        progress_tracker.set_total_files(
-            sum([len(files) for files in self.outputs_by_root.values()]),
-            self.total_bytes_to_download,
-        )
+
         start_time = time.perf_counter()
         downloaded_files_paths_by_root: DefaultDict[str, list[str]] = DefaultDict(list)
 

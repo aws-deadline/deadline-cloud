@@ -3,6 +3,7 @@
 """Tests for the Asset Synching class for task-level attachments."""
 
 import json
+from logging import getLogger
 import shutil
 from math import trunc
 from pathlib import Path
@@ -26,7 +27,6 @@ from deadline.job_attachments.models import (
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
-    ProgressReportMetadata,
     SummaryStatistics,
 )
 from deadline.job_attachments._utils import OperatingSystemFamily, _human_readable_file_size
@@ -548,11 +548,6 @@ class TestAssetSync:
             )
 
             readable_total_input_bytes = _human_readable_file_size(expected_total_bytes)
-            expected_last_progress_report = ProgressReportMetadata(
-                status=ProgressStatus.UPLOAD_IN_PROGRESS,
-                progress=100.0,
-                progressMessage=f"Uploaded {readable_total_input_bytes} / {readable_total_input_bytes} of 2 files",
-            )
 
             expected_summary_statistics = SummaryStatistics(
                 total_time=summary_statistics.total_time,
@@ -565,7 +560,15 @@ class TestAssetSync:
                 transfer_rate=expected_processed_bytes / summary_statistics.total_time,
             )
 
-            mock_on_uploading_files.assert_called_with(expected_last_progress_report)
+            actual_args, _ = mock_on_uploading_files.call_args
+            actual_last_progress_report = actual_args[0]
+            assert actual_last_progress_report.status == ProgressStatus.UPLOAD_IN_PROGRESS
+            assert actual_last_progress_report.progress == 100.0
+            assert (
+                f"Uploaded {readable_total_input_bytes} / {readable_total_input_bytes} of 2 files (Transfer rate: "
+                in actual_last_progress_report.progressMessage
+            )
+
             assert summary_statistics == expected_summary_statistics
 
     @pytest.mark.parametrize(
@@ -715,4 +718,5 @@ class TestAssetSync:
                 fs_permission_settings=None,
                 session=ANY,
                 on_downloading_files=mock_on_downloading_files,
+                logger=getLogger("deadline.job_attachments"),
             )
