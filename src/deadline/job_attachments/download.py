@@ -39,13 +39,13 @@ from .exceptions import (
     MissingAssetRootError,
 )
 from .fus3 import Fus3ProcessManager
-from .models import JobAttachmentS3Settings, Attachments
-from ._utils import (
+from .models import (
+    Attachments,
     FileConflictResolution,
     FileSystemPermissionSettings,
-    _is_relative_to,
-    _join_s3_paths,
+    JobAttachmentS3Settings,
 )
+from ._utils import _is_relative_to, _join_s3_paths
 
 download_logger = getLogger("deadline.job_attachments.download")
 

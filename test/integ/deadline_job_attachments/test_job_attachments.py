@@ -20,10 +20,9 @@ from deadline.job_attachments import asset_sync, download, upload
 from deadline.job_attachments.asset_manifests import ManifestVersion
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import AssetSyncError, JobAttachmentsS3ClientError
-from deadline.job_attachments.models import ManifestProperties, Attachments
+from deadline.job_attachments.models import Attachments, ManifestProperties, OperatingSystemFamily
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
-    OperatingSystemFamily,
     _get_deadline_formatted_os,
     _get_unique_dest_dir_name,
     _hash_data,
@@ -1041,7 +1040,7 @@ def upload_input_files_no_input_paths(
     assert attachments.manifests == [
         ManifestProperties(
             rootPath=str(job_attachment_test.OUTPUT_PATH),
-            osType=OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+            osType=OperatingSystemFamily(mock_submission_profile_name),
             outputRelativeDirectories=["."],
         )
     ]
@@ -1106,9 +1105,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     assert len(attachments.manifests) == 1
     assert attachments.manifests[0].fileSystemLocationName is None
     assert attachments.manifests[0].rootPath == str(job_attachment_test.INPUT_PATH)
-    assert attachments.manifests[0].osType == OperatingSystemFamily.get_os_family(
-        mock_submission_profile_name
-    )
+    assert attachments.manifests[0].osType == OperatingSystemFamily(mock_submission_profile_name)
     assert attachments.manifests[0].outputRelativeDirectories == []
     assert attachments.manifests[0].inputManifestPath is not None
     assert attachments.manifests[0].inputManifestPath.startswith(

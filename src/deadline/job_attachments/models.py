@@ -6,6 +6,7 @@ Data classes for AWS objects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Set, Any
 
@@ -14,9 +15,6 @@ from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetMani
 from deadline.job_attachments.exceptions import MissingS3RootPrefixError
 
 from ._utils import (
-    AssetLoadingMethod,
-    FileSystemLocationType,
-    OperatingSystemFamily,
     _generate_random_guid,
     _join_s3_paths,
 )
@@ -72,6 +70,26 @@ class OutputFile:
     full_path: str
     s3_key: str
     in_s3: bool  # If the file already exists in the CAS
+
+
+class OperatingSystemFamily(str, Enum):
+    WINDOWS = "windows"
+    LINUX = "linux"
+    MACOS = "macos"
+
+    def to_path_format(self) -> str:
+        if self == OperatingSystemFamily.WINDOWS:
+            return "WINDOWS"
+        else:
+            return "POSIX"
+
+
+# Behavior to adopt when loading job assets
+class AssetLoadingMethod(str, Enum):
+    # Load all assets at before execution of the job code
+    PRELOAD = "PRELOAD"
+    # Start job execution immediately and load assets as needed
+    ON_DEMAND = "ON_DEMAND"
 
 
 @dataclass
@@ -218,6 +236,16 @@ class Job:
 
 
 @dataclass
+class StorageProfile:
+    """DataClass to store Storage Profile For Queue objects"""
+
+    storageProfileId: str
+    displayName: str
+    osFamily: OperatingSystemFamily
+    fileSystemLocations: List[FileSystemLocation] = field(default_factory=list)  # type: ignore
+
+
+@dataclass
 class FileSystemLocation:
     """DataClass to store File System Location objects"""
 
@@ -226,11 +254,30 @@ class FileSystemLocation:
     type: FileSystemLocationType
 
 
-@dataclass
-class StorageProfileForQueue:
-    """DataClass to store Storage Profile For Queue objects"""
+class FileSystemLocationType(str, Enum):
+    SHARED = "SHARED"
+    LOCAL = "LOCAL"
 
-    storageProfileId: str
-    displayName: str
-    osFamily: OperatingSystemFamily = OperatingSystemFamily.WINDOWS
-    fileSystemLocations: List[FileSystemLocation] = field(default_factory=list)  # type: ignore
+
+class FileConflictResolution(Enum):
+    SKIP = 1
+    OVERWRITE = 2
+    CREATE_COPY = 3
+
+
+@dataclass
+class FileSystemPermissionSettings:
+    """
+    A data class representing file system permission-related information.
+    The specified permission modes will be bitwise-OR'ed with the directory
+    or file's existing permissions.
+
+    Attributes:
+        os_group (str): The target operating system group for ownership.
+        dir_mode (int): The permission mode to be applied to directories.
+        file_mode (int): The permission mode to be applied to files.
+    """
+
+    os_group: str
+    dir_mode: int
+    file_mode: int

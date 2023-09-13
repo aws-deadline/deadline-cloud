@@ -11,9 +11,14 @@ from unittest.mock import ANY, patch
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
 from deadline.client.job_bundle import submission
-from deadline.job_attachments.models import ManifestProperties, AssetRootManifest, Attachments
+from deadline.job_attachments.models import (
+    Attachments,
+    AssetLoadingMethod,
+    AssetRootManifest,
+    ManifestProperties,
+    OperatingSystemFamily,
+)
 from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.job_attachments._utils import AssetLoadingMethod, OperatingSystemFamily
 
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID
 from .test_job_bundle_submission import (
