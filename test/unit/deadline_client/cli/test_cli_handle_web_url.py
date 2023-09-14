@@ -7,11 +7,6 @@ import os
 import sys
 from typing import Dict, List
 from unittest.mock import ANY, MagicMock, call, patch
-from deadline.job_attachments._utils import (
-    FileConflictResolution,
-    OperatingSystemFamily,
-    _get_deadline_formatted_os,
-)
 
 import pytest
 from click.testing import CliRunner
@@ -25,7 +20,12 @@ from deadline.client.cli._deadline_web_url import (
 )
 from deadline.client.cli._groups import handle_web_url_command, job_group
 from deadline.client.exceptions import DeadlineOperationError
-from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    OperatingSystemFamily,
+)
+from deadline.job_attachments._utils import _get_deadline_formatted_os
 
 from ..api.test_job_bundle_submission import (
     MOCK_GET_QUEUE_RESPONSE,
@@ -260,7 +260,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+                        "osType": OperatingSystemFamily(mock_submission_profile_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -310,7 +310,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+                        "osType": OperatingSystemFamily(mock_submission_profile_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],

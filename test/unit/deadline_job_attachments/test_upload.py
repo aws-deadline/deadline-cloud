@@ -31,24 +31,22 @@ from deadline.job_attachments.exceptions import (
     MissingS3RootPrefixError,
 )
 from deadline.job_attachments.models import (
-    Attachments,
     AssetRootGroup,
+    Attachments,
     FileSystemLocation,
+    FileSystemLocationType,
     ManifestProperties,
     HashCacheEntry,
     JobAttachmentS3Settings,
-    StorageProfileForQueue,
+    OperatingSystemFamily,
+    StorageProfile,
 )
 from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
     SummaryStatistics,
 )
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
-from deadline.job_attachments._utils import (
-    FileSystemLocationType,
-    OperatingSystemFamily,
-    _human_readable_file_size,
-)
+from deadline.job_attachments._utils import _human_readable_file_size
 
 
 class TestUpload:
@@ -128,7 +126,7 @@ class TestUpload:
 
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["e", "manifesthash"],
@@ -208,7 +206,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily.get_os_family("linux").value,
+                        "osType": OperatingSystemFamily("linux").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": [
@@ -371,13 +369,13 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{root_c}",
-                        "osType": OperatingSystemFamily.get_os_family("windows").value,
+                        "osType": OperatingSystemFamily("windows").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
                         "inputManifestHash": "manifesthash",
                     },
                     {
                         "rootPath": f"{output_d}",
-                        "osType": OperatingSystemFamily.get_os_family("windows").value,
+                        "osType": OperatingSystemFamily("windows").value,
                         "outputRelativeDirectories": [
                             ".",
                         ],
@@ -467,7 +465,7 @@ class TestUpload:
 
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -536,7 +534,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily.get_os_family("linux").value,
+                        "osType": OperatingSystemFamily("linux").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": ["outputs"],
@@ -621,7 +619,7 @@ class TestUpload:
         # Given
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -729,13 +727,13 @@ class TestUpload:
         # Given
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=mock_hash_file
         ), patch(
@@ -853,13 +851,13 @@ class TestUpload:
         # Given
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifesto", "manifesthash"],
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
@@ -985,7 +983,7 @@ class TestUpload:
         # Given
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["a", "manifesthash"],
@@ -1038,7 +1036,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{output_dir}",
-                        "osType": OperatingSystemFamily.get_os_family("linux").value,
+                        "osType": OperatingSystemFamily("linux").value,
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -1422,7 +1420,7 @@ class TestUpload:
 
         with patch(
             f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="Linux",
+            return_value="linux",
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -1698,7 +1696,7 @@ class TestUpload:
         mock_file_system_locations: List[FileSystemLocation],
         expected_result: Tuple[Dict[str, str], Dict[str, str]],
     ):
-        mock_storage_profile_for_queue = StorageProfileForQueue(
+        mock_storage_profile_for_queue = StorageProfile(
             storageProfileId="sp-0123456789",
             displayName="Storage profile 1",
             osFamily=OperatingSystemFamily.WINDOWS,

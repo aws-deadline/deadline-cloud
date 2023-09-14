@@ -135,6 +135,7 @@ class ProgressReportMetadata:
 
     status: ProgressStatus
     progress: float  # percentage with one decimal place
+    transferRate: float  # bytes/second
     progressMessage: str  # pylint: disable=invalid-name
 
 
@@ -288,7 +289,7 @@ class ProgressTracker:
         seconds_since_last_report = round(
             time.perf_counter() - self.last_report_time if self.last_report_time else 0, 2
         )
-        transfer_rate = int(
+        transfer_rate = (
             (self.processed_bytes - self.last_report_processed_bytes) / seconds_since_last_report
             if seconds_since_last_report > 0
             else 0
@@ -301,12 +302,13 @@ class ProgressTracker:
             f"{self.status.verb_in_message}"
             f" {_human_readable_file_size(completed_bytes)} / {_human_readable_file_size(self.total_bytes)}"
             f" of {self.total_files} file{'' if self.total_files == 1 else 's'}"
-            f" ({transfer_rate_name}: {_human_readable_file_size(transfer_rate)}/s)"
+            f" ({transfer_rate_name}: {_human_readable_file_size(int(transfer_rate))}/s)"
         )
 
         return ProgressReportMetadata(
             status=self.status,
             progress=percentage,
+            transferRate=transfer_rate,
             progressMessage=progress_message,
         )
 

@@ -10,11 +10,6 @@ import sys
 from unittest.mock import ANY, MagicMock, patch
 
 import boto3  # type: ignore[import]
-from deadline.job_attachments._utils import (
-    FileConflictResolution,
-    OperatingSystemFamily,
-    _get_deadline_formatted_os,
-)
 from botocore.exceptions import ClientError  # type: ignore[import]
 from click.testing import CliRunner
 from dateutil.tz import tzutc  # type: ignore[import]
@@ -22,7 +17,12 @@ from dateutil.tz import tzutc  # type: ignore[import]
 from deadline.client import api, config
 from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
-from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    OperatingSystemFamily,
+)
+from deadline.job_attachments._utils import _get_deadline_formatted_os
 
 from ..api.test_job_bundle_submission import (
     MOCK_GET_QUEUE_RESPONSE,
@@ -310,7 +310,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+                        "osType": OperatingSystemFamily(mock_submission_profile_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -401,7 +401,7 @@ def test_cli_job_dowuload_output_stdout_with_json_format(
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+                        "osType": OperatingSystemFamily(mock_submission_profile_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -465,7 +465,7 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily.get_os_family(mock_submission_profile_name),
+                        "osType": OperatingSystemFamily(mock_submission_profile_name),
                         "outputRelativeDirectories": ["."],
                     },
                 ],

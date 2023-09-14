@@ -1,21 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from dataclasses import dataclass
 import datetime
 import io
 import os
 import sys
-from enum import Enum
 from hashlib import shake_256
 from pathlib import Path
 from typing import Optional, Tuple, Union
 import uuid
-
 import xxhash
 
 __all__ = [
-    "FileSystemLocationType",
-    "OperatingSystemFamily",
     "_hash_file",
     "_hash_data",
     "_join_s3_paths",
@@ -27,49 +22,10 @@ __all__ = [
     "_get_bucket_and_object_key",
     "_get_default_hash_cache_db_file_dir",
     "_is_relative_to",
-    "AssetLoadingMethod",
-    "FileConflictResolution",
 ]
 
 CONFIG_ROOT = ".deadline"
 COMPONENT_NAME = "job_attachments"
-
-
-class FileSystemLocationType(str, Enum):
-    SHARED = "SHARED"
-    LOCAL = "LOCAL"
-
-    @classmethod
-    def get_type(cls, type_string):
-        """
-        Returns the OperatingSystemFamily enum value from the (case-insensitive) OS string.
-        """
-        try:
-            return cls(type_string.upper())
-        except ValueError:
-            raise ValueError(f"Invalid type string: {type_string}")
-
-
-class OperatingSystemFamily(str, Enum):
-    WINDOWS = "windows"
-    LINUX = "linux"
-    MACOS = "macos"
-
-    @classmethod
-    def get_os_family(cls, os_string):
-        """
-        Returns the OperatingSystemFamily enum value from the (case-insensitive) OS string.
-        """
-        try:
-            return cls(os_string.lower())
-        except ValueError:
-            raise ValueError(f"Invalid OS string: {os_string}")
-
-    def to_path_mapping_os(self) -> str:
-        if self == OperatingSystemFamily.WINDOWS:
-            return "WINDOWS"
-        else:
-            return "POSIX"
 
 
 def _hash_file(file_path: str) -> str:
@@ -137,6 +93,9 @@ def _get_deadline_formatted_os() -> str:
     """
     Get a string specifying what the OS is, following the format the Deadline API expects.
     """
+    # Avoiding circular imports here
+    from .models import OperatingSystemFamily
+
     if sys.platform.startswith("linux"):
         return OperatingSystemFamily.LINUX.value
 
@@ -184,39 +143,3 @@ def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
         return True
     except ValueError:
         return False
-
-
-# Behavior to adopt when loading job assets
-class AssetLoadingMethod(str, Enum):
-    # Load all assets at before execution of the job code
-    PRELOAD = "PRELOAD"
-    # Start job execution immediately and load assets as needed
-    ON_DEMAND = "ON_DEMAND"
-
-
-class FileConflictResolution(Enum):
-    SKIP = 1
-    OVERWRITE = 2
-    CREATE_COPY = 3
-
-    @classmethod
-    def from_index(cls, index: int):
-        return cls(index)
-
-
-@dataclass
-class FileSystemPermissionSettings:
-    """
-    A data class representing file system permission-related information.
-    The specified permission modes will be bitwise-OR'ed with the directory
-    or file's existing permissions.
-
-    Attributes:
-        os_group (str): The target operating system group for ownership.
-        dir_mode (int): The permission mode to be applied to directories.
-        file_mode (int): The permission mode to be applied to files.
-    """
-
-    os_group: str
-    dir_mode: int
-    file_mode: int

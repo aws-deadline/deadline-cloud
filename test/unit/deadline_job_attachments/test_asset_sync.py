@@ -24,13 +24,14 @@ from deadline.job_attachments.models import (
     Job,
     JobAttachmentS3Settings,
     ManifestProperties,
+    OperatingSystemFamily,
     Queue,
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     SummaryStatistics,
 )
-from deadline.job_attachments._utils import OperatingSystemFamily, _human_readable_file_size
+from deadline.job_attachments._utils import _human_readable_file_size
 
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 

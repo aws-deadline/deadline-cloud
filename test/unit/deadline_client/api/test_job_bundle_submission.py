@@ -16,9 +16,13 @@ import time
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
 from deadline.client.job_bundle import submission
-from deadline.job_attachments.models import ManifestProperties, Attachments
+from deadline.job_attachments.models import (
+    AssetLoadingMethod,
+    Attachments,
+    ManifestProperties,
+    OperatingSystemFamily,
+)
 from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.job_attachments._utils import AssetLoadingMethod, OperatingSystemFamily
 
 from ..shared_constants import (
     MOCK_BUCKET_NAME,
