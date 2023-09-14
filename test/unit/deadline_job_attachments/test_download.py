@@ -51,18 +51,21 @@ from deadline.job_attachments.exceptions import (
     MissingAssetRootError,
     PathOutsideDirectoryError,
 )
-from deadline.job_attachments.models import Job, JobAttachmentS3Settings, Attachments, Queue
+from deadline.job_attachments.models import (
+    Attachments,
+    FileConflictResolution,
+    FileSystemPermissionSettings,
+    Job,
+    JobAttachmentS3Settings,
+    Queue,
+)
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
     ProgressStatus,
 )
-from deadline.job_attachments._utils import (
-    FileConflictResolution,
-    FileSystemPermissionSettings,
-    _human_readable_file_size,
-)
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
+from deadline.job_attachments._utils import _human_readable_file_size
 
 from .conftest import has_posix_target_user, has_posix_disjoint_user
 

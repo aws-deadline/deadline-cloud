@@ -17,14 +17,16 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 
 from deadline.client.api._session import _modified_logging_level
 from deadline.job_attachments.download import OutputDownloader
-from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    OperatingSystemFamily,
+)
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
 )
-from deadline.job_attachments._utils import FileConflictResolution, _human_readable_file_size
-
-from deadline.job_attachments._utils import OperatingSystemFamily, _get_deadline_formatted_os
+from deadline.job_attachments._utils import _human_readable_file_size, _get_deadline_formatted_os
 
 from ... import api
 from ...config import config_file
@@ -351,7 +353,7 @@ def _download_job_output(
                 return
             else:
                 resolution_choice_int = int(user_choice)
-                file_conflict_resolution = FileConflictResolution.from_index(resolution_choice_int)
+                file_conflict_resolution = FileConflictResolution(resolution_choice_int)
 
     # TODO: remove logging level setting when the max number connections for boto3 client
     # in Job Attachments library can be increased (currently using default number, 10, which

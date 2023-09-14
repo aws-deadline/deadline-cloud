@@ -31,15 +31,13 @@ import deadline  # noqa: E402 isort:skip
 from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
 from deadline.job_attachments.asset_sync import AssetSync  # noqa: E402 isort:skip
 from deadline.job_attachments.models import (  # noqa: E402 isort:skip
+    AssetLoadingMethod,
     Attachments,
     ManifestProperties,
     Job,
     JobAttachmentS3Settings,
-    Queue,
-)
-from deadline.job_attachments._utils import (  # noqa: E402 isort:skip
-    AssetLoadingMethod,
     OperatingSystemFamily,
+    Queue,
 )
 
 

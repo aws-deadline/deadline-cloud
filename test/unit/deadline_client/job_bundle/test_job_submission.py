@@ -11,9 +11,8 @@ from unittest.mock import Mock
 import pytest
 
 from deadline.client.job_bundle import submission
-from deadline.job_attachments.models import Attachments
+from deadline.job_attachments.models import AssetLoadingMethod, Attachments
 from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.job_attachments._utils import AssetLoadingMethod
 
 MOCK_FARM_ID = "farm-0123456789abcdef0123456789abcdef"
 MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"

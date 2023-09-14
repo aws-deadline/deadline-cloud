@@ -41,15 +41,15 @@ from .download import (
 from .fus3 import Fus3ProcessManager
 from .exceptions import AssetSyncError, Fus3ExecutableMissingError
 from .models import (
-    ManifestProperties,
+    AssetLoadingMethod,
     Attachments,
+    FileSystemPermissionSettings,
     JobAttachmentS3Settings,
+    ManifestProperties,
     OutputFile,
 )
 from .upload import S3AssetUploader
 from ._utils import (
-    AssetLoadingMethod,
-    FileSystemPermissionSettings,
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
     _hash_data,
@@ -333,7 +333,7 @@ class AssetSync:
                 dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
                 local_root = str(session_dir.joinpath(dir_name))
                 pathmapping_rules[dir_name] = {
-                    "source_os": manifest_properties.osType.to_path_mapping_os(),
+                    "source_os": manifest_properties.osType.to_path_format(),
                     "source_path": manifest_properties.rootPath,
                     "destination_path": local_root,
                 }
