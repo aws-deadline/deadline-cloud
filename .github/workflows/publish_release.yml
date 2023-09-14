@@ -14,6 +14,7 @@ jobs:
           with:
             role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
             aws-region: us-west-2
+            mask-aws-account-id: true
         - name: Run CodeBuild
           uses: aws-actions/aws-codebuild-run-build@v1
           with:

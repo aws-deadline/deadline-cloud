@@ -76,6 +76,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
           aws-region: us-west-2
+          mask-aws-account-id: true
       - name: Install dependencies
         run: |
           CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
