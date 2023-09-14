@@ -6,7 +6,7 @@ pytest-xdist ~= 3.3
 freezegun ~= 1.2
 types-pyyaml ~= 6.0
 twine ~= 4.0
-black == 23.3.*; python_version == '3.7'
+black == 23.9.*; python_version == '3.7'
 black == 23.*; python_version > '3.7'
 mypy ~= 1.4
 ruff ~= 0.0.289
