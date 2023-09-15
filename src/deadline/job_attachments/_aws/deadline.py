@@ -40,7 +40,9 @@ def get_queue(
 
     # The API returns empty fields instead of an empty dict if there are no job attachment settings. So we need to
     # double check if the s3BucketName is set.
-    if response["jobAttachmentSettings"] and response["jobAttachmentSettings"].get("s3BucketName"):
+    if response.get("jobAttachmentSettings") and response["jobAttachmentSettings"].get(
+        "s3BucketName"
+    ):
         job_attachment_settings = JobAttachmentS3Settings(
             s3BucketName=response["jobAttachmentSettings"].get("s3BucketName", ""),
             rootPrefix=response["jobAttachmentSettings"].get("rootPrefix", ""),

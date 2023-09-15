@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set, Any
+from typing import List, Optional, Set, Any, Union
 
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 
@@ -266,11 +266,11 @@ class FileConflictResolution(Enum):
 
 
 @dataclass
-class FileSystemPermissionSettings:
+class PosixFileSystemPermissionSettings:
     """
-    A data class representing file system permission-related information.
-    The specified permission modes will be bitwise-OR'ed with the directory
-    or file's existing permissions.
+    A dataclass representing file system permission-related information
+    for Posix. The specified permission modes will be bitwise-OR'ed with
+    the directory or file's existing permissions.
 
     Attributes:
         os_group (str): The target operating system group for ownership.
@@ -281,3 +281,19 @@ class FileSystemPermissionSettings:
     os_group: str
     dir_mode: int
     file_mode: int
+
+
+@dataclass
+class WindowsFileSystemPermissionSettings:
+    """
+    A dataclass representing file system permission-related information
+    for Windows.
+    """
+
+    # TODO: Implement this
+
+
+# A union of different file system permission settings that are based on the underlying OS.
+FileSystemPermissionSettings = Union[
+    PosixFileSystemPermissionSettings, WindowsFileSystemPermissionSettings
+]

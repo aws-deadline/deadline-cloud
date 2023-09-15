@@ -54,7 +54,7 @@ from deadline.job_attachments.exceptions import (
 from deadline.job_attachments.models import (
     Attachments,
     FileConflictResolution,
-    FileSystemPermissionSettings,
+    PosixFileSystemPermissionSettings,
     Job,
     JobAttachmentS3Settings,
     Queue,
@@ -696,7 +696,11 @@ class TestFullDownload:
         )
 
     @mock_sts
-    def test_download_files_from_manifests_with_fs_permission_settings(
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="This test is for testing file permission changes in Posix-based OS.",
+    )
+    def test_download_files_from_manifests_with_posix_fs_permission_settings(
         self,
         tmp_path: Path,
         manifest_version: ManifestVersion,
@@ -713,7 +717,7 @@ class TestFullDownload:
         manifest = decode_manifest(mannifest_str)
 
         manifests_by_root = {str(tmp_path): manifest}
-        fs_permission_settings = FileSystemPermissionSettings(
+        fs_permission_settings = PosixFileSystemPermissionSettings(
             os_group="test-group",
             dir_mode=0o20,
             file_mode=0o20,
@@ -773,7 +777,7 @@ class TestFullDownload:
         not (has_posix_target_user() and has_posix_disjoint_user()),
         reason="Must be running inside of the sudo_environment testing container.",
     )
-    def test_download_files_from_manifests_have_correct_group(
+    def test_download_files_from_manifests_have_correct_group_posix(
         self,
         tmp_path: Path,
         manifest_version: ManifestVersion,
@@ -803,7 +807,7 @@ class TestFullDownload:
         manifest = decode_manifest(mannifest_str)
         manifests_by_root = {str(tmp_path): manifest}
 
-        fs_permission_settings = FileSystemPermissionSettings(
+        fs_permission_settings = PosixFileSystemPermissionSettings(
             os_group=posix_target_group,
             dir_mode=0o20,
             file_mode=0o20,
