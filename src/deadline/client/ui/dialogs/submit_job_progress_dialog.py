@@ -70,21 +70,23 @@ class SubmitJobProgressDialog(QDialog):
     hashing_thread_progress_report = Signal(ProgressReportMetadata)
     upload_thread_progress_report = Signal(ProgressReportMetadata)
 
-    @staticmethod
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent=parent)
+        self._build_ui()
+
     def start_submission(
+        self,
         farm_id: str,
         queue_id: str,
         storage_profile_id: str,
         job_bundle_dir: str,
         asset_manager: S3AssetManager,
         deadline_client: BaseClient,
-        parent: QWidget = None,
         auto_accept: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
-        Static method that runs the SubmitJobProgressDialog. Returns the response
-        from calling create job. If an error occurs or the submission is canceled
-        then None is returned.
+        Starts a submission. Returns the response from calling create job. If an error occurs
+        or the submission is canceled then None is returned.
 
         Args:
             farm_id (str): Id of the farm to submit to
@@ -96,37 +98,9 @@ class SubmitJobProgressDialog(QDialog):
             asset_manager (S3AssetManager): A job attachments S3AssetManager
                 configured for the farm/queue to submit to
             deadline_client (BaseClient): A boto client for Amazon Deadline Cloud
-            parent (QWidget): Parent widget of the dialog.
             auto_accept (bool, default False): Flag for whether any confirmation
                 prompts should automatically be accepted.
-            config (ConfigParser, optional): The Amazon Deadline Cloud configuration object to
-                use instead of the config file.
         """
-        job_progress_dialog = SubmitJobProgressDialog(
-            farm_id,
-            queue_id,
-            storage_profile_id,
-            job_bundle_dir,
-            asset_manager,
-            deadline_client,
-            parent=parent,
-            auto_accept=auto_accept,
-        )
-        return job_progress_dialog.exec()
-
-    def __init__(
-        self,
-        farm_id: str,
-        queue_id: str,
-        storage_profile_id: str,
-        job_bundle_dir: str,
-        asset_manager: S3AssetManager,
-        deadline_client: BaseClient,
-        parent: QWidget = None,
-        auto_accept: bool = False,
-    ) -> None:
-        super().__init__(parent=parent)
-
         self._farm_id = farm_id
         self._queue_id = queue_id
         self._storage_profile_id = storage_profile_id
@@ -143,8 +117,8 @@ class SubmitJobProgressDialog(QDialog):
         self.__upload_thread: Optional[threading.Thread] = None
         self.__create_job_thread: Optional[threading.Thread] = None
 
-        self._build_ui()
         self._start_submission()
+        return self.exec()
 
     def _build_ui(self):
         """Builds up the Dialog UI"""
