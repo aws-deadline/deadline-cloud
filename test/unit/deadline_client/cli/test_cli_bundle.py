@@ -16,7 +16,7 @@ from deadline.client import config
 from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
 from deadline.client.config.config_file import set_setting
-from deadline.job_attachments._utils import AssetLoadingMethod
+from deadline.job_attachments.models import AssetLoadingMethod
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 from ..api.test_job_bundle_submission import (

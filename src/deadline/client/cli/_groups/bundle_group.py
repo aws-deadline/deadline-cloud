@@ -29,12 +29,13 @@ from deadline.client.job_bundle.submission import (
 )
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
+    AssetLoadingMethod,
     AssetRootManifest,
     JobAttachmentS3Settings,
 )
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments._utils import _human_readable_file_size, AssetLoadingMethod
+from deadline.job_attachments._utils import _human_readable_file_size
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from .._common import _apply_cli_options_to_config, _handle_error
