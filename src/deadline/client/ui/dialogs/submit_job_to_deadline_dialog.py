@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from PySide2.QtCore import QSize, Qt  # pylint: disable=import-error
 from PySide2.QtGui import QKeyEvent  # pylint: disable=import-error
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -252,6 +253,10 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         asset_references = self.job_attachments.get_asset_references()
 
+        job_progress_dialog = SubmitJobProgressDialog(parent=self)
+        job_progress_dialog.show()
+        QApplication.instance().processEvents()
+
         # Submit the job
         try:
             deadline = api.get_boto3_client("deadline")
@@ -279,7 +284,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 session=queue_role_session,
             )
 
-            self.create_job_response = SubmitJobProgressDialog.start_submission(
+            self.create_job_response = job_progress_dialog.start_submission(
                 farm_id,
                 queue_id,
                 storage_profile_id,
@@ -287,7 +292,6 @@ class SubmitJobToDeadlineDialog(QDialog):
                 asset_manager,
                 deadline,
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
-                parent=self,
             )
         except Exception as exc:
             logger.exception("error submitting job")
