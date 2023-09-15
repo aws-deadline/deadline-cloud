@@ -44,6 +44,8 @@ from .models import (
     FileConflictResolution,
     FileSystemPermissionSettings,
     JobAttachmentS3Settings,
+    PosixFileSystemPermissionSettings,
+    WindowsFileSystemPermissionSettings,
 )
 from ._utils import _is_relative_to, _join_s3_paths
 
@@ -692,7 +694,31 @@ def _set_fs_group(
     Sets file system group ownership and permissions for all files and directories
     in the given paths, starting from root. It is expected that all `file_paths`
     point to files, not directories.
+
+    Raises:
+        TypeError: If the `fs_permission_settings` are not specific to the underlying OS.
     """
+    if os.name == "posix":
+        if not isinstance(fs_permission_settings, PosixFileSystemPermissionSettings):
+            raise TypeError(
+                "The file system permission settings must be specific to Posix-based system."
+            )
+        _set_fs_group_for_posix(
+            file_paths=file_paths,
+            local_root=local_root,
+            fs_permission_settings=fs_permission_settings,
+        )
+    else:  # if os.name is not "posix"
+        if not isinstance(fs_permission_settings, WindowsFileSystemPermissionSettings):
+            raise TypeError("The file system permission settings must be specific to Windows.")
+        # TODO: implement _set_fs_group_for_windows()
+
+
+def _set_fs_group_for_posix(
+    file_paths: list[str],
+    local_root: str,
+    fs_permission_settings: PosixFileSystemPermissionSettings,
+) -> None:
     os_group = fs_permission_settings.os_group
     dir_mode = fs_permission_settings.dir_mode
     file_mode = fs_permission_settings.file_mode
