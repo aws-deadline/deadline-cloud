@@ -205,9 +205,38 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.desc_edit = QLineEdit()
         self.layout.addRow(self.desc_label, self.desc_edit)
 
+        self.priority_box_label = QLabel("Priority")
+        self.priority_box = QSpinBox(parent=self)
+        self.layout.addRow(self.priority_box_label, self.priority_box)
+
+        self.initial_status_box_label = QLabel("Initial State")
+        self.initial_status_box = QComboBox(parent=self)
+        self.initial_status_box.addItems(["READY", "SUSPENDED"])
+        self.layout.addRow(self.initial_status_box_label, self.initial_status_box)
+
+        self.max_failed_tasks_count_box_label = QLabel("Maximum Failed Tasks Count")
+        self.max_failed_tasks_count_box_label.setToolTip(
+            "Maximum number of Tasks that can fail before the Job will be marked as failed."
+        )
+        self.max_failed_tasks_count_box = QSpinBox(parent=self)
+        self.max_failed_tasks_count_box.setRange(0, 2147483647)
+        self.layout.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
+
+        self.max_retries_per_task_box_label = QLabel("Maximum Retries Per Task")
+        self.max_retries_per_task_box_label.setToolTip(
+            "Maximum number of times that a Task will retry before it's marked as failed."
+        )
+        self.max_retries_per_task_box = QSpinBox(parent=self)
+        self.max_retries_per_task_box.setRange(0, 2147483647)
+        self.layout.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
+
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
+        self.initial_status_box.setCurrentText("READY")
+        self.max_failed_tasks_count_box.setValue(20)
+        self.max_retries_per_task_box.setValue(5)
+        self.priority_box.setValue(50)
 
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
@@ -319,64 +348,6 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         self.farm_box.refresh(deadline_authorized)
         self.queue_box.refresh(deadline_authorized)
-
-    def update_settings(self, settings) -> None:
-        """
-        Updates an Amazon Deadline Cloud settings object with the latest values.
-
-        The settings object should be a dataclass with:
-            initial_status: str (or enum of base str)
-            max_failed_tasks_count: int
-            max_retries_per_task: int
-            priority: int
-        """
-        settings.initial_status = self.initial_status_box.currentText()
-        settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
-        settings.max_retries_per_task = self.max_retries_per_task_box.value()
-        settings.priority = self.priority_box.value()
-
-
-class InstallationRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
-    """
-    UI element to hold list of Installation Requirements
-
-    The settings object should be a dataclass with:
-      - `override_rez_packages: bool`
-      - `rez_packages: str`
-    """
-
-    def __init__(self, initial_settings, parent=None):
-        super().__init__("Installation Requirements", parent)
-
-        self._build_ui()
-        self.refresh_ui(initial_settings)
-
-    def _build_ui(self):
-        self.layout = QGridLayout(self)
-
-        self.requirements_chck = QCheckBox("Override Rez Packages", self)
-        self.requirements_edit = QLineEdit(self)
-        self.layout.addWidget(self.requirements_chck, 4, 0)
-        self.layout.addWidget(self.requirements_edit, 4, 1)
-        self.requirements_chck.stateChanged.connect(self.enable_requirements_override_changed)
-
-    def refresh_ui(self, settings: Any):
-        self.requirements_chck.setChecked(settings.override_rez_packages)
-        self.requirements_edit.setEnabled(settings.override_rez_packages)
-        self.requirements_edit.setText(settings.rez_packages)
-
-    def update_settings(self, settings):
-        """
-        Update a given instance of scene settings with updated values.
-        """
-        settings.rez_packages = self.requirements_edit.text()
-        settings.override_rez_packages = self.requirements_chck.isChecked()
-
-    def enable_requirements_override_changed(self, state):
-        """
-        Set the enabled/disabled status of the requirements override text box
-        """
-        self.requirements_edit.setEnabled(state == Qt.Checked)
 
 
 class _DeadlineNamedResourceDisplay(QWidget):

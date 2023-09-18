@@ -44,11 +44,6 @@ class JobBundleSettingsWidget(QWidget):
         self._build_ui(settings)
 
     def _build_ui(self, initial_settings: JobBundleSettings):
-        if not os.path.isdir(initial_settings.input_job_bundle_dir):
-            raise RuntimeError(
-                f"Input Job Bundle Dir is not valid: {initial_settings.input_job_bundle_dir}"
-            )
-
         self.input_job_bundle_dir = initial_settings.input_job_bundle_dir
 
         self.parameters_widget = OpenJDParametersWidget(

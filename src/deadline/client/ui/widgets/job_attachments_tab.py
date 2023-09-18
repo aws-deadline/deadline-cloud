@@ -161,8 +161,8 @@ class JobAttachmentsWidget(QWidget):
 
     def refresh_ui(
         self,
-        auto_detected_attachments: Optional[FlatAssetReferences],
-        attachments: Optional[FlatAssetReferences],
+        auto_detected_attachments: Optional[AssetReferences],
+        attachments: Optional[AssetReferences],
     ):
         """Refresh the job attachment lists if provided"""
         if auto_detected_attachments:
