@@ -154,5 +154,9 @@ def show_job_bundle_submitter(
         parent=parent,
         f=f,
     )
+
+    # Browse history button is disabled by default for submitters. Enable history button for UIs launched from `deadline bundle`
+    submitter_dialog.set_browse_btn_visible()
+
     submitter_dialog.show()
     return submitter_dialog

@@ -32,17 +32,31 @@ class JobBundleSettingsWidget(QWidget):
     def __init__(self, initial_settings: JobBundleSettings, parent=None):
         super().__init__(parent=parent)
 
+        self.layout = QVBoxLayout(self)
         self._build_ui(initial_settings)
 
+    def refresh_ui(self, settings: JobBundleSettings):
+        self._build_ui(settings)
+
+        # Clear the layout
+        for i in reversed(range(self.layout.count())):
+            item = self.layout.takeAt(i)
+            item.widget().deleteLater()
+
+        self._build_ui(settings)
+
     def _build_ui(self, initial_settings: JobBundleSettings):
-        layout = QVBoxLayout(self)
+        if not os.path.isdir(initial_settings.input_job_bundle_dir):
+            raise RuntimeError(
+                f"Input Job Bundle Dir is not valid: {initial_settings.input_job_bundle_dir}"
+            )
 
         self.input_job_bundle_dir = initial_settings.input_job_bundle_dir
 
         self.parameters_widget = OpenJDParametersWidget(
             parameter_definitions=initial_settings.parameters, parent=self
         )
-        layout.addWidget(self.parameters_widget)
+        self.layout.addWidget(self.parameters_widget)
         self.parameters_widget.parameter_changed.connect(
             lambda message: self.parameter_changed.emit(message)
         )
