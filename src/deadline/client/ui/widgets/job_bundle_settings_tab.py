@@ -36,8 +36,6 @@ class JobBundleSettingsWidget(QWidget):
         self._build_ui(initial_settings)
 
     def refresh_ui(self, settings: JobBundleSettings):
-        self._build_ui(settings)
-
         # Clear the layout
         for i in reversed(range(self.layout.count())):
             item = self.layout.takeAt(i)

@@ -37,8 +37,9 @@ from ..widgets.deadline_credentials_status_widget import DeadlineCredentialsStat
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
-from ...job_bundle.submission import AssetReferences, FlatAssetReferences
+from ...job_bundle.submission import AssetReferences
 from ...job_bundle.loader import read_yaml_or_json_object
+from ...job_bundle.parameters import read_job_bundle_parameters
 from ..dataclasses import JobBundleSettings
 
 logger = logging.getLogger(__name__)
@@ -104,8 +105,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         self,
         *,
         job_settings: Optional[Any] = None,
-        auto_detected_attachments: Optional[FlatAssetReferences] = None,
-        attachments: Optional[FlatAssetReferences] = None,
+        auto_detected_attachments: Optional[AssetReferences] = None,
+        attachments: Optional[AssetReferences] = None,
     ):
         # Refresh the UI components
         self.refresh_deadline_settings()
@@ -307,17 +308,16 @@ class SubmitJobToDeadlineDialog(QDialog):
             read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
         )
 
-        asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+        asset_references = AssetReferences.from_dict(asset_references_obj)
 
         # Load the template to get the bundle name
         template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
         name = (
             template.get("name", "Job Bundle Submission") if template else "Job Bundle Submission"
         )
-        job_settings = JobBundleSettings(
-            input_job_bundle_dir=input_job_bundle_dir,
-            name=name,
-        )
+
+        job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
+        job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
 
         self.refresh(
             job_settings=job_settings, auto_detected_attachments=asset_references, attachments=None

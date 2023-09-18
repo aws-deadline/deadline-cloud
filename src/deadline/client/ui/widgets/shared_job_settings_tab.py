@@ -100,8 +100,6 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     def refresh_ui(self, job_settings: Any):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
-        self.deadline_cloud_settings_box.refresh_ui(job_settings)
-        self.queue_parameters_box.refresh_ui(job_settings)
         self.refresh_queue_parameters()
 
     def refresh_queue_parameters(self):
@@ -210,10 +208,6 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
-        self.initial_status_box.setCurrentText("READY")
-        self.max_failed_tasks_count_box.setValue(20)
-        self.max_retries_per_task_box.setValue(5)
-        self.priority_box.setValue(50)
 
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
@@ -295,7 +289,6 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
         self._build_ui()
-        self.refresh_ui(initial_settings)
 
     def _set_enabled_with_label(self, prop_name: str, enabled: bool):
         """Enable/disable a control w/ its label"""
@@ -326,12 +319,6 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         self.farm_box.refresh(deadline_authorized)
         self.queue_box.refresh(deadline_authorized)
-
-    def refresh_ui(self, settings: Any):
-        self.initial_status_box.setCurrentText(settings.initial_status)
-        self.max_failed_tasks_count_box.setValue(settings.max_failed_tasks_count)
-        self.max_retries_per_task_box.setValue(settings.max_retries_per_task)
-        self.priority_box.setValue(settings.priority)
 
     def update_settings(self, settings) -> None:
         """
