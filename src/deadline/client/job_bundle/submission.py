@@ -8,11 +8,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
-from typing import Any, Callable, Dict, List, Tuple, Optional
-
-from deadline.job_attachments.models import AssetRootManifest
-from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.job_attachments.upload import S3AssetManager
+from typing import Any, Tuple, Optional
 
 from ..exceptions import DeadlineOperationError
 
@@ -28,12 +24,17 @@ DEFAULT_SUPPORTED_APP_PARAMETER_NAMES = [
 
 
 @dataclasses.dataclass
-class FlatAssetReferences:
-    """Flat representation of a job bundle's asset references."""
+class AssetReferences:
+    """Holds the asset references for a job bundle."""
 
     input_filenames: set[str] = dataclasses.field(default_factory=set)
+    """Filenames whose file contents are input to the job."""
     input_directories: set[str] = dataclasses.field(default_factory=set)
+    """Directories whose contents are input to the job."""
     output_directories: set[str] = dataclasses.field(default_factory=set)
+    """Directories whose contents are output from the job."""
+    referenced_paths: set[str] = dataclasses.field(default_factory=set)
+    """Paths that are referenced by the job, but not necessarily input or output."""
 
     def __init__(
         self,
@@ -41,19 +42,12 @@ class FlatAssetReferences:
         input_filenames: Optional[set[str]] = None,
         input_directories: Optional[set[str]] = None,
         output_directories: Optional[set[str]] = None,
+        referenced_paths: Optional[set[str]] = None,
     ):
-        if input_filenames:
-            self.input_filenames = input_filenames
-        else:
-            self.input_filenames = set()
-        if input_directories:
-            self.input_directories = input_directories
-        else:
-            self.input_directories = set()
-        if output_directories:
-            self.output_directories = output_directories
-        else:
-            self.output_directories = set()
+        self.input_filenames = input_filenames or set()
+        self.input_directories = input_directories or set()
+        self.output_directories = output_directories or set()
+        self.referenced_paths = referenced_paths or set()
 
     def __bool__(self) -> bool:
         """Returns whether the object has any asset references."""
@@ -61,27 +55,31 @@ class FlatAssetReferences:
             bool(self.input_filenames)
             or bool(self.input_directories)
             or bool(self.output_directories)
+            or bool(self.referenced_paths)
         )
 
-    def union(self, other: FlatAssetReferences):
+    def union(self, other: AssetReferences):
         """Returns the union of the asset references."""
-        return FlatAssetReferences(
+        return AssetReferences(
             input_filenames=self.input_filenames.union(other.input_filenames),
             input_directories=self.input_directories.union(other.input_directories),
             output_directories=self.output_directories.union(other.output_directories),
+            referenced_paths=self.referenced_paths.union(other.referenced_paths),
         )
 
     @classmethod
-    def from_dict(cls, obj: Optional[dict[str, Any]]) -> FlatAssetReferences:
+    def from_dict(cls, obj: Optional[dict[str, Any]]) -> AssetReferences:
         if obj:
             input_filenames = obj["assetReferences"].get("inputs", {}).get("filenames", [])
             input_directories = obj["assetReferences"].get("inputs", {}).get("directories", [])
             output_directories = obj["assetReferences"].get("outputs", {}).get("directories", [])
+            referenced_paths = obj["assetReferences"].get("referencedPaths", [])
 
             return cls(
                 input_filenames=set(os.path.normpath(path) for path in input_filenames),
                 input_directories=set(os.path.normpath(path) for path in input_directories),
                 output_directories=set(os.path.normpath(path) for path in output_directories),
+                referenced_paths=set(os.path.normpath(path) for path in referenced_paths),
             )
         else:
             return cls()
@@ -94,32 +92,9 @@ class FlatAssetReferences:
                     "filenames": sorted(self.input_filenames),
                 },
                 "outputs": {"directories": sorted(self.output_directories)},
+                "referencedPaths": sorted(self.referenced_paths),
             }
         }
-
-
-def upload_job_attachments(
-    asset_manager: S3AssetManager,
-    manifests: List[AssetRootManifest],
-    upload_progress_callback: Callable,
-) -> Tuple[SummaryStatistics, Dict[str, Any]]:
-    (upload_summary, attachments) = asset_manager.upload_assets(
-        manifests=manifests, on_uploading_assets=upload_progress_callback
-    )
-
-    # TODO: dataclasses.asdict doesn't respect the "metadata(exclude)" from dataclasses_json
-    #       that DeadlineJobAttachments is using. Would like to consider removing
-    #       DeadlineJobAttachments' dependency on dataclasses_json to reduce the dependency
-    #       footprint we place inside of DCCs, and find a consistent way to handle this.
-    uploaded_attachments = _remove_nones(dataclasses.asdict(attachments))
-    for manifest_properties in uploaded_attachments["manifests"]:
-        if (
-            "outputRelativeDirectories" in manifest_properties
-            and manifest_properties["outputRelativeDirectories"] == []
-        ):
-            del manifest_properties["outputRelativeDirectories"]
-
-    return upload_summary, uploaded_attachments
 
 
 def split_parameter_args(
@@ -172,26 +147,3 @@ def split_parameter_args(
                     job_parameters[parameter_name] = {parameter_type: str(parameter_value)}
 
     return app_parameters, job_parameters
-
-
-def _remove_nones(obj: Any) -> Any:
-    """
-    Removes any fields from dicts contained
-    within the object whose value is None. Recursively
-    processes any dict or list within the object.
-
-    Modifies obj in place, and returns it.
-    """
-    if isinstance(obj, dict):
-        keys_to_remove = []
-        for key, value in obj.items():
-            if value is None:
-                keys_to_remove.append(key)
-            elif isinstance(value, (dict, list)):
-                _remove_nones(value)
-        for key in keys_to_remove:
-            del obj[key]
-    elif isinstance(obj, list):
-        for i in range(len(obj)):
-            _remove_nones(obj[i])
-    return obj

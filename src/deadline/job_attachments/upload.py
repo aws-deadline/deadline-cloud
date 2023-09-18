@@ -564,6 +564,7 @@ class S3AssetManager:
         self,
         input_paths: set[str],
         output_paths: set[str],
+        referenced_paths: set[str],
         local_type_locations: dict[str, str] = {},
         shared_type_locations: dict[str, str] = {},
     ) -> list[AssetRootGroup]:
@@ -577,6 +578,8 @@ class S3AssetManager:
         - The given `local_type_locations` paths can each form a group based on its root path. In other
           words, if there are paths relative to any of the `local_type_locations` paths, they are grouped
           together as one.
+        - The referenced paths may have no files or directories associated, but they always live
+          relative to one of the AssetRootGroup objects returned.
         """
         groupings: dict[str, AssetRootGroup] = {}
 
@@ -585,10 +588,11 @@ class S3AssetManager:
         for _path in input_paths:
             # Need to use absolute to not resolve symlinks, but need normpath to get rid of relative paths, i.e. '..'
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
-            if not abs_path.exists() or abs_path.is_dir():
-                logger.warning(
-                    f"Skipping uploading input as it either doesn't exist or is a directory: {abs_path}"
-                )
+            if not abs_path.exists():
+                logger.warning(f"Skipping uploading input as it doesn't exist: {abs_path}")
+                continue
+            if abs_path.is_dir():
+                logger.warning(f"Skipping uploading input as it is a directory: {abs_path}")
                 continue
 
             # Skips the upload if the path is relative to any of the File System Location
@@ -622,10 +626,28 @@ class S3AssetManager:
             )
             groupings[matched_root].outputs.add(abs_path)
 
+        for _path in referenced_paths:
+            abs_path = Path(os.path.normpath(Path(_path).absolute()))
+
+            # Skips the reference if the path is relative to any of the File System Location
+            # of SHARED type that was set in the Job.
+            if any(_is_relative_to(abs_path, shared) for shared in shared_type_locations):
+                continue
+            # If the path is relative to any of the File System Location of LOCAL type,
+            # groups the references into a single group using the path of that location.
+            matched_root = self._find_matched_root_from_local_type_locations(
+                groupings=groupings,
+                abs_path=abs_path,
+                local_type_locations=local_type_locations,
+            )
+            groupings[matched_root].references.add(abs_path)
+
         # Finally, build the list of asset root groups
         for asset_group in groupings.values():
             common_path: Path = Path(
-                os.path.commonpath(list(asset_group.inputs | asset_group.outputs))
+                os.path.commonpath(
+                    list(asset_group.inputs | asset_group.outputs | asset_group.references)
+                )
             )
             if common_path.is_file():
                 common_path = common_path.parent
@@ -733,6 +755,7 @@ class S3AssetManager:
         self,
         input_paths: list[str],
         output_paths: list[str],
+        referenced_paths: list[str],
         storage_profile_id: Optional[str] = None,
         hash_cache_dir: Optional[str] = None,
         on_preparing_to_submit: Optional[Callable[[Any], bool]] = None,
@@ -766,6 +789,7 @@ class S3AssetManager:
         asset_groups: list[AssetRootGroup] = self._get_asset_groups(
             {ip_path for ip_path in input_paths if ip_path},
             {op_path for op_path in output_paths if op_path},
+            {rf_path for rf_path in referenced_paths if rf_path},
             local_type_locations,
             shared_type_locations,
         )

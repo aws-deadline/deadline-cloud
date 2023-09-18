@@ -5,14 +5,11 @@ Tests the deadline.client.job_bundle.submission functions for building up the
 arguments to call CreateJob with.
 """
 from __future__ import annotations
-from typing import Any, Dict, Tuple
-from unittest.mock import Mock
+from typing import Any, Dict
 
 import pytest
 
 from deadline.client.job_bundle import submission
-from deadline.job_attachments.models import AssetLoadingMethod, Attachments
-from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 MOCK_FARM_ID = "farm-0123456789abcdef0123456789abcdef"
 MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
@@ -23,7 +20,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
     [
         pytest.param(
             {},
-            submission.FlatAssetReferences(),
+            submission.AssetReferences(),
         ),
         pytest.param(
             {
@@ -32,7 +29,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": []},
                 }
             },
-            submission.FlatAssetReferences(),
+            submission.AssetReferences(),
         ),
         pytest.param(
             {
@@ -44,7 +41,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": ["output_dir_1"]},
                 }
             },
-            submission.FlatAssetReferences(
+            submission.AssetReferences(
                 input_filenames=set(["input_file_1.txt", "input_file_2.txt"]),
                 output_directories=set(["output_dir_1"]),
             ),
@@ -59,7 +56,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": ["output_dir_1"]},
                 }
             },
-            submission.FlatAssetReferences(
+            submission.AssetReferences(
                 input_filenames=set(
                     [
                         "input_file_1.txt",
@@ -74,49 +71,17 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
 )
 def test_flatten_asset_references(
     assets_input: Dict[str, Any],
-    expected_output: submission.FlatAssetReferences,
+    expected_output: submission.AssetReferences,
 ) -> None:
     """
     Test that FlatAssetReferences.from_dict creates a FlatAssetReferences object with
     all of the filenames/directories from an input.
     """
-    response = submission.FlatAssetReferences.from_dict(assets_input)
+    response = submission.AssetReferences.from_dict(assets_input)
 
     assert response.input_filenames == expected_output.input_filenames
     assert response.input_directories == expected_output.input_directories
     assert response.output_directories == expected_output.output_directories
-
-
-def test_upload_job_attachments() -> None:
-    """
-    Test that upload_job_attachments starts the assets upload and returns the
-    attachment settings.
-    """
-
-    def fake_progress_callback():
-        pass
-
-    expected_output: Tuple[SummaryStatistics, Dict[str, Any]] = (
-        SummaryStatistics(),
-        {
-            "manifests": [],
-            "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
-        },
-    )
-
-    asset_manager = Mock()
-    asset_manager.upload_assets.return_value = [
-        SummaryStatistics(),
-        Attachments(),
-    ]
-
-    summary, response = submission.upload_job_attachments(asset_manager, [], fake_progress_callback)
-
-    asset_manager.upload_assets.assert_called_once_with(
-        manifests=[], on_uploading_assets=fake_progress_callback
-    )
-
-    assert (summary, response) == expected_output
 
 
 def test_split_parameter_args() -> None:

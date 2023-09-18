@@ -3,22 +3,20 @@
 """
 A UI Widget containing the render setup tab
 """
+from __future__ import annotations
+
 import sys
 import threading
 from typing import Any, Dict, Optional
 
-from PySide2.QtCore import Qt, Signal  # type: ignore
+from PySide2.QtCore import Signal  # type: ignore
 from PySide2.QtWidgets import (  # type: ignore
-    QCheckBox,
     QComboBox,
     QFormLayout,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QSizePolicy,
-    QSpacerItem,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -27,29 +25,156 @@ from PySide2.QtWidgets import (  # type: ignore
 from ... import api
 from ...config import get_setting
 from .. import CancelationFlag
+from .openjd_parameters_widget import OpenJDParametersWidget
+from ...api import get_queue_parameter_definitions
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
     """
     Widget that holds Job setup shared across all job types.
+
+
+    Signals:
+        parameter_changed: This is sent whenever a parameter value in the widget changes. The message
+            is a copy of the parameter definition with the "value" key containing the new value.
+
+    Args:
+        initial_settings: dataclass containing the job-specific settings.
+        initial_shared_parameter_values: (dict[str, Any]): A dict of parameter values {<name>, <value>, ...}
+            to override default queue parameter values from the queue. For example,
+            a Rez queue environment may have a default "" for the RezPackages parameter, but a Maya
+            submitter would override that default with "maya-2023" or similar.
+        parent: The parent Qt Widget.
     """
 
-    def __init__(self, initial_settings, parent=None):
-        super().__init__(parent)
+    parameter_changed = Signal(dict)
+
+    # Emitted when the background refresh thread catches an exception,
+    # provides (operation_name, BaseException)
+    _background_exception = Signal(str, BaseException)
+
+    # Emitted when an async queue parameters loading thread completes,
+    # provides (refresh_id, queue_parameters)
+    _queue_parameters_update = Signal(int, list)
+
+    def __init__(
+        self, *, initial_settings, initial_shared_parameter_values: dict[str, Any], parent=None
+    ):
+        super().__init__(parent=parent)
         layout = QVBoxLayout(self)
 
-        self.desc_box = SubmissionDescriptionWidget(initial_settings, self)
-        layout.addWidget(self.desc_box)
-        self.deadline_settings_box = DeadlineSettingsWidget(initial_settings, self)
-        layout.addWidget(self.deadline_settings_box)
+        # This is a dictionary {<name>: <value>} containing values to
+        # override the queue parameter defaults.
+        self.initial_shared_parameter_values = initial_shared_parameter_values
 
-        self.rez_packages_box = InstallationRequirementsWidget(initial_settings, self)
-        layout.addWidget(self.rez_packages_box)
+        self.shared_job_properties_box = SharedJobPropertiesWidget(
+            initial_settings=initial_settings, parent=self
+        )
+        layout.addWidget(self.shared_job_properties_box)
 
-        layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.deadline_cloud_settings_box = DeadlineCloudSettingsWidget(parent=self)
+        layout.addWidget(self.deadline_cloud_settings_box)
+
+        self.queue_parameters_box = OpenJDParametersWidget(
+            async_loading_state="Loading Queue Environments...", parent=self
+        )
+        layout.addWidget(self.queue_parameters_box)
+        self.queue_parameters_box.parameter_changed.connect(
+            lambda message: self.parameter_changed.emit(message)
+        )
+
+        self.__refresh_queue_parameters_thread: Optional[threading.Thread] = None
+        self.__refresh_queue_parameters_id = 0
+        self.canceled = CancelationFlag()
+        self.destroyed.connect(self.canceled.set_canceled)
+        self._queue_parameters_update.connect(self._handle_queue_parameters_update)
+        self._background_exception.connect(self._handle_background_queue_parameters_exception)
+        self._start_load_queue_parameters_thread()
+
+        # Set any "deadline:*" parameters, like deadline:priority.
+        # The queue parameters will be set asynchronously by the background thread.
+        for name, value in initial_shared_parameter_values.items():
+            if name.startswith("deadline:"):
+                self.set_parameter_value({"name": name, "value": value})
+
+    def refresh_queue_parameters(self):
+        """
+        If the default queue id has changed, refresh the queue parameters.
+        """
+        queue_id = get_setting("defaults.queue_id")
+        if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id:
+            self.queue_parameters_box.rebuild_ui(
+                async_loading_state="Reloading Queue Environments..."
+            )
+            self._start_load_queue_parameters_thread()
+
+    def _handle_background_queue_parameters_exception(self, e):
+        self.queue_parameters_box.rebuild_ui(
+            async_loading_state="Error Loading Queue Environments."
+        )
+
+    def _start_load_queue_parameters_thread(self):
+        """
+        Starts a background thread to load the queue parameters.
+        """
+        self.farm_id = farm_id = get_setting("defaults.farm_id")
+        self.queue_id = queue_id = get_setting("defaults.queue_id")
+        self.__refresh_queue_parameters_id += 1
+        self.__refresh_queue_parameters_thread = threading.Thread(
+            target=self._load_queue_parameters_thread_function,
+            name="Amazon Deadline Cloud Load Queue Parameters Thread",
+            args=(self.__refresh_queue_parameters_id, farm_id, queue_id),
+        )
+        self.__refresh_queue_parameters_thread.start()
+
+    def _handle_queue_parameters_update(self, refresh_id, queue_parameters):
+        # Apply the refresh if it's still for the latest call
+        if refresh_id == self.__refresh_queue_parameters_id:
+            # Apply the initial queue parameter values
+            for parameter in queue_parameters:
+                if parameter["name"] in self.initial_shared_parameter_values:
+                    parameter["value"] = self.initial_shared_parameter_values[parameter["name"]]
+            self.queue_parameters_box.rebuild_ui(parameter_definitions=queue_parameters)
+
+    def _load_queue_parameters_thread_function(self, refresh_id: int, farm_id: str, queue_id: str):
+        """
+        This function gets started in a background thread to refresh the list.
+        """
+        try:
+            queue_parameters = get_queue_parameter_definitions(farmId=farm_id, queueId=queue_id)
+            if not self.canceled:
+                self._queue_parameters_update.emit(refresh_id, queue_parameters)
+        except BaseException as e:
+            if not self.canceled:
+                self._background_exception.emit("Load Queue Parameters", e)
+
+    def update_settings(self, settings):
+        self.shared_job_properties_box.update_settings(settings)
+
+    def get_parameters(self):
+        """
+        Returns a list of OpenJD parameter definition dicts with
+        a "value" key filled from the widget.
+        """
+        queue_parameters = self.queue_parameters_box.get_parameters()
+        deadline_shared_job_parameters = self.shared_job_properties_box.get_parameters()
+
+        return queue_parameters + deadline_shared_job_parameters
+
+    def set_parameter_value(self, parameter: dict[str, Any]):
+        """
+        Given an OpenJD parameter definition with a "value" key,
+        set the parameter value in the widget.
+
+        If the parameter value cannot be set, raises a KeyError.
+        """
+        if parameter["name"].startswith("deadline:"):
+            self.shared_job_properties_box.set_parameter_value(parameter)
+        else:
+            self.queue_parameters_box.set_parameter_value(parameter)
 
 
-class SubmissionDescriptionWidget(QGroupBox):  # pylint: disable=too-few-public-methods
+class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-methods
     """
     UI element to hold top level description components of the submission
 
@@ -58,14 +183,15 @@ class SubmissionDescriptionWidget(QGroupBox):  # pylint: disable=too-few-public-
       - `description: str`  The description of the Job to submit.
     """
 
-    def __init__(self, initial_settings, parent=None):
-        super().__init__("Description", parent)
+    def __init__(self, *, initial_settings, parent=None):
+        super().__init__("Job Properties", parent=parent)
 
         self._build_ui()
         self._load_initial_settings(initial_settings)
 
     def _build_ui(self):
         self.layout = QFormLayout(self)
+        self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
         self.sub_name_edit = QLineEdit()
         self.layout.addRow("Name", self.sub_name_edit)
@@ -74,9 +200,98 @@ class SubmissionDescriptionWidget(QGroupBox):  # pylint: disable=too-few-public-
         self.desc_edit = QLineEdit()
         self.layout.addRow(self.desc_label, self.desc_edit)
 
+        self.priority_box_label = QLabel("Priority")
+        self.priority_box = QSpinBox(parent=self)
+        self.layout.addRow(self.priority_box_label, self.priority_box)
+
+        self.initial_status_box_label = QLabel("Initial State")
+        self.initial_status_box = QComboBox(parent=self)
+        self.initial_status_box.addItems(["READY", "SUSPENDED"])
+        self.layout.addRow(self.initial_status_box_label, self.initial_status_box)
+
+        self.max_failed_tasks_count_box_label = QLabel("Maximum Failed Tasks Count")
+        self.max_failed_tasks_count_box_label.setToolTip(
+            "Maximum number of Tasks that can fail before the Job will be marked as failed."
+        )
+        self.max_failed_tasks_count_box = QSpinBox(parent=self)
+        self.max_failed_tasks_count_box.setRange(0, 2147483647)
+        self.layout.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
+
+        self.max_retries_per_task_box_label = QLabel("Maximum Retries Per Task")
+        self.max_retries_per_task_box_label.setToolTip(
+            "Maximum number of times that a Task will retry before it's marked as failed."
+        )
+        self.max_retries_per_task_box = QSpinBox(parent=self)
+        self.max_retries_per_task_box.setRange(0, 2147483647)
+        self.layout.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
+
     def _load_initial_settings(self, settings):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
+        self.initial_status_box.setCurrentText("READY")
+        self.max_failed_tasks_count_box.setValue(20)
+        self.max_retries_per_task_box.setValue(5)
+        self.priority_box.setValue(50)
+
+    def set_parameter_value(self, parameter: dict[str, Any]):
+        """
+        Given an OpenJD parameter definition with a "value" key,
+        set the parameter value in the widget.
+
+        If the parameter value cannot be set, raises a KeyError.
+        """
+        parameter_name = parameter["name"]
+        if parameter_name == "deadline:targetTaskRunStatus":
+            self.initial_status_box.setCurrentText(parameter["value"])
+        elif parameter_name == "deadline:maxFailedTasksCount":
+            self.max_failed_tasks_count_box.setValue(parameter["value"])
+        elif parameter_name == "deadline:maxRetriesPerTask":
+            self.max_retries_per_task_box.setValue(parameter["value"])
+        elif parameter_name == "deadline:priority":
+            self.priority_box.setValue(parameter["value"])
+        else:
+            raise KeyError(parameter_name)
+
+    def get_parameters(self):
+        """
+        Returns a list of OpenJD parameter definition dicts with
+        a "value" key filled from the widget.
+        """
+        return [
+            {
+                "name": "deadline:targetTaskRunStatus",
+                "type": "STRING",
+                "userInterface": {
+                    "control": "DROPDOWN_LIST",
+                    "label": "Initial State",
+                },
+                "allowedValues": ["READY", "SUSPENDED"],
+                "value": self.initial_status_box.currentText(),
+            },
+            {
+                "name": "deadline:maxFailedTasksCount",
+                "description": "Maximum number of Tasks that can fail before the Job will be marked as failed.",
+                "type": "INT",
+                "userInterface": {
+                    "control": "SPIN_BOX",
+                    "label": "Maximum Failed Tasks Count",
+                },
+                "minValue": 0,
+                "value": self.max_failed_tasks_count_box.value(),
+            },
+            {
+                "name": "deadline:maxRetriesPerTask",
+                "description": "Maximum number of times that a Task will retry before it's marked as failed.",
+                "type": "INT",
+                "userInterface": {
+                    "control": "SPIN_BOX",
+                    "label": "Maximum Retries Per Task",
+                },
+                "minValue": 0,
+                "value": self.max_retries_per_task_box.value(),
+            },
+            {"name": "deadline:priority", "type": "INT", "value": self.priority_box.value()},
+        ]
 
     def update_settings(self, settings):
         """
@@ -86,19 +301,18 @@ class SubmissionDescriptionWidget(QGroupBox):  # pylint: disable=too-few-public-
         settings.description = self.desc_edit.text()
 
 
-class DeadlineSettingsWidget(QGroupBox):
+class DeadlineCloudSettingsWidget(QGroupBox):
     """
     UI component for the Deadline Render Manager.
     """
 
-    def __init__(self, initial_settings, parent: Optional[QWidget] = None):
-        super().__init__("Deadline Settings", parent=parent)
+    def __init__(self, *, parent: Optional[QWidget] = None):
+        super().__init__("Deadline Cloud Settings", parent=parent)
         self.deadline_settings: Dict[str, Any] = {"counter": -1}
-        self.lyt = QFormLayout(self)
-        self.lyt.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        self.layout = QFormLayout(self)
+        self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
         self._build_ui()
-        self._load_initial_settings(initial_settings)
 
     def _set_enabled_with_label(self, prop_name: str, enabled: bool):
         """Enable/disable a control w/ its label"""
@@ -111,36 +325,11 @@ class DeadlineSettingsWidget(QGroupBox):
         """
         self.farm_box_label = QLabel("Farm")
         self.farm_box = DeadlineFarmDisplay()
-        self.lyt.addRow(self.farm_box_label, self.farm_box)
+        self.layout.addRow(self.farm_box_label, self.farm_box)
 
         self.queue_box_label = QLabel("Queue")
         self.queue_box = DeadlineQueueDisplay()
-        self.lyt.addRow(self.queue_box_label, self.queue_box)
-
-        self.initial_status_box_label = QLabel("Initial State")
-        self.initial_status_box = QComboBox(parent=self)
-        self.initial_status_box.addItems(["READY", "SUSPENDED"])
-        self.lyt.addRow(self.initial_status_box_label, self.initial_status_box)
-
-        self.max_failed_tasks_count_box_label = QLabel("Maximum Failed Tasks Count")
-        self.max_failed_tasks_count_box_label.setToolTip(
-            "Maximum number of Tasks that can fail before the Job will be marked as failed."
-        )
-        self.max_failed_tasks_count_box = QSpinBox(parent=self)
-        self.max_failed_tasks_count_box.setRange(0, 2147483647)
-        self.lyt.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
-
-        self.max_retries_per_task_box_label = QLabel("Maximum Retries Per Task")
-        self.max_retries_per_task_box_label.setToolTip(
-            "Maximum number of times that a Task will retry before it's marked as failed."
-        )
-        self.max_retries_per_task_box = QSpinBox(parent=self)
-        self.max_retries_per_task_box.setRange(0, 2147483647)
-        self.lyt.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
-
-        self.priority_box_label = QLabel("Priority")
-        self.priority_box = QSpinBox(parent=self)
-        self.lyt.addRow(self.priority_box_label, self.priority_box)
+        self.layout.addRow(self.queue_box_label, self.queue_box)
 
     def refresh_setting_controls(self, deadline_authorized):
         """
@@ -154,70 +343,6 @@ class DeadlineSettingsWidget(QGroupBox):
         """
         self.farm_box.refresh(deadline_authorized)
         self.queue_box.refresh(deadline_authorized)
-
-    def _load_initial_settings(self, settings):
-        self.initial_status_box.setCurrentText(settings.initial_status)
-        self.max_failed_tasks_count_box.setValue(settings.max_failed_tasks_count)
-        self.max_retries_per_task_box.setValue(settings.max_retries_per_task)
-        self.priority_box.setValue(settings.priority)
-
-    def update_settings(self, settings) -> None:
-        """
-        Updates an Amazon Deadline Cloud settings object with the latest values.
-
-        The settings object should be a dataclass with:
-            initial_status: str (or enum of base str)
-            max_failed_tasks_count: int
-            max_retries_per_task: int
-            priority: int
-        """
-        settings.initial_status = self.initial_status_box.currentText()
-        settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
-        settings.max_retries_per_task = self.max_retries_per_task_box.value()
-        settings.priority = self.priority_box.value()
-
-
-class InstallationRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
-    """
-    UI element to hold list of Installation Requirements
-
-    The settings object should be a dataclass with:
-      - `override_rez_packages: bool`
-      - `rez_packages: str`
-    """
-
-    def __init__(self, initial_settings, parent=None):
-        super().__init__("Installation Requirements", parent)
-
-        self._build_ui()
-        self._load_initial_settings(initial_settings)
-
-    def _build_ui(self):
-        self.layout = QGridLayout(self)
-
-        self.requirements_chck = QCheckBox("Override Rez Packages", self)
-        self.requirements_edit = QLineEdit(self)
-        self.layout.addWidget(self.requirements_chck, 4, 0)
-        self.layout.addWidget(self.requirements_edit, 4, 1)
-        self.requirements_chck.stateChanged.connect(self.enable_requirements_override_changed)
-
-    def _load_initial_settings(self, settings):
-        self.requirements_chck.setChecked(settings.override_rez_packages)
-        self.requirements_edit.setEnabled(settings.override_rez_packages)
-        self.requirements_edit.setText(settings.rez_packages)
-
-    def update_settings(self, settings):
-        """
-        Update a given instance of scene settings with updated values.
-        """
-        settings.rez_packages = self.requirements_edit.text()
-        settings.override_rez_packages = self.requirements_chck.isChecked()
-
-    def enable_requirements_override_changed(self, state):
-        """
-        Set the enabled/disabled status of the requirements override text box
-        """
-        self.requirements_edit.setEnabled(state == Qt.Checked)
 
 
 class _DeadlineNamedResourceDisplay(QWidget):
@@ -240,8 +365,8 @@ class _DeadlineNamedResourceDisplay(QWidget):
     # provides (refresh_id, id, name, description)
     _item_update = Signal(int, str, str, str)
 
-    def __init__(self, resource_name, setting_name, parent=None):
-        super().__init__(parent)
+    def __init__(self, *, resource_name, setting_name, parent=None):
+        super().__init__(parent=parent)
 
         self.__refresh_thread = None
         self.__refresh_id = 0
@@ -329,7 +454,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
 
 
 class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, parent=None):
+    def __init__(self, *, parent=None):
         super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
 
     def get_item(self):
@@ -343,7 +468,7 @@ class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
 
 
 class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, parent=None):
+    def __init__(self, *, parent=None):
         super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
 
     def get_item(self):
@@ -362,7 +487,7 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
     MAC_OS = "Macos"
     LINUX_OS = "Linux"
 
-    def __init__(self, parent=None):
+    def __init__(self, *, parent=None):
         super().__init__(
             resource_name="Storage Profile Name",
             setting_name="settings.storage_profile_id",

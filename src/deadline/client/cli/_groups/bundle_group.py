@@ -3,6 +3,7 @@
 """
 All the `deadline bundle` commands.
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -11,7 +12,7 @@ import re
 import signal
 import textwrap
 from configparser import ConfigParser
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -23,9 +24,8 @@ from deadline.client.config import config_file, get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
-    FlatAssetReferences,
+    AssetReferences,
     split_parameter_args,
-    upload_job_attachments,
 )
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
@@ -125,6 +125,10 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
         click.echo(f"Submitting to Queue: {queue['displayName']}")
 
+        queue_parameter_definitions = api.get_queue_parameter_definitions(
+            farmId=farm_id, queueId=queue_id
+        )
+
         # Read in the job template
         file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
 
@@ -145,9 +149,15 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         asset_references_obj = read_yaml_or_json_object(
             job_bundle_dir, "asset_references", required=False
         )
-        asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+        asset_references = AssetReferences.from_dict(asset_references_obj)
 
-        apply_job_parameters(parameter, job_bundle_dir, job_bundle_parameters, asset_references)
+        apply_job_parameters(
+            parameter,
+            job_bundle_dir,
+            job_bundle_parameters,
+            queue_parameter_definitions,
+            asset_references,
+        )
         app_parameters_formatted, job_parameters_formatted = split_parameter_args(
             job_bundle_parameters, job_bundle_dir
         )
@@ -179,8 +189,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
             hash_summary, asset_manifests = _hash_attachments(
                 asset_manager,
-                asset_references.input_filenames,
-                asset_references.output_directories,
+                asset_references,
                 storage_profile_id=storage_profile_id,
                 config=config,
             )
@@ -299,8 +308,7 @@ def bundle_gui_submit(job_bundle_dir, **args):
 
 def _hash_attachments(
     asset_manager: S3AssetManager,
-    input_paths: Set[str],
-    output_paths: Set[str],
+    asset_references: AssetReferences,
     storage_profile_id: Optional[str] = None,
     config: Optional[ConfigParser] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
@@ -318,8 +326,9 @@ def _hash_attachments(
             return continue_submission
 
         hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
-            input_paths=sorted(input_paths),
-            output_paths=sorted(output_paths),
+            input_paths=sorted(asset_references.input_filenames),
+            output_paths=sorted(asset_references.output_directories),
+            referenced_paths=sorted(asset_references.referenced_paths),
             storage_profile_id=storage_profile_id,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=_update_hash_progress,
@@ -355,12 +364,12 @@ def _upload_attachments(
                 upload_progress.update(new_progress)
             return continue_submission
 
-        upload_summary, attachment_settings = upload_job_attachments(
-            asset_manager, manifests, _update_upload_progress
+        upload_summary, attachment_settings = asset_manager.upload_assets(
+            manifests, _update_upload_progress
         )
 
     api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
     click.echo("Upload Summary:")
     click.echo(textwrap.indent(str(upload_summary), "    "))
 
-    return attachment_settings
+    return attachment_settings.to_dict()

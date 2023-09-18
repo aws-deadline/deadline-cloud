@@ -1,12 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-
 """
 UI widgets for the Scene Settings tab.
 """
+from __future__ import annotations
+
 import os
 from typing import Any, Dict, List
+from copy import deepcopy
 
-from PySide2.QtCore import QRegularExpression, Qt  # type: ignore
+from PySide2.QtCore import QRegularExpression, Qt, Signal  # type: ignore
 from PySide2.QtGui import QValidator
 from PySide2.QtWidgets import (  # type: ignore
     QCheckBox,
@@ -25,106 +27,129 @@ from PySide2.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ..widgets.path_widgets import (
+from ...job_bundle.parameters import get_ui_control_for_parameter_definition
+from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
     OutputFilePickerWidget,
 )
-from ..widgets.spinbox_widgets import DecimalMode, FloatDragSpinBox, IntDragSpinBox
+from .spinbox_widgets import DecimalMode, FloatDragSpinBox, IntDragSpinBox
 
 
-class JobTemplateParametersWidget(QWidget):
+class OpenJDParametersWidget(QWidget):
     """
-    Widget that takes the set of parameters from a job template, and generated
-    a UI form to edit them with.
+    Widget that takes the set of Open Job Description parameters, for example from a job template or a queue,
+    and generates a UI form to edit them.
 
     Open Job Description has optional UI metadata for each parameter specified under "userInterface".
 
+    Signals:
+        parameter_changed: This is sent whenever a parameter value in the widget changes. The message
+            is a copy of the parameter definition with the "value" key containing the new value.
+
     Args:
-        initial_job_parameters (Dict[str, Any]): Open Job Description parameters block.
+        parameter_definitions (List[Dict[str, Any]]): A list of Open Job Description parameter definitions.
+        async_loading_state (str): A message to show its async loading state. Cannot provide both this
+            message and the parameter_definitions.
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, job_parameters: List[Dict[str, Any]], parent=None):
+    parameter_changed = Signal(dict)
+
+    def __init__(
+        self,
+        *,
+        parameter_definitions: List[Dict[str, Any]] = [],
+        async_loading_state: str = "",
+        parent=None,
+    ):
         super().__init__(parent=parent)
 
-        self._build_ui(job_parameters)
+        self.rebuild_ui(
+            parameter_definitions=parameter_definitions, async_loading_state=async_loading_state
+        )
 
-    def _build_ui(self, job_parameters: List[Dict[str, Any]]):
-        layout = QVBoxLayout(self)
+    def rebuild_ui(
+        self, *, parameter_definitions: list[dict[str, Any]] = [], async_loading_state: str = ""
+    ):
+        """
+        Rebuilds the widget's UI to the new parameter_definitions, or to display the
+        async_loading_state message.
+        """
+        if parameter_definitions and async_loading_state:
+            raise RuntimeError(
+                "Constructing or updating an OpenJD parameters widget in the "
+                + "async_loading_state requires an empty parameter_definitions list."
+            )
+
+        layout = self.layout()
+        if isinstance(layout, QVBoxLayout):
+            for index in reversed(range(layout.count())):
+                child = layout.takeAt(index)
+                if child.widget():
+                    child.widget().deleteLater()
+                elif child.layout():
+                    child.layout().deleteLater()
+        else:
+            layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.controls: List[Any] = []
+        self.controls: dict[str, Any] = {}
+
+        if async_loading_state:
+            loading = QLabel(async_loading_state, self)
+            loading.setAlignment(Qt.AlignCenter)
+            loading.setMinimumSize(100, 30)
+            layout.addWidget(loading)
+            layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+            self.async_loading_state = async_loading_state
+            return
+        else:
+            self.async_loading_state = ""
+
         need_spacer = True
 
         control_map = {
-            ControlType.LINE_EDIT: _JobTemplateLineEditWidget,
-            ControlType.MULTILINE_EDIT: _JobTemplateMultiLineEditWidget,
-            ControlType.INT_SPIN_BOX: _JobTemplateIntSpinBoxWidget,
-            ControlType.FLOAT_SPIN_BOX: _JobTemplateFloatSpinBoxWidget,
-            ControlType.DROPDOWN_LIST: _JobTemplateDropdownListWidget,
-            ControlType.CHOOSE_INPUT_FILE: _JobTemplateInputFileWidget,
-            ControlType.CHOOSE_OUTPUT_FILE: _JobTemplateOutputFileWidget,
-            ControlType.CHOOSE_DIRECTORY: _JobTemplateDirectoryWidget,
-            ControlType.CHECK_BOX: _JobTemplateCheckBoxWidget,
-            ControlType.HIDDEN: _JobTemplateHiddenWidget,
+            ControlType.LINE_EDIT.name: _JobTemplateLineEditWidget,
+            ControlType.MULTILINE_EDIT.name: _JobTemplateMultiLineEditWidget,
+            ControlType.DROPDOWN_LIST.name: _JobTemplateDropdownListWidget,
+            ControlType.CHOOSE_INPUT_FILE.name: _JobTemplateInputFileWidget,
+            ControlType.CHOOSE_OUTPUT_FILE.name: _JobTemplateOutputFileWidget,
+            ControlType.CHOOSE_DIRECTORY.name: _JobTemplateDirectoryWidget,
+            ControlType.CHECK_BOX.name: _JobTemplateCheckBoxWidget,
+            ControlType.HIDDEN.name: _JobTemplateHiddenWidget,
         }
 
-        for parameter in job_parameters:
+        for parameter in parameter_definitions:
             # Skip application-specific parameters like "deadline:priority"
             if ":" in parameter["name"]:
                 continue
 
-            try:
-                control_type_name = ""
-                if "userInterface" in parameter:
-                    control_type_name = parameter["userInterface"].get("control", "")
+            control_type_name = get_ui_control_for_parameter_definition(parameter)
 
-                # If not explicitly provided, determine the default control type name based on the OPENJD specification
-                if not control_type_name:
-                    if parameter.get("allowedValues"):
-                        control_type_name = "DROPDOWN_LIST"
-                    else:
-                        if parameter["type"] == "STRING":
-                            control_type_name = "LINE_EDIT"
-                        elif parameter["type"] == "PATH":
-                            if parameter.get("objectType") == "FILE":
-                                if parameter.get("dataFlow") == "OUT":
-                                    control_type_name = "CHOOSE_OUTPUT_FILE"
-                                else:
-                                    control_type_name = "CHOOSE_INPUT_FILE"
-                            else:
-                                control_type_name = "CHOOSE_DIRECTORY"
-                        elif parameter["type"] in ["INT", "FLOAT"]:
-                            control_type_name = "SPIN_BOX"
-
-                if control_type_name == "SPIN_BOX":
-                    control_type_name = f"{parameter['type']}_{control_type_name}"
-
-                control_type = ControlType[control_type_name]
-            except KeyError:
-                raise RuntimeError(
-                    f"Job Template parameter {parameter['name']} specifies unsupported control type {control_type_name}."
-                )
-
-            if "userInterface" in parameter:
-                group_label = parameter["userInterface"].get("groupLabel", "")
+            if parameter["type"] == "INT" and control_type_name == "SPIN_BOX":
+                control_widget = _JobTemplateIntSpinBoxWidget
+            elif parameter["type"] == "FLOAT" and control_type_name == "SPIN_BOX":
+                control_widget = _JobTemplateFloatSpinBoxWidget
             else:
-                group_label = ""
+                control_widget = control_map[control_type_name]
 
-            control_widget = control_map[control_type]
-            self.controls.append(control_widget(self, parameter))
+            group_label = parameter.get("userInterface", {}).get("groupLabel", "")
 
-            if control_type != ControlType.HIDDEN:
+            control = control_widget(self, parameter)
+            self.controls[control.name()] = control
+            control.connect_parameter_changed(lambda message: self.parameter_changed.emit(message))
+
+            if control_type_name != ControlType.HIDDEN.name:
                 if group_label:
                     group_layout = self.findChild(_JobTemplateGroupLayout, group_label)
                     if not group_layout:
                         group_layout = _JobTemplateGroupLayout(self, group_label)
                         group_layout.setObjectName(group_label)
                         layout.addWidget(group_layout)
-                    group_layout.layout().addWidget(self.controls[-1])
+                    group_layout.layout().addWidget(control)
                 else:
-                    layout.addWidget(self.controls[-1])
+                    layout.addWidget(control)
 
                 if control_widget.IS_VERTICAL_EXPANDING:
                     # Turn off the spacer at the end, as there's already a stretchy control
@@ -133,8 +158,26 @@ class JobTemplateParametersWidget(QWidget):
         if need_spacer:
             layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-    def get_parameter_values(self):
-        return [{"name": control.name(), "value": control.value()} for control in self.controls]
+    def get_parameters(self):
+        """
+        Returns a list of OpenJD parameter definition dicts with
+        a "value" key filled from the widget.
+        """
+        parameter_values = []
+        for control in self.controls.values():
+            parameter = deepcopy(control.job_template_parameter)
+            parameter["value"] = control.value()
+            parameter_values.append(parameter)
+        return parameter_values
+
+    def set_parameter_value(self, parameter: dict[str, Any]):
+        """
+        Given an OpenJD parameter definition with a "value" key,
+        set the parameter value in the widget.
+
+        If the parameter value cannot be set, raises a KeyError.
+        """
+        self.controls[parameter["name"]].set_value(parameter["value"])
 
 
 def _get_parameter_label(parameter):
@@ -222,6 +265,12 @@ class _JobTemplateWidget(QWidget):
         value = parameter.get("value", parameter.get("default", self.OPENJD_DEFAULT_VALUE))
         self.set_value(value)
 
+    def name(self):
+        return self.job_template_parameter["name"]
+
+    def type(self):
+        return self.job_template_parameter["type"]
+
 
 class _JobTemplateLineEditWidget(_JobTemplateWidget):
     OPENJD_CONTROL_TYPE: ControlType = ControlType.LINE_EDIT
@@ -257,14 +306,21 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.text()
 
     def set_value(self, value):
         self.edit_control.setText(value)
+
+    def _handle_text_changed(self, text, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = text
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.textChanged.connect(
+            lambda text: self._handle_text_changed(text, callback)
+        )
 
 
 class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
@@ -281,6 +337,7 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.label = QLabel(_get_parameter_label(parameter))
         self.edit_control = QTextEdit(self)
+        self.edit_control.setAcceptRichText(False)
         if os.name == "nt":
             font_family = "Consolas"
         elif os.name == "darwin":
@@ -303,14 +360,21 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.toPlainText()
 
     def set_value(self, value):
         self.edit_control.setPlainText(value)
+
+    def _handle_text_changed(self, text, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = text
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.textChanged.connect(
+            lambda: self._handle_text_changed(self.value(), callback)
+        )
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
@@ -374,14 +438,21 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.value()
 
     def set_value(self, value):
         self.edit_control.setValue(value)
+
+    def _handle_value_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.valueChanged.connect(
+            lambda value: self._handle_value_changed(value, callback)
+        )
 
 
 class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
@@ -452,14 +523,21 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.value()
 
     def set_value(self, value):
         self.edit_control.setValue(value)
+
+    def _handle_value_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.valueChanged.connect(
+            lambda value: self._handle_value_changed(value, callback)
+        )
 
 
 class _JobTemplateDropdownListWidget(_JobTemplateWidget):
@@ -496,9 +574,6 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.currentData()
 
@@ -506,6 +581,16 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
         index = self.edit_control.findData(value)
         if index >= 0:
             self.edit_control.setCurrentIndex(index)
+
+    def _handle_index_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.currentIndexChanged.connect(
+            lambda _: self._handle_index_changed(self.value(), callback)
+        )
 
 
 class _JobTemplateBaseFileWidget(_JobTemplateWidget):
@@ -555,14 +640,21 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.text()
 
     def set_value(self, value):
         self.edit_control.setText(value)
+
+    def _handle_path_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.path_changed.connect(
+            lambda path: self._handle_path_changed(path, callback)
+        )
 
 
 class _JobTemplateInputFileWidget(_JobTemplateBaseFileWidget):
@@ -600,14 +692,21 @@ class _JobTemplateDirectoryWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self):
-        return self.job_template_parameter["name"]
-
     def value(self):
         return self.edit_control.text()
 
     def set_value(self, value):
         self.edit_control.setText(value)
+
+    def _handle_path_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.path_changed.connect(
+            lambda path: self._handle_path_changed(path, callback)
+        )
 
 
 # These are the permitted sets of values that can be in a string job parameter 'allowedValues'
@@ -658,9 +757,6 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def name(self) -> str:
-        return self.job_template_parameter["name"]
-
     def value(self) -> str:
         if self.edit_control.isChecked():
             return self.true_value
@@ -672,6 +768,16 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
             self.edit_control.setChecked(True)
         else:
             self.edit_control.setChecked(False)
+
+    def _handle_value_changed(self, value, callback):
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = value
+        callback(message)
+
+    def connect_parameter_changed(self, callback):
+        self.edit_control.stateChanged.connect(
+            lambda _: self._handle_value_changed(self.value(), callback)
+        )
 
 
 class _JobTemplateHiddenWidget(_JobTemplateWidget):
@@ -692,14 +798,14 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
     def _build_ui(self, parameter: Dict[str, Any]) -> None:
         pass
 
-    def name(self) -> str:
-        return self.job_template_parameter["name"]
-
     def value(self) -> Any:
         return self._value
 
     def set_value(self, value: Any) -> None:
         self._value = value
+
+    def connect_parameter_changed(self, callback):
+        pass
 
 
 class _JobTemplateGroupLayout(QGroupBox):

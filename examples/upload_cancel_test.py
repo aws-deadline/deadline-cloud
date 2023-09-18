@@ -87,6 +87,7 @@ def run():
         (summary_statistics_hashing, manifests) = asset_manager.hash_assets_and_create_manifest(
             files,
             [root_path / "outputs"],
+            [],
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )
         print(f"Hashing Summary Statistics:\n{summary_statistics_hashing}")

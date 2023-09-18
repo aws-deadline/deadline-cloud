@@ -10,7 +10,6 @@ from unittest.mock import ANY, patch
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
-from deadline.client.job_bundle import submission
 from deadline.job_attachments.models import (
     Attachments,
     AssetLoadingMethod,
@@ -18,6 +17,7 @@ from deadline.job_attachments.models import (
     ManifestProperties,
     OperatingSystemFamily,
 )
+from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID
@@ -136,9 +136,9 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
     with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
         _submit_job_bundle.api, "get_boto3_client"
     ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
-        submission.S3AssetManager, "hash_assets_and_create_manifest"
+        S3AssetManager, "hash_assets_and_create_manifest"
     ) as mock_hash_assets, patch.object(
-        submission.S3AssetManager, "upload_assets"
+        S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
     ):
@@ -268,9 +268,19 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                 "./file/inside",
             ]
         )
+        referenced_paths = sorted(
+            os.path.normpath(os.path.abspath(p))
+            for p in [
+                os.path.join(temp_assets_dir, "./dir/inside/asset-dir-dirnone"),
+                os.path.join(temp_assets_dir, "./dir/inside/asset-dir-dirnonedefault"),
+                os.path.join(temp_assets_dir, "file/inside/asset-dir-filenonedefault.txt"),
+                os.path.join(temp_assets_dir, "file/inside/asset-dir-filenone.txt"),
+            ]
+        )
         mock_hash_assets.assert_called_once_with(
             input_paths=input_paths,
             output_paths=output_paths,
+            referenced_paths=referenced_paths,
             storage_profile_id="",
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=ANY,

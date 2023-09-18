@@ -5,6 +5,8 @@ from __future__ import annotations
 __all__ = [
     "apply_job_parameters",
     "read_job_bundle_parameters",
+    "get_ui_control_for_parameter_definition",
+    "parameter_definition_difference",
 ]
 
 import os
@@ -12,14 +14,15 @@ from typing import Any
 
 from ..exceptions import DeadlineOperationError
 from .loader import read_yaml_or_json_object
-from ..job_bundle.submission import FlatAssetReferences
+from ..job_bundle.submission import AssetReferences
 
 
 def apply_job_parameters(
     job_parameters: list[dict[str, Any]],
     job_bundle_dir: str,
     job_bundle_parameters: list[dict[str, Any]],
-    asset_references: FlatAssetReferences,
+    queue_parameter_definitions: list[dict[str, Any]],
+    asset_references: AssetReferences,
 ) -> None:
     """
     Modifies the provided job_bundle_parameters and asset_references to incorporate
@@ -39,11 +42,21 @@ def apply_job_parameters(
     param_dict = {parameter["name"]: parameter["value"] for parameter in job_parameters}
     modified_job_parameters = param_dict.copy()
 
+    queue_param_dict = {parameter["name"]: parameter for parameter in queue_parameter_definitions}
+
     for parameter in job_bundle_parameters:
         parameter_name = parameter["name"]
         # Skip application-specific parameters like "deadline:priority"
         if ":" in parameter_name:
             continue
+        if "type" not in parameter:
+            if parameter_name in queue_param_dict:
+                # Use the parameter definition from the queue if the job didn't supply one
+                parameter.update(queue_param_dict[parameter_name])
+            else:
+                raise DeadlineOperationError(
+                    f"Job Template for job bundle {job_bundle_dir}:\nJob Template parameter {parameter_name} is missing its type."
+                )
         parameter_type = parameter["type"]
 
         # Apply the job_parameters value if available
@@ -61,7 +74,7 @@ def apply_job_parameters(
             parameter_value = parameter.get("value", parameter.get("default"))
             if parameter_value is None:
                 raise DeadlineOperationError(
-                    f"No parameter value provided for Job Template parameter {parameter_name}, and it has no default value."
+                    f"Job Template for job bundle {job_bundle_dir}:\nNo parameter value provided for Job Template parameter {parameter_name}, and it has no default value."
                 )
 
         # If it's a PATH parameter with dataFlow, add it to asset_references
@@ -69,11 +82,15 @@ def apply_job_parameters(
             data_flow = parameter.get("dataFlow", "NONE")
             if data_flow not in ("NONE", "IN", "OUT", "INOUT"):
                 raise DeadlineOperationError(
-                    f"Job Template parameter {parameter_name} had an incorrect "
+                    f"Job Template for job bundle {job_bundle_dir}:\nJob Template parameter {parameter_name} had an incorrect "
                     + f"value {data_flow} for 'dataFlow'. Valid values are "
                     + "['NONE', 'IN', 'OUT', 'INOUT']"
                 )
-            if data_flow != "NONE":
+            if data_flow == "NONE":
+                # This path is referenced, but its contents are not necessarily
+                # input or output.
+                asset_references.referenced_paths.add(parameter_value)
+            else:
                 object_type = parameter.get("objectType")
 
                 if "IN" in data_flow:
@@ -116,31 +133,31 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[dict[str, Any]]:
         bundle_dir=bundle_dir, filename="parameter_values", required=False
     )
 
+    if not isinstance(template, dict):
+        raise DeadlineOperationError(
+            f"Job Template for job bundle {bundle_dir}:\nThe document does not contain a top-level object."
+        )
+
     # Get the spec version of the template
-    schema_version: str = ""
-    if isinstance(template, dict):
-        version = template.get("specificationVersion")
-        if not isinstance(version, str):
-            raise DeadlineOperationError("Job Template's 'specificationVersion' must be a string.")
-        schema_version = version
-        if schema_version not in ["jobtemplate-2023-09"]:
-            raise DeadlineOperationError(
-                f"The Job Bundle's Job Template has an unsupported specificationVersion: {schema_version}"
-            )
+    if "specificationVersion" not in template:
+        raise DeadlineOperationError(
+            f"Job Template for job bundle {bundle_dir}:\nDocument does not contain a specificationVersion."
+        )
+    elif template.get("specificationVersion") not in ["jobtemplate-2023-09"]:
+        raise DeadlineOperationError(
+            f"Job Template for job bundle {bundle_dir}:\nDocument has an unsupported specificationVersion: {template.get('specificationVersion')}"
+        )
 
-    # Start with the template parameters
-    template_parameters = {}
-    if isinstance(template, dict):
-        template_parameters = template.get("parameterDefinitions", {})
-
-    if template_parameters:
+    # Start with the template parameters, converting them from a list into a dictionary
+    template_parameters: dict[str, dict[str, Any]] = {}
+    if "parameterDefinitions" in template:
         # parameters are a list of objects. Convert it to a map
         # from name -> parameter
-        if not isinstance(template_parameters, list):
+        if not isinstance(template["parameterDefinitions"], list):
             raise DeadlineOperationError(
-                f"Job parameters must be a list in a '{schema_version}' Job Template."
+                f"Job Template for job bundle {bundle_dir}:\nJob parameter definitions must be a list."
             )
-        template_parameters = {param["name"]: param for param in template_parameters}
+        template_parameters = {param["name"]: param for param in template["parameterDefinitions"]}
 
     # Add the parameter values where provided
     if parameter_values:
@@ -149,15 +166,14 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[dict[str, Any]]:
             if name in template_parameters:
                 template_parameters[name]["value"] = parameter_value["value"]
             else:
-                if ":" in name:
-                    # Names with a ':' are for the system using the job bundle, like Amazon Deadline Cloud
-                    template_parameters[name] = parameter_value
+                # Keep the other parameter values around, they may be
+                # provide values for queue parameters or specific render farm
+                # values such as "deadline:*"
+                template_parameters[name] = parameter_value
 
-    # Make valueless PATH parameters with default and are not constrained
+    # Make valueless PATH parameters with default but not constrained
     # by allowedValues, absolute by joining with the job bundle directory
-    for name in template_parameters:
-        parameter = template_parameters[name]
-
+    for parameter in template_parameters.values():
         if (
             "value" not in parameter
             and parameter["type"] == "PATH"
@@ -174,3 +190,98 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[dict[str, Any]]:
 
     # Rearrange the dict from the template into a list
     return [{"name": name, **values} for name, values in template_parameters.items()]
+
+
+_SUPPORTED_CONTROLS_FOR_TYPE = {
+    "STRING": {"LINE_EDIT", "MULTILINE_EDIT", "DROPDOWN_LIST", "CHECK_BOX", "HIDDEN"},
+    "PATH": {
+        "CHOOSE_INPUT_FILE",
+        "CHOOSE_OUTPUT_FILE",
+        "CHOOSE_DIRECTORY",
+        "DROPDOWN_LIST",
+        "HIDDEN",
+    },
+    "INT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
+    "FLOAT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
+}
+
+
+def get_ui_control_for_parameter_definition(param_def: dict[str, Any]) -> str:
+    """Returns the UI control for the given parameter definition, determining
+    the default if not explicitly set."""
+    # If it's explicitly provided, return that
+    control = param_def.get("userInterface", {}).get("control")
+    param_type = param_def["type"]
+    if not control:
+        if "allowedValues" in param_def:
+            control = "DROPDOWN_LIST"
+        elif param_type == "STRING":
+            return "LINE_EDIT"
+        elif param_type == "PATH":
+            if param_def.get("objectType", "DIRECTORY") == "FILE":
+                if param_def.get("dataFlow", "NONE") == "OUT":
+                    return "CHOOSE_OUTPUT_FILE"
+                else:
+                    return "CHOOSE_INPUT_FILE"
+            else:
+                return "CHOOSE_DIRECTORY"
+        elif param_type in ("INT", "FLOAT"):
+            return "SPIN_BOX"
+        else:
+            raise DeadlineOperationError(
+                f"The job template parameter '{param_def.get('name', '<unnamed>')}' "
+                + f"specifies an unsupported type '{param_type}'."
+            )
+
+    if control not in _SUPPORTED_CONTROLS_FOR_TYPE[param_type]:
+        raise DeadlineOperationError(
+            f"The job template parameter '{param_def.get('name', '<unnamed>')}' "
+            + f"specifies an unsupported control '{control}' for its type '{param_type}'."
+        )
+
+    if control == "DROPDOWN_LIST" and "allowedValues" not in param_def:
+        raise DeadlineOperationError(
+            f"The job template parameter '{param_def.get('name', '<unnamed>')}' "
+            + "must supply 'allowedValues' if it uses a DROPDOWN_LIST control."
+        )
+
+    return control
+
+
+def _parameter_definition_fields_equivalent(
+    lhs: dict[str, Any],
+    rhs: dict[str, Any],
+    field_name: str,
+    set_comparison: bool = False,
+) -> bool:
+    lhs_value = lhs.get(field_name)
+    rhs_value = rhs.get(field_name)
+    if set_comparison and lhs_value is not None and rhs_value is not None:
+        return set(lhs_value) == set(rhs_value)
+    else:
+        return lhs_value == rhs_value
+
+
+def parameter_definition_difference(lhs: dict[str, Any], rhs: dict[str, Any]) -> list[str]:
+    """Compares the two parameter definitions, returning a list of fields which differ.
+    Does not compare the userInterface properties.
+    """
+    differences = []
+    # Compare these properties as values
+    for name in (
+        "name",
+        "type",
+        "minValue",
+        "maxValue",
+        "minLength",
+        "maxLength",
+        "dataFlow",
+        "objectType",
+    ):
+        if not _parameter_definition_fields_equivalent(lhs, rhs, name):
+            differences.append(name)
+    # Compare these properties as sets
+    for name in ("allowedValues",):
+        if not _parameter_definition_fields_equivalent(lhs, rhs, name, set_comparison=True):
+            differences.append(name)
+    return differences

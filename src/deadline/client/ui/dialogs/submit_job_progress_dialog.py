@@ -3,8 +3,7 @@
 Provides a modal dialog box for the submission progress when submitting to
 Amazon Deadline Cloud
 """
-
-__all__ = ["SubmitJobProgressDialog"]
+from __future__ import annotations
 
 import json
 import logging
@@ -36,15 +35,16 @@ from deadline.client.config import set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
-    FlatAssetReferences,
+    AssetReferences,
     split_parameter_args,
-    upload_job_attachments,
 )
 from deadline.job_attachments.exceptions import AssetSyncCancelledError
 from deadline.job_attachments.models import AssetRootManifest
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
+
+__all__ = ["SubmitJobProgressDialog"]
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,7 @@ class SubmitJobProgressDialog(QDialog):
         queue_id: str,
         storage_profile_id: str,
         job_bundle_dir: str,
+        queue_parameters: list[dict[str, Any]],
         asset_manager: S3AssetManager,
         deadline_client: BaseClient,
         auto_accept: bool = False,
@@ -105,6 +106,7 @@ class SubmitJobProgressDialog(QDialog):
         self._queue_id = queue_id
         self._storage_profile_id = storage_profile_id
         self._job_bundle_dir = job_bundle_dir
+        self._queue_parameters = queue_parameters
         self._asset_manager = asset_manager
         self._deadline_client = deadline_client
         self._auto_accept = auto_accept
@@ -189,9 +191,15 @@ class SubmitJobProgressDialog(QDialog):
         asset_references_obj = read_yaml_or_json_object(
             self._job_bundle_dir, "asset_references", required=False
         )
-        self.asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+        self.asset_references = AssetReferences.from_dict(asset_references_obj)
 
-        apply_job_parameters([], self._job_bundle_dir, job_bundle_parameters, self.asset_references)
+        apply_job_parameters(
+            [],
+            self._job_bundle_dir,
+            job_bundle_parameters,
+            self._queue_parameters,
+            self.asset_references,
+        )
 
         app_parameters_formatted, job_parameters_formatted = split_parameter_args(
             job_bundle_parameters, self._job_bundle_dir
@@ -218,6 +226,7 @@ class SubmitJobProgressDialog(QDialog):
             self._start_hashing(
                 self.asset_references.input_filenames,
                 self.asset_references.output_directories,
+                self.asset_references.referenced_paths,
             )
         else:
             self.hashing_progress_bar.setVisible(False)
@@ -226,7 +235,9 @@ class SubmitJobProgressDialog(QDialog):
             self.upload_progress_message.setVisible(False)
             self._start_create_job()
 
-    def _hashing_background_thread(self, input_paths: Set[str], output_paths: Set[str]) -> None:
+    def _hashing_background_thread(
+        self, input_paths: Set[str], output_paths: Set[str], referenced_paths: Set[str]
+    ) -> None:
         """
         This function gets started in a background thread to start the hashing
         of any job attachments.
@@ -242,6 +253,7 @@ class SubmitJobProgressDialog(QDialog):
             hashing_summary, manifests = self._asset_manager.hash_assets_and_create_manifest(
                 input_paths=sorted(input_paths),
                 output_paths=sorted(output_paths),
+                referenced_paths=sorted(referenced_paths),
                 storage_profile_id=self._storage_profile_id,
                 hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
                 on_preparing_to_submit=_update_hash_progress,
@@ -273,15 +285,14 @@ class SubmitJobProgressDialog(QDialog):
 
             logger.info("Uploading job attachments files...")
 
-            upload_summary, attachment_settings = upload_job_attachments(
-                self._asset_manager,
+            upload_summary, attachment_settings = self._asset_manager.upload_assets(
                 manifests,
                 _update_upload_progress,
             )
 
             logger.info("Finished uploading job attachments files.")
 
-            self.upload_thread_succeeded.emit(upload_summary, attachment_settings)
+            self.upload_thread_succeeded.emit(upload_summary, attachment_settings.to_dict())
         except AssetSyncCancelledError as e:
             # If it wasn't canceled, send the exception to the dialog
             if self._continue_submission:
@@ -336,7 +347,9 @@ class SubmitJobProgressDialog(QDialog):
             # Send the exception to the dialog
             self.create_job_thread_exception.emit(e)
 
-    def _start_hashing(self, input_paths: Set[str], output_paths: Set[str]) -> None:
+    def _start_hashing(
+        self, input_paths: Set[str], output_paths: Set[str], referenced_paths: Set[str]
+    ) -> None:
         """
         Starts the background hashing thread.
         """
@@ -344,7 +357,7 @@ class SubmitJobProgressDialog(QDialog):
         self.__hashing_thread = threading.Thread(
             target=self._hashing_background_thread,
             name="Amazon Deadline Cloud Hashing Background Thread",
-            args=(input_paths, output_paths),
+            args=(input_paths, output_paths, referenced_paths),
         )
         self.__hashing_thread.start()
 
