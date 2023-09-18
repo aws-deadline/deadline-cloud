@@ -36,12 +36,13 @@ class AssetRootManifest:
 
 @dataclass
 class AssetRootGroup:
-    """Represents lists of input and output files grouped under the same root"""
+    """Represents lists of input files, output files and path references grouped under the same root"""
 
     file_system_location_name: Optional[str] = None
     root_path: str = ""
     inputs: Set[Path] = field(default_factory=set)
     outputs: Set[Path] = field(default_factory=set)
+    references: Set[Path] = field(default_factory=set)
 
 
 @dataclass

@@ -13,6 +13,7 @@ from click.testing import CliRunner
 import pytest
 
 from deadline.client import config
+from deadline.client.api import _queue_parameters
 from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
 from deadline.client.config.config_file import set_setting
@@ -27,6 +28,65 @@ from ..api.test_job_bundle_submission import (
     MOCK_PARAMETERS_CASES,
     MOCK_QUEUE_ID,
 )
+
+MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE = {
+    "environments": [
+        {"queueEnvironmentId": "queueenv-123", "name": "First Env", "priority": 2},
+        {"queueEnvironmentId": "queueenv-234", "name": "Second Env", "priority": 1},
+    ]
+}
+
+MOCK_QUEUE_ENV_TEMPLATE_1 = """
+specificationVersion: 'jobtemplate-2023-09'
+parameters:
+- name: RezPackages
+  type: STRING
+  description: Choose which rez packages to install for the render.
+  default: ""
+  userInterface:
+    control: LINE_EDIT
+    label: Rez Packages
+environment:
+  name: Rez Non-Final
+  script:
+    actions:
+      onEnter:
+        command: "say-hello"
+"""
+
+MOCK_QUEUE_ENV_TEMPLATE_2 = """
+specificationVersion: 'jobtemplate-2023-09'
+parameters:
+- name: IntParam
+  type: INT
+  default: ""
+  userInterface:
+    control: SPIN_BOX
+    label: Int Param
+environment:
+  name: Int Param Env
+  script:
+    actions:
+      onEnter:
+        command: "say-hello"
+"""
+
+MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES = [
+    {
+        "queueEnvironmentId": "queueenv-123",
+        "name": "Rez Non-Final",
+        "priority": 1,
+        "templateType": "YAML",
+        "template": MOCK_QUEUE_ENV_TEMPLATE_1,
+    },
+    {
+        "queueEnvironmentId": "queueenv-234",
+        "name": "Int Param Env",
+        "priority": 1,
+        "templateType": "YAML",
+        "template": MOCK_QUEUE_ENV_TEMPLATE_1,
+    },
+]
 
 
 def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
@@ -50,14 +110,24 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
         f.write(MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][1])
 
     with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
+        _queue_parameters, "get_boto3_client"
+    ) as qp_boto3_client_mock, patch.object(
         bundle_group, "_hash_attachments", return_value=[]
-    ), patch.object(bundle_group, "get_queue_boto3_session"), patch.object(
+    ), patch.object(
+        bundle_group, "get_queue_boto3_session"
+    ), patch.object(
         bundle_group, "_upload_attachments"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
+        qp_boto3_client_mock().list_queue_environments.return_value = (
+            MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE
+        )
+        qp_boto3_client_mock().get_queue_environment.side_effect = (
+            MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES
+        )
 
         runner = CliRunner()
         result = runner.invoke(main, ["bundle", "submit", temp_job_bundle_dir])
@@ -111,7 +181,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
                 ],
             )
 
-        session_mock.assert_called_once_with(profile_name="NonDefaultProfileName")
+        session_mock.assert_called_with(profile_name="NonDefaultProfileName")
         session_mock().client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
@@ -168,21 +238,31 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     attachment_mock.total_bytes = 0
     attachment_mock.total_files.return_value = 0
 
-    with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
+    with patch.object(bundle_group, "get_boto3_client") as bundle_boto3_client_mock, patch.object(
+        _queue_parameters, "get_boto3_client"
+    ) as qp_boto3_client_mock, patch.object(
         bundle_group, "_hash_attachments", return_value=(attachment_mock, {})
-    ), patch.object(bundle_group, "_upload_attachments", return_value={}), patch.object(
+    ), patch.object(
+        bundle_group, "_upload_attachments", return_value={}
+    ), patch.object(
         bundle_group.api, "get_boto3_session"
     ), patch.object(
         bundle_group, "get_queue_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
-        get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-        get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
-        get_boto3_client_mock().get_queue.return_value = {
+        bundle_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        bundle_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
+        bundle_boto3_client_mock().get_queue.return_value = {
             "displayName": "Test Queue",
             "jobAttachmentSettings": {"s3BucketName": "mock", "rootPrefix": "root"},
         }
+        qp_boto3_client_mock().list_queue_environments.return_value = (
+            MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE
+        )
+        qp_boto3_client_mock().get_queue_environment.side_effect = (
+            MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES
+        )
 
         params = ["bundle", "submit", temp_job_bundle_dir]
 
@@ -199,7 +279,8 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             else config.get_setting("defaults.job_attachments_file_system")
         )
 
-        get_boto3_client_mock().create_job.assert_called_with(
+        assert temp_job_bundle_dir in result.output
+        bundle_boto3_client_mock().create_job.assert_called_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
             parameters=MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][2]["parameters"],  # type: ignore
@@ -207,7 +288,6 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             templateType="JSON",
             attachments={"assetLoadingMethod": expected_loading_method},
         )
-        assert temp_job_bundle_dir in result.output
         assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
         assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
         assert result.exit_code == 0
@@ -397,8 +477,12 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
         json.dump(data, f)
 
     with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
+        _queue_parameters, "get_boto3_client"
+    ) as qp_boto3_client_mock, patch.object(
         bundle_group, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
-    ), patch.object(bundle_group, "_upload_attachments") as upload_attachments_mock, patch.object(
+    ), patch.object(
+        bundle_group, "_upload_attachments"
+    ) as upload_attachments_mock, patch.object(
         bundle_group.api, "get_boto3_session"
     ), patch.object(
         bundle_group, "get_queue_boto3_session"
@@ -409,6 +493,13 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
             "displayName": "Test Queue",
             "jobAttachmentSettings": {"s3BucketName": "mock", "rootPrefix": "root"},
         }
+        qp_boto3_client_mock().list_queue_environments.return_value = (
+            MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE
+        )
+        qp_boto3_client_mock().get_queue_environment.side_effect = (
+            MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES
+        )
+
         set_setting("settings.auto_accept", "false")
         runner = CliRunner()
         result = runner.invoke(

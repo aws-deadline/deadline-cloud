@@ -136,6 +136,7 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -202,6 +203,7 @@ def upload_input_files_one_asset_in_cas(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -281,6 +283,7 @@ def test_upload_input_files_all_assets_in_cas(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1028,6 +1031,7 @@ def upload_input_files_no_input_paths(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1087,6 +1091,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1191,6 +1196,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
         (_, manifests) = asset_manager.hash_assets_and_create_manifest(
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
             output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+            referenced_paths=[],
             hash_cache_dir=str(job_attachment_test.hash_cache_dir),
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )
