@@ -333,12 +333,16 @@ class SubmitJobToDeadlineDialog(QDialog):
                 queue_display_name=queue["displayName"],
             )
 
-            asset_manager = S3AssetManager(
-                farm_id=farm_id,
-                queue_id=queue_id,
-                job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
-                session=queue_role_session,
-            )
+            asset_manager: Optional[S3AssetManager] = None
+            if "jobAttachmentSettings" in queue:
+                asset_manager = S3AssetManager(
+                    farm_id=farm_id,
+                    queue_id=queue_id,
+                    job_attachment_settings=JobAttachmentS3Settings(
+                        **queue["jobAttachmentSettings"]
+                    ),
+                    session=queue_role_session,
+                )
 
             self.create_job_response = job_progress_dialog.start_submission(
                 farm_id,
