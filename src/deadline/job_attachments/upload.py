@@ -45,7 +45,7 @@ from .models import (
     HashCacheEntry,
     JobAttachmentS3Settings,
     ManifestProperties,
-    OperatingSystemFamily,
+    PathFormat,
 )
 from .progress_tracker import (
     ProgressStatus,
@@ -53,7 +53,6 @@ from .progress_tracker import (
     SummaryStatistics,
 )
 from ._utils import (
-    _get_deadline_formatted_os,
     _hash_data,
     _hash_file,
     _is_relative_to,
@@ -866,7 +865,7 @@ class S3AssetManager:
             manifest_properties = ManifestProperties(
                 fileSystemLocationName=asset_root_manifest.file_system_location_name,
                 rootPath=asset_root_manifest.root_path,
-                osType=OperatingSystemFamily(_get_deadline_formatted_os()),
+                rootPathFormat=PathFormat.get_host_path_format(),
                 outputRelativeDirectories=output_rel_paths,
             )
 
