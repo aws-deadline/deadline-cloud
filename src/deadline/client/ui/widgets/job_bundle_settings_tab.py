@@ -5,13 +5,29 @@ UI widgets for the Scene Settings tab.
 """
 from __future__ import annotations
 
+import os
+from logging import getLogger
 from typing import Any
 
 from PySide2.QtCore import Signal  # type: ignore
-from PySide2.QtWidgets import QVBoxLayout, QWidget  # type: ignore
+from PySide2.QtWidgets import (  # type: ignore
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QFileDialog,
+    QPushButton,
+    QSpacerItem,
+    QSizePolicy,
+    QMessageBox,
+)
 
 from ..dataclasses import JobBundleSettings
 from .openjd_parameters_widget import OpenJDParametersWidget
+from ...job_bundle.submission import AssetReferences
+from ...job_bundle.loader import read_yaml_or_json_object
+from ...job_bundle.parameters import read_job_bundle_parameters
+
+logger = getLogger(__name__)
 
 
 class JobBundleSettingsWidget(QWidget):
@@ -27,32 +43,99 @@ class JobBundleSettingsWidget(QWidget):
         parent: The parent Qt Widget.
     """
 
+    # Parameters for loading the bundle settings
+    BROWSE_BUNDLE_SETTINGS = {"name": "browse_bundle_settings", "type": "INT", "value": 1}
+
     parameter_changed = Signal(dict)
 
     def __init__(self, initial_settings: JobBundleSettings, parent=None):
         super().__init__(parent=parent)
 
-        self.layout = QVBoxLayout(self)
+        self.parent = parent
+
+        self.param_layout = QVBoxLayout()
+
         self._build_ui(initial_settings)
-
-    def refresh_ui(self, settings: JobBundleSettings):
-        # Clear the layout
-        for i in reversed(range(self.layout.count())):
-            item = self.layout.takeAt(i)
-            item.widget().deleteLater()
-
-        self._build_ui(settings)
 
     def _build_ui(self, initial_settings: JobBundleSettings):
         self.input_job_bundle_dir = initial_settings.input_job_bundle_dir
 
+        layout = QVBoxLayout(self)
+
+        # The JobBundleSettingsWidget needs to handle a special case when displaying the "Load a different job bundle" Option.
+        # If this setting is included, create the button in a layout above the rest of the parameters.
+        if initial_settings.parameters:
+            # The job_bundle_submitter will append this parameter to the end of the parameters list.
+            load_setting = initial_settings.parameters[-1]
+            if load_setting.get("name") == self.BROWSE_BUNDLE_SETTINGS["name"] and load_setting.get(
+                "value"
+            ):
+                btnBox = QHBoxLayout()
+                self.load_bundle_button = QPushButton("Load a different job bundle")
+                self.load_bundle_button.clicked.connect(self.on_load_bundle)
+                btnBox.addWidget(self.load_bundle_button)
+                btnBox.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+                layout.addLayout(btnBox)
+
+        layout.addLayout(self.param_layout)
+        self.refresh_ui(initial_settings)
+
+    def refresh_ui(self, settings: JobBundleSettings):
+        # Clear the layout
+        for i in reversed(range(self.param_layout.count())):
+            item = self.param_layout.takeAt(i)
+            item.widget().deleteLater()
+
         self.parameters_widget = OpenJDParametersWidget(
-            parameter_definitions=initial_settings.parameters, parent=self
+            parameter_definitions=settings.parameters, parent=self
         )
-        self.layout.addWidget(self.parameters_widget)
+        self.param_layout.addWidget(self.parameters_widget)
         self.parameters_widget.parameter_changed.connect(
             lambda message: self.parameter_changed.emit(message)
         )
+
+    def on_load_bundle(self):
+        """
+        Browse and load the selected submission bundle
+        """
+        # Open the file picker dialog
+        bundle_path = os.path.expanduser(os.path.join("~", ".deadline", "job_history"))
+        input_job_bundle_dir = QFileDialog.getExistingDirectory(
+            self, "Choose Job Bundle Directory", bundle_path
+        )
+        if not input_job_bundle_dir:
+            return
+
+        asset_references_obj = (
+            read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
+        )
+
+        asset_references = AssetReferences.from_dict(asset_references_obj)
+
+        # Warn the user if the Job Bundle could not be loaded
+        try:
+            # Load the template to get the bundle name
+            template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
+            name = (
+                template.get("name", "Job Bundle Submission")
+                if template
+                else "Job Bundle Submission"
+            )
+            job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
+            job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+
+        except Exception as e:
+            msg = str(e)
+            QMessageBox.warning(self, "Could not Load Job Bundle", msg)
+            logger.warning(msg)
+            return
+
+        if self.parent and hasattr(self.parent, "refresh"):
+            self.parent.refresh(
+                job_settings=job_settings,
+                auto_detected_attachments=asset_references,
+                attachments=None,
+            )
 
     def update_settings(self, settings: JobBundleSettings):
         """

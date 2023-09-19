@@ -14,7 +14,6 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
     QMessageBox,
     QPushButton,
@@ -38,9 +37,6 @@ from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ...job_bundle.submission import AssetReferences
-from ...job_bundle.loader import read_yaml_or_json_object
-from ...job_bundle.parameters import read_job_bundle_parameters
-from ..dataclasses import JobBundleSettings
 
 logger = logging.getLogger(__name__)
 
@@ -181,16 +177,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button = QPushButton("Submit")
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
-        self.save_bundle_button = QPushButton("Save Bundle")
-        self.save_bundle_button.clicked.connect(self.on_save_bundle)
-        self.button_box.addButton(self.save_bundle_button, QDialogButtonBox.AcceptRole)
-
-        # Browse button is only available from "deadline bundle" and "deadline-dev-gui" dialogs
-        self.browse_bundle_button = QPushButton("Browse")
-        self.browse_bundle_button.setToolTip("Browse Submission History")
-        self.browse_bundle_button.clicked.connect(self.on_browse_bundle)
-        self.button_box.addButton(self.browse_bundle_button, QDialogButtonBox.AcceptRole)
-        self.browse_bundle_button.setVisible(False)
+        self.export_bundle_button = QPushButton("Export Bundle")
+        self.export_bundle_button.clicked.connect(self.on_export_bundle)
+        self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
         self.lyt.addWidget(self.button_box)
 
@@ -271,9 +260,6 @@ class SubmitJobToDeadlineDialog(QDialog):
             # just ignore it.
             pass
 
-    def set_browse_btn_visible(self):
-        self.browse_bundle_button.setVisible(True)
-
     def on_login(self):
         DeadlineLoginDialog.login(parent=self)
         self.refresh_deadline_settings()
@@ -292,40 +278,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         if DeadlineConfigDialog.configure_settings(parent=self):
             self.refresh_deadline_settings()
 
-    def on_browse_bundle(self):
+    def on_export_bundle(self):
         """
-        Browse and load the selected submission bundle
-        """
-        # Open the file picker dialog
-        bundle_path = os.path.expanduser(os.path.join("~", ".deadline", "job_history"))
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Job Bundle Directory", bundle_path
-        )
-        if not input_job_bundle_dir:
-            return
-
-        asset_references_obj = (
-            read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-        )
-
-        asset_references = AssetReferences.from_dict(asset_references_obj)
-
-        # Load the template to get the bundle name
-        template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-        name = (
-            template.get("name", "Job Bundle Submission") if template else "Job Bundle Submission"
-        )
-
-        job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
-        job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
-
-        self.refresh(
-            job_settings=job_settings, auto_detected_attachments=asset_references, attachments=None
-        )
-
-    def on_save_bundle(self):
-        """
-        Saves a Job Bundle, but does not submit the job.
+        Exports a Job Bundle, but does not submit the job.
         """
         # Retrieve all the settings into the dataclass
         settings = self.job_settings_type()

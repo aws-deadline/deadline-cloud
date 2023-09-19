@@ -11,6 +11,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QFileDialog,
     QMainWindow,
+    QMessageBox,
 )
 
 from ..exceptions import DeadlineOperationError
@@ -30,7 +31,7 @@ logger = getLogger(__name__)
 
 
 def show_job_bundle_submitter(
-    input_job_bundle_dir: str = "", parent=None, f=Qt.WindowFlags()
+    *, input_job_bundle_dir: str = "", browse: bool = False, parent=None, f=Qt.WindowFlags()
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an Amazon Deadline Cloud job submission dialog for the provided job bundle.
@@ -49,10 +50,16 @@ def show_job_bundle_submitter(
             parent = main_windows[0]
 
     if not input_job_bundle_dir:
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            parent, "Choose Job Bundle Directory", input_job_bundle_dir
-        )
-        if not input_job_bundle_dir:
+        if browse:
+            input_job_bundle_dir = QFileDialog.getExistingDirectory(
+                parent, "Choose Job Bundle Directory", input_job_bundle_dir
+            )
+            if not input_job_bundle_dir:
+                return None
+        else:
+            msg = "Specify a job bundle directory or run the bundle command with the --browse flag"
+            QMessageBox.warning(None, "Cannot Load the Dialog", msg)
+            logger.warning(msg)
             return None
 
     def on_create_job_bundle_callback(
@@ -98,20 +105,27 @@ def show_job_bundle_submitter(
 
         # First filter the queue parameters to exclude any from the job template,
         # then extend it with the job template parameters.
-        job_parameter_names = {param["name"] for param in settings.parameters}
+        # Avoid adding the "browse bundle" parameter to the parameters list
+        setting_parameters = [
+            param
+            for param in settings.parameters
+            if param["name"] != JobBundleSettingsWidget.BROWSE_BUNDLE_SETTINGS["name"]
+        ]
+        job_parameter_names = {param["name"] for param in setting_parameters}
         parameters_values: list[dict[str, Any]] = [
             {"name": param["name"], "value": param["value"]}
             for param in queue_parameters
             if param["name"] not in job_parameter_names
         ]
+
         parameters_values.extend(
-            {"name": param["name"], "value": param["value"]} for param in settings.parameters
+            {"name": param["name"], "value": param["value"]} for param in setting_parameters
         )
 
         apply_job_parameters(
             parameters_values,
             job_bundle_dir,
-            settings.parameters,
+            setting_parameters,
             queue_parameters,
             AssetReferences(),
         )
@@ -136,6 +150,11 @@ def show_job_bundle_submitter(
     initial_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
 
+    if browse:
+        # Add a "Browse Bundle Settings" parameter to the settings. This is needed to tell the "JobBundleSettingsWidget"
+        # whether or not to include this option.
+        initial_settings.parameters.append(JobBundleSettingsWidget.BROWSE_BUNDLE_SETTINGS)
+
     # Populate the initial queue parameter values based on the job template parameter values
     initial_shared_parameter_values = {}
     for parameter in initial_settings.parameters:
@@ -154,9 +173,6 @@ def show_job_bundle_submitter(
         parent=parent,
         f=f,
     )
-
-    # Browse history button is disabled by default for submitters. Enable history button for UIs launched from `deadline bundle` or the `deadline-dev-gui`
-    submitter_dialog.set_browse_btn_visible()
 
     submitter_dialog.show()
     return submitter_dialog
