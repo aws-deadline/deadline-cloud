@@ -35,6 +35,7 @@ from ...job_bundle import create_job_history_bundle_dir
 from ..widgets.deadline_credentials_status_widget import DeadlineCredentialsStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
+from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ...job_bundle.submission import AssetReferences
 
@@ -60,6 +61,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         attachments: (FlatAssetReferences): The job attachments that have been added to the job by the user.
         on_create_job_bundle_callback: A function to call when the dialog needs to create a Job Bundle. It
             is called with arguments (widget, job_bundle_dir, settings, queue_parameters, asset_references)
+        parent: parent of the widget
+        f: Qt Window Flags
+        show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
+            to False.
     """
 
     def __init__(
@@ -73,6 +78,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         on_create_job_bundle_callback,
         parent=None,
         f=Qt.WindowFlags(),
+        show_host_requirements_tab=False,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
@@ -89,6 +95,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             initial_shared_parameter_values,
             auto_detected_attachments,
             attachments,
+            show_host_requirements_tab,
         )
 
         self.gui_update_counter: Any = None
@@ -147,6 +154,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         initial_shared_parameter_values,
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
+        show_host_requirements_tab: bool,
     ):
         self.lyt = QVBoxLayout(self)
         self.lyt.setContentsMargins(5, 5, 5, 5)
@@ -159,6 +167,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         self._build_shared_job_settings_tab(initial_job_settings, initial_shared_parameter_values)
         self._build_job_settings_tab(job_setup_widget_type, initial_job_settings)
         self._build_job_attachments_tab(auto_detected_attachments, attachments)
+
+        # Show host requirements only if requested by the constructor
+        if show_host_requirements_tab:
+            self._build_host_requirements_tab(HostRequirementsWidget())
 
         self.creds_status_box = DeadlineCredentialsStatusWidget()
         self.lyt.addWidget(self.creds_status_box)
@@ -227,6 +239,12 @@ class SubmitJobToDeadlineDialog(QDialog):
         )
         self.job_attachments_tab.setWidget(self.job_attachments)
         self.job_attachments_tab.setWidgetResizable(True)
+
+    def _build_host_requirements_tab(self, worker_requirements_widget: QWidget):
+        self.host_requirements_tab = QScrollArea()
+        self.tabs.addTab(self.host_requirements_tab, "Host Requirements")
+        self.host_requirements_tab.setWidget(worker_requirements_widget)
+        self.host_requirements_tab.setWidgetResizable(True)
 
     def on_shared_job_parameter_changed(self, parameter: dict[str, Any]):
         """
