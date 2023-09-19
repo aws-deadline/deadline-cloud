@@ -43,9 +43,6 @@ class JobBundleSettingsWidget(QWidget):
         parent: The parent Qt Widget.
     """
 
-    # Parameters for loading the bundle settings
-    BROWSE_BUNDLE_SETTINGS = {"name": "browse_bundle_settings", "type": "INT", "value": 1}
-
     parameter_changed = Signal(dict)
 
     def __init__(self, initial_settings: JobBundleSettings, parent=None):
