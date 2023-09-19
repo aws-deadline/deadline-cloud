@@ -62,20 +62,13 @@ class JobBundleSettingsWidget(QWidget):
 
         layout = QVBoxLayout(self)
 
-        # The JobBundleSettingsWidget needs to handle a special case when displaying the "Load a different job bundle" Option.
-        # If this setting is included, create the button in a layout above the rest of the parameters.
-        if initial_settings.parameters:
-            # The job_bundle_submitter will append this parameter to the end of the parameters list.
-            load_setting = initial_settings.parameters[-1]
-            if load_setting.get("name") == self.BROWSE_BUNDLE_SETTINGS["name"] and load_setting.get(
-                "value"
-            ):
-                btnBox = QHBoxLayout()
-                self.load_bundle_button = QPushButton("Load a different job bundle")
-                self.load_bundle_button.clicked.connect(self.on_load_bundle)
-                btnBox.addWidget(self.load_bundle_button)
-                btnBox.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
-                layout.addLayout(btnBox)
+        if initial_settings.browse_enabled:
+            btnBox = QHBoxLayout()
+            self.load_bundle_button = QPushButton("Load a different job bundle")
+            self.load_bundle_button.clicked.connect(self.on_load_bundle)
+            btnBox.addWidget(self.load_bundle_button)
+            btnBox.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            layout.addLayout(btnBox)
 
         layout.addLayout(self.param_layout)
         self.refresh_ui(initial_settings)
@@ -130,7 +123,7 @@ class JobBundleSettingsWidget(QWidget):
             logger.warning(msg)
             return
 
-        if self.parent and hasattr(self.parent, "refresh"):
+        if hasattr(self.parent, "refresh"):
             self.parent.refresh(
                 job_settings=job_settings,
                 auto_detected_attachments=asset_references,

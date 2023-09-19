@@ -297,6 +297,11 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
     with gui_context_for_cli() as app:
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
+        if not job_bundle_dir and not browse:
+            raise DeadlineOperationError(
+                "Specify a job bundle directory or run the bundle command with the --browse flag"
+            )
+
         submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
 
         if not submitter:
