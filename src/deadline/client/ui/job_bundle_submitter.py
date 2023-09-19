@@ -58,7 +58,7 @@ def show_job_bundle_submitter(
                 return None
         else:
             msg = "Specify a job bundle directory or run the bundle command with the --browse flag"
-            QMessageBox.warning(None, "Cannot Load the Dialog", msg)
+            QMessageBox.warning(None, "Cannot Load the Amazon Deadline Cloud Dialog", msg)
             logger.warning(msg)
             return None
 
