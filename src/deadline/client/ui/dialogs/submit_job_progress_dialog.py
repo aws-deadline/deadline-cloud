@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 import textwrap
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, cast
 
 from deadline.client.config import config_file
 
@@ -81,7 +81,7 @@ class SubmitJobProgressDialog(QDialog):
         storage_profile_id: str,
         job_bundle_dir: str,
         queue_parameters: list[dict[str, Any]],
-        asset_manager: S3AssetManager,
+        asset_manager: Optional[S3AssetManager],
         deadline_client: BaseClient,
         auto_accept: bool = False,
     ) -> Optional[Dict[str, Any]]:
@@ -210,7 +210,7 @@ class SubmitJobProgressDialog(QDialog):
         if job_parameters_formatted:
             self._create_job_args["parameters"] = job_parameters_formatted
 
-        if (
+        if self._asset_manager and (
             self.asset_references.input_filenames
             or self.asset_references.input_directories
             or self.asset_references.output_directories
@@ -250,7 +250,10 @@ class SubmitJobProgressDialog(QDialog):
 
             logger.info("Hashing job attachments files...")
 
-            hashing_summary, manifests = self._asset_manager.hash_assets_and_create_manifest(
+            # This thread is only started if self._asset_manager is set.
+            hashing_summary, manifests = cast(
+                S3AssetManager, self._asset_manager
+            ).hash_assets_and_create_manifest(
                 input_paths=sorted(input_paths),
                 output_paths=sorted(output_paths),
                 referenced_paths=sorted(referenced_paths),
@@ -285,7 +288,10 @@ class SubmitJobProgressDialog(QDialog):
 
             logger.info("Uploading job attachments files...")
 
-            upload_summary, attachment_settings = self._asset_manager.upload_assets(
+            # This thread is only started if self._asset_manager is set.
+            upload_summary, attachment_settings = cast(
+                S3AssetManager, self._asset_manager
+            ).upload_assets(
                 manifests,
                 _update_upload_progress,
             )

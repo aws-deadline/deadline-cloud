@@ -123,8 +123,10 @@ def create_job_from_job_bundle(
         job_bundle_parameters, job_bundle_dir
     )
 
+    queue = deadline.get_queue(farmId=create_job_args["farmId"], queueId=create_job_args["queueId"])
+
     # Hash and upload job attachments if there are any
-    if asset_references:
+    if asset_references and "jobAttachmentSettings" in queue:
         # Extend input_filenames with all the files in the input_directories
         for directory in asset_references.input_directories:
             for root, _, files in os.walk(directory):
@@ -132,10 +134,6 @@ def create_job_from_job_bundle(
                     os.path.normpath(os.path.join(root, file)) for file in files
                 )
         asset_references.input_directories.clear()
-
-        queue = deadline.get_queue(
-            farmId=create_job_args["farmId"], queueId=create_job_args["queueId"]
-        )
 
         queue_role_session = api.get_queue_boto3_session(
             deadline=deadline,

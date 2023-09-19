@@ -163,7 +163,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         )
 
         # Hash and upload job attachments if there are any
-        if asset_references:
+        if asset_references and "jobAttachmentSettings" in queue:
             # Extend input_filenames with all the files in the input_directories
             for directory in asset_references.input_directories:
                 for root, _, files in os.walk(directory):
