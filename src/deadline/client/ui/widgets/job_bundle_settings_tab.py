@@ -26,6 +26,7 @@ from .openjd_parameters_widget import OpenJDParametersWidget
 from ...job_bundle.submission import AssetReferences
 from ...job_bundle.loader import read_yaml_or_json_object
 from ...job_bundle.parameters import read_job_bundle_parameters
+from ...config import config_file
 
 logger = getLogger(__name__)
 
@@ -89,21 +90,20 @@ class JobBundleSettingsWidget(QWidget):
         Browse and load the selected submission bundle
         """
         # Open the file picker dialog
-        bundle_path = os.path.expanduser(os.path.join("~", ".deadline", "job_history"))
+        bundle_path = os.path.expanduser(config_file.get_setting("settings.job_history_dir"))
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
             self, "Choose Job Bundle Directory", bundle_path
         )
         if not input_job_bundle_dir:
             return
 
-        asset_references_obj = (
-            read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-        )
-
-        asset_references = AssetReferences.from_dict(asset_references_obj)
-
         # Warn the user if the Job Bundle could not be loaded
         try:
+            asset_references_obj = (
+                read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
+            )
+            asset_references = AssetReferences.from_dict(asset_references_obj)
+
             # Load the template to get the bundle name
             template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
             name = (

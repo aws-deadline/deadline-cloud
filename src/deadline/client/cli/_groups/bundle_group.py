@@ -287,10 +287,6 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 def bundle_gui_submit(job_bundle_dir, browse, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
-
-    Args:
-        job_bundle_dir (str): Path to the job bundle directory
-        browse (bool): Whether to include an option for Loading a different job bundle
     """
     from ...ui import gui_context_for_cli
 
