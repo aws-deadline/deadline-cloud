@@ -104,7 +104,6 @@ def show_job_bundle_submitter(
             for param in queue_parameters
             if param["name"] not in job_parameter_names
         ]
-
         parameters_values.extend(
             {"name": param["name"], "value": param["value"]} for param in settings.parameters
         )
@@ -156,6 +155,5 @@ def show_job_bundle_submitter(
         parent=parent,
         f=f,
     )
-
     submitter_dialog.show()
     return submitter_dialog
