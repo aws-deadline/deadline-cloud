@@ -62,7 +62,12 @@ class DevMainWindow(QMainWindow):
             self, "Choose Job Bundle Directory", input_job_bundle_dir
         )
         if input_job_bundle_dir:
-            show_job_bundle_submitter(os.path.normpath(input_job_bundle_dir), self, f=Qt.Tool)
+            show_job_bundle_submitter(
+                input_job_bundle_dir=os.path.normpath(input_job_bundle_dir),
+                browse=True,
+                parent=self,
+                f=Qt.Tool,
+            )
 
     def submit_cli_job(self):
         show_cli_job_submitter(self, f=Qt.Tool)

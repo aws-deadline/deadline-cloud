@@ -27,6 +27,9 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
     input_job_bundle_dir: str = field(default="")
     parameters: list[dict[str, Any]] = field(default_factory=list)
 
+    # Whether to allow ability to "Load a different job bundle"
+    browse_enabled: bool = field(default=False)
+
 
 @dataclass
 class CliJobSettings:  # pylint: disable=too-many-instance-attributes

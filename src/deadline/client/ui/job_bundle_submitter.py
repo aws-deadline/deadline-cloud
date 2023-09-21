@@ -30,7 +30,7 @@ logger = getLogger(__name__)
 
 
 def show_job_bundle_submitter(
-    input_job_bundle_dir: str = "", parent=None, f=Qt.WindowFlags()
+    *, input_job_bundle_dir: str = "", browse: bool = False, parent=None, f=Qt.WindowFlags()
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an Amazon Deadline Cloud job submission dialog for the provided job bundle.
@@ -135,6 +135,7 @@ def show_job_bundle_submitter(
         raise DeadlineOperationError(f"Input Job Bundle Dir is not valid: {input_job_bundle_dir}")
     initial_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+    initial_settings.browse_enabled = browse
 
     # Populate the initial queue parameter values based on the job template parameter values
     initial_shared_parameter_values = {}
