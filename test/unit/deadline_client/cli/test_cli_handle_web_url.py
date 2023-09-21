@@ -247,7 +247,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_boto3_session"
+        api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
@@ -297,7 +297,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_boto3_session"
+        api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download

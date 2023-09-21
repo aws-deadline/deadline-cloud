@@ -4,7 +4,7 @@
 tests the deadline.client.api functions relating to boto3.Client
 """
 
-from unittest.mock import call, patch, MagicMock
+from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
 import pytest
@@ -95,7 +95,7 @@ def test_get_check_credentials_status_configuration_error(fresh_deadline_config)
         assert api.check_credentials_status() == api.AwsCredentialsStatus.CONFIGURATION_ERROR
 
 
-def test_get_queue_boto3_session_cache(fresh_deadline_config):
+def test_get_queue_user_boto3_session_cache(fresh_deadline_config):
     session_mock = MagicMock()
     session_mock.profile_name = "test_profile"
     session_mock.region_name = "us-west-2"
@@ -107,23 +107,48 @@ def test_get_queue_boto3_session_cache(fresh_deadline_config):
 
     with patch.object(api._session, "get_boto3_session", return_value=session_mock), patch(
         "botocore.session.Session", return_value=mock_botocore_session
-    ), patch.object(api._session, "_get_queue_boto3_session") as _get_queue_boto3_session_mock:
-        _ = api.get_queue_boto3_session(
+    ), patch.object(
+        api._session, "_get_queue_user_boto3_session"
+    ) as _get_queue_user_boto3_session_mock:
+        _ = api.get_queue_user_boto3_session(
             deadline_mock, farm_id="farm-1234", queue_id="queue-1234", queue_display_name="queue"
         )
         # Same farm ID and queue ID, returns cached session
-        _ = api.get_queue_boto3_session(
+        _ = api.get_queue_user_boto3_session(
             deadline_mock, farm_id="farm-1234", queue_id="queue-1234", queue_display_name="queue"
         )
         # Different queue ID, makes a fresh session
-        _ = api.get_queue_boto3_session(
+        _ = api.get_queue_user_boto3_session(
             deadline_mock, farm_id="farm-1234", queue_id="queue-5678", queue_display_name="queue"
         )
         # Different queue ID, makes a fresh session
-        _ = api.get_queue_boto3_session(
+        _ = api.get_queue_user_boto3_session(
             deadline_mock, farm_id="farm-5678", queue_id="queue-1234", queue_display_name="queue"
         )
-        assert _get_queue_boto3_session_mock.call_count == 3
+        assert _get_queue_user_boto3_session_mock.call_count == 3
+
+
+def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):
+    """Make sure that boto3.Session gets called with profile_name=None for the default profile."""
+    session_mock = MagicMock()
+    # The value returned when no profile was selected is "default"
+    session_mock.profile_name = "default"
+    session_mock.region_name = "us-west-2"
+    deadline_mock = MagicMock()
+    mock_botocore_session = MagicMock()
+    mock_botocore_session.get_config_variable = (
+        lambda name: "default" if name == "profile" else None
+    )
+
+    with patch.object(api._session, "get_boto3_session", return_value=session_mock), patch(
+        "botocore.session.Session", return_value=mock_botocore_session
+    ), patch("boto3.Session") as boto3_session_mock:
+        api.get_queue_user_boto3_session(
+            deadline_mock, farm_id="farm-1234", queue_id="queue-1234", queue_display_name="queue"
+        )
+        boto3_session_mock.assert_called_once_with(
+            botocore_session=ANY, profile_name=None, region_name="us-west-2"
+        )
 
 
 def test_check_deadline_api_available(fresh_deadline_config):

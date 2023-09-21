@@ -18,7 +18,7 @@ import click
 from botocore.exceptions import ClientError  # type: ignore[import]
 
 from deadline.client import api
-from deadline.client.api import get_boto3_client, get_queue_boto3_session
+from deadline.client.api import get_boto3_client, get_queue_user_boto3_session
 from deadline.client.api._session import _modified_logging_level
 from deadline.client.config import config_file, get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
@@ -172,7 +172,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
                     )
             asset_references.input_directories.clear()
 
-            queue_role_session = get_queue_boto3_session(
+            queue_role_session = get_queue_user_boto3_session(
                 deadline=deadline,
                 config=config,
                 farm_id=farm_id,

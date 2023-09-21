@@ -18,7 +18,7 @@ __all__ = [
     "list_jobs",
     "list_fleets",
     "list_storage_profiles_for_queue",
-    "get_queue_boto3_session",
+    "get_queue_user_boto3_session",
     "get_queue_parameter_definitions",
     "get_telemetry_client",
 ]
@@ -31,7 +31,7 @@ from ._loginout import login, logout
 from ._session import (
     AwsCredentialsStatus,
     AwsCredentialsType,
-    get_queue_boto3_session,
+    get_queue_user_boto3_session,
     check_credentials_status,
     get_boto3_client,
     get_boto3_session,
