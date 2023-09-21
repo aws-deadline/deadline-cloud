@@ -3,7 +3,6 @@
 import datetime
 import io
 import os
-import sys
 from hashlib import shake_256
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -17,7 +16,6 @@ __all__ = [
     "_generate_random_guid",
     "_float_to_iso_datetime_string",
     "_human_readable_file_size",
-    "_get_deadline_formatted_os",
     "_get_unique_dest_dir_name",
     "_get_bucket_and_object_key",
     "_get_default_hash_cache_db_file_dir",
@@ -87,25 +85,6 @@ def _human_readable_file_size(size_in_bytes: int) -> str:
     # If we go higher than the provided postfix,
     # then return as a large amount of the highest postfix we've specified.
     return f"{rounded} {postfixes[-1]}"
-
-
-def _get_deadline_formatted_os() -> str:
-    """
-    Get a string specifying what the OS is, following the format the Deadline API expects.
-    """
-    # Avoiding circular imports here
-    from .models import OperatingSystemFamily
-
-    if sys.platform.startswith("linux"):
-        return OperatingSystemFamily.LINUX.value
-
-    if sys.platform.startswith("darwin"):
-        return OperatingSystemFamily.MACOS.value
-
-    if sys.platform.startswith("win"):
-        return OperatingSystemFamily.WINDOWS.value
-
-    return "Unknown"
 
 
 def _get_unique_dest_dir_name(source_root: str) -> str:

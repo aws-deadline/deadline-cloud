@@ -333,7 +333,7 @@ class AssetSync:
                 dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
                 local_root = str(session_dir.joinpath(dir_name))
                 pathmapping_rules[dir_name] = {
-                    "source_os": manifest_properties.osType.to_path_format(),
+                    "source_path_format": manifest_properties.rootPathFormat.value,
                     "source_path": manifest_properties.rootPath,
                     "destination_path": local_root,
                 }
@@ -461,7 +461,7 @@ class AssetSync:
                     local_root = session_dir.joinpath(dir_name)
 
                 output_files: List[OutputFile] = self._get_output_files(
-                    manifest_properties.osType.value,
+                    manifest_properties.rootPathFormat.value,
                     manifest_properties,
                     s3_settings,
                     local_root,

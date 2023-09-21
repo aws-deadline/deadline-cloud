@@ -24,7 +24,7 @@ from deadline.job_attachments.models import (
     Job,
     JobAttachmentS3Settings,
     ManifestProperties,
-    OperatingSystemFamily,
+    PathFormat,
     Queue,
 )
 from deadline.job_attachments.progress_tracker import (
@@ -162,14 +162,14 @@ class TestAssetSync:
             )
 
             # THEN
-            expected_source_os = (
-                "WINDOWS"
-                if default_job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
-                else "POSIX"
+            expected_source_path_format = (
+                "windows"
+                if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
             )
             assert result_pathmap_rules == [
                 {
-                    "source_os": expected_source_os,
+                    "source_path_format": expected_source_path_format,
                     "source_path": default_job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 }
@@ -248,14 +248,14 @@ class TestAssetSync:
             )
 
             # THEN
-            expected_source_os = (
-                "WINDOWS"
-                if job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
-                else "POSIX"
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
             )
             assert result_pathmap_rules == [
                 {
-                    "source_os": expected_source_os,
+                    "source_path_format": expected_source_path_format,
                     "source_path": job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 }
@@ -317,14 +317,14 @@ class TestAssetSync:
             )
 
             # THEN
-            expected_source_os = (
-                "WINDOWS"
-                if default_job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
-                else "POSIX"
+            expected_source_path_format = (
+                "windows"
+                if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
             )
             assert result_pathmap_rules == [
                 {
-                    "source_os": expected_source_os,
+                    "source_path_format": expected_source_path_format,
                     "source_path": default_job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 },
@@ -393,15 +393,15 @@ class TestAssetSync:
 
             # THEN
             merge_manifests_mock.assert_called()
-            expected_source_os = (
-                "WINDOWS"
-                if job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
-                else "POSIX"
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
             )
 
             assert result_pathmap_rules == [
                 {
-                    "source_os": expected_source_os,
+                    "source_path_format": expected_source_path_format,
                     "source_path": job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 },
@@ -650,7 +650,7 @@ class TestAssetSync:
             manifests=[
                 ManifestProperties(
                     rootPath="/tmp",
-                    osType=OperatingSystemFamily.LINUX,
+                    rootPathFormat=PathFormat.POSIX,
                     inputManifestPath="manifest_input.xxh128",
                     inputManifestHash="manifesthash",
                     outputRelativeDirectories=["test/outputs"],
@@ -658,7 +658,7 @@ class TestAssetSync:
                 ManifestProperties(
                     fileSystemLocationName="Movie 1",
                     rootPath="/home/user/movie1",
-                    osType=OperatingSystemFamily.LINUX,
+                    rootPathFormat=PathFormat.POSIX,
                     inputManifestPath="manifest-movie1_input.xxh128",
                     inputManifestHash="manifestmovie1hash",
                     outputRelativeDirectories=["test/outputs"],
@@ -704,7 +704,7 @@ class TestAssetSync:
             # THEN
             assert result_pathmap_rules == [
                 {
-                    "source_os": "POSIX",
+                    "source_path_format": "posix",
                     "source_path": default_job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 }
@@ -787,14 +787,14 @@ class TestAssetSync:
             )
 
             # THEN
-            expected_source_os = (
-                "WINDOWS"
-                if job.attachments.manifests[0].osType == OperatingSystemFamily.WINDOWS
-                else "POSIX"
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
             )
             assert result_pathmap_rules == [
                 {
-                    "source_os": expected_source_os,
+                    "source_path_format": expected_source_path_format,
                     "source_path": job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 }

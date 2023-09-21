@@ -23,9 +23,8 @@ from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
-    OperatingSystemFamily,
+    PathFormat,
 )
-from deadline.job_attachments._utils import _get_deadline_formatted_os
 
 from ..api.test_job_bundle_submission import (
     MOCK_GET_QUEUE_RESPONSE,
@@ -252,7 +251,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_submission_profile_name = _get_deadline_formatted_os()
+        mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -260,7 +259,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily(mock_submission_profile_name),
+                        "rootPathFormat": PathFormat(mock_host_path_format_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -302,7 +301,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     ):
         mock_download = MagicMock()
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_submission_profile_name = _get_deadline_formatted_os()
+        mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
@@ -310,7 +309,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
                 "manifests": [
                     {
                         "rootPath": "/root/path",
-                        "osType": OperatingSystemFamily(mock_submission_profile_name),
+                        "rootPathFormat": PathFormat(mock_host_path_format_name),
                         "outputRelativeDirectories": ["."],
                     }
                 ],

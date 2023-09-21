@@ -7,24 +7,12 @@ from unittest.mock import patch
 import pytest
 
 from deadline.job_attachments._utils import (
-    _get_deadline_formatted_os,
     _get_default_hash_cache_db_file_dir,
     _is_relative_to,
 )
 
 
 class TestUtils:
-    @pytest.mark.parametrize(
-        ("sys_os", "expected_output"),
-        [("win32", "windows"), ("darwin", "macos"), ("linux", "linux"), ("fakeos", "Unknown")],
-    )
-    def test_get_deadline_formatted_os(self, sys_os: str, expected_output: str):
-        """
-        Tests that the expected OS string is returned
-        """
-        with patch("sys.platform", sys_os):
-            assert _get_deadline_formatted_os() == expected_output
-
     def test_get_default_hash_cache_db_file_dir_env_var_path_exists(self, tmpdir):
         """
         Tests that when an environment variable exists, it uses that path for the hash cache

@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import sys
 from typing import List, Optional, Set, Any, Union
 
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
@@ -78,11 +79,25 @@ class OperatingSystemFamily(str, Enum):
     LINUX = "linux"
     MACOS = "macos"
 
-    def to_path_format(self) -> str:
-        if self == OperatingSystemFamily.WINDOWS:
-            return "WINDOWS"
+
+class PathFormat(str, Enum):
+    WINDOWS = "windows"
+    POSIX = "posix"
+
+    @classmethod
+    def get_host_path_format(cls) -> PathFormat:
+        """Get the current path format."""
+        if sys.platform.startswith("win"):
+            return PathFormat.WINDOWS
+        if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
+            return PathFormat.POSIX
         else:
-            return "POSIX"
+            raise NotImplementedError(f"Operating system {sys.platform} is not supported.")
+
+    @classmethod
+    def get_host_path_format_string(cls) -> str:
+        """Get a string of the current path format."""
+        return cls.get_host_path_format().value
 
 
 # Behavior to adopt when loading job assets
@@ -99,12 +114,12 @@ class ManifestProperties:
 
     # The path assests were relative to on submitting machine
     rootPath: str
+    # Used for path mapping.
+    rootPathFormat: PathFormat
     # If submitting machine has a 'Local' Storage Profile and files are relative
     # to any of its 'Asset Roots', the Asset Root Path will be used below.
     # Otherwise, the dynamic Job Attachments root path will be used and this will be empty.
     fileSystemLocationName: Optional[str] = field(default=None)  # type: ignore
-    # Used for path mapping.
-    osType: OperatingSystemFamily = OperatingSystemFamily.WINDOWS
     # An S3 (object) key that points to a file manifest location.
     # Optional as we may not need inputs if everything is embedded in the Job Template.
     inputManifestPath: Optional[str] = field(default=None)  # type: ignore
@@ -117,7 +132,7 @@ class ManifestProperties:
         result: dict[str, Any] = {"rootPath": self.rootPath}
         if self.fileSystemLocationName:
             result["fileSystemLocationName"] = self.fileSystemLocationName
-        result["osType"] = self.osType.value
+        result["rootPathFormat"] = self.rootPathFormat.value
         if self.inputManifestPath:
             result["inputManifestPath"] = self.inputManifestPath
         if self.inputManifestHash:
