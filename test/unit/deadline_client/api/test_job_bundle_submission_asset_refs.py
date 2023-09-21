@@ -15,7 +15,7 @@ from deadline.job_attachments.models import (
     AssetLoadingMethod,
     AssetRootManifest,
     ManifestProperties,
-    OperatingSystemFamily,
+    PathFormat,
 )
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.progress_tracker import SummaryStatistics
@@ -152,7 +152,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                 [
                     ManifestProperties(
                         rootPath="/mnt/root/path1",
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         inputManifestPath="mock-manifest",
                         inputManifestHash="mock-manifest-hash",
                         outputRelativeDirectories=["."],
@@ -294,7 +294,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                 "manifests": [
                     {
                         "rootPath": "/mnt/root/path1",
-                        "osType": OperatingSystemFamily.LINUX,
+                        "rootPathFormat": PathFormat.POSIX,
                         "inputManifestPath": "mock-manifest",
                         "inputManifestHash": "mock-manifest-hash",
                         "outputRelativeDirectories": ["."],
