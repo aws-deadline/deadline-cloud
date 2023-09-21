@@ -135,7 +135,7 @@ def create_job_from_job_bundle(
                 )
         asset_references.input_directories.clear()
 
-        queue_role_session = api.get_queue_boto3_session(
+        queue_role_session = api.get_queue_user_boto3_session(
             deadline=deadline,
             config=config,
             farm_id=create_job_args["farmId"],

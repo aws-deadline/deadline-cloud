@@ -239,7 +239,7 @@ def _download_job_output(
 
     queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 
-    queue_role_session = api.get_queue_boto3_session(
+    queue_role_session = api.get_queue_user_boto3_session(
         deadline=deadline,
         config=config,
         farm_id=farm_id,

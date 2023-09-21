@@ -114,7 +114,7 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
     ) as qp_boto3_client_mock, patch.object(
         bundle_group, "_hash_attachments", return_value=[]
     ), patch.object(
-        bundle_group, "get_queue_boto3_session"
+        bundle_group, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group, "_upload_attachments"
     ), patch.object(
@@ -247,7 +247,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     ), patch.object(
         bundle_group.api, "get_boto3_session"
     ), patch.object(
-        bundle_group, "get_queue_boto3_session"
+        bundle_group, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
@@ -412,7 +412,9 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
     ), patch.object(bundle_group, "_upload_attachments"), patch.object(
         bundle_group.api, "get_boto3_session"
     ), patch.object(
-        bundle_group, "get_queue_boto3_session"
+        bundle_group.api, "get_queue_parameter_definitions", return_value=[]
+    ), patch.object(
+        bundle_group, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
@@ -485,7 +487,7 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
     ) as upload_attachments_mock, patch.object(
         bundle_group.api, "get_boto3_session"
     ), patch.object(
-        bundle_group, "get_queue_boto3_session"
+        bundle_group, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):

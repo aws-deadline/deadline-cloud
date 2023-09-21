@@ -19,7 +19,7 @@ from deadline.client.exceptions import DeadlineOperationError
 
 # This is imported by `test_cli_config.py` for a matching CLI test
 CONFIG_SETTING_ROUND_TRIP = [
-    ("defaults.aws_profile_name", "", "AnotherProfileName"),
+    ("defaults.aws_profile_name", "(default)", "AnotherProfileName"),
     (
         "settings.deadline_endpoint_url",
         DEFAULT_DEADLINE_ENDPOINT_URL,
@@ -61,7 +61,7 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default profile, and check the next layer of the onion
-    config.set_setting("defaults.aws_profile_name", "")
+    config.set_setting("defaults.aws_profile_name", "(default)")
     assert config.get_setting("settings.deadline_endpoint_url") == "nondefault-endpoint-url"
     assert config.get_setting("defaults.farm_id") == "farm-for-profile-default"
     # The queue id is still default
@@ -136,7 +136,7 @@ def test_config_file_env_var(fresh_deadline_config):
         os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
 
         # Confirm that we see the default settings again
-        assert config.get_setting("defaults.aws_profile_name") == ""
+        assert config.get_setting("defaults.aws_profile_name") == "(default)"
 
         # Change the settings in this new file
         config.set_setting("defaults.aws_profile_name", "AlternateProfileName")

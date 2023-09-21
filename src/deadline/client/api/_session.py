@@ -66,19 +66,18 @@ def get_boto3_session(
 
     # If the default AWS profile name is either not set, or set to "default",
     # use the default credentials provider chain instead of a named profile.
-    if profile_name in ("", "default"):
+    if profile_name in ("(default)", "default", ""):
         profile_name = None
 
     # If a config was provided, don't use the Session caching mechanism.
     if config:
         return boto3.Session(profile_name=profile_name)
 
+    if force_refresh:
+        invalidate_boto3_session_cache()
+
     # If this is the first call or the profile name has changed, make a fresh Session
-    if (
-        force_refresh
-        or not __cached_boto3_session
-        or __cached_boto3_session_profile_name != profile_name
-    ):
+    if not __cached_boto3_session or __cached_boto3_session_profile_name != profile_name:
         __cached_boto3_session = boto3.Session(profile_name=profile_name)
         __cached_boto3_session_profile_name = profile_name
 
@@ -87,13 +86,19 @@ def get_boto3_session(
 
 def invalidate_boto3_session_cache() -> None:
     """
-    Invalidates the cached boto3 session.
+    Invalidates the cached boto3 session and boto3 queue session.
     """
     global __cached_boto3_session
     global __cached_boto3_session_profile_name
+    global __cached_boto3_queue_session
+    global __cached_farm_id_for_queue_session
+    global __cached_queue_id_for_queue_session
 
     __cached_boto3_session = None
     __cached_boto3_session_profile_name = None
+    __cached_boto3_queue_session = None
+    __cached_farm_id_for_queue_session = None
+    __cached_queue_id_for_queue_session = None
 
 
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
@@ -164,7 +169,7 @@ def get_studio_id(
     return profile_config.get("studio_id", None)
 
 
-def get_queue_boto3_session(
+def get_queue_user_boto3_session(
     deadline: BaseClient,
     config: Optional[ConfigParser] = None,
     farm_id: Optional[str] = None,
@@ -189,7 +194,7 @@ def get_queue_boto3_session(
     global __cached_farm_id_for_queue_session
     global __cached_queue_id_for_queue_session
 
-    base_session = get_boto3_session(config=config)
+    base_session = get_boto3_session(config=config, force_refresh=force_refresh)
 
     if farm_id is None:
         farm_id = get_setting("defaults.farm_id")
@@ -198,18 +203,17 @@ def get_queue_boto3_session(
 
     # If a config was provided, don't use the Session caching mechanism.
     if config:
-        return _get_queue_boto3_session(
+        return _get_queue_user_boto3_session(
             deadline, base_session, farm_id, queue_id, queue_display_name
         )
 
     # If this is the first call or the farm ID/queue ID has changed, make a fresh Session and cache it
     if (
-        force_refresh
-        or not __cached_boto3_queue_session
+        not __cached_boto3_queue_session
         or __cached_farm_id_for_queue_session != farm_id
         or __cached_queue_id_for_queue_session != queue_id
     ):
-        __cached_boto3_queue_session = _get_queue_boto3_session(
+        __cached_boto3_queue_session = _get_queue_user_boto3_session(
             deadline, base_session, farm_id, queue_id, queue_display_name
         )
 
@@ -219,14 +223,14 @@ def get_queue_boto3_session(
     return __cached_boto3_queue_session
 
 
-def _get_queue_boto3_session(
+def _get_queue_user_boto3_session(
     deadline: BaseClient,
     base_session: boto3.Session,
     farm_id: str,
     queue_id: str,
     queue_display_name: Optional[str] = None,
 ):
-    queue_credential_provider = QueueCredentialProvider(
+    queue_credential_provider = QueueUserCredentialProvider(
         deadline,
         farm_id,
         queue_id,
@@ -236,25 +240,15 @@ def _get_queue_boto3_session(
     botocore_session = get_botocore_session()
     credential_provider = botocore_session.get_component("credential_provider")
     credential_provider.insert_before("env", queue_credential_provider)
+    aws_profile_name: Optional[str] = None
+    if base_session.profile_name != "default":
+        aws_profile_name = base_session.profile_name
 
     return boto3.Session(
         botocore_session=botocore_session,
-        profile_name=base_session.profile_name,
+        profile_name=aws_profile_name,
         region_name=base_session.region_name,
     )
-
-
-def invalidate_boto3_queue_session_cache() -> None:
-    """
-    Invalidates the cached boto3 queue session.
-    """
-    global __cached_boto3_queue_session
-    global __cached_farm_id_for_queue_session
-    global __cached_queue_id_for_queue_session
-
-    __cached_boto3_queue_session = None
-    __cached_farm_id_for_queue_session = None
-    __cached_queue_id_for_queue_session = None
 
 
 @contextmanager
@@ -427,7 +421,7 @@ class DeadlineClient:
         return method
 
 
-class QueueCredentialProvider(CredentialProvider):
+class QueueUserCredentialProvider(CredentialProvider):
     """A custom botocore CredentialProvider for handling AssumeQueueRoleForUser API
     credentials. If the credentials expire, the provider will automatically refresh
     them using the _get_queue_credentials method.
