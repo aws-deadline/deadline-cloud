@@ -52,7 +52,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "description": "The filesystem path to Deadline Cloud Monitor, set during login process.",
     },
     "defaults.aws_profile_name": {
-        "default": "",
+        "default": "(default)",
         "section_format": "profile-{}",
         "description": "The AWS profile name to use by default. Set to '' to use the default credentials."
         + " Other settings are saved with the profile.",

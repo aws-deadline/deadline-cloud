@@ -432,7 +432,9 @@ def test_create_job_from_job_bundle_job_attachments(
     # Use a temporary directory for the job bundle
     with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
         _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+    ) as client_mock, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ), patch.object(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
         S3AssetManager, "upload_assets"
@@ -580,7 +582,9 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     # Use a temporary directory for the job bundle
     with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
         _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+    ) as client_mock, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ), patch.object(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
         S3AssetManager, "upload_assets"
