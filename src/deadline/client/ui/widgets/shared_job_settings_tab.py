@@ -97,6 +97,11 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             if name.startswith("deadline:"):
                 self.set_parameter_value({"name": name, "value": value})
 
+    def refresh_ui(self, job_settings: Any):
+        # Refresh the job settings in the UI
+        self.shared_job_properties_box.refresh_ui(job_settings)
+        self.refresh_queue_parameters()
+
     def refresh_queue_parameters(self):
         """
         If the default queue id has changed, refresh the queue parameters.
@@ -187,7 +192,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         super().__init__("Job Properties", parent=parent)
 
         self._build_ui()
-        self._load_initial_settings(initial_settings)
+        self.refresh_ui(initial_settings)
 
     def _build_ui(self):
         self.layout = QFormLayout(self)
@@ -225,7 +230,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_retries_per_task_box.setRange(0, 2147483647)
         self.layout.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
 
-    def _load_initial_settings(self, settings):
+    def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
         self.initial_status_box.setCurrentText("READY")

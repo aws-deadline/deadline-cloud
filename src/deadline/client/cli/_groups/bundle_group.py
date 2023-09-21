@@ -278,8 +278,13 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
 @cli_bundle.command(name="gui-submit")
 @click.argument("job_bundle_dir", required=False)
+@click.option(
+    "--browse",
+    is_flag=True,
+    help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, **args):
+def bundle_gui_submit(job_bundle_dir, browse, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
     """
@@ -288,10 +293,17 @@ def bundle_gui_submit(job_bundle_dir, **args):
     with gui_context_for_cli() as app:
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
-        submitter = show_job_bundle_submitter(job_bundle_dir)
+        if not job_bundle_dir and not browse:
+            raise DeadlineOperationError(
+                "Specify a job bundle directory or run the bundle command with the --browse flag"
+            )
 
-        if submitter:
-            response = submitter.show()
+        submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
+
+        if not submitter:
+            return
+
+        response = submitter.show()
 
         app.exec_()
 

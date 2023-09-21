@@ -97,6 +97,26 @@ class SubmitJobToDeadlineDialog(QDialog):
     def sizeHint(self):
         return QSize(540, 600)
 
+    def refresh(
+        self,
+        *,
+        job_settings: Optional[Any] = None,
+        auto_detected_attachments: Optional[AssetReferences] = None,
+        attachments: Optional[AssetReferences] = None,
+    ):
+        # Refresh the UI components
+        self.refresh_deadline_settings()
+        if (auto_detected_attachments is not None) or (attachments is not None):
+            self.job_attachments.refresh_ui(auto_detected_attachments, attachments)
+
+        if job_settings is not None:
+            self.job_settings_type = type(job_settings)
+            # Refresh shared job settings
+            self.shared_job_settings.refresh_ui(job_settings)
+            # Refresh job specific settings
+            if hasattr(self.job_settings, "refresh_ui"):
+                self.job_settings.refresh_ui(job_settings)
+
     def refresh_deadline_settings(self):
         # Enable/disable the Login and Logout buttons based on whether
         # the configured profile is for Deadline Cloud Monitor
@@ -157,9 +177,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button = QPushButton("Submit")
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
-        self.save_bundle_button = QPushButton("Save Bundle")
-        self.save_bundle_button.clicked.connect(self.on_save_bundle)
-        self.button_box.addButton(self.save_bundle_button, QDialogButtonBox.AcceptRole)
+        self.export_bundle_button = QPushButton("Export Bundle")
+        self.export_bundle_button.clicked.connect(self.on_export_bundle)
+        self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
+
         self.lyt.addWidget(self.button_box)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -257,9 +278,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         if DeadlineConfigDialog.configure_settings(parent=self):
             self.refresh_deadline_settings()
 
-    def on_save_bundle(self):
+    def on_export_bundle(self):
         """
-        Saves a Job Bundle, but does not submit the job.
+        Exports a Job Bundle, but does not submit the job.
         """
         # Retrieve all the settings into the dataclass
         settings = self.job_settings_type()
