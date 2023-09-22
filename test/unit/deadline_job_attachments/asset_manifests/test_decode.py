@@ -2,9 +2,11 @@
 
 """ Tests for the asset_manifests.decode module """
 from __future__ import annotations
+from enum import Enum
 
 import json
 from dataclasses import dataclass
+import re
 from typing import Any
 from unittest.mock import patch
 
@@ -116,8 +118,40 @@ def test_decode_manifest_version_not_supported():
     """
     Test that a ManifestDecodeValidationError is raised if the manifest passed has a version that isn't valid.
     """
-    with pytest.raises(ManifestDecodeValidationError, match="Unknown manifest version: 1900-06-06"):
+    with pytest.raises(
+        ManifestDecodeValidationError,
+        match=re.escape(
+            "Unknown manifest version: 1900-06-06 (Currently supported Manifest versions: 2023-03-03)"
+        ),
+    ):
         decode.decode_manifest('{"manifestVersion": "1900-06-06"}')
+
+
+def test_decode_manifest_version_not_supported_when_multiple_versions_are_supported():
+    """
+    Test that a ManifestDecodeValidationError is raised with a descriptive error message if the manifest passed
+    has a version that isn't valid. In this test, the ManifestVersion class is mocked to simulate having multple
+    supported manifest versions.
+    """
+
+    class MockManifestVersion(str, Enum):
+        UNDEFINED = "UNDEFINED"
+        v2023_03_03 = "2023-03-03"
+        v2024_04_03 = "2024-04-03"
+        v2025_05_03 = "2025-05-03"
+
+    with patch(
+        f"{deadline.__package__}.job_attachments.asset_manifests.decode.ManifestVersion",
+        new=MockManifestVersion,
+    ):
+        with pytest.raises(
+            ManifestDecodeValidationError,
+            match=re.escape(
+                "Unknown manifest version: 1900-06-06 "
+                "(Currently supported Manifest versions: 2023-03-03, 2024-04-03, 2025-05-03)"
+            ),
+        ):
+            decode.decode_manifest('{"manifestVersion": "1900-06-06"}')
 
 
 def test_decode_manifest_not_valid_manifest():
