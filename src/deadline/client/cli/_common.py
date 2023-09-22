@@ -137,7 +137,7 @@ def _apply_cli_options_to_config(
 
     if args:
         raise RuntimeError(
-            f"Option names {args.keys()} are not standard Amazon Deadline Cloud CLI options, they need special handling"
+            f"Option names {tuple(args.keys())} are not standard Amazon Deadline Cloud CLI options, they need special handling"
         )
 
     return config

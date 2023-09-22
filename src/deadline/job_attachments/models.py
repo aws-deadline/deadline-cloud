@@ -240,6 +240,7 @@ class Queue:
     displayName: str
     farmId: str  # pylint: disable=invalid-name
     status: str
+    defaultBudgetAction: str
     jobAttachmentSettings: Optional[JobAttachmentS3Settings] = None  # pylint: disable=invalid-name
 
 

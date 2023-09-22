@@ -619,6 +619,7 @@ class TestAssetSync:
                     displayName="test-queue",
                     farmId="test-farm",
                     status="test",
+                    defaultBudgetAction="NONE",
                 ),
                 None,
             ),
