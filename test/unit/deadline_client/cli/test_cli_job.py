@@ -27,12 +27,18 @@ from deadline.job_attachments.models import (
 from ..api.test_job_bundle_submission import (
     MOCK_GET_QUEUE_RESPONSE,
 )
-from ..shared_constants import MOCK_FARM_ID, MOCK_JOB_ID, MOCK_QUEUE_ID
+from ..shared_constants import (
+    MOCK_FARM_ID,
+    MOCK_JOB_ID,
+    MOCK_QUEUE_ID,
+    MOCK_FLEET_ID,
+    MOCK_WORKER_ID,
+)
 
 MOCK_JOBS_LIST = [
     {
         "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "displayName": "CLI Job",
+        "name": "CLI Job",
         "taskRunStatus": "RUNNING",
         "lifecycleStatus": "SUCCEEDED",
         "createdBy": "b801f3c0-c071-70bc-b869-6804bc732408",
@@ -43,7 +49,7 @@ MOCK_JOBS_LIST = [
     },
     {
         "jobId": "job-0d239749fa05435f90263b3a8be54144",
-        "displayName": "CLI Job",
+        "name": "CLI Job",
         "taskRunStatus": "COMPLETED",
         "lifecycleStatus": "SUCCEEDED",
         "createdBy": "b801f3c0-c071-70bc-b869-6804bc732408",
@@ -53,6 +59,69 @@ MOCK_JOBS_LIST = [
         "priority": 50,
     },
 ]
+
+MOCK_SESSIONS_LIST = [
+    {
+        "sessionId": "session-1",
+        "fleetId": MOCK_FLEET_ID,
+        "workerId": MOCK_WORKER_ID,
+        "startedAt": datetime.datetime(2023, 1, 27, 7, 24, 22, tzinfo=tzutc()),
+        "lifecycleStatus": "ENDED",
+        "endedAt": datetime.datetime(2023, 1, 27, 7, 25, 22, tzinfo=tzutc()),
+    },
+]
+
+MOCK_SESSION_ACTIONS_LIST = [
+    {
+        "sessionActionId": "sessionaction-1-0",
+        "status": "SUCCEEDED",
+        "startedAt": datetime.datetime(2023, 1, 27, 7, 24, 45, tzinfo=tzutc()),
+        "endedAt": datetime.datetime(2023, 1, 27, 7, 25, 15, tzinfo=tzutc()),
+        "progressPercent": 100.0,
+        "definition": {
+            "taskRun": {
+                "taskId": "task-0a0ac395f3ed4d61bda7019874b1f384-0",
+                "stepId": "step-0a0ac395f3ed4d61bda7019874b1f384",
+            }
+        },
+    },
+]
+
+MOCK_STEP = {
+    "stepId": "step-0a0ac395f3ed4d61bda7019874b1f384",
+    "name": "Step Name",
+    "lifecycleStatus": "CREATE_COMPLETE",
+    "taskRunStatus": "SUCCEEDED",
+    "taskRunStatusCounts": {
+        "PENDING": 0,
+        "READY": 0,
+        "RUNNING": 0,
+        "ASSIGNED": 0,
+        "STARTING": 0,
+        "SCHEDULED": 0,
+        "INTERRUPTING": 0,
+        "SUSPENDED": 0,
+        "CANCELED": 0,
+        "FAILED": 0,
+        "SUCCEEDED": 1,
+    },
+    "createdAt": datetime.datetime(2023, 1, 27, 7, 14, 41, tzinfo=tzutc()),
+    "createdBy": "a4a874f8-10b1-70d6-e763-a0e3822893b0",
+    "startedAt": datetime.datetime(2023, 1, 27, 7, 24, 45, tzinfo=tzutc()),
+    "endedAt": datetime.datetime(2023, 1, 27, 7, 25, 15, tzinfo=tzutc()),
+}
+
+MOCK_TASK = {
+    "taskId": "task-0a0ac395f3ed4d61bda7019874b1f384-2",
+    "createdAt": datetime.datetime(2023, 1, 27, 7, 14, 41, tzinfo=tzutc()),
+    "createdBy": "a4a874f8-10b1-70d6-e763-a0e3822893b0",
+    "runStatus": "SUCCEEDED",
+    "failureRetryCount": 0,
+    "parameters": {},
+    "startedAt": datetime.datetime(2023, 1, 27, 7, 24, 45, tzinfo=tzutc()),
+    "endedAt": datetime.datetime(2023, 1, 27, 7, 25, 15, tzinfo=tzutc()),
+    "latestSessionActionId": "sessionaction-1-0",
+}
 
 os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
@@ -79,14 +148,14 @@ def test_cli_job_list(fresh_deadline_config):
             result.output
             == """Displaying 2 of 12 Jobs starting at 0
 
-- displayName: CLI Job
+- name: CLI Job
   jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
   taskRunStatus: RUNNING
   startedAt: 2023-01-27 07:37:53+00:00
   endedAt: 2023-01-27 07:39:17+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
-- displayName: CLI Job
+- name: CLI Job
   jobId: job-0d239749fa05435f90263b3a8be54144
   taskRunStatus: COMPLETED
   startedAt: 2023-01-27 07:27:06+00:00
@@ -121,14 +190,14 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
             result.output
             == """Displaying 2 of 12 Jobs starting at 0
 
-- displayName: CLI Job
+- name: CLI Job
   jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
   taskRunStatus: RUNNING
   startedAt: 2023-01-27 07:37:53+00:00
   endedAt: 2023-01-27 07:39:17+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
-- displayName: CLI Job
+- name: CLI Job
   jobId: job-0d239749fa05435f90263b3a8be54144
   taskRunStatus: COMPLETED
   startedAt: 2023-01-27 07:27:06+00:00
@@ -248,7 +317,7 @@ def test_cli_job_get(fresh_deadline_config):
         assert (
             result.output
             == """jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
-displayName: CLI Job
+name: CLI Job
 taskRunStatus: RUNNING
 lifecycleStatus: SUCCEEDED
 createdBy: b801f3c0-c071-70bc-b869-6804bc732408
@@ -511,3 +580,63 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
                 on_downloading_files=ANY,
             )
             assert result.exit_code == 0
+
+
+def test_cli_job_trace_schedule(fresh_deadline_config):
+    """
+    A very minimal sanity check of the trace-schedule CLI command.
+    To test the function more thoroughly involves creating a mock
+    set of APIs that return a coherent set of data based on the query
+    IDs instead of single mocked returns as this test does.
+    """
+
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        deadline_mock = session_mock().client("deadline")
+        deadline_mock.get_job.return_value = MOCK_JOBS_LIST[0]
+        deadline_mock.list_sessions.return_value = {"sessions": MOCK_SESSIONS_LIST}
+        deadline_mock.list_session_actions.return_value = {
+            "sessionactions": MOCK_SESSION_ACTIONS_LIST
+        }
+        deadline_mock.get_step.return_value = MOCK_STEP
+        deadline_mock.get_task.return_value = MOCK_TASK
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "job",
+                "trace-schedule",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--job-id",
+                str(MOCK_JOBS_LIST[0]["jobId"]),
+            ],
+        )
+
+        assert (
+            result.output
+            == """Getting the job...
+Getting all the sessions for the job...
+Getting all the session actions for the job...
+Getting all the steps and tasks for the job...
+Processing the trace data...
+
+ ==== SUMMARY ====
+
+Session Count: 1
+Session Total Duration: 0:01:00
+Session Action Count: 1
+Session Action Total Duration: 0:00:30
+Task Run Count: 1
+Task Run Total Duration: 0:00:30
+Non-Task Run Count: 0
+Non-Task Run Total Duration: 0:00:00
+
+Within-session Overhead Duration: 0:00:30
+Within-session Overhead Duration Per Action: 0:00:30
+Within-session Overhead: 50.0%
+"""
+        )
+        assert result.exit_code == 0

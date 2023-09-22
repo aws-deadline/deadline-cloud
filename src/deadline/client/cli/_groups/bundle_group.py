@@ -81,9 +81,22 @@ def validate_parameters(ctx, param, value):
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--priority", type=int, help="The priority of the job.")
+@click.option(
+    "--max-failed-tasks-count",
+    type=int,
+    help="The maximum number of failed tasks before the job is marked as failed.",
+)
+@click.option(
+    "--max-retries-per-task",
+    type=int,
+    help="The maximum number of times to retry a task before it is marked as failed.",
+)
 @click.option(
     "--job-attachments-file-system",
-    help="The method to use for loading assets on the server (Overrides the default set in config file).  Options are COPIED (load assets onto server first then run the job) or VIRTUAL (load assets as requested).",
+    help="The method for accessing files from job attachments. "
+    + "COPIED means to copy files to the host and "
+    + "VIRTUAL means to load files when needed with a virtual file system.",
     type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
@@ -93,7 +106,16 @@ def validate_parameters(ctx, param, value):
 )
 @click.argument("job_bundle_dir")
 @_handle_error
-def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, **args):
+def bundle_submit(
+    job_bundle_dir,
+    job_attachments_file_system,
+    parameter,
+    yes,
+    priority,
+    max_failed_tasks_count,
+    max_retries_per_task,
+    **args,
+):
     """
     Submits an Open Job Description job bundle to Amazon Deadline Cloud.
     """
@@ -219,6 +241,13 @@ def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, *
 
         if job_parameters_formatted:
             create_job_args["parameters"] = job_parameters_formatted
+
+        if priority is not None:
+            create_job_args["priority"] = priority
+        if max_failed_tasks_count is not None:
+            create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
+        if max_retries_per_task is not None:
+            create_job_args["maxRetriesPerTask"] = max_retries_per_task
 
         if logging.DEBUG >= logger.getEffectiveLevel():
             logger.debug(json.dumps(create_job_args, indent=1))

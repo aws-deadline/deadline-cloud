@@ -40,6 +40,7 @@ _VALID_UI_CONTROLS = (
     "LINE_EDIT",
     "MULTILINE_EDIT",
     "SPIN_BOX",
+    "HIDDEN",
 )
 
 
