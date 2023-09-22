@@ -49,8 +49,12 @@ def decode_manifest(manifest: str) -> BaseAssetManifest:
         version = ManifestVersion(document["manifestVersion"])
     except ValueError:
         # Value of the manifest version is not one we know.
+        supported_versions = ", ".join(
+            [v.value for v in ManifestVersion if v != ManifestVersion.UNDEFINED]
+        )
         raise ManifestDecodeValidationError(
-            f"Unknown manifest version: {document['manifestVersion']}"
+            f"Unknown manifest version: {document['manifestVersion']} "
+            f"(Currently supported Manifest versions: {supported_versions})"
         )
     except KeyError:
         raise ManifestDecodeValidationError(
