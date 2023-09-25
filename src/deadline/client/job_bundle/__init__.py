@@ -29,6 +29,11 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
     job_history_dir = str(get_setting("settings.job_history_dir"))
     job_history_dir = os.path.expanduser(job_history_dir)
 
+    # Clean the submitter_name's characters
+    submitter_name_cleaned = "".join(
+        char for char in submitter_name if char.isalnum() or char in " -_"
+    )
+
     # Clean the job_name's characters and truncate for the filename
     job_name_cleaned = "".join(char for char in job_name if char.isalnum() or char in " -_")
     job_name_cleaned = job_name_cleaned[:128]
@@ -48,6 +53,8 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
         latest_dir = existing_dirs[-1]
         number = int(os.path.basename(latest_dir)[len(date_tag) + 1 :].split("-", 1)[0]) + 1
 
-    result = os.path.join(month_dir, f"{date_tag}-{number:02}-{submitter_name}-{job_name_cleaned}")
+    result = os.path.join(
+        month_dir, f"{date_tag}-{number:02}-{submitter_name_cleaned}-{job_name_cleaned}"
+    )
     os.makedirs(result)
     return result

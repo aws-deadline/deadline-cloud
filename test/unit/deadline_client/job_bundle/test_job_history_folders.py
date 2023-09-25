@@ -6,6 +6,7 @@ Tests the job bundle folders created for the user's history of jobs.
 
 import os
 import tempfile
+import pytest
 
 from freezegun import freeze_time
 
@@ -52,3 +53,45 @@ def test_create_job_bundle_dir(fresh_deadline_config):
         assert sorted(os.listdir(tmpdir)) == ["2023-01", "2023-04"]
         assert sorted(os.listdir(os.path.join(tmpdir, "2023-01"))) == EXPECTED_DIRS[:3]
         assert sorted(os.listdir(os.path.join(tmpdir, "2023-04"))) == EXPECTED_DIRS[3:]
+
+
+@pytest.mark.parametrize(
+    "submitter_name, job_name, freeze_date, expected_output_path",
+    [
+        pytest.param(
+            "SubmitterOne",
+            "JobOne",
+            "2023-09-25",
+            os.path.join("2023-09", "2023-09-25-01-SubmitterOne-JobOne"),
+            id="NoInvalidCharacters",
+        ),
+        pytest.param(
+            "Submitter...Two",
+            "Job@#$%^?Two",
+            "2023-09-25",
+            os.path.join("2023-09", "2023-09-25-01-SubmitterTwo-JobTwo"),
+            id="InvalidCharactersInNames",
+        ),
+        pytest.param(
+            "\\..\\..\\..\\SubmitterThree",
+            "./../../Job/Three",
+            "2023-09-25",
+            os.path.join("2023-09", "2023-09-25-01-SubmitterThree-JobThree"),
+            id="PathsInNames",
+        ),
+    ],
+)
+def test_create_job_bundle_dir_sanitization(
+    submitter_name: str,
+    job_name: str,
+    freeze_date: str,
+    expected_output_path: str,
+    fresh_deadline_config,
+):
+    # Use a temporary directory for the job history
+    with tempfile.TemporaryDirectory() as tmpdir, freeze_time(freeze_date):
+        config.set_setting("settings.job_history_dir", tmpdir)
+        assert job_bundle.create_job_history_bundle_dir(submitter_name, job_name) == os.path.join(
+            tmpdir, expected_output_path
+        )
+        assert os.path.isdir(os.path.join(tmpdir, expected_output_path))
