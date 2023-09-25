@@ -374,10 +374,17 @@ class DeadlineWorkstationConfigWidget(QWidget):
         # if the configured profile does not exist.
         try:
             session = boto3.Session()
-            aws_profile_names = session._session.full_config["profiles"].keys()
+            aws_profile_names = [
+                "(default)",
+                *(
+                    name
+                    for name in session._session.full_config["profiles"].keys()
+                    if name != "default"
+                ),
+            ]
         except ProfileNotFound:
             logger.exception("Failed to create boto3.Session for AWS profile list")
-            aws_profile_names = f"{NOT_VALID_MARKER} <failed to retrieve AWS profile names>"
+            aws_profile_names = [f"{NOT_VALID_MARKER} <failed to retrieve AWS profile names>"]
 
         self.aws_profile_names = aws_profile_names
         with block_signals(self.aws_profiles_box):
@@ -405,7 +412,10 @@ class DeadlineWorkstationConfigWidget(QWidget):
             aws_profile_name = config_file.get_setting(
                 "defaults.aws_profile_name", config=self.config
             )
-            if aws_profile_name not in self.aws_profile_names:
+            # Change the values representing the default to the UI value representing the default
+            if aws_profile_name in ("(default)", "default", ""):
+                aws_profile_name = "(default)"
+            elif aws_profile_name not in self.aws_profile_names:
                 aws_profile_name = f"{NOT_VALID_MARKER} {aws_profile_name}"
             index = self.aws_profiles_box.findText(aws_profile_name, Qt.MatchFixedString)
             if index >= 0:

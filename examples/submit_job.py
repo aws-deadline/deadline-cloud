@@ -40,7 +40,7 @@ def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_clien
         queue_id=queue_id,
         job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
     )
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(inputs, [outputDir])
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(inputs, [outputDir], [])
     (_, attachments) = asset_manager.upload_assets(manifests)
     attachments = attachments.to_dict()
     total = time.perf_counter() - start

@@ -3,6 +3,7 @@
 """
 All the `deadline bundle` commands.
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -11,21 +12,20 @@ import re
 import signal
 import textwrap
 from configparser import ConfigParser
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from botocore.exceptions import ClientError  # type: ignore[import]
 
 from deadline.client import api
-from deadline.client.api import get_boto3_client, get_queue_boto3_session
+from deadline.client.api import get_boto3_client, get_queue_user_boto3_session
 from deadline.client.api._session import _modified_logging_level
 from deadline.client.config import config_file, get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
-    FlatAssetReferences,
+    AssetReferences,
     split_parameter_args,
-    upload_job_attachments,
 )
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
@@ -125,6 +125,10 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
         click.echo(f"Submitting to Queue: {queue['displayName']}")
 
+        queue_parameter_definitions = api.get_queue_parameter_definitions(
+            farmId=farm_id, queueId=queue_id
+        )
+
         # Read in the job template
         file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
 
@@ -145,15 +149,21 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
         asset_references_obj = read_yaml_or_json_object(
             job_bundle_dir, "asset_references", required=False
         )
-        asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+        asset_references = AssetReferences.from_dict(asset_references_obj)
 
-        apply_job_parameters(parameter, job_bundle_dir, job_bundle_parameters, asset_references)
+        apply_job_parameters(
+            parameter,
+            job_bundle_dir,
+            job_bundle_parameters,
+            queue_parameter_definitions,
+            asset_references,
+        )
         app_parameters_formatted, job_parameters_formatted = split_parameter_args(
             job_bundle_parameters, job_bundle_dir
         )
 
         # Hash and upload job attachments if there are any
-        if asset_references:
+        if asset_references and "jobAttachmentSettings" in queue:
             # Extend input_filenames with all the files in the input_directories
             for directory in asset_references.input_directories:
                 for root, _, files in os.walk(directory):
@@ -162,7 +172,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
                     )
             asset_references.input_directories.clear()
 
-            queue_role_session = get_queue_boto3_session(
+            queue_role_session = get_queue_user_boto3_session(
                 deadline=deadline,
                 config=config,
                 farm_id=farm_id,
@@ -179,8 +189,7 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
             hash_summary, asset_manifests = _hash_attachments(
                 asset_manager,
-                asset_references.input_filenames,
-                asset_references.output_directories,
+                asset_references,
                 storage_profile_id=storage_profile_id,
                 config=config,
             )
@@ -269,8 +278,13 @@ def bundle_submit(job_bundle_dir, asset_loading_method, parameter, yes, **args):
 
 @cli_bundle.command(name="gui-submit")
 @click.argument("job_bundle_dir", required=False)
+@click.option(
+    "--browse",
+    is_flag=True,
+    help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, **args):
+def bundle_gui_submit(job_bundle_dir, browse, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
     """
@@ -279,10 +293,17 @@ def bundle_gui_submit(job_bundle_dir, **args):
     with gui_context_for_cli() as app:
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
-        submitter = show_job_bundle_submitter(job_bundle_dir)
+        if not job_bundle_dir and not browse:
+            raise DeadlineOperationError(
+                "Specify a job bundle directory or run the bundle command with the --browse flag"
+            )
 
-        if submitter:
-            response = submitter.show()
+        submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
+
+        if not submitter:
+            return
+
+        response = submitter.show()
 
         app.exec_()
 
@@ -299,8 +320,7 @@ def bundle_gui_submit(job_bundle_dir, **args):
 
 def _hash_attachments(
     asset_manager: S3AssetManager,
-    input_paths: Set[str],
-    output_paths: Set[str],
+    asset_references: AssetReferences,
     storage_profile_id: Optional[str] = None,
     config: Optional[ConfigParser] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
@@ -318,8 +338,9 @@ def _hash_attachments(
             return continue_submission
 
         hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
-            input_paths=sorted(input_paths),
-            output_paths=sorted(output_paths),
+            input_paths=sorted(asset_references.input_filenames),
+            output_paths=sorted(asset_references.output_directories),
+            referenced_paths=sorted(asset_references.referenced_paths),
             storage_profile_id=storage_profile_id,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=_update_hash_progress,
@@ -355,12 +376,12 @@ def _upload_attachments(
                 upload_progress.update(new_progress)
             return continue_submission
 
-        upload_summary, attachment_settings = upload_job_attachments(
-            asset_manager, manifests, _update_upload_progress
+        upload_summary, attachment_settings = asset_manager.upload_assets(
+            manifests, _update_upload_progress
         )
 
     api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
     click.echo("Upload Summary:")
     click.echo(textwrap.indent(str(upload_summary), "    "))
 
-    return attachment_settings
+    return attachment_settings.to_dict()

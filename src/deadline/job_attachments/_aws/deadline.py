@@ -16,6 +16,7 @@ from ..models import (
     JobAttachmentS3Settings,
     ManifestProperties,
     OperatingSystemFamily,
+    PathFormat,
     Queue,
     StorageProfile,
 )
@@ -89,7 +90,7 @@ def get_job(
                 ManifestProperties(
                     fileSystemLocationName=manifest_properties.get("fileSystemLocationName", None),
                     rootPath=manifest_properties["rootPath"],
-                    osType=OperatingSystemFamily(manifest_properties["osType"]),
+                    rootPathFormat=PathFormat(manifest_properties["rootPathFormat"]),
                     outputRelativeDirectories=manifest_properties["outputRelativeDirectories"],
                     inputManifestPath=manifest_properties.get("inputManifestPath", None),
                 )

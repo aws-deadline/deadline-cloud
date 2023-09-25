@@ -106,7 +106,7 @@ if __name__ == "__main__":
     start = time.perf_counter()
 
     (summary_statistics_hashing, manifests) = asset_manager.hash_assets_and_create_manifest(
-        files, [root_path / "outputs"]
+        files, [root_path / "outputs"], []
     )
     print(f"Summary Statistics for file hashing:\n{summary_statistics_hashing}")
 

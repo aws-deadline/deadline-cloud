@@ -20,10 +20,13 @@ from deadline.job_attachments import asset_sync, download, upload
 from deadline.job_attachments.asset_manifests import ManifestVersion
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import AssetSyncError, JobAttachmentsS3ClientError
-from deadline.job_attachments.models import Attachments, ManifestProperties, OperatingSystemFamily
+from deadline.job_attachments.models import (
+    Attachments,
+    ManifestProperties,
+    PathFormat,
+)
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
-    _get_deadline_formatted_os,
     _get_unique_dest_dir_name,
     _hash_data,
     _hash_file,
@@ -136,6 +139,7 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -202,6 +206,7 @@ def upload_input_files_one_asset_in_cas(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -281,6 +286,7 @@ def test_upload_input_files_all_assets_in_cas(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1028,6 +1034,7 @@ def upload_input_files_no_input_paths(
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1036,11 +1043,11 @@ def upload_input_files_no_input_paths(
     )
 
     # THEN
-    mock_submission_profile_name = _get_deadline_formatted_os()
+    mock_host_path_format_name = PathFormat.get_host_path_format_string()
     assert attachments.manifests == [
         ManifestProperties(
             rootPath=str(job_attachment_test.OUTPUT_PATH),
-            osType=OperatingSystemFamily(mock_submission_profile_name),
+            rootPathFormat=PathFormat(mock_host_path_format_name),
             outputRelativeDirectories=["."],
         )
     ]
@@ -1087,6 +1094,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[],
+        referenced_paths=[],
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1098,14 +1106,14 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     if manifests[0].asset_manifest is None:
         raise TypeError("Asset manifest must be set for this test.")
 
-    mock_submission_profile_name = _get_deadline_formatted_os()
+    mock_host_path_format_name = PathFormat.get_host_path_format_string()
     asset_root_hash = _hash_data(str(job_attachment_test.INPUT_PATH).encode())
     manifest_hash = _hash_data(bytes(manifests[0].asset_manifest.encode(), "utf-8"))
 
     assert len(attachments.manifests) == 1
     assert attachments.manifests[0].fileSystemLocationName is None
     assert attachments.manifests[0].rootPath == str(job_attachment_test.INPUT_PATH)
-    assert attachments.manifests[0].osType == OperatingSystemFamily(mock_submission_profile_name)
+    assert attachments.manifests[0].rootPathFormat == PathFormat(mock_host_path_format_name)
     assert attachments.manifests[0].outputRelativeDirectories == []
     assert attachments.manifests[0].inputManifestPath is not None
     assert attachments.manifests[0].inputManifestPath.startswith(
@@ -1191,6 +1199,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
         (_, manifests) = asset_manager.hash_assets_and_create_manifest(
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
             output_paths=[str(job_attachment_test.OUTPUT_PATH)],
+            referenced_paths=[],
             hash_cache_dir=str(job_attachment_test.hash_cache_dir),
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )

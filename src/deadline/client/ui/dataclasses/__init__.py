@@ -3,10 +3,11 @@
 """
 Contains dataclasses for holding UI parameter values, used by the widgets.
 """
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -21,16 +22,13 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
     # Shared settings
     name: str = field(default="Job Bundle")
     description: str = field(default="")
-    initial_status: str = field(default="READY")
-    max_failed_tasks_count: int = field(default=100)
-    max_retries_per_task: int = field(default=5)
-    priority: int = field(default=50)
-    override_rez_packages: bool = field(default=False)
-    rez_packages: str = field(default="")
 
     # Job Bundle settings
     input_job_bundle_dir: str = field(default="")
-    parameter_values: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: list[dict[str, Any]] = field(default_factory=list)
+
+    # Whether to allow ability to "Load a different job bundle"
+    browse_enabled: bool = field(default=False)
 
 
 @dataclass
@@ -45,12 +43,6 @@ class CliJobSettings:  # pylint: disable=too-many-instance-attributes
     # Shared settings
     name: str = field(default="CLI Job")
     description: str = field(default="")
-    initial_status: str = field(default="READY")
-    max_failed_tasks_count: int = field(default=20)
-    max_retries_per_task: int = field(default=5)
-    priority: int = field(default=50)
-    override_rez_packages: bool = field(default=False)
-    rez_packages: str = field(default="")
 
     # CLI job settings
     bash_script_contents: str = field(

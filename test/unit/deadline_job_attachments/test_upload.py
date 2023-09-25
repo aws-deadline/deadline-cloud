@@ -39,6 +39,7 @@ from deadline.job_attachments.models import (
     HashCacheEntry,
     JobAttachmentS3Settings,
     OperatingSystemFamily,
+    PathFormat,
     StorageProfile,
 )
 from deadline.job_attachments.progress_tracker import (
@@ -125,8 +126,8 @@ class TestUpload:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["e", "manifesthash"],
@@ -174,6 +175,7 @@ class TestUpload:
                     str(output_dir2),
                     "",
                 ],
+                referenced_paths=[],
                 hash_cache_dir=str(cache_dir),
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -188,7 +190,7 @@ class TestUpload:
                 manifests=[
                     ManifestProperties(
                         rootPath=asset_root,
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=[
@@ -206,7 +208,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily("linux").value,
+                        "rootPathFormat": PathFormat("posix").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": [
@@ -336,6 +338,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[input_c, input_d],
                 output_paths=[output_d],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -350,13 +353,14 @@ class TestUpload:
                 manifests=[
                     ManifestProperties(
                         rootPath=root_c,
-                        osType=OperatingSystemFamily.WINDOWS,
+                        rootPathFormat=PathFormat.WINDOWS,
                         inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=[],
                     ),
                     ManifestProperties(
                         rootPath=output_d,
+                        rootPathFormat=PathFormat.WINDOWS,
                         outputRelativeDirectories=["."],
                     ),
                 ],
@@ -369,13 +373,13 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{root_c}",
-                        "osType": OperatingSystemFamily("windows").value,
+                        "rootPathFormat": PathFormat("windows").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
                         "inputManifestHash": "manifesthash",
                     },
                     {
                         "rootPath": f"{output_d}",
-                        "osType": OperatingSystemFamily("windows").value,
+                        "rootPathFormat": PathFormat("windows").value,
                         "outputRelativeDirectories": [
                             ".",
                         ],
@@ -464,8 +468,8 @@ class TestUpload:
         asset_root = str(tmpdir)
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -506,6 +510,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -520,7 +525,7 @@ class TestUpload:
                 manifests=[
                     ManifestProperties(
                         rootPath=asset_root,
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=["outputs"],
@@ -534,7 +539,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{asset_root}",
-                        "osType": OperatingSystemFamily("linux").value,
+                        "rootPathFormat": PathFormat("posix").value,
                         "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": ["outputs"],
@@ -618,8 +623,8 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -656,6 +661,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -726,14 +732,14 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=mock_hash_file
         ), patch(
@@ -772,6 +778,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[already_uploaded_file, not_yet_uploaded_file],
                 output_paths=[],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -850,14 +857,14 @@ class TestUpload:
         """
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifesto", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
@@ -908,6 +915,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
                 output_paths=[],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -982,8 +990,8 @@ class TestUpload:
 
         # Given
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["a", "manifesthash"],
@@ -1010,6 +1018,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[],
                 output_paths=[output_dir],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1024,7 +1033,7 @@ class TestUpload:
                 manifests=[
                     ManifestProperties(
                         rootPath=output_dir,
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         outputRelativeDirectories=["."],
                     )
                 ],
@@ -1036,7 +1045,7 @@ class TestUpload:
                 "manifests": [
                     {
                         "rootPath": f"{output_dir}",
-                        "osType": OperatingSystemFamily("linux").value,
+                        "rootPathFormat": PathFormat("posix").value,
                         "outputRelativeDirectories": ["."],
                     }
                 ],
@@ -1188,7 +1197,7 @@ class TestUpload:
                 test_file = tmpdir.join("test.txt")
                 test_file.write("test")
                 asset_manager.hash_assets_and_create_manifest(
-                    [test_file], [], hash_cache_dir=cache_dir
+                    [test_file], [], [], hash_cache_dir=cache_dir
                 )
 
     @mock_sts
@@ -1419,8 +1428,8 @@ class TestUpload:
         expected_total_input_bytes = scene_file.size()
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["c", "manifesthash"],
@@ -1446,6 +1455,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[input_not_exist, scene_file],
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1456,10 +1466,7 @@ class TestUpload:
             )
 
             # Then
-            assert (
-                "Skipping uploading input as it either doesn't exist or is a directory: "
-                in caplog.text
-            )
+            assert "Skipping uploading input as it doesn't exist: " in caplog.text
 
             assert_progress_report_last_callback(
                 num_input_files=1,
@@ -1538,8 +1545,8 @@ class TestUpload:
 
         # WHEN
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._get_deadline_formatted_os",
-            return_value="linux",
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
         ), patch(
             f"{deadline.__package__}.job_attachments.upload._hash_data",
             side_effect=["manifest", "manifesthash"],
@@ -1565,6 +1572,7 @@ class TestUpload:
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[str(symlink_input_path)],
                 output_paths=[str(symlink_output_path)],
+                referenced_paths=[],
                 hash_cache_dir=str(cache_dir),
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1580,7 +1588,7 @@ class TestUpload:
                 manifests=[
                     ManifestProperties(
                         rootPath=expected_root,
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=["sym_op_test_dir"],
@@ -1725,11 +1733,12 @@ class TestUpload:
     )
     @patch.object(Path, "exists", return_value=True)
     @pytest.mark.parametrize(
-        "input_paths, output_paths, local_type_locations, shared_type_locations, expected_result",
+        "input_paths, output_paths, referenced_paths, local_type_locations, shared_type_locations, expected_result",
         [
             (
                 set(),  # input paths
                 set(),  # output paths
+                set(),  # referenced paths
                 {},  # File System Location (LOCAL type)
                 {},  # File System Location (SHARED type)
                 [],
@@ -1737,6 +1746,7 @@ class TestUpload:
             (
                 {"/home/username/docs/inputs/input1.txt"},  # input paths
                 {"/home/username/docs/outputs"},  # output paths
+                set(),  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
                 {},  # File System Location (SHARED type)
                 [
@@ -1754,6 +1764,7 @@ class TestUpload:
             (
                 {"/home/username/movie1/inputs/input1.txt"},  # input paths
                 {"/home/username/movie1/outputs"},  # output paths
+                set(),  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
                 {},  # File System Location (SHARED type)
                 [
@@ -1772,6 +1783,7 @@ class TestUpload:
             (
                 {"/mnt/shared/movie1/something.txt"},  # input paths
                 {"/home/username/movie1/outputs"},  # output paths
+                set(),  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
                 {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
                 [
@@ -1798,6 +1810,7 @@ class TestUpload:
                     "/home/username/movie1/outputs1",
                     "/home/username/movie1/outputs2",
                 },  # output paths
+                {"/home/username/movie1/outputs1/referenced/path"},  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
                 {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
                 [
@@ -1812,6 +1825,7 @@ class TestUpload:
                             Path("/home/username/movie1/outputs1"),
                             Path("/home/username/movie1/outputs2"),
                         },
+                        references={Path("/home/username/movie1/outputs1/referenced/path")},
                     ),
                     AssetRootGroup(
                         root_path="/home/username",
@@ -1832,6 +1846,7 @@ class TestUpload:
         queue_id: str,
         input_paths: Set[str],
         output_paths: Set[str],
+        referenced_paths: Set[str],
         local_type_locations: Dict[str, str],
         shared_type_locations: Dict[str, str],
         expected_result: List[AssetRootGroup],
@@ -1844,6 +1859,7 @@ class TestUpload:
         result = asset_manager._get_asset_groups(
             input_paths,
             output_paths,
+            referenced_paths,
             local_type_locations,
             shared_type_locations,
         )

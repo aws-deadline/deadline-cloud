@@ -6,6 +6,7 @@ UI widgets for the Job Attachments tab.
 from __future__ import annotations
 import os
 from logging import getLogger
+from typing import Optional
 
 from PySide2.QtWidgets import (  # type: ignore
     QAbstractItemView,
@@ -23,7 +24,7 @@ from PySide2.QtWidgets import (  # type: ignore
     QMessageBox,
 )
 
-from ...job_bundle.submission import FlatAssetReferences
+from ...job_bundle.submission import AssetReferences
 from .. import block_signals
 
 logger = getLogger(__name__)
@@ -43,8 +44,8 @@ class JobAttachmentsWidget(QWidget):
 
     def __init__(
         self,
-        auto_detected_attachments: FlatAssetReferences,
-        attachments: FlatAssetReferences,
+        auto_detected_attachments: AssetReferences,
+        attachments: AssetReferences,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -131,10 +132,13 @@ class JobAttachmentsWidget(QWidget):
         output_directories_layout.addWidget(self.output_directories_controls)
         output_directories_layout.addWidget(self.output_directories)
 
+        self.attachments_controls = self._build_attachment_controls()
+
+    def _build_attachment_controls(
+        self,
+    ) -> list[tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]]:
         # Put all the controls in a list of tuples for structured processing
-        self.attachments_controls: list[
-            tuple[set[str], set[str], QListWidget, JobAttachmentsControlsWidget]
-        ] = [
+        return [
             (
                 self.auto_detected_attachments.input_filenames,
                 self.attachments.input_filenames,
@@ -154,6 +158,19 @@ class JobAttachmentsWidget(QWidget):
                 self.output_directories_controls,
             ),
         ]
+
+    def refresh_ui(
+        self,
+        auto_detected_attachments: Optional[AssetReferences],
+        attachments: Optional[AssetReferences],
+    ):
+        """Refresh the job attachment lists if provided"""
+        if auto_detected_attachments:
+            self.auto_detected_attachments = auto_detected_attachments
+        if attachments:
+            self.attachments = attachments
+        self.attachments_controls = self._build_attachment_controls()
+        self._populate_attachment_lists()
 
     def _set_attachments_list(
         self, list_widget: QListWidget, auto_detected_paths: set[str], paths: set[str]
@@ -284,7 +301,7 @@ class JobAttachmentsWidget(QWidget):
                 f"The selected directories from the auto-detected list ({len(unremoved_dirs)} items) were not removed.",
             )
 
-    def get_asset_references(self) -> FlatAssetReferences:
+    def get_asset_references(self) -> AssetReferences:
         """
         Creates an asset_references object that can be saved as the
         asset_references.json|yaml file in a Job Bundle.

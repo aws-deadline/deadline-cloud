@@ -15,13 +15,14 @@ import time
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
-from deadline.client.job_bundle import submission
+from deadline.client.job_bundle.submission import AssetReferences
 from deadline.job_attachments.models import (
     AssetLoadingMethod,
     Attachments,
     ManifestProperties,
-    OperatingSystemFamily,
+    PathFormat,
 )
+from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 from ..shared_constants import (
@@ -431,10 +432,12 @@ def test_create_job_from_job_bundle_job_attachments(
     # Use a temporary directory for the job bundle
     with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
         _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+    ) as client_mock, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ), patch.object(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
-        submission.S3AssetManager, "upload_assets"
+        S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
     ):
@@ -490,14 +493,17 @@ def test_create_job_from_job_bundle_job_attachments(
 
         mock_hash_attachments.assert_called_once_with(
             ANY,
-            set(
-                [
-                    os.path.join(temp_assets_dir, "asset-1.txt"),
-                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
-                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
-                ]
+            AssetReferences(
+                input_filenames=set(
+                    [
+                        os.path.join(temp_assets_dir, "asset-1.txt"),
+                        os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
+                        os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
+                    ]
+                ),
+                output_directories=set([os.path.join(temp_assets_dir, "somedir")]),
+                referenced_paths=set(),
             ),
-            set([os.path.join(temp_assets_dir, "somedir")]),
             MOCK_STORAGE_PROFILE_ID,
             fake_hashing_callback,
         )
@@ -576,10 +582,12 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     # Use a temporary directory for the job bundle
     with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
         _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_boto3_session"), patch.object(
+    ) as client_mock, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ), patch.object(
         api._submit_job_bundle, "_hash_attachments"
     ) as mock_hash_attachments, patch.object(
-        submission.S3AssetManager, "upload_assets"
+        S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
     ):
@@ -592,7 +600,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
                 [
                     ManifestProperties(
                         rootPath="/mnt/root/path1",
-                        osType=OperatingSystemFamily.LINUX,
+                        rootPathFormat=PathFormat.POSIX,
                         inputManifestPath="mock-manifest",
                         inputManifestHash="mock-manifest-hash",
                         outputRelativeDirectories=["."],
@@ -641,8 +649,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
 
         mock_hash_attachments.assert_called_once_with(
             ANY,
-            set([os.path.join(temp_assets_dir, "asset-1.txt")]),
-            set(),
+            AssetReferences(input_filenames=set([os.path.join(temp_assets_dir, "asset-1.txt")])),
             MOCK_STORAGE_PROFILE_ID,
             fake_hashing_callback,
         )
@@ -656,7 +663,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
                 "manifests": [
                     {
                         "rootPath": "/mnt/root/path1",
-                        "osType": OperatingSystemFamily.LINUX,
+                        "rootPathFormat": PathFormat.POSIX,
                         "inputManifestPath": "mock-manifest",
                         "inputManifestHash": "mock-manifest-hash",
                         "outputRelativeDirectories": ["."],

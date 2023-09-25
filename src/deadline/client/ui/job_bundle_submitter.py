@@ -1,9 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+from __future__ import annotations
 
 import json
 import os
 from logging import getLogger
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from PySide2.QtCore import Qt  # pylint: disable=import-error
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -12,23 +13,24 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QMainWindow,
 )
 
+from ..exceptions import DeadlineOperationError
 from ..job_bundle import deadline_yaml_dump
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
     read_yaml_or_json_object,
 )
-from ..job_bundle.parameters import apply_job_parameters
+from ..job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from .dataclasses import JobBundleSettings
 from .dialogs.submit_job_to_deadline_dialog import SubmitJobToDeadlineDialog
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
-from ..job_bundle.submission import FlatAssetReferences
+from ..job_bundle.submission import AssetReferences
 
 logger = getLogger(__name__)
 
 
 def show_job_bundle_submitter(
-    input_job_bundle_dir: str = "", parent=None, f=Qt.WindowFlags()
+    *, input_job_bundle_dir: str = "", browse: bool = False, parent=None, f=Qt.WindowFlags()
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an Amazon Deadline Cloud job submission dialog for the provided job bundle.
@@ -55,9 +57,10 @@ def show_job_bundle_submitter(
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,
-        settings: JobBundleSettings,
         job_bundle_dir: str,
-        asset_references: FlatAssetReferences,
+        settings: JobBundleSettings,
+        queue_parameters: list[dict[str, Any]],
+        asset_references: AssetReferences,
     ) -> None:
         """
         Perform a submission when the submit button is pressed
@@ -87,25 +90,30 @@ def show_job_bundle_submitter(
             elif file_type == "JSON":
                 json.dump(template, f, indent=1)
 
-        parameters_values: List[Dict[str, Any]] = [
-            {"name": "deadline:priority", "value": settings.priority},
-            {"name": "deadline:targetTaskRunStatus", "value": settings.initial_status},
-            {"name": "deadline:maxFailedTasksCount", "value": settings.max_failed_tasks_count},
-            {"name": "deadline:maxRetriesPerTask", "value": settings.max_retries_per_task},
-        ]
-
         if asset_references:
             with open(
                 os.path.join(job_bundle_dir, "asset_references.yaml"), "w", encoding="utf8"
             ) as f:
                 deadline_yaml_dump(asset_references.to_dict(), f)
 
-        job_bundle_parameters = widget.job_settings.job_bundle_parameters
-
-        parameters_values.extend(settings.parameter_values)
+        # First filter the queue parameters to exclude any from the job template,
+        # then extend it with the job template parameters.
+        job_parameter_names = {param["name"] for param in settings.parameters}
+        parameters_values: list[dict[str, Any]] = [
+            {"name": param["name"], "value": param["value"]}
+            for param in queue_parameters
+            if param["name"] not in job_parameter_names
+        ]
+        parameters_values.extend(
+            {"name": param["name"], "value": param["value"]} for param in settings.parameters
+        )
 
         apply_job_parameters(
-            parameters_values, job_bundle_dir, job_bundle_parameters, FlatAssetReferences()
+            parameters_values,
+            job_bundle_dir,
+            settings.parameters,
+            queue_parameters,
+            AssetReferences(),
         )
 
         with open(os.path.join(job_bundle_dir, "parameter_values.yaml"), "w", encoding="utf8") as f:
@@ -117,18 +125,33 @@ def show_job_bundle_submitter(
     asset_references_obj = (
         read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
     )
-    asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+    asset_references = AssetReferences.from_dict(asset_references_obj)
 
     name = "Job Bundle Submission"
     if template:
         name = template.get("name", name)
 
+    if not os.path.isdir(input_job_bundle_dir):
+        raise DeadlineOperationError(f"Input Job Bundle Dir is not valid: {input_job_bundle_dir}")
+    initial_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
+    initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+    initial_settings.browse_enabled = browse
+
+    # Populate the initial queue parameter values based on the job template parameter values
+    initial_shared_parameter_values = {}
+    for parameter in initial_settings.parameters:
+        if "default" in parameter or "value" in parameter:
+            initial_shared_parameter_values[parameter["name"]] = parameter.get(
+                "value", parameter.get("default")
+            )
+
     submitter_dialog = SubmitJobToDeadlineDialog(
-        JobBundleSettingsWidget,
-        JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name),
-        asset_references,
-        FlatAssetReferences(),
-        on_create_job_bundle_callback,
+        job_setup_widget_type=JobBundleSettingsWidget,
+        initial_job_settings=initial_settings,
+        initial_shared_parameter_values=initial_shared_parameter_values,
+        auto_detected_attachments=asset_references,
+        attachments=AssetReferences(),
+        on_create_job_bundle_callback=on_create_job_bundle_callback,
         parent=parent,
         f=f,
     )

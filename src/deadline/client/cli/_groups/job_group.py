@@ -20,13 +20,12 @@ from deadline.job_attachments.download import OutputDownloader
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
-    OperatingSystemFamily,
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
 )
-from deadline.job_attachments._utils import _human_readable_file_size, _get_deadline_formatted_os
+from deadline.job_attachments._utils import _human_readable_file_size
 
 from ... import api
 from ...config import config_file
@@ -240,7 +239,7 @@ def _download_job_output(
 
     queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 
-    queue_role_session = api.get_queue_boto3_session(
+    queue_role_session = api.get_queue_user_boto3_session(
         deadline=deadline,
         config=config,
         farm_id=farm_id,
@@ -505,7 +504,7 @@ def _is_current_os_windows() -> bool:
     """
     Checks whether the current OS is Windows.
     """
-    return _get_deadline_formatted_os() == OperatingSystemFamily.WINDOWS.value
+    return sys.platform.startswith("win")
 
 
 def _is_path_in_windows_format(path_str: str) -> bool:

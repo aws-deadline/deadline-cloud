@@ -3,13 +3,14 @@
 """
 Provides the function to submit a job bundle to Amazon Deadline Cloud.
 """
+from __future__ import annotations
 
 import json
 import logging
 import time
 import os
 from configparser import ConfigParser
-from typing import Any, Callable, Dict, List, Optional, Tuple, Set
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from deadline.client import api
 from deadline.client.exceptions import DeadlineOperationError, CreateJobWaiterCanceled
@@ -17,9 +18,8 @@ from deadline.client.config import get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
-    FlatAssetReferences,
+    AssetReferences,
     split_parameter_args,
-    upload_job_attachments,
 )
 from deadline.job_attachments.models import (
     AssetRootManifest,
@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 
 def create_job_from_job_bundle(
     job_bundle_dir: str,
-    job_parameters: List[Dict[str, Any]] = [],
+    job_parameters: list[dict[str, Any]] = [],
+    queue_parameter_definitions: list[dict[str, Any]] = [],
     config: Optional[ConfigParser] = None,
     hashing_progress_callback: Optional[Callable] = None,
     upload_progress_callback: Optional[Callable] = None,
@@ -109,15 +110,23 @@ def create_job_from_job_bundle(
     asset_references_obj = read_yaml_or_json_object(
         job_bundle_dir, "asset_references", required=False
     )
-    asset_references = FlatAssetReferences.from_dict(asset_references_obj)
+    asset_references = AssetReferences.from_dict(asset_references_obj)
 
-    apply_job_parameters(job_parameters, job_bundle_dir, job_bundle_parameters, asset_references)
+    apply_job_parameters(
+        job_parameters,
+        job_bundle_dir,
+        job_bundle_parameters,
+        queue_parameter_definitions,
+        asset_references,
+    )
     app_parameters_formatted, job_parameters_formatted = split_parameter_args(
         job_bundle_parameters, job_bundle_dir
     )
 
+    queue = deadline.get_queue(farmId=create_job_args["farmId"], queueId=create_job_args["queueId"])
+
     # Hash and upload job attachments if there are any
-    if asset_references:
+    if asset_references and "jobAttachmentSettings" in queue:
         # Extend input_filenames with all the files in the input_directories
         for directory in asset_references.input_directories:
             for root, _, files in os.walk(directory):
@@ -126,11 +135,7 @@ def create_job_from_job_bundle(
                 )
         asset_references.input_directories.clear()
 
-        queue = deadline.get_queue(
-            farmId=create_job_args["farmId"], queueId=create_job_args["queueId"]
-        )
-
-        queue_role_session = api.get_queue_boto3_session(
+        queue_role_session = api.get_queue_user_boto3_session(
             deadline=deadline,
             config=config,
             farm_id=create_job_args["farmId"],
@@ -147,8 +152,7 @@ def create_job_from_job_bundle(
 
         asset_manifests = _hash_attachments(
             asset_manager,
-            asset_references.input_filenames,
-            asset_references.output_directories,
+            asset_references,
             storage_profile_id,
             hashing_progress_callback,
         )
@@ -243,8 +247,7 @@ def wait_for_create_job_to_complete(
 
 def _hash_attachments(
     asset_manager: S3AssetManager,
-    input_paths: Set[str],
-    output_paths: Set[str],
+    asset_references: AssetReferences,
     storage_profile_id: Optional[str] = None,
     hashing_progress_callback: Optional[Callable] = None,
     config: Optional[ConfigParser] = None,
@@ -261,8 +264,9 @@ def _hash_attachments(
         hashing_progress_callback = _default_update_hash_progress
 
     hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
-        input_paths=sorted(input_paths),
-        output_paths=sorted(output_paths),
+        input_paths=sorted(asset_references.input_filenames),
+        output_paths=sorted(asset_references.output_directories),
+        referenced_paths=sorted(asset_references.referenced_paths),
         storage_profile_id=storage_profile_id,
         hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
         on_preparing_to_submit=hashing_progress_callback,
@@ -289,9 +293,9 @@ def _upload_attachments(
     if not upload_progress_callback:
         upload_progress_callback = _default_update_upload_progress
 
-    upload_summary, attachment_settings = upload_job_attachments(
-        asset_manager, manifests, upload_progress_callback
+    upload_summary, attachment_settings = asset_manager.upload_assets(
+        manifests, upload_progress_callback
     )
     api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
 
-    return attachment_settings
+    return attachment_settings.to_dict()

@@ -36,7 +36,7 @@ from deadline.job_attachments.models import (  # noqa: E402 isort:skip
     ManifestProperties,
     Job,
     JobAttachmentS3Settings,
-    OperatingSystemFamily,
+    PathFormat,
     Queue,
 )
 
@@ -113,7 +113,7 @@ def fixture_default_attachments(farm_id, queue_id):
         manifests=[
             ManifestProperties(
                 rootPath="/tmp",
-                osType=OperatingSystemFamily.LINUX,
+                rootPathFormat=PathFormat.POSIX,
                 inputManifestPath=f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
                 inputManifestHash="manifesthash",
                 outputRelativeDirectories=["test/outputs"],
@@ -131,7 +131,7 @@ def fixture_vfs_attachments():
         manifests=[
             ManifestProperties(
                 rootPath="/tmp",
-                osType=OperatingSystemFamily.LINUX,
+                rootPathFormat=PathFormat.POSIX,
                 inputManifestPath="manifest.json",
                 inputManifestHash="manifesthash",
                 outputRelativeDirectories=["test/outputs"],
@@ -150,7 +150,7 @@ def fixture_windows_attachments():
         manifests=[
             ManifestProperties(
                 rootPath=r"C:\Users\temp",
-                osType=OperatingSystemFamily.WINDOWS,
+                rootPathFormat=PathFormat.WINDOWS,
                 inputManifestPath="manifest.json",
                 inputManifestHash="manifesthash",
                 outputRelativeDirectories=["test/outputs"],
@@ -168,7 +168,7 @@ def fixture_attachments_no_required_assets():
         manifests=[
             ManifestProperties(
                 rootPath="/tmp",
-                osType=OperatingSystemFamily.LINUX,
+                rootPathFormat=PathFormat.POSIX,
                 outputRelativeDirectories=["test/outputs"],
             )
         ],
