@@ -28,7 +28,7 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.upload import S3AssetManager
 
 from ... import api
-from ...cli.deadline_credentials_status import DeadlineCredentialsStatus
+from ..deadline_credentials_status import DeadlineCredentialsStatus
 from .. import block_signals
 from ...config import get_setting
 from ...config.config_file import str2bool

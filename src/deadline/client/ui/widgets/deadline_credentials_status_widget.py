@@ -16,7 +16,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
-from ...cli.deadline_credentials_status import DeadlineCredentialsStatus
+from ..deadline_credentials_status import DeadlineCredentialsStatus
 
 logger = getLogger(__name__)
 

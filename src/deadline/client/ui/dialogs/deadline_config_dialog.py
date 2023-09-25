@@ -39,7 +39,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
-from ...cli.deadline_credentials_status import DeadlineCredentialsStatus
+from ..deadline_credentials_status import DeadlineCredentialsStatus
 from ...config import config_file, get_setting_default, str2bool
 from .. import CancelationFlag, block_signals
 from ..widgets import DirectoryPickerWidget
