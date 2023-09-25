@@ -39,6 +39,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
+from ...cli.deadline_credentials_status import DeadlineCredentialsStatus
 from ...config import config_file, get_setting_default, str2bool
 from .. import CancelationFlag, block_signals
 from ..widgets import DirectoryPickerWidget
@@ -77,7 +78,7 @@ class DeadlineConfigDialog(QDialog):
 
         self.setWindowTitle("Amazon Deadline Cloud Workstation Configuration")
         self.changes_were_applied = False
-
+        self.deadline_credentials_status = DeadlineCredentialsStatus.getInstance()
         self._build_ui()
 
     def _build_ui(self):
@@ -89,10 +90,12 @@ class DeadlineConfigDialog(QDialog):
 
         self.layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        self.creds_status_box = DeadlineCredentialsStatusWidget(config=config_file.read_config())
+        self.creds_status_box = DeadlineCredentialsStatusWidget(self)
         self.layout.addWidget(self.creds_status_box)
-        self.creds_status_box.deadline_config_changed.connect(self.config_box.refresh)
-        self.creds_status_box.refresh_thread_update.connect(self.on_creds_status_update)
+        self.deadline_credentials_status.deadline_config_changed.connect(self.config_box.refresh)
+        self.deadline_credentials_status.api_availability_changed.connect(
+            self.on_creds_status_update
+        )
 
         # We only use a Close button, not OK/Cancel, because we live update the settings.
         self.button_box = QDialogButtonBox(
@@ -115,12 +118,12 @@ class DeadlineConfigDialog(QDialog):
 
     def on_login(self):
         DeadlineLoginDialog.login(parent=self, config=self.config_box.config)
-        self.creds_status_box.refresh_status()
+        self.deadline_credentials_status.refresh_status()
         self.config_box.refresh()
 
     def on_logout(self):
         api.logout(config=self.config_box.config)
-        self.creds_status_box.refresh_status()
+        self.deadline_credentials_status.refresh_status()
         self.config_box.refresh()
 
     def on_button_box_clicked(self, button):
@@ -131,13 +134,13 @@ class DeadlineConfigDialog(QDialog):
         # Enable the "Apply" button only if there are changes
         self.button_box.button(QDialogButtonBox.Apply).setEnabled(bool(self.config_box.changes))
         # Update the creds status with the refreshed config
-        self.creds_status_box.set_config(self.config_box.config)
+        self.deadline_credentials_status.set_config(self.config_box.config)
 
     def on_creds_status_update(self):
         # If the Amazon Deadline Cloud API is authorized successfully for the AWS profile
         # in the config dialog, refresh the farm/queue lists
-        if self.creds_status_box.deadline_authorized and config_file.get_setting(
-            "defaults.aws_profile_name", self.creds_status_box.config
+        if self.deadline_credentials_status.api_availability and config_file.get_setting(
+            "defaults.aws_profile_name", self.deadline_credentials_status.config
         ) == config_file.get_setting("defaults.aws_profile_name", self.config_box.config):
             self.config_box.refresh_lists()
 

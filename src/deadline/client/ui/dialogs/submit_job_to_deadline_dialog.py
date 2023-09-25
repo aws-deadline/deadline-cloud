@@ -28,6 +28,7 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.upload import S3AssetManager
 
 from ... import api
+from ...cli.deadline_credentials_status import DeadlineCredentialsStatus
 from ...config import get_setting
 from ...config.config_file import str2bool
 from ...job_bundle import create_job_history_bundle_dir
@@ -38,6 +39,9 @@ from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ...job_bundle.submission import FlatAssetReferences
 
 logger = logging.getLogger(__name__)
+
+# initialize early so once the UI opens, things are already initialized
+DeadlineCredentialsStatus.getInstance()
 
 
 class SubmitJobToDeadlineDialog(QDialog):
@@ -75,6 +79,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
+        self.deadline_credentials_status = DeadlineCredentialsStatus.getInstance()
 
         self._build_ui(
             job_setup_widget_type, initial_job_settings, auto_detected_attachments, attachments
@@ -90,21 +95,23 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Login and Logout buttons based on whether
         # the configured profile is for Deadline Cloud Monitor
         self.login_button.setEnabled(
-            self.creds_status_box.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+            self.deadline_credentials_status.creds_type
+            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
         )
         self.logout_button.setEnabled(
-            self.creds_status_box.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+            self.deadline_credentials_status.creds_type
+            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
         )
         # Enable/disable the Submit button based on whether the
         # Amazon Deadline Cloud API is accessible and the farm+queue are configured.
         self.submit_button.setEnabled(
-            self.creds_status_box.deadline_authorized is True
+            self.deadline_credentials_status.api_availability is True
             and get_setting("defaults.farm_id") != ""
             and get_setting("defaults.queue_id") != ""
         )
 
         self.shared_job_settings.deadline_settings_box.refresh_setting_controls(
-            self.creds_status_box.deadline_authorized
+            self.deadline_credentials_status.api_availability
         )
 
     def _build_ui(
@@ -126,9 +133,11 @@ class SubmitJobToDeadlineDialog(QDialog):
         self._build_job_settings_tab(job_setup_widget_type, initial_job_settings)
         self._build_job_attachments_tab(auto_detected_attachments, attachments)
 
-        self.creds_status_box = DeadlineCredentialsStatusWidget()
+        self.creds_status_box = DeadlineCredentialsStatusWidget(self)
         self.lyt.addWidget(self.creds_status_box)
-        self.creds_status_box.refresh_thread_update.connect(self.refresh_deadline_settings)
+        self.deadline_credentials_status.api_availability_changed.connect(
+            self.refresh_deadline_settings
+        )
 
         self.button_box = QDialogButtonBox(Qt.Horizontal)
         self.login_button = QPushButton("Login")
@@ -192,14 +201,14 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.refresh_deadline_settings()
         # This widget watches the creds files, but that does
         # not always catch a change so force a refresh here.
-        self.creds_status_box.refresh_status()
+        self.deadline_credentials_status.refresh_status()
 
     def on_logout(self):
         api.logout()
         self.refresh_deadline_settings()
         # This widget watches the creds files, but that does
         # not always catch a change so force a refresh here.
-        self.creds_status_box.refresh_status()
+        self.deadline_credentials_status.refresh_status()
 
     def on_settings(self):
         if DeadlineConfigDialog.configure_settings(parent=self):
