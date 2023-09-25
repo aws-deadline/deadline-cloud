@@ -126,10 +126,11 @@ class DeadlineCredentialsStatus(QObject):
             creds_config_changed = True
 
         # Make a copy of the config object
-        self.config = None
+        self.config = ConfigParser()
         if config:
-            self.config = ConfigParser()
             self.config.read_dict(config)
+        else:
+            self.config.read_dict(config_file.read_config())
 
         if creds_config_changed:
             self.refresh_status()
