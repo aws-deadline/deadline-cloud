@@ -115,7 +115,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             )
             self._start_load_queue_parameters_thread()
 
-    def _handle_background_queue_parameters_exception(self, title, error=None):
+    def _handle_background_queue_parameters_exception(self, title: str, error: BaseException):
         if self.__refresh_queue_parameters_thread:
             self.canceled.set_canceled()
             self.__refresh_queue_parameters_thread.join()
