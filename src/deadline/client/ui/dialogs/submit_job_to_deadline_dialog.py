@@ -137,7 +137,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button.setEnabled(enable)
 
         if not enable:
-            self.submit_button.setToolTip("Cannot submit job to deadline cloud. Invalid credentials or queue parameters.")
+            self.submit_button.setToolTip(
+                "Cannot submit job to deadline cloud. Invalid credentials or queue parameters."
+            )
         else:
             self.submit_button.setToolTip("")
 
