@@ -13,14 +13,15 @@ from deadline.job_attachments.download import OutputDownloader
 from deadline.job_attachments.exceptions import AssetSyncCancelledError
 
 """
-A testing script to simulate cancellation of (1) syncing inputs, and (2) downloading outputs.
+A testing script to simulate cancellation of (1) syncing inputs, or (2) downloading outputs.
 
 How to test:
+
 1. Run the script with the following command for each test:
   (1) To test canceling syncing inputs, run the following command:
-      $ python3 download_cancel_test.py sync_inputs -f <farm_id> -q <queue_id> -j <job_id>
+      python3 download_cancel_test.py sync_inputs -f <farm_id> -q <queue_id> -j <job_id>
   (2) To test canceling downloading outputs, run the following command:
-      $ python3 download_cancel_test.py download_outputs -f <farm_id> -q <queue_id> -j <job_id>
+      python3 download_cancel_test.py download_outputs -f <farm_id> -q <queue_id> -j <job_id>
 2. In the middle of downloading files, you can send a cencel signal by pressing 'k' key
    and then pressing 'Enter' key in succession. Confirm that cancelling is working as expected.
 """
@@ -79,13 +80,13 @@ def test_sync_inputs(
         job = get_job(farm_id=farm_id, queue_id=queue_id, job_id=job_id)
 
         print("Starting test to sync inputs...")
-        asset_sync = AssetSync()
+        asset_sync = AssetSync(farm_id=farm_id)
 
         try:
             download_start = time.perf_counter()
             (summary_statistics, local_roots) = asset_sync.sync_inputs(
                 s3_settings=queue.jobAttachmentSettings,
-                ja_settings=job.attachmentSettings,
+                attachments=job.attachments,
                 queue_id=queue_id,
                 job_id=job_id,
                 session_dir=pathlib.Path(temp_root_dir),
@@ -125,6 +126,8 @@ def test_download_outputs(
         download_start = time.perf_counter()
         output_downloader = OutputDownloader(
             s3_settings=queue.jobAttachmentSettings,
+            farm_id=farm_id,
+            queue_id=queue_id,
             job_id=job_id,
         )
         summary_statistics = output_downloader.download_job_output(
