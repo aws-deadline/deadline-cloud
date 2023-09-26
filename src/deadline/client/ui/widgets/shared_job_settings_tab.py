@@ -49,6 +49,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
     parameter_changed = Signal(dict)
 
+    # Emitted when the queue parameter validity state changes
+    valid_parameters = Signal(bool)
+
     # Emitted when the background refresh thread catches an exception,
     # provides (operation_name, BaseException)
     _background_exception = Signal(str, BaseException)
@@ -85,6 +88,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
         self.__refresh_queue_parameters_thread: Optional[threading.Thread] = None
         self.__refresh_queue_parameters_id = 0
+        self.__valid_queue = False
         self.canceled = CancelationFlag()
         self.destroyed.connect(self.canceled.set_canceled)
         self._queue_parameters_update.connect(self._handle_queue_parameters_update)
@@ -100,6 +104,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     def refresh_ui(self, job_settings: Any):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
+        self._start_load_queue_parameters_thread()
         self.refresh_queue_parameters()
 
     def refresh_queue_parameters(self):
@@ -115,7 +120,10 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             )
             self._start_load_queue_parameters_thread()
 
+
     def _handle_background_queue_parameters_exception(self, title: str, error: BaseException):
+        self.__valid_queue = False
+        self.valid_parameters.emit(False)
         if self.__refresh_queue_parameters_thread:
             self.canceled.set_canceled()
             self.__refresh_queue_parameters_thread.join()
@@ -132,6 +140,10 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.farm_id = farm_id = get_setting("defaults.farm_id")
         self.queue_id = queue_id = get_setting("defaults.queue_id")
         self.__refresh_queue_parameters_id += 1
+        if self.__refresh_queue_parameters_thread:
+            self.__refresh_queue_parameters_thread.join()
+
+        self.canceled = CancelationFlag()
         self.__refresh_queue_parameters_thread = threading.Thread(
             target=self._load_queue_parameters_thread_function,
             name="Amazon Deadline Cloud Load Queue Parameters Thread",
@@ -139,9 +151,14 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         )
         self.__refresh_queue_parameters_thread.start()
 
+    def is_queue_valid(self) -> bool:
+        return self.__valid_queue
+
     def _handle_queue_parameters_update(self, refresh_id, queue_parameters):
         # Apply the refresh if it's still for the latest call
         if refresh_id == self.__refresh_queue_parameters_id:
+            self.__valid_queue = True
+            self.valid_parameters.emit(True)
             # Apply the initial queue parameter values
             for parameter in queue_parameters:
                 if parameter["name"] in self.initial_shared_parameter_values:
