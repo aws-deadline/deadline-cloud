@@ -107,15 +107,22 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         If the default queue id has changed, refresh the queue parameters.
         """
         queue_id = get_setting("defaults.queue_id")
-        if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id:
+        if not self.canceled and (
+            self.queue_parameters_box.async_loading_state or queue_id != self.queue_id
+        ):
             self.queue_parameters_box.rebuild_ui(
                 async_loading_state="Reloading Queue Environments..."
             )
             self._start_load_queue_parameters_thread()
 
-    def _handle_background_queue_parameters_exception(self, e):
+    def _handle_background_queue_parameters_exception(self, title, error=None):
+        if self.__refresh_queue_parameters_thread:
+            self.canceled.set_canceled()
+            self.__refresh_queue_parameters_thread.join()
         self.queue_parameters_box.rebuild_ui(
-            async_loading_state="Error Loading Queue Environments."
+            async_loading_state="Error Loading Queue Environments: {}\n\nError Traceback: {}".format(
+                title, error
+            )
         )
 
     def _start_load_queue_parameters_thread(self):
@@ -151,7 +158,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
                 self._queue_parameters_update.emit(refresh_id, queue_parameters)
         except BaseException as e:
             if not self.canceled:
-                self._background_exception.emit("Load Queue Parameters", e)
+                self._background_exception.emit("Invalid Queue Parameters", e)
 
     def update_settings(self, settings):
         self.shared_job_properties_box.update_settings(settings)
