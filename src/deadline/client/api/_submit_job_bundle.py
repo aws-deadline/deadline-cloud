@@ -171,7 +171,11 @@ def create_job_from_job_bundle(
     if logging.DEBUG >= logger.getEffectiveLevel():
         logger.debug(json.dumps(create_job_args, indent=1))
 
+    api.get_telemetry_client(config=config).record_test_event("test-submission-ryancaji")
+    print("hello from _submit_job_bundly")
+    logger.debug(f"hello again")
     create_job_response = deadline.create_job(**create_job_args)
+
 
     logger.debug(f"CreateJob Response {create_job_response}")
 

@@ -383,6 +383,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                     session=queue_role_session,
                 )
 
+            api.get_telemetry_client().record_submission({"test: test"})
+
             self.create_job_response = job_progress_dialog.start_submission(
                 farm_id,
                 queue_id,
@@ -393,9 +395,11 @@ class SubmitJobToDeadlineDialog(QDialog):
                 deadline,
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
             )
+            
         except Exception as exc:
             logger.exception("error submitting job")
             QMessageBox.warning(self, f"{settings.submitter_name} Job Submission", str(exc))
+            api.get_telemetry_client().record_submission({"failed: failed"})
 
         if self.create_job_response:
             # Close the submitter window to signal the submission is done

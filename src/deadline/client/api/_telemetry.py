@@ -60,6 +60,7 @@ class TelemetryClient:
         )
         if self.telemetry_opted_out:
             return
+        #self.endpoint: str = "https://management.alpha.bealine-dev.us-west-2.amazonaws.com/2023-10-12/telemetry"
         self.endpoint: str = f"{config_file.get_setting('settings.deadline_endpoint_url', config=config)}/2023-10-12/telemetry"
 
         # IDs for this session
@@ -94,7 +95,7 @@ class TelemetryClient:
     def _get_env_summary(self) -> Dict[str, Any]:
         """Builds up a dict of non-identifiable information the environment."""
         return {
-            "service": "deadline-cloud-library",
+            "service": "deadline-cloud-library-ryancaji",
             "version": ".".join(version.split(".")[:3]),
             "pythonVersion": platform.python_version(),
         }
@@ -147,6 +148,42 @@ class TelemetryClient:
             except Exception as ex:
                 logger.debug(f"Exception sending telemetry: {str(ex)}")
             self.event_queue.task_done()
+    
+    def process_single_event(self):
+        event_data: Optional[TelemetryEvent] = self.event_queue.get()
+        # We've received the shutdown signal
+        if event_data is None:
+            return
+
+        headers = {"Accept": "application-json", "Content-Type": "application-json"}
+        request_body = {
+            "BatchId": str(uuid.uuid4()),
+            "RumEvents": [
+                {
+                    "details": "{}",
+                    "id": str(uuid.uuid4()),
+                    "metadata": str(json.dumps(event_data.event_body)),
+                    "timestamp": int(datetime.now().timestamp()),
+                    "type": event_data.event_type,
+                },
+            ],
+            "UserDetails": {"sessionId": self.session_id, "userId": self.telemetry_id},
+        }
+        request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
+        req = request.Request(url=self.endpoint, data=request_body_encoded, headers=headers)
+        try:
+            print("hello")
+            print(f"Sending telemetry data: {request_body}")
+            with request.urlopen(req):
+                print("hello yay")
+                print("Successfully sent telemetry.")
+        except error.HTTPError as httpe:
+            print("hello o no")
+            print(f"HTTPError sending telemetry: {str(httpe)}")
+        except Exception as ex:
+            print("hello uh oh")
+            print(f"Exception sending telemetry: {str(ex)}")
+        self.event_queue.task_done()        
 
     def _record_summary_statistics(
         self, event_type: str, summary: SummaryStatistics, from_gui: bool
@@ -172,6 +209,38 @@ class TelemetryClient:
         self._record_summary_statistics(
             "com.amazon.rum.job_attachments.upload_summary", summary, from_gui
         )
+    
+    def _record_event(self, data_body: Dict[str, Any], event_type: str, from_gui: bool):
+        if self.telemetry_opted_out:
+            return
+        data_body.update(self.env_info)
+        data_body.update(self.system_info)
+        if self.user_id:
+            data_body["userId"] = self.user_id
+        if self.studio_id:
+            data_body["studioId"] = self.studio_id
+        data_body["usageMode"] = "GUI" if from_gui else "CLI"        
+        self.event_queue.put_nowait(TelemetryEvent(event_type=event_type, event_body=data_body))
+
+
+    def record_submission(self, data: Dict[str, Any], from_gui: bool = False):
+        self._record_event(data_body=data, event_type="com.amazon.rum.job.submision", from_gui=from_gui)
+
+    def record_submitter_callback(self, submitter: str, from_gui: bool = False):
+        data_body: Dict[str, Any] = {"Submitter": submitter}
+        self._record_event(data_body=data_body, event_type="com.amazon.rum.submitter.callback", from_gui=from_gui)
+
+    def record_test_event(self, event_type: str):
+        if self.telemetry_opted_out:
+            return
+        data_body: Dict[str, Any] = {}
+        data_body.update(self.env_info)
+        data_body.update(self.system_info)
+        if self.user_id:
+            data_body["userId"] = self.user_id
+        if self.studio_id:
+            data_body["studioId"] = self.studio_id
+        self.event_queue.put_nowait(TelemetryEvent(event_type=event_type, event_body=data_body))
 
 
 def get_telemetry_client(config: Optional[ConfigParser] = None) -> TelemetryClient:
