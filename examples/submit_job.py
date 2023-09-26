@@ -2,14 +2,6 @@
 
 #! /usr/bin/env python3
 
-"""
-This is a sample script that illustrates how to submit a custom job using
-the job attachments library.
-
-Example usage:
-python submit_job.py -f $FARM_ID -q $QUEUE_ID -r /tmp/asset_root -i /tmp/asset_root/inputs -o /tmp/asset_root/outputs
-"""
-
 import argparse
 import pprint
 import time
@@ -19,6 +11,16 @@ import boto3
 
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.models import JobAttachmentS3Settings
+
+"""
+This is a sample script that illustrates how to submit a custom job using the
+Job Attachments library. Please make sure to specify `endpoint_url` to the target
+endpoint you want to test, when creating a (boto3) service client for deadline.
+
+Example usage:
+
+python submit_job.py -f $FARM_ID -q $QUEUE_ID -i /tmp/asset_root/inputs -o /tmp/asset_root/outputs
+"""
 
 
 def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_client):
@@ -50,12 +52,12 @@ def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_clien
     return attachments
 
 
-JOB_TEMPLATE = """specificationVersion: '2022-09-01'
+JOB_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
 name: SubmitJobExample
 description: >
     A Job that counts the number of files and total size,
     and also creates a default output file.
-parameters:
+parameterDefinitions:
   - name: DataDir
     type: PATH
     objectType: DIRECTORY
@@ -165,7 +167,7 @@ if __name__ == "__main__":
     deadline_client = boto3.client(
         "deadline",
         region_name="us-west-2",
-        endpoint_url="https://gamma.us-west-2.bealine.creative-tools.aws.dev",
+        endpoint_url="https://management.gamma.bealine-dev.us-west-2.amazonaws.com",
     )
 
     attachments = process_job_attachments(

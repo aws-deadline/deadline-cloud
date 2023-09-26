@@ -8,12 +8,14 @@ import sys
 import time
 
 from deadline.job_attachments._aws.deadline import get_queue
+from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.download import download_files_from_manifests, get_manifest_from_s3
+from deadline.job_attachments.models import S3_MANIFEST_FOLDER_NAME
 from deadline.job_attachments.upload import S3AssetManager
 
-NUM_SMALL_FILES = 20000
-NUM_MEDIUM_FILES = 20000
-NUM_LARGE_FILES = 1
+NUM_SMALL_FILES = 2000
+NUM_MEDIUM_FILES = 2000
+NUM_LARGE_FILES = 0
 
 """
 A simple scale testing script for measuring input file upload and hashing speed.
@@ -22,11 +24,16 @@ for the given Farm's Queue.
 
 Optionally, downloads the same files that were uploaded, to a different directory.
 
-You can profile this by running with cProfile:
-python -m cProfile -o profile.prof upload_scale_test.py -f $FARM_ID -q $QUEUE_ID
+Example usage:
 
-You can then visualize the data by running it through a tool like 'snakeviz' (just pip install):
-snakeviz profile.prof
+- You can run this command (assuming you have a Farm configured with a Queue):
+  python3 upload_scale_test.py -f $FARM_ID -q $QUEUE_ID
+
+- You can profile this by running with cProfile:
+  python -m cProfile -o profile.prof upload_scale_test.py -f $FARM_ID -q $QUEUE_ID
+
+- You can then visualize the data by running it through a tool like 'snakeviz' (just pip install):
+  snakeviz profile.prof
 """
 
 if __name__ == "__main__":
@@ -99,7 +106,7 @@ if __name__ == "__main__":
 
     queue = get_queue(farm_id=farm_id, queue_id=queue_id)
     asset_manager = S3AssetManager(
-        job_attachment_settings=queue.jobAttachmentSettings, farm_id=farm_id, queue_id=queue_id
+        farm_id=farm_id, queue_id=queue_id, job_attachment_settings=queue.jobAttachmentSettings
     )
 
     print("\nStarting upload test...")
@@ -121,16 +128,14 @@ if __name__ == "__main__":
     if not args.skip_download:
         print("\nStarting download test...")
         start = time.perf_counter()
-        man_prefx = (
-            attachment_settings.assetRoots[0]
-            .requiredAssets[0]
-            .manifestUrl.replace(f"s3://{queue.jobAttachmentSettings.s3BucketName}/", "")
-        )
-        man = get_manifest_from_s3(man_prefx, queue.jobAttachmentSettings.s3BucketName)
+        manifest_key = f"{queue.jobAttachmentSettings.rootPrefix}/{S3_MANIFEST_FOLDER_NAME}/{attachment_settings.manifests[0].inputManifestPath}"
+        manifest = get_manifest_from_s3(manifest_key, queue.jobAttachmentSettings.s3BucketName)
+        with open(manifest) as manifest_file:
+            asset_manifest = decode_manifest(manifest_file.read())
         download_files_from_manifests(
-            queue.jobAttachmentSettings.s3BucketName,
-            {"/tmp/test_download": [man]},
-            queue.jobAttachmentSettings.full_cas_prefix(),
+            s3_bucket=queue.jobAttachmentSettings.s3BucketName,
+            manifests_by_root={"/tmp/test_download": asset_manifest},
+            cas_prefix=queue.jobAttachmentSettings.full_cas_prefix(),
         )
         total = time.perf_counter() - start
         print(f"Finished downloading after {total} seconds")

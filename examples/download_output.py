@@ -2,7 +2,6 @@
 
 #! /usr/bin/env python3
 import argparse
-import pathlib
 import sys
 import time
 
@@ -16,7 +15,7 @@ include the Job, Step, and Task ID to get the outputs for a specific Task.
 
 Example usage:
 
-python download_output.py -f $FARM_ID -q $QUEUE_ID -j $JOB_ID -d /path/to/download/to
+python download_output.py -f $FARM_ID -q $QUEUE_ID -j $JOB_ID
 """
 
 if __name__ == "__main__":
@@ -41,9 +40,6 @@ if __name__ == "__main__":
         type=str,
         help="Optional. Deadline Task you want outputs of. If specifying, must include Step ID.",
     )
-    parser.add_argument(
-        "-d", "--download-dir", type=str, help="Where files will be downloaded to.", required=True
-    )
     args = parser.parse_args()
 
     farm_id = args.farm_id
@@ -56,18 +52,18 @@ if __name__ == "__main__":
         print("Must specify Step ID when including Task ID! Stopping.")
         sys.exit()
 
-    down_dir = pathlib.Path(args.download_dir)
-    if not down_dir.is_dir():
-        print("Download directory given is not a directory! Stopping.")
-        sys.exit()
-
     print("\nGetting queue settings...")
     settings = get_queue(farm_id, queue_id).jobAttachmentSettings
 
     print("\nStarting download...")
     start = time.perf_counter()
     output_downloader = OutputDownloader(
-        s3_settings=settings, job_id=job_id, step_id=step_id, task_id=task_id
+        s3_settings=settings,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+        step_id=step_id,
+        task_id=task_id,
     )
     output_downloader.download_job_output()
     total = time.perf_counter() - start
