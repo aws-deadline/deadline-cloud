@@ -91,7 +91,9 @@ def get_job(
                     fileSystemLocationName=manifest_properties.get("fileSystemLocationName", None),
                     rootPath=manifest_properties["rootPath"],
                     rootPathFormat=PathFormat(manifest_properties["rootPathFormat"]),
-                    outputRelativeDirectories=manifest_properties["outputRelativeDirectories"],
+                    outputRelativeDirectories=manifest_properties.get(
+                        "outputRelativeDirectories", None
+                    ),
                     inputManifestPath=manifest_properties.get("inputManifestPath", None),
                 )
                 for manifest_properties in response["attachments"]["manifests"]

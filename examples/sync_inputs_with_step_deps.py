@@ -17,9 +17,9 @@ have an S3 bucket set up for Job Attachments, and inside the bucket, prepare a j
 that has assets and outputs on two or more different steps.
 
 How to test:
+
 1. Run the script with the following command:
-   $ python3 sync_inputs_with_step_deps.py sync_inputs -f <farm_id> -q <queue_id>
-     -j <job_id> -s <a list of step ids separated by a whitespace>
+   python3 sync_inputs_with_step_deps.py -f <farm_id> -q <queue_id> -j <job_id> -s <a list of step ids separated by a whitespace>
 2. See the logs on the console to confirm whether the expected files have been
    downloaded to the temporary (session) directory. (This directory will be deleted
    when the test is finished.)
@@ -71,7 +71,7 @@ def test_sync_inputs(
         job = get_job(farm_id=farm_id, queue_id=queue_id, job_id=job_id)
 
         print("Starting test to sync inputs...\n")
-        asset_sync = AssetSync()
+        asset_sync = AssetSync(farm_id=farm_id)
 
         download_start = time.perf_counter()
 
@@ -92,10 +92,26 @@ def test_sync_inputs(
 
         print("\nListing files in the temporary directory:")
         for pathmapping in local_roots:
-            for file in pathlib.Path(pathmapping["destination_path"]).iterdir():
+            all_files = _get_files_list_recursively(pathlib.Path(pathmapping["destination_path"]))
+            for file in all_files:
                 print(file)
 
     print(f"\nCleaned up the temporary directory: {temp_root_dir}")
+
+
+def _get_files_list_recursively(directory: pathlib.Path):
+    files_list = []
+
+    for file in directory.iterdir():
+        if file.is_file():
+            files_list.append(file)
+
+    for subdirectory in directory.iterdir():
+        if subdirectory.is_dir():
+            subdirectory_files = _get_files_list_recursively(subdirectory)
+            files_list.extend(subdirectory_files)
+
+    return files_list
 
 
 if __name__ == "__main__":
