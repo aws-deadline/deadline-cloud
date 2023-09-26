@@ -104,7 +104,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     def refresh_ui(self, job_settings: Any):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
-        self._start_load_queue_parameters_thread()
+        if not self.__refresh_queue_parameters_thread.is_alive():
+            self._start_load_queue_parameters_thread()
         self.refresh_queue_parameters()
 
     def refresh_queue_parameters(self):
@@ -139,9 +140,6 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.farm_id = farm_id = get_setting("defaults.farm_id")
         self.queue_id = queue_id = get_setting("defaults.queue_id")
         self.__refresh_queue_parameters_id += 1
-        if self.__refresh_queue_parameters_thread:
-            self.__refresh_queue_parameters_thread.join()
-
         self.canceled = CancelationFlag()
         self.__refresh_queue_parameters_thread = threading.Thread(
             target=self._load_queue_parameters_thread_function,
