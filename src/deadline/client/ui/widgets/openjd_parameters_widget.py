@@ -100,6 +100,8 @@ class OpenJDParametersWidget(QWidget):
             loading = QLabel(async_loading_state, self)
             loading.setAlignment(Qt.AlignCenter)
             loading.setMinimumSize(100, 30)
+            loading.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            loading.setWordWrap(True)
             layout.addWidget(loading)
             layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
             self.async_loading_state = async_loading_state
