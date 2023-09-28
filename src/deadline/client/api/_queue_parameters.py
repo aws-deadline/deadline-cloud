@@ -47,12 +47,14 @@ def get_queue_parameter_definitions(
 
     queue_parameters_definitions: dict[str, dict[str, Any]] = {}
     for template in queue_environment_templates:
-        if "parameterDefinitions" not in template:
+        param_definitions = template.get("parameterDefinitions")
+        # Template is invalid if the parameterDefinitions value is missing, empty, or not a list
+        if not param_definitions or not isinstance(param_definitions, list):
             raise DeadlineOperationError(
                 "'parameterDefinitions' not in queue template keys: %s" % template.keys()
             )
 
-        for parameter in template["parameterDefinitions"]:
+        for parameter in param_definitions:
             # If there is no group label, set it to the name of the Queue Environment
             if not parameter.get("userInterface", {}).get("groupLabel"):
                 if "userInterface" not in parameter:
