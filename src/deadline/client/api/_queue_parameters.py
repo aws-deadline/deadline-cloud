@@ -48,7 +48,7 @@ def get_queue_parameter_definitions(
     queue_parameters_definitions: dict[str, dict[str, Any]] = {}
     for template in queue_environment_templates:
         param_definitions = template.get("parameterDefinitions")
-        # Template is invalid if the parameterDefinitions value is missing, empty, or not a list
+        # Template is not valid if the parameterDefinitions value is missing, empty, or not a list
         if not param_definitions or not isinstance(param_definitions, list):
             raise DeadlineOperationError(
                 "'parameterDefinitions' not in queue template keys: %s" % template.keys()
