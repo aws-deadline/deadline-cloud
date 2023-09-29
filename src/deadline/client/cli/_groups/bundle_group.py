@@ -346,7 +346,9 @@ def _hash_attachments(
             on_preparing_to_submit=_update_hash_progress,
         )
 
-    api.get_telemetry_client(config=config).record_hashing_summary(hashing_summary)
+    api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
+        hashing_summary
+    )
     click.echo("Hashing Summary:")
     click.echo(textwrap.indent(str(hashing_summary), "    "))
 
@@ -380,7 +382,9 @@ def _upload_attachments(
             manifests, _update_upload_progress
         )
 
-    api.get_telemetry_client(config=config).record_upload_summary(upload_summary)
+    api.get_deadline_cloud_library_telemetry_client(config=config).record_upload_summary(
+        upload_summary
+    )
     click.echo("Upload Summary:")
     click.echo(textwrap.indent(str(upload_summary), "    "))
 
