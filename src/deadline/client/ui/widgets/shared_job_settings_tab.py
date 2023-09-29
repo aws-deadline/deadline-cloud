@@ -104,11 +104,6 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     def refresh_ui(self, job_settings: Any):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
-        if (
-            self.__refresh_queue_parameters_thread
-            and not self.__refresh_queue_parameters_thread.is_alive()
-        ):
-            self._start_load_queue_parameters_thread()
         self.refresh_queue_parameters()
 
     def refresh_queue_parameters(self):
@@ -116,13 +111,24 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         If the default queue id has changed, refresh the queue parameters.
         """
         queue_id = get_setting("defaults.queue_id")
-        if not self.canceled and (
-            self.queue_parameters_box.async_loading_state or queue_id != self.queue_id
-        ):
+        if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id:
             self.queue_parameters_box.rebuild_ui(
                 async_loading_state="Reloading Queue Environments..."
             )
-            self._start_load_queue_parameters_thread()
+            # Join the thread if the queue id has changed and the thread is running
+            if (
+                queue_id != self.queue_id
+                and self.__refresh_queue_parameters_thread
+                and self.__refresh_queue_parameters_thread.is_alive()
+            ):
+                self.__refresh_queue_parameters_thread.join()
+
+            # Start the thread if it doesn't exist or is not alive
+            if (
+                not self.__refresh_queue_parameters_thread
+                or not self.__refresh_queue_parameters_thread.is_alive()
+            ):
+                self._start_load_queue_parameters_thread()
 
     def _handle_background_queue_parameters_exception(self, title: str, error: BaseException):
         self.__valid_queue = False
