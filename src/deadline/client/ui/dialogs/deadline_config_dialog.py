@@ -76,7 +76,6 @@ class DeadlineConfigDialog(QDialog):
         )
 
         self.setWindowTitle("Amazon Deadline Cloud Workstation Configuration")
-        self.changes_were_applied = False
 
         self._build_ui()
 
@@ -108,6 +107,10 @@ class DeadlineConfigDialog(QDialog):
         self.logout_button.clicked.connect(self.on_logout)
         self.button_box.addButton(self.logout_button, QDialogButtonBox.ResetRole)
         self.layout.addWidget(self.button_box)
+
+    @property
+    def changes_were_applied(self) -> bool:
+        return self.config_box.changes_were_applied
 
     def accept(self):
         if self.config_box.apply():
@@ -165,6 +168,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         self.changes = {}
         self.config: Optional[ConfigParser] = None
+        self.changes_were_applied = False
 
         self._build_ui()
         self._fill_aws_profiles_box()
@@ -471,12 +475,16 @@ class DeadlineWorkstationConfigWidget(QWidget):
             config_file.set_setting(setting_name, value, self.config)
         root.setLevel(config_file.get_setting("settings.log_level"))
 
+        # Only update self.changes_were_applied if false. We don't want to invalidate that a change has
+        # occurred if the user repeatedly hits "Apply" or hits "Apply" and then "Save".
+        if not self.changes_were_applied:
+            self.changes_were_applied = len(self.changes) > 0
+
         self.changes.clear()
 
         # The file watcher will see the file modification and call refresh() for us
         config_file.write_config(self.config)
 
-        self.changes_were_applied = False
         return True
 
     def aws_profile_changed(self, value):
