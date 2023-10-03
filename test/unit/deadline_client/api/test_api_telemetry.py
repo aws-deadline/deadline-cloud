@@ -2,6 +2,7 @@
 
 import pytest
 import uuid
+import time
 
 from unittest.mock import patch, MagicMock
 from dataclasses import asdict
@@ -22,7 +23,9 @@ def fixture_telemetry_client(fresh_deadline_config):
         "get_user_and_identity_store_id",
         side_effect=[("user-id", "identity-store-id")],
     ):
-        return TelemetryClient(config=config.config_file.read_config())
+        return TelemetryClient(
+            "test-library", "0.1.2.1234", config=config.config_file.read_config()
+        )
 
 
 def test_opt_out(fresh_deadline_config):
@@ -31,19 +34,19 @@ def test_opt_out(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     config.set_setting("telemetry.opt_out", "true")
     # WHEN
-    client = TelemetryClient(config=config.config_file.read_config())
+    client = TelemetryClient(
+        "test-library", "test-version", config=config.config_file.read_config()
+    )
     # THEN
     assert not hasattr(client, "endpoint")
     assert not hasattr(client, "session_id")
     assert not hasattr(client, "telemetry_id")
-    assert not hasattr(client, "studio_id")
-    assert not hasattr(client, "user_id")
-    assert not hasattr(client, "env_info")
+    assert not hasattr(client, "system_metadata")
     assert not hasattr(client, "event_queue")
     assert not hasattr(client, "processing_thread")
     # Ensure nothing blows up if we try recording telemetry after we've opted out
-    client.record_hashing_summary(SummaryStatistics(), True)
-    client.record_upload_summary(SummaryStatistics(), False)
+    client.record_hashing_summary(SummaryStatistics(), from_gui=True)
+    client.record_upload_summary(SummaryStatistics(), from_gui=False)
 
 
 def test_get_telemetry_identifier(telemetry_client):
@@ -78,9 +81,36 @@ def test_process_event_queue_thread(telemetry_client):
     assert queue_mock.get.call_count == 2
 
 
+@pytest.mark.parametrize(
+    "http_code,attempt_count",
+    [
+        (400, 1),
+        (429, TelemetryClient.MAX_RETRY_ATTEMPTS),
+        (500, TelemetryClient.MAX_RETRY_ATTEMPTS),
+    ],
+)
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread_handles_errors(telemetry_client):
-    """Test that the thread continues after getting exceptions"""
+def test_process_event_queue_thread_retries_and_exits(telemetry_client, http_code, attempt_count):
+    """Test that the thread exits cleanly after getting an unexpected exception"""
+    # GIVEN
+    http_error = request.HTTPError("http://test.com", http_code, "Http Error", {}, None)  # type: ignore
+    queue_mock = MagicMock()
+    queue_mock.get.side_effect = [TelemetryEvent(), None]
+    telemetry_client.event_queue = queue_mock
+    # WHEN
+    with patch.object(request, "urlopen", side_effect=http_error) as urlopen_mock, patch.object(
+        time, "sleep"
+    ) as sleep_mock:
+        telemetry_client._process_event_queue_thread()
+        urlopen_mock.call_count = attempt_count
+        sleep_mock.call_count = attempt_count
+    # THEN
+    assert queue_mock.get.call_count == 1
+
+
+@pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
+def test_process_event_queue_thread_handles_unexpected_error(telemetry_client):
+    """Test that the thread exits cleanly after getting an unexpected exception"""
     # GIVEN
     queue_mock = MagicMock()
     queue_mock.get.side_effect = [TelemetryEvent(), None]
@@ -90,31 +120,21 @@ def test_process_event_queue_thread_handles_errors(telemetry_client):
         telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
-    assert queue_mock.get.call_count == 2
+    assert queue_mock.get.call_count == 1
 
 
 def test_record_hashing_summary(telemetry_client):
     """Tests that recording a hashing summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
-    expected_env_info = {"test_env": "test_val"}
-    expected_machine_info = {"test_machine": "test_val2"}
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
-
     expected_summary = asdict(test_summary)
-    expected_summary["usageMode"] = "CLI"
-    expected_summary["userId"] = "user-id"
-    expected_summary["studioId"] = "studio-id"
-    expected_summary.update(expected_env_info)
-    expected_summary.update(expected_machine_info)
-
+    expected_summary["usage_mode"] = "CLI"
     expected_event = TelemetryEvent(
-        event_type="com.amazon.rum.job_attachments.hashing_summary", event_body=expected_summary
+        event_type="com.amazon.rum.deadline.job_attachments.hashing_summary",
+        event_details=expected_summary,
     )
-
     telemetry_client.event_queue = queue_mock
-    telemetry_client.env_info = expected_env_info
-    telemetry_client.system_info = expected_machine_info
 
     # WHEN
     telemetry_client.record_hashing_summary(test_summary)
@@ -127,24 +147,14 @@ def test_record_upload_summary(telemetry_client):
     """Tests that recording an upload summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
-    expected_env_info = {"test_env": "test_val"}
-    expected_machine_info = {"test_machine": "test_val2"}
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
-
     expected_summary = asdict(test_summary)
-    expected_summary["usageMode"] = "GUI"
-    expected_summary["userId"] = "user-id"
-    expected_summary["studioId"] = "studio-id"
-    expected_summary.update(expected_env_info)
-    expected_summary.update(expected_machine_info)
-
+    expected_summary["usage_mode"] = "GUI"
     expected_event = TelemetryEvent(
-        event_type="com.amazon.rum.job_attachments.upload_summary", event_body=expected_summary
+        event_type="com.amazon.rum.deadline.job_attachments.upload_summary",
+        event_details=expected_summary,
     )
-
     telemetry_client.event_queue = queue_mock
-    telemetry_client.env_info = expected_env_info
-    telemetry_client.system_info = expected_machine_info
 
     # WHEN
     telemetry_client.record_upload_summary(test_summary, from_gui=True)

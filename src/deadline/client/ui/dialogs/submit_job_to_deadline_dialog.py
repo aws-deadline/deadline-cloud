@@ -129,31 +129,6 @@ class SubmitJobToDeadlineDialog(QDialog):
             if hasattr(self.job_settings, "refresh_ui"):
                 self.job_settings.refresh_ui(job_settings)
 
-    def refresh_deadline_settings(self):
-        # Enable/disable the Login and Logout buttons based on whether
-        # the configured profile is for Deadline Cloud Monitor
-        self.login_button.setEnabled(
-            self.deadline_credentials_status.creds_type
-            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
-        )
-        self.logout_button.setEnabled(
-            self.deadline_credentials_status.creds_type
-            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
-        )
-        # Enable/disable the Submit button based on whether the
-        # Amazon Deadline Cloud API is accessible and the farm+queue are configured.
-        self.submit_button.setEnabled(
-            self.deadline_credentials_status.api_availability is True
-            and get_setting("defaults.farm_id") != ""
-            and get_setting("defaults.queue_id") != ""
-        )
-
-        self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
-            self.deadline_credentials_status.api_availability
-        )
-        # If necessary, this reloads the queue parameters
-        self.shared_job_settings.refresh_queue_parameters()
-
     def _build_ui(
         self,
         job_setup_widget_type,
@@ -185,6 +160,9 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.refresh_deadline_settings
         )
 
+        # Refresh the submit button enable state once queue parameter status changes
+        self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
+
         self.button_box = QDialogButtonBox(Qt.Horizontal)
         self.login_button = QPushButton("Login")
         self.login_button.clicked.connect(self.on_login)
@@ -203,6 +181,43 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
         self.lyt.addWidget(self.button_box)
+
+    def _set_submit_button_state(self):
+        # Enable/disable the Submit button based on whether the
+        # Amazon Deadline Cloud API is accessible and the farm+queue are configured.
+        enable = (
+            self.deadline_credentials_status.api_availability is True
+            and get_setting("defaults.farm_id") != ""
+            and get_setting("defaults.queue_id") != ""
+            and self.shared_job_settings.is_queue_valid()
+        )
+
+        self.submit_button.setEnabled(enable)
+
+        if not enable:
+            self.submit_button.setToolTip(
+                "Cannot submit job to deadline cloud. Invalid credentials or queue parameters."
+            )
+        else:
+            self.submit_button.setToolTip("")
+
+    def refresh_deadline_settings(self):
+        # Enable/disable the Login and Logout buttons based on whether
+        # the configured profile is for Deadline Cloud Monitor
+        self.login_button.setEnabled(
+            self.deadline_credentials_status.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+        )
+        self.logout_button.setEnabled(
+            self.deadline_credentials_status.creds_type == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+        )
+
+        self._set_submit_button_state()
+
+        self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
+            self.deadline_credentials_status.api_availability is True
+        )
+        # If necessary, this reloads the queue parameters
+        self.shared_job_settings.refresh_queue_parameters()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """

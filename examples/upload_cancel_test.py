@@ -11,23 +11,34 @@ from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import AssetSyncCancelledError
 from deadline.job_attachments.upload import S3AssetManager
 
-NUM_SMALL_FILES = 0
-NUM_MEDIUM_FILES = 0
-NUM_LARGE_FILES = 1
-
 """
 A testing script to simulate cancelling a hash/upload of assets.
-First, creates a large amount of local text files and uploads them to the S3 bucket
+It creates a large amount of local text files and uploads them to the S3 bucket
 configured for the given Farm's Queue.
-Then, in the middle of hashing or uploading those files, you can send a cancel signal
-by pressing 'k' and Enter keys in succession.
+
+How to test:
+
+1. Run this script with the folowing command:
+   python3 upload_cancel_test.py -f <farm_id> -q <queue_id>
+2. In the middle of hashing or uploading those files, you can send a cancel
+   signal by pressing 'k' and Enter keys in succession. Confirm that cancelling
+   is working as expected by checking the console output.
 """
+
+MESSAGE_HOW_TO_CANCEL = (
+    "To stop the hash/upload process, please hit 'k' key and then 'Enter' key in succession.\n"
+)
+
+NUM_SMALL_FILES = 0
+NUM_MEDIUM_FILES = 5
+NUM_LARGE_FILES = 1
 
 continue_reporting = True
 main_terminated = False
 
 
 def run():
+    print(MESSAGE_HOW_TO_CANCEL)
     start_time = time.perf_counter()
 
     parser = argparse.ArgumentParser()
@@ -77,7 +88,9 @@ def run():
             files.append(str(file_path))
 
     queue = get_queue(farm_id=farm_id, queue_id=queue_id)
-    asset_manager = S3AssetManager(job_attachment_settings=queue.jobAttachmentSettings)
+    asset_manager = S3AssetManager(
+        farm_id=farm_id, queue_id=queue_id, job_attachment_settings=queue.jobAttachmentSettings
+    )
 
     print("\nStarting test...")
     start = time.perf_counter()
@@ -85,9 +98,9 @@ def run():
     try:
         print("\nStart hashing...")
         (summary_statistics_hashing, manifests) = asset_manager.hash_assets_and_create_manifest(
-            files,
-            [root_path / "outputs"],
-            [],
+            input_paths=files,
+            output_paths=[root_path / "outputs"],
+            referenced_paths=[],
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )
         print(f"Hashing Summary Statistics:\n{summary_statistics_hashing}")

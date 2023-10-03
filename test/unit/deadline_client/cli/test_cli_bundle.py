@@ -38,7 +38,7 @@ MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE = {
 
 MOCK_QUEUE_ENV_TEMPLATE_1 = """
 specificationVersion: 'jobtemplate-2023-09'
-parameters:
+parameterDefinitions:
 - name: RezPackages
   type: STRING
   description: Choose which rez packages to install for the render.
@@ -56,7 +56,7 @@ environment:
 
 MOCK_QUEUE_ENV_TEMPLATE_2 = """
 specificationVersion: 'jobtemplate-2023-09'
-parameters:
+parameterDefinitions:
 - name: IntParam
   type: INT
   default: ""
