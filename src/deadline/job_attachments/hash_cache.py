@@ -25,8 +25,8 @@ class HashCache:
     This class is intended to always be used with a context manager to properly
     close the connection to the hash cache database.
 
-    This class also automatically locks when doing writes, so it can be called
-    by multiple threads.
+    This class also automatically locks, so it can be called by multiple threads.
+    Context manager functions (__enter__ and __exit__) are not thread safe.
     """
 
     def __init__(self, cache_dir: Optional[str] = None) -> None:
@@ -65,12 +65,17 @@ class HashCache:
                 ) from oe
 
             try:
-                self.db_connection.execute("SELECT * FROM hashesV1")
+                cur = self.db_connection.cursor()
+                cur.execute("SELECT * FROM hashesV1")
+                cur.close()
             except Exception:
                 # DB file doesn't have our table, so we need to create it
-                self.db_connection.execute(
+                if not cur:
+                    cur = self.db_connection.cursor()
+                cur.execute(
                     "CREATE TABLE hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
                 )
+                cur.close()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -85,10 +90,12 @@ class HashCache:
         if not self.enabled:
             return None
 
-        with self.db_lock, self.db_connection:
-            entry_vals = self.db_connection.execute(
+        with self.db_lock:
+            cur = self.db_connection.cursor()
+            entry_vals = cur.execute(
                 "SELECT * FROM hashesV1 WHERE file_path=?", [file_path_key]
             ).fetchone()
+            cur.close()
             if entry_vals:
                 return HashCacheEntry(
                     file_path=entry_vals[0],
@@ -101,8 +108,10 @@ class HashCache:
     def put_entry(self, entry: HashCacheEntry) -> None:
         """Inserts or replaces an entry into the hash cache database after acquiring the lock."""
         if self.enabled:
-            with self.db_lock, self.db_connection:
-                self.db_connection.execute(
+            with self.db_lock:
+                cur = self.db_connection.cursor()
+                cur.execute(
                     "INSERT OR REPLACE INTO hashesV1 VALUES(:file_path, :file_hash, :last_modified_time)",
                     entry.to_dict(),
                 )
+                cur.close()

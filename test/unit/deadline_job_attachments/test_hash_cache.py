@@ -1,7 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import concurrent.futures
+import multiprocessing
 import os
 from sqlite3 import OperationalError
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +13,24 @@ import deadline
 from deadline.job_attachments.exceptions import JobAttachmentsError
 from deadline.job_attachments.hash_cache import CACHE_FILE_NAME, HashCache
 from deadline.job_attachments.models import HashCacheEntry
+
+
+# This function is used by the bellow function, so it requires to be a top-module function
+def parallelization_loop_function(hc, i) -> tuple[HashCacheEntry, HashCacheEntry]:
+    filepath = f"/no/file{i}"
+    inserted = HashCacheEntry(filepath, f"hash{i}", str(i))
+    # print(f"Inserting {i} from {threading.get_ident()}")
+    hc.put_entry(inserted)
+    retrieved = hc.get_entry(filepath)
+    return inserted, retrieved
+
+
+# requires to be a top-module level function in order to be pickled
+def parallelization_process_function(tmpdir, iterations):
+    with HashCache(tmpdir) as hc:
+        for i in range(iterations):
+            result = parallelization_loop_function(hc, i)
+            assert result[0] == result[1]
 
 
 class TestHashCache:
@@ -81,3 +102,50 @@ class TestHashCache:
                 assert hc.get_entry("/no/file") is None
                 hc.put_entry(HashCacheEntry("/no/file", "abc", "1234.56"))
                 assert hc.get_entry("/no/file") is None
+
+    def test_parallelization(self, tmpdir):
+        iterations = 1000
+
+        # Test that we can have multiple threads on the same hashcache
+        with HashCache(tmpdir) as hc:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {
+                    executor.submit(parallelization_loop_function, hc, i) for i in range(iterations)
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    assert future.result()[0] == future.result()[1]
+
+        # Test that we can have multiple hashcache across multiple threads
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            with HashCache(tmpdir) as hc:
+                futures = {
+                    executor.submit(parallelization_loop_function, hc, i) for i in range(iterations)
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    assert future.result()[0] == future.result()[1]
+
+        # Test that we can have multiple threads using different hashcache on the same tmpdir
+        def thread_function():
+            with HashCache(tmpdir) as hc:
+                for i in range(iterations):
+                    result = parallelization_loop_function(hc, i)
+                    assert result[0] == result[1]
+
+        threads = []
+        for n in range(multiprocessing.cpu_count()):
+            t = threading.Thread(target=thread_function)
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
+
+        # Test that we can have multiple processes using different hashcache on the same tmpdir
+        processes = []
+        for n in range(multiprocessing.cpu_count()):
+            p = multiprocessing.Process(
+                target=parallelization_process_function, args=[tmpdir, iterations]
+            )
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
