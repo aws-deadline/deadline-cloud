@@ -3,7 +3,7 @@
 """
 UI widgets for the Host Requirements tab.
 """
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from PySide2.QtCore import Qt  # type: ignore
 from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QPalette
@@ -67,6 +67,37 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
         self.hardware_requirements_box.setEnabled(state)
         self.custom_requirements_box.setEnabled(state)
 
+    def _is_custom_requirements_selected(self) -> bool:
+        return self.mode_selection_box.use_custom_button.isChecked()
+
+    def get_requirements(self) -> Optional[Dict[str, Any]]:
+        """
+        Returns a list of OpenJD parameter definition dicts with values filled from the widget.
+        If requirement settings are not enabled, then return None.
+
+        host_requirements: dict[str, Any] = {
+           "amounts": [ <AmountRequirement>, ... ], # @optional
+           "attributes": [ <AttributeRequirement>, ... ] # @optional
+        }
+        """
+        if not self._is_custom_requirements_selected():
+            return None
+
+        os_requirements = self.os_requirements_box.get_requirements()
+        hardware_requirements = self.hardware_requirements_box.get_requirements()
+        # TODO: add custom requirements
+
+        requirements = {}
+        if os_requirements:
+            # OS requirements are currently all amount type capabilities
+            requirements["attributes"] = os_requirements
+
+        if hardware_requirements:
+            # hardware requirements are currently all amount
+            requirements["amounts"] = hardware_requirements
+
+        return requirements
+
 
 class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
     """
@@ -126,11 +157,39 @@ class OSRequirementsWidget(QGroupBox):
         self._build_ui()
 
     def _build_ui(self):
-        self.os_row = OSRequirementRowWidget("Operating System", ["Linux", "MacOS", "Windows"])
+        self.os_row = OSRequirementRowWidget("Operating System", ["linux", "macos", "windows"])
         self.cpu_row = OSRequirementRowWidget("CPU Architecture", ["x86_64", "arm64"])
 
         self.layout.addWidget(self.os_row)
         self.layout.addWidget(self.cpu_row)
+
+    def get_requirements(self) -> List[Dict[str, Any]]:
+        """
+        Returns a list of OpenJD parameter definition dicts with
+        a "value" key filled from the widget.
+
+        Set the following capabilities according to OpenJD spec.
+        - attr.worker.os.family
+        - attr.worker.cpu.arch
+        """
+
+        # TODO: currently only supports "AnyOf" from the UI
+        requirements: List[dict] = []
+        if self.os_row.combo_box.has_input():
+            requirements.append(
+                {
+                    "name": "attr.worker.os.family",
+                    "anyOf": [self.os_row.combo_box.currentText()],
+                }
+            )
+        if self.cpu_row.combo_box.has_input():
+            requirements.append(
+                {
+                    "name": "attr.worker.cpu.arch",
+                    "anyOf": [self.cpu_row.combo_box.currentText()],
+                }
+            )
+        return requirements
 
 
 class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
@@ -160,6 +219,29 @@ class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         self.layout.addWidget(self.gpu_row)
         self.layout.addWidget(self.gpu_memory_row)
         self.layout.addWidget(self.scratch_space_row)
+
+    def get_requirements(self) -> List[Dict[str, Any]]:
+        """
+        Returns a list of OpenJD parameter definition dicts with
+        a "value" key filled from the widget.
+
+        Set the following capabilities according to OpenJD spec.
+        - amount.worker.vcpu
+        - amount.worker.memory
+        - amount.worker.gpu
+        - amount.worker.gpu.memory
+        - amount.worker.disk.scratch
+        """
+        requirements: List[Dict[str, Any]] = []
+        self.cpu_row.add_requirement(requirements, "amount.worker.vcpu")
+        # Memory capability has UI unit in GiB but template unit in MiB, so setting scaling factor to 1024
+        self.memory_row.add_requirement(requirements, "amount.worker.memory", 1024)
+        self.gpu_row.add_requirement(requirements, "amount.worker.gpu")
+        # GPU Memory capability has UI unit in GiB but template unit in MiB, so set scaling factor to 1024
+        self.gpu_memory_row.add_requirement(requirements, "amount.worker.gpu.memory", 1024)
+        # Disk Scratch capability has unit in GiB
+        self.scratch_space_row.add_requirement(requirements, "amount.worker.disk.scratch")
+        return requirements
 
 
 class CustomRequirementsWidget(QGroupBox):
@@ -206,6 +288,12 @@ class CustomRequirementsWidget(QGroupBox):
         print("Feature not yet supported!")
         # TODO: insert widget once UI design is finalized
         # self.layout.insertWidget(0, CustomAttributeWidget())
+
+    def get_requirements(self):
+        """
+        Returns a list of OpenJD parameter definition dicts
+        """
+        print("Feature not yet supported!")
 
 
 class CustomAmountWidget(QWidget):
@@ -299,6 +387,25 @@ class HardwareRequirementsRowWidget(QWidget):
         self.layout.addWidget(self.max_label)
         self.layout.addWidget(self.max_spin_box)
 
+    def add_requirement(self, requirements: List, name: str, scaling_factor: int = 1):
+        """
+        Create a dict based on whether inputs have been received for the components in the row widget,
+        then append the dict to an existing list of requirements.
+
+        Args:
+            requirements: the list of requirements to append to
+            name: the name of the capability
+            scaling_factor: for some of the amount capabilities, the unit displayed on the UI is different
+                then the unit used within template, so use this factor to scale the input values.
+        """
+        if self.min_spin_box.has_input() or self.max_spin_box.has_input():
+            requirement = {"name": name}
+            if self.min_spin_box.has_input():
+                requirement["min"] = self.min_spin_box.value() * scaling_factor
+            if self.max_spin_box.has_input():
+                requirement["max"] = self.max_spin_box.value() * scaling_factor
+            requirements.append(requirement)
+
 
 class OptionalComboBox(QComboBox):
     """
@@ -310,6 +417,9 @@ class OptionalComboBox(QComboBox):
         self.addItem(PLACEHOLDER_TEXT)
         self.setItemData(0, QBrush(Qt.gray), Qt.TextColorRole)
         self.addItems(items)
+
+    def has_input(self) -> bool:
+        return PLACEHOLDER_TEXT != self.currentText()
 
 
 class OptionalSpinBox(QSpinBox):

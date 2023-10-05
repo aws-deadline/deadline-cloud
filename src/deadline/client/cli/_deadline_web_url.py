@@ -3,7 +3,7 @@
 import os
 import re
 import sys
-import urllib
+import urllib.parse
 from logging import getLogger
 from typing import Any, Dict, List
 
