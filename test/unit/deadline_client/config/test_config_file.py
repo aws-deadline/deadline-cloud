@@ -5,7 +5,10 @@ tests the deadline.client.config settings
 """
 
 import os
-from unittest.mock import patch
+import platform
+import subprocess
+from unittest.mock import patch, MagicMock
+from pathlib import Path
 
 import boto3  # type: ignore[import]
 import pytest
@@ -122,18 +125,25 @@ def test_config_set_setting_nonexistant(fresh_deadline_config):
     assert "aws_porfile_name" in str(excinfo.value)
 
 
+@patch.object(config_file, "_should_read_config", MagicMock(return_value=True))
 def test_config_file_env_var(fresh_deadline_config):
     """Test that setting the env var DEADLINE_CONFIG_FILE_PATH overrides the config path"""
+    assert config_file.get_config_file_path() == Path(fresh_deadline_config).expanduser()
 
     alternate_deadline_config_file = fresh_deadline_config + "_alternative_file"
 
     # Set our config file to a known starting point
     config.set_setting("defaults.aws_profile_name", "EnvVarOverrideProfile")
     assert config.get_setting("defaults.aws_profile_name") == "EnvVarOverrideProfile"
+    with open(fresh_deadline_config, "r", encoding="utf-8") as f:
+        assert "aws_profile_name = EnvVarOverrideProfile" in f.read()
 
     try:
         # Set the override environment variable
         os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
+        assert (
+            config_file.get_config_file_path() == Path(alternate_deadline_config_file).expanduser()
+        )
 
         # Confirm that we see the default settings again
         assert config.get_setting("defaults.aws_profile_name") == "(default)"
@@ -141,20 +151,27 @@ def test_config_file_env_var(fresh_deadline_config):
         # Change the settings in this new file
         config.set_setting("defaults.aws_profile_name", "AlternateProfileName")
         assert config.get_setting("defaults.aws_profile_name") == "AlternateProfileName"
+        with open(alternate_deadline_config_file, "r", encoding="utf-8") as f:
+            assert "aws_profile_name = AlternateProfileName" in f.read()
 
         # Remove the override
         del os.environ["DEADLINE_CONFIG_FILE_PATH"]
+        assert config_file.get_config_file_path() == Path(fresh_deadline_config).expanduser()
 
         # We should see the known starting point again
         assert config.get_setting("defaults.aws_profile_name") == "EnvVarOverrideProfile"
 
         # Set the override environment variable again
         os.environ["DEADLINE_CONFIG_FILE_PATH"] = alternate_deadline_config_file
+        assert (
+            config_file.get_config_file_path() == Path(alternate_deadline_config_file).expanduser()
+        )
 
         assert config.get_setting("defaults.aws_profile_name") == "AlternateProfileName"
     finally:
         os.unlink(alternate_deadline_config_file)
-        del os.environ["DEADLINE_CONFIG_FILE_PATH"]
+        if "DEADLINE_CONFIG_FILE_PATH" in os.environ:
+            del os.environ["DEADLINE_CONFIG_FILE_PATH"]
 
 
 def test_get_best_profile_for_farm(fresh_deadline_config):
@@ -219,3 +236,48 @@ def test_str2bool():
         config_file.str2bool("not_boolean")
     with pytest.raises(ValueError):
         config_file.str2bool("")
+
+
+@pytest.mark.skipif(
+    platform.system() != "Windows",
+    reason="This test is for testing file permission changes in Windows.",
+)
+def test_windows_config_file_permissions(fresh_deadline_config) -> None:
+    config_file_path = config_file.get_config_file_path()
+    parent_dir = config_file_path.parent
+    subprocess.run(
+        [
+            "icacls",
+            str(parent_dir),
+            "/grant",
+            "Everyone:(OI)(CI)(F)",
+            "/T",
+        ],
+        check=True,
+    )
+
+    config_file.set_setting("defaults.aws_profile_name", "goodguyprofile")
+
+    result = subprocess.run(
+        [
+            "icacls",
+            str(config_file_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "Everyone" not in result.stdout
+
+
+@pytest.mark.skipif(
+    platform.system() == "Windows",
+    reason="This test is for testing file permission changes in POSIX.",
+)
+def test_posix_config_file_permissions(fresh_deadline_config) -> None:
+    config_file_path = config_file.get_config_file_path()
+    config_file_path.chmod(0o777)
+
+    config_file.set_setting("defaults.aws_profile_name", "goodguyprofile")
+
+    assert config_file_path.stat().st_mode & 0o777 == 0o600

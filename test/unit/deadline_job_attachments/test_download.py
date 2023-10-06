@@ -1902,4 +1902,4 @@ def test_download_files_from_manifests(
             on_downloading_files=on_downloading_files,
         )
 
-    assert downloaded_files == ["a.txt", "b.txt", "c.txt", "d.txt"]
+    assert sorted(downloaded_files) == ["a.txt", "b.txt", "c.txt", "d.txt"]

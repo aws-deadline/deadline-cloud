@@ -4,9 +4,9 @@
 Common fixtures for Deadline Client Library tests.
 """
 
-import os
 import tempfile
 from unittest.mock import patch
+from pathlib import Path
 
 import pytest
 
@@ -21,17 +21,18 @@ def fresh_deadline_config():
 
     try:
         # Create an empty temp file to set as the Amazon Deadline Cloud config
-        with tempfile.NamedTemporaryFile(
-            mode="w+t", suffix="", encoding="utf8", delete=False
-        ) as temp:
-            temp.write("")
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir_path = Path(temp_dir.name)
+        temp_file_path = temp_dir_path / "config"
+        with open(temp_file_path, "w+t", encoding="utf8") as temp_file:
+            temp_file.write("")
 
         # Yield the temp file name with it patched in as the
         # Amazon Deadline Cloud config file
-        with patch.object(config_file, "CONFIG_FILE_PATH", temp.name):
-            yield temp.name
+        with patch.object(config_file, "CONFIG_FILE_PATH", str(temp_file_path)):
+            yield str(temp_file_path)
     finally:
-        os.remove(temp.name)
+        temp_dir.cleanup()
 
 
 @pytest.fixture(scope="function")
