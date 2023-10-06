@@ -12,7 +12,11 @@ __all__ = [
     "DEFAULT_DEADLINE_ENDPOINT_URL",
 ]
 
+import getpass
 import os
+import platform
+import stat
+import subprocess
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -20,6 +24,7 @@ from typing import Any, Dict, List, Optional
 import boto3  # type: ignore[import]
 
 from ..exceptions import DeadlineOperationError
+import re
 
 # Default path where Amazon Deadline Cloud's configuration lives
 CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
@@ -111,6 +116,21 @@ def get_config_file_path() -> Path:
     return Path(os.environ.get(CONFIG_FILE_PATH_ENV_VAR) or CONFIG_FILE_PATH).expanduser()
 
 
+def _should_read_config(config_file_path: Path) -> bool:
+    global __config_file_path
+    global __config_mtime
+
+    if (
+        __config_mtime is not None
+        and config_file_path == __config_file_path
+        and config_file_path.is_file()
+    ):
+        mtime = config_file_path.stat().st_mtime
+        if mtime == __config_mtime:
+            return False
+    return True
+
+
 def read_config() -> ConfigParser:
     """
     If the config hasn't been read yet, or was modified since it was last
@@ -122,26 +142,91 @@ def read_config() -> ConfigParser:
 
     config_file_path = get_config_file_path()
 
-    config_file_exists = config_file_path.is_file()
-
-    # Return without re-reading the config file if the last-modified time is the same
-    reload_config = True
-    if __config_mtime is not None and config_file_path == __config_file_path and config_file_exists:
-        mtime = config_file_path.stat().st_mtime
-        if mtime == __config_mtime:
-            reload_config = False
-
-    if reload_config:
+    if _should_read_config(config_file_path):
         # Read the config file with a fresh config parser, and update the last-modified time stamp
         __config = ConfigParser()
         __config_file_path = config_file_path
         __config.read(config_file_path)
-        if config_file_exists:
+        if config_file_path.is_file():
             __config_mtime = config_file_path.stat().st_mtime
         else:
             __config_mtime = None
 
     return __config
+
+
+def _get_grant_args(principal: str, permissions: str) -> List[str]:
+    return [
+        "/grant",
+        f"{principal}:{permissions}",
+        # Apply recursively
+        "/T",
+    ]
+
+
+RE_ICACLS_OUTPUT = re.compile(r"^(.+?(?=\\))?(?:\\)?(.+?(?=:)):(.*)$")
+
+
+def _reset_directory_permissions_windows(directory: Path, username: str, permissions: str) -> None:
+    if platform.system() != "Windows":
+        return
+
+    result = subprocess.run(
+        [
+            "icacls",
+            str(directory),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    icacls_output = result.stdout
+
+    principals_to_remove = []
+
+    for line in icacls_output.splitlines():
+        if line.startswith(str(directory)):
+            permission_line = line[len(str(directory)) :].strip()
+        else:
+            permission_line = line.strip()
+
+        permissions_match = RE_ICACLS_OUTPUT.match(permission_line)
+        if permissions_match:
+            ad_group = permissions_match.group(1)
+            ad_user = permissions_match.group(2)
+            principal = f"{ad_group}\\{ad_user}"
+            if (
+                ad_user != username
+                and principal != "BUILTIN\\Administrators"
+                and principal != "NT AUTHORITY\\SYSTEM"
+            ):
+                principals_to_remove.append(ad_user)
+
+    for principal in principals_to_remove:
+        subprocess.run(
+            [
+                "icacls",
+                str(directory),
+                "/remove",
+                principal,
+            ],
+            check=True,
+        )
+
+    subprocess.run(
+        [
+            "icacls",
+            str(directory),
+            *_get_grant_args(username, permissions),
+            # On Windows, both SYSTEM and the Administrators group normally
+            # have Full Access to files in the user's home directory.
+            *_get_grant_args("Administrators", permissions),
+            *_get_grant_args("SYSTEM", permissions),
+        ],
+        check=True,
+        capture_output=True,
+    )
 
 
 def write_config(config: ConfigParser) -> None:
@@ -153,9 +238,34 @@ def write_config(config: ConfigParser) -> None:
             a modified value from what `read_config` returns.
     """
     config_file_path = get_config_file_path()
-    os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
-    with open(config_file_path, "w") as configfile:
-        config.write(configfile)
+    config_file_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        config_file_path.unlink()
+    except FileNotFoundError:
+        pass
+
+    if platform.system() == "Windows":
+        username = getpass.getuser()
+        config_file_parent_path = config_file_path.parent.absolute()
+        # OI - Contained objects will inherit
+        # CI - Sub-directories will inherit
+        # F  - Full control
+        _reset_directory_permissions_windows(config_file_parent_path, username, "(OI)(CI)(F)")
+        with open(config_file_path, "w", encoding="utf8") as configfile:
+            config.write(configfile)
+
+    else:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        mode = stat.S_IRUSR | stat.S_IWUSR
+
+        original_umask = os.umask(0)
+        try:
+            file_descriptor = os.open(config_file_path, flags, mode)
+        finally:
+            os.umask(original_umask)
+
+        with os.fdopen(file_descriptor, "w", encoding="utf8") as configfile:
+            config.write(configfile)
 
 
 def _get_setting_config(setting_name: str) -> dict:
