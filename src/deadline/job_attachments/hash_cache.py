@@ -82,7 +82,10 @@ class DbConnection:
     def __init__(self, cache_db_file):
         try:
             self.con: sqlite3.Connection = sqlite3.connect(
-                cache_db_file, check_same_thread=True, isolation_level=None
+                cache_db_file,
+                check_same_thread=True,
+                isolation_level="IMMEDIATE",
+                timeout=15,
             )
             self.con.execute("pragma journal_mode=wal")
         except sqlite3.OperationalError as oe:

@@ -116,7 +116,7 @@ class TestHashCache:
     def test_parallelization(self, tmpdir):
         # keeping count low to decrease the time the test takes to run. Was locally run with
         # iterations=10000 without issues
-        iterations = 10
+        iterations = 100
 
         # Test that we can have multiple threads on the same hashcache
         with HashCache(tmpdir) as hc:
