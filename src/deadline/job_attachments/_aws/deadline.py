@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from ..exceptions import JobAttachmentsError
 from ..models import (
     Attachments,
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     FileSystemLocation,
     FileSystemLocationType,
     Job,
@@ -98,8 +98,8 @@ def get_job(
                 )
                 for manifest_properties in response["attachments"]["manifests"]
             ],
-            assetLoadingMethod=AssetLoadingMethod(
-                response["attachments"].get("assetLoadingMethod", AssetLoadingMethod.PRELOAD.value)
+            fileSystem=JobAttachmentsFileSystem(
+                response["attachments"].get("fileSystem", JobAttachmentsFileSystem.COPIED.value)
             ),
         )
         if "attachments" in response and response["attachments"]
