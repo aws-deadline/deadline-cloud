@@ -170,18 +170,14 @@ def test_record_error(telemetry_client):
     queue_mock = MagicMock()
     test_error_details = {"some_field": "some_value"}
     test_exc = Exception("some exception")
-    expected_event_details = {
-        "some_field": "some_value",
-        "exception_type": str(type(test_exc))
-    }
+    expected_event_details = {"some_field": "some_value", "exception_type": str(type(test_exc))}
     expected_event = TelemetryEvent(
-        event_type="com.amazon.rum.deadline.error",
-        event_details=expected_event_details
+        event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
     )
     telemetry_client.event_queue = queue_mock
 
-    #WHEN
+    # WHEN
     telemetry_client.record_error(test_error_details, str(type(test_exc)))
 
     # THEN
-    queue_mock.put_nowait.assert_called_once_with(expected_event)    
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
