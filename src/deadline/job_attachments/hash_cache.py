@@ -26,6 +26,7 @@ class FileLocking:
     Handles file locking.
     File locking is necessary to control access to the HashCache database across processes.
     multiprocessing.Lock only works between processes that were spawned through multiprocessing itself.
+    threading.Lock does not handle access to the database across proccess, producing "database is locked" errors
     """
 
     MAX_RETRY_ATTEMPTS = 10
@@ -81,6 +82,8 @@ class DbConnection:
 
     def __init__(self, cache_db_file):
         try:
+            # Using immediate isolation level and increasing the timeout so multiple threads can
+            # operate at the same time without erroring out so quickly
             self.con: sqlite3.Connection = sqlite3.connect(
                 cache_db_file,
                 check_same_thread=True,
@@ -117,8 +120,8 @@ class DbCursor:
             DbCursor.thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
         return DbCursor.thread_local_connection.db.con
 
-    # to reduce file locks, we will take a file lock only once per process. We sync threads within the process
-    # with a ref counter
+    # to reduce file locks (since they hare a bit more expensive and only needed per process), we will take
+    # a file lock only once per process. We sync threads within the process with a ref counter
     file_locking = None
     ref_counter = 0
     lock = threading.Lock()
@@ -152,15 +155,12 @@ class HashCache:
     Class used to store and retrieve entries in the local file hash cache.
 
     This class handles multithreading and multiprocessing by creating a connection per
-    thread, using cursors, committing when done, enabling WAL and doing file locking
-    when accessing the database.
+    thread, using cursors, committing immediately, enabling WAL and doing file locking
+    per process.
 
-    This class can be used with context manager to close the database connection on
-    exit. Closing on exit is optional and enabled by default. If false, connection
-    will be closed on thread destruction.
-
-    This class also helds a file lock on <database_file>.lock to allow multiple writers to
-    sync (threads and processes).
+    This class can be used with context manager to close all database connections on
+    exit. Closing on exit is optional and enabled by default. If false, connections will
+    be closed on thread destruction.
     """
 
     def __init__(self, cache_dir: Optional[str] = None, close_on_exit: bool = True) -> None:
