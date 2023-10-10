@@ -6,7 +6,7 @@ Module for accessing the local file hash cache.
 
 import logging
 import os
-from multiprocessing import Lock
+from threading import Lock
 from typing import Optional
 
 from .exceptions import JobAttachmentsError
