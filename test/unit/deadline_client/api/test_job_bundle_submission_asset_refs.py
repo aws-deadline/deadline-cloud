@@ -12,7 +12,7 @@ from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
 from deadline.job_attachments.models import (
     Attachments,
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     AssetRootManifest,
     ManifestProperties,
     PathFormat,
@@ -302,7 +302,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                         "outputRelativeDirectories": ["."],
                     },
                 ],
-                "assetLoadingMethod": AssetLoadingMethod.PRELOAD.value,
+                "fileSystem": JobAttachmentsFileSystem.COPIED.value,
             },
             # The job parameter values are the second thing this test needs to verify,
             # confirming that the parameters were processed according to their types.

@@ -17,7 +17,7 @@ from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
 from deadline.client.job_bundle.submission import AssetReferences
 from deadline.job_attachments.models import (
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     Attachments,
     ManifestProperties,
     PathFormat,
@@ -515,7 +515,7 @@ def test_create_job_from_job_bundle_job_attachments(
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments={
                 "manifests": [],
-                "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
+                "fileSystem": JobAttachmentsFileSystem.COPIED,
             },
         )
 
@@ -669,7 +669,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
                         "outputRelativeDirectories": ["."],
                     },
                 ],
-                "assetLoadingMethod": AssetLoadingMethod.PRELOAD,
+                "fileSystem": JobAttachmentsFileSystem.COPIED,
             },
         )
 

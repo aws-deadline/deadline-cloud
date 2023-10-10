@@ -31,7 +31,7 @@ import deadline  # noqa: E402 isort:skip
 from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
 from deadline.job_attachments.asset_sync import AssetSync  # noqa: E402 isort:skip
 from deadline.job_attachments.models import (  # noqa: E402 isort:skip
-    AssetLoadingMethod,
+    JobAttachmentsFileSystem,
     Attachments,
     ManifestProperties,
     Job,
@@ -137,7 +137,7 @@ def fixture_vfs_attachments():
                 outputRelativeDirectories=["test/outputs"],
             )
         ],
-        assetLoadingMethod=AssetLoadingMethod.ON_DEMAND,
+        fileSystem=JobAttachmentsFileSystem.VIRTUAL,
     )
 
 
