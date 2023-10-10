@@ -98,7 +98,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("defaults.queue_id", "queue-389348u234jhk34")
     config.set_setting("defaults.job_id", "job-239u40234jkl234nkl23")
     config.set_setting("settings.auto_accept", "False")
-    config.set_setting("defaults.job_attachments_file_system", "ON_DEMAND")
+    config.set_setting("defaults.job_attachments_file_system", "VIRTUAL")
     config.set_setting("settings.log_level", "DEBUG")
     config.set_setting("telemetry.opt_out", "True")
     config.set_setting("telemetry.identifier", "user-id-123abc-456def")
