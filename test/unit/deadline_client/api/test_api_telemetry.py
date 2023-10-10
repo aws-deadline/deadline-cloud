@@ -47,7 +47,7 @@ def test_opt_out(fresh_deadline_config):
     # Ensure nothing blows up if we try recording telemetry after we've opted out
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
-    client.record_error({}, type(Exception))
+    client.record_error({}, str(type(Exception)))
 
 
 def test_get_telemetry_identifier(telemetry_client):
