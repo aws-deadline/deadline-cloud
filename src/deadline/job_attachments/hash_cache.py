@@ -38,7 +38,7 @@ class FileLocking:
     def __del__(self):
         os.close(self._db_lock_file)
 
-    def __enter__(self):
+    def acquire(self):
         attempts = 0
         while True:
             try:
@@ -59,7 +59,7 @@ class FileLocking:
                     raise
                 time.sleep(random.uniform(0.0, self.MAX_BACKOFF_SECONDS))
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    def release(self):
         if os.name == "posix":
             import fcntl
 
@@ -81,7 +81,6 @@ class DbConnection:
 
     def __init__(self, cache_db_file):
         try:
-            # print(f"Creating connection for thread {threading.get_ident()}")
             self.con: sqlite3.Connection = sqlite3.connect(
                 cache_db_file, check_same_thread=True, isolation_level=None
             )
@@ -92,46 +91,57 @@ class DbConnection:
             ) from oe
 
     def __del__(self):
-        # print(f"Removing connection for thread {threading.get_ident()}")
         self.con.close()
 
 
-# We maintain a connection per thread, we reuse it and maintain it for the lifetime of the thread.
-# Most compilations of sqlite3 have threadsafety=1 (SQLITE_THREADSAFE=2) which allows to share the
-# module, but connections cannot be shared between threads. This code is compatible with
-# threadsafety=1 and threadsafety=3.
-assert sqlite3.threadsafety in (1, 3)
-
-__thread_local_connection = threading.local()
-
-
-def _get_db_con(cache_db_file) -> sqlite3.Connection:
-    global __thread_local_connection
-    if "db" not in __thread_local_connection.__dict__:
-        __thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
-    return __thread_local_connection.db.con
-
-
-class DbCursorContext(FileLocking):
+class DbCursor:
     """
     Class to use the sqlite cursor with context manager (not supported by default)
-    This class also helds a file lock on <database_file>.lock to allow multiple writers to
-    sync (threads and processes).
     """
 
-    def __init__(self, db_file_path):
-        super().__init__(f"{db_file_path}.lock")
-        self._db_con = _get_db_con(db_file_path)
+    # We maintain a connection per thread, we reuse it and maintain it for the lifetime of the thread.
+    # Most compilations of sqlite3 have threadsafety=1 (SQLITE_THREADSAFE=2) which allows to share the
+    # module, but connections cannot be shared between threads. This code is compatible with
+    # threadsafety=1 and threadsafety=3.
+    assert sqlite3.threadsafety in (1, 3)
+
+    thread_local_connection = threading.local()
+
+    @staticmethod
+    def _get_db_con(cache_db_file) -> sqlite3.Connection:
+        DbCursor.thread_local_connection
+        if "db" not in DbCursor.thread_local_connection.__dict__:
+            DbCursor.thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
+        return DbCursor.thread_local_connection.db.con
+
+    # to reduce file locks, we will take a file lock only once per process. We sync threads within the process
+    # with a ref counter
+    file_locking = None
+    ref_counter = 0
+    lock = threading.Lock()
+
+    def __init__(self, db_file_path: str):
+        self._db_lock_file = f"{db_file_path}.lock"
+        self._db_con = DbCursor._get_db_con(db_file_path)
 
     def __enter__(self):
+        with DbCursor.lock:
+            if DbCursor.ref_counter == 0:
+                # first thread and instance of DbCursor, initialize file locking
+                DbCursor.file_locking = FileLocking(self._db_lock_file)
+                DbCursor.file_locking.acquire()
+            DbCursor.ref_counter += 1
         self._db_cur = self._db_con.cursor()
-        super().__enter__()
         return self._db_cur
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self._db_con.commit()
         self._db_cur.close()
-        super().__exit__(exc_type, exc_value, exc_traceback)
+        with DbCursor.lock:
+            DbCursor.ref_counter -= 1
+            if DbCursor.ref_counter == 0:
+                DbCursor.file_locking.release()
+                del DbCursor.file_locking
 
 
 class HashCache:
@@ -145,6 +155,9 @@ class HashCache:
     This class can be used with context manager to close the database connection on
     exit. Closing on exit is optional and enabled by default. If false, connection
     will be closed on thread destruction.
+
+    This class also helds a file lock on <database_file>.lock to allow multiple writers to
+    sync (threads and processes).
     """
 
     def __init__(self, cache_dir: Optional[str] = None, close_on_exit: bool = True) -> None:
@@ -169,7 +182,7 @@ class HashCache:
         os.makedirs(self.cache_dir, exist_ok=True)
         self.cache_db_file: str = os.path.join(self.cache_dir, CACHE_FILE_NAME)
 
-        with DbCursorContext(self.cache_db_file) as cur:
+        with DbCursor(self.cache_db_file) as cur:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
             )
@@ -181,8 +194,7 @@ class HashCache:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """Called when exiting the context manager."""
         if self.close_on_exit:
-            global thread_local_connection
-            thread_local_connection.__dict__.clear()
+            DbCursor.thread_local_connection.__dict__.clear()
         return
 
     def get_entry(self, file_path_key: str) -> Optional[HashCacheEntry]:
@@ -190,7 +202,7 @@ class HashCache:
         if not self.enabled:
             return None
 
-        with DbCursorContext(self.cache_db_file) as cur:
+        with DbCursor(self.cache_db_file) as cur:
             entry_vals = cur.execute(
                 "SELECT * FROM hashesV1 WHERE file_path=?", [file_path_key]
             ).fetchone()
@@ -208,7 +220,7 @@ class HashCache:
         if not self.enabled:
             return
 
-        with DbCursorContext(self.cache_db_file) as cur:
+        with DbCursor(self.cache_db_file) as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO hashesV1 VALUES(:file_path, :file_hash, :last_modified_time)",
                 entry.to_dict(),
