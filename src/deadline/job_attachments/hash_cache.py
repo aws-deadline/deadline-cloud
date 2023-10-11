@@ -88,7 +88,7 @@ class DbConnection:
                 cache_db_file,
                 check_same_thread=True,
                 isolation_level="IMMEDIATE",
-                timeout=15,
+                timeout=30,
             )
             self.con.execute("pragma journal_mode=wal")
         except sqlite3.OperationalError as oe:
@@ -100,9 +100,10 @@ class DbConnection:
         self.con.close()
 
 
-class DbCursor:
+class ReadDbCursor:
     """
-    Class to use the sqlite cursor with context manager (not supported by default)
+    Class to use the sqlite cursor with context manager (not supported by default). This class is meant
+    to be used with queries that only do reads on the database.
     """
 
     # We maintain a connection per thread, we reuse it and maintain it for the lifetime of the thread.
@@ -115,10 +116,27 @@ class DbCursor:
 
     @staticmethod
     def _get_db_con(cache_db_file) -> sqlite3.Connection:
-        DbCursor.thread_local_connection
-        if "db" not in DbCursor.thread_local_connection.__dict__:
-            DbCursor.thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
-        return DbCursor.thread_local_connection.db.con
+        ReadDbCursor.thread_local_connection
+        if "db" not in ReadDbCursor.thread_local_connection.__dict__:
+            ReadDbCursor.thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
+        return ReadDbCursor.thread_local_connection.db.con
+
+    def __init__(self, db_file_path: str):
+        self._db_lock_file = f"{db_file_path}.lock"
+        self._db_con = ReadDbCursor._get_db_con(db_file_path)
+
+    def __enter__(self):
+        self._db_cur = self._db_con.cursor()
+        return self._db_cur
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self._db_cur.close()
+
+
+class WriteDbCursor(ReadDbCursor):
+    """
+    Class to use the sqlite cursor with context manager (not supported by default)
+    """
 
     # to reduce file locks (since they hare a bit more expensive and only needed per process), we will take
     # a file lock only once per process. We sync threads within the process with a ref counter
@@ -127,27 +145,25 @@ class DbCursor:
     lock = threading.Lock()
 
     def __init__(self, db_file_path: str):
-        self._db_lock_file = f"{db_file_path}.lock"
-        self._db_con = DbCursor._get_db_con(db_file_path)
+        super().__init__(db_file_path)
 
     def __enter__(self):
-        with DbCursor.lock:
-            if DbCursor.ref_counter == 0:
-                # first thread and instance of DbCursor, initialize file locking
-                DbCursor.file_locking = FileLocking(self._db_lock_file)
-                DbCursor.file_locking.acquire()
-            DbCursor.ref_counter += 1
-        self._db_cur = self._db_con.cursor()
-        return self._db_cur
+        with WriteDbCursor.lock:
+            if WriteDbCursor.ref_counter == 0:
+                # first thread and instance of WriteDbCursor, initialize file locking
+                WriteDbCursor.file_locking = FileLocking(self._db_lock_file)
+                WriteDbCursor.file_locking.acquire()
+            WriteDbCursor.ref_counter += 1
+        return super().__enter__()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self._db_con.commit()
-        self._db_cur.close()
-        with DbCursor.lock:
-            DbCursor.ref_counter -= 1
-            if DbCursor.ref_counter == 0:
-                DbCursor.file_locking.release()
-                del DbCursor.file_locking
+        super().__exit__(exc_type, exc_value, exc_traceback)
+        with WriteDbCursor.lock:
+            WriteDbCursor.ref_counter -= 1
+            if WriteDbCursor.ref_counter == 0:
+                WriteDbCursor.file_locking.release()
+                del WriteDbCursor.file_locking
 
 
 class HashCache:
@@ -185,7 +201,7 @@ class HashCache:
         os.makedirs(self.cache_dir, exist_ok=True)
         self.cache_db_file: str = os.path.join(self.cache_dir, CACHE_FILE_NAME)
 
-        with DbCursor(self.cache_db_file) as cur:
+        with WriteDbCursor(self.cache_db_file) as cur:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
             )
@@ -197,7 +213,7 @@ class HashCache:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """Called when exiting the context manager."""
         if self.close_on_exit:
-            DbCursor.thread_local_connection.__dict__.clear()
+            ReadDbCursor.thread_local_connection.__dict__.clear()
         return
 
     def get_entry(self, file_path_key: str) -> Optional[HashCacheEntry]:
@@ -205,7 +221,7 @@ class HashCache:
         if not self.enabled:
             return None
 
-        with DbCursor(self.cache_db_file) as cur:
+        with ReadDbCursor(self.cache_db_file) as cur:
             entry_vals = cur.execute(
                 "SELECT * FROM hashesV1 WHERE file_path=?", [file_path_key]
             ).fetchone()
@@ -223,7 +239,7 @@ class HashCache:
         if not self.enabled:
             return
 
-        with DbCursor(self.cache_db_file) as cur:
+        with WriteDbCursor(self.cache_db_file) as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO hashesV1 VALUES(:file_path, :file_hash, :last_modified_time)",
                 entry.to_dict(),
