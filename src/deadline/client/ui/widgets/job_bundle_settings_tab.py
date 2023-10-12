@@ -106,8 +106,9 @@ class JobBundleSettingsWidget(QWidget):
 
             # Load the template to get the bundle name
             template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-            # Validate the template. Raises an exception if invalid
-            validate_template_object(template)
+            if template:
+                # Validate the template. Raises an exception if invalid
+                validate_template_object(template)
 
             name = (
                 template.get("name", "Job Bundle Submission")

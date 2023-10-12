@@ -122,8 +122,9 @@ def show_job_bundle_submitter(
 
     # Load the template to get the starting name
     template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-    # Validate the template. Raises an exception if invalid
-    validate_template_object(template)
+    if template:
+        # Validate the template. Raises an exception if invalid
+        validate_template_object(template)
 
     asset_references_obj = (
         read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
