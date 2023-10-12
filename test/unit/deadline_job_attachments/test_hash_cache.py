@@ -5,7 +5,7 @@ import multiprocessing
 import os
 from sqlite3 import OperationalError
 import threading
-from typing import Optional
+from typing import Optional, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -19,7 +19,7 @@ from deadline.job_attachments.models import HashCacheEntry
 # This function is used by the bellow function, so it requires to be a top-module function
 def parallelization_loop_function_hc(
     hc: HashCache, i: int
-) -> tuple[HashCacheEntry, Optional[HashCacheEntry]]:
+) -> Tuple[HashCacheEntry, Optional[HashCacheEntry]]:
     filepath = f"/no/file{i}"
     inserted = HashCacheEntry(filepath, f"hash{i}", str(i))
     hc.put_entry(inserted)
@@ -29,7 +29,7 @@ def parallelization_loop_function_hc(
 
 def parallelization_loop_function_dir(
     tmpdir: str, i: int
-) -> tuple[HashCacheEntry, Optional[HashCacheEntry]]:
+) -> Tuple[HashCacheEntry, Optional[HashCacheEntry]]:
     with HashCache(tmpdir, False) as hc:
         return parallelization_loop_function_hc(hc, i)
 
