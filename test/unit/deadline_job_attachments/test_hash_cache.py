@@ -22,7 +22,6 @@ def parallelization_loop_function_hc(
 ) -> tuple[HashCacheEntry, Optional[HashCacheEntry]]:
     filepath = f"/no/file{i}"
     inserted = HashCacheEntry(filepath, f"hash{i}", str(i))
-    # print(f"Inserting {i} from {threading.get_ident()}")
     hc.put_entry(inserted)
     retrieved = hc.get_entry(filepath)
     return inserted, retrieved
@@ -75,13 +74,19 @@ class TestHashCache:
         """
         Tests that an error is raised when a bad path is provided to the HashCache constructor
         """
+
         with pytest.raises(JobAttachmentsError) as err:
-            hc = HashCache(tmpdir)
-            hc.cache_dir = "/some/bad/path"
-            with hc:
-                assert (
-                    False
-                ), "Context manager should throw an execption, this assert should not be reached"
+            if os.name == "nt":
+                # On Windows, "/some/bad/path" will create a folder at the root of the current drive.
+                # If tests are run from a different drive, the test may fail since the path may be
+                # able to be created. Instead, we use a path that wont create a folder and will
+                # produce sqlite3.connect a permission error.
+                HashCache(os.environ["SYSTEMROOT"])
+            else:
+                HashCache("/some/bad/path")
+            assert (
+                False
+            ), "Context manager should throw an exception, this assert should not be reached"
         assert isinstance(err.value.__cause__, OperationalError)
 
     def test_get_entry_returns_valid_entry(self, tmpdir):
