@@ -198,13 +198,21 @@ class HashCache:
             raise JobAttachmentsError(
                 "No default hash cache path found. Please provide a hash cache directory."
             )
-        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+        except (PermissionError, OSError) as exc:
+            raise JobAttachmentsError(f"Could not access hash cache file in {cache_dir}") from exc
         self.cache_dir: str = os.path.join(cache_dir, CACHE_FILE_NAME)
 
         with WriteDbCursor(self.cache_dir) as cur:
-            cur.execute(
-                "CREATE TABLE IF NOT EXISTS hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
-            )
+            # "CREATE TABLE IF NOT EXISTS" seems to not work on macos
+            try:
+                cur.execute("SELECT * FROM hashesV1")
+            except Exception:
+                # DB file doesn't have our table, so we need to create it
+                cur.execute(
+                    "CREATE TABLE hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
+                )
 
     def __enter__(self):
         """Called when entering the context manager."""

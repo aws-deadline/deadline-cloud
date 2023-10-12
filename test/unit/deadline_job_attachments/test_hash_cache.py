@@ -3,7 +3,6 @@
 import concurrent.futures
 import multiprocessing
 import os
-from sqlite3 import OperationalError
 import threading
 from typing import Optional, Tuple
 from unittest.mock import patch
@@ -81,13 +80,13 @@ class TestHashCache:
                 # permission error.
                 HashCache(os.environ["SYSTEMROOT"])
             else:
-                # For Linux, we take a POSIX-defined non-directory as a directory, which will
-                # a sqlite3.connect invalid path situation.
-                HashCache("/dev/null/invalid")
+                # For Linux, we take the root which does not give permissions to the current user
+                HashCache("/proc")
             assert (
                 False
             ), "Context manager should throw an exception, this assert should not be reached"
-        assert isinstance(err.value.__cause__, OperationalError)
+        # The exceptions produced come from os.makedirs
+        assert isinstance(err.value.__cause__, (PermissionError, OSError))
 
     def test_get_entry_returns_valid_entry(self, tmpdir):
         """
