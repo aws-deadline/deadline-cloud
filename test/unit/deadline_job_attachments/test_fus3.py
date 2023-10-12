@@ -16,7 +16,10 @@ import pytest
 
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
-from deadline.job_attachments.exceptions import Fus3ExecutableMissingError
+from deadline.job_attachments.exceptions import (
+    Fus3ExecutableMissingError,
+    Fus3LaunchScriptMissingError,
+)
 from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.fus3 import (
     Fus3ProcessManager,
@@ -242,6 +245,12 @@ class TestFus3Processmanager:
             process_manager.find_fus3_launch_script()
 
             mock_os_path_exists.assert_called_once()
+
+            Fus3ProcessManager.fus3_script_path = None
+            mock_os_path_exists.return_value = False
+
+            with pytest.raises(Fus3LaunchScriptMissingError):
+                process_manager.find_fus3_launch_script()
 
     def test_create_mount_point(
         self,

@@ -11,7 +11,11 @@ import threading
 from signal import SIGTERM
 from typing import List, Union, Optional
 
-from .exceptions import Fus3ExecutableMissingError, Fus3FailedToMountError
+from .exceptions import (
+    Fus3ExecutableMissingError,
+    Fus3FailedToMountError,
+    Fus3LaunchScriptMissingError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +196,7 @@ class Fus3ProcessManager(object):
             found_path = environ_check
         else:
             log.error("Failed to find fus3 launch script!")
-            raise Fus3ExecutableMissingError
+            raise Fus3LaunchScriptMissingError
         Fus3ProcessManager.fus3_script_path = found_path
         return found_path  # type: ignore[return-value]
 
@@ -215,10 +219,10 @@ class Fus3ProcessManager(object):
 
             if FUS3_PATH_ENV_VAR in os.environ:
                 log.info(f"{FUS3_PATH_ENV_VAR} found in environment")
-                environ_check = os.environ[FUS3_PATH_ENV_VAR] + "/bin/fus3"
+                environ_check = os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"
             else:
                 log.warning(f"{FUS3_PATH_ENV_VAR} not found in environment")
-                environ_check = FUS3_DEFAULT_INSTALL_PATH + "/bin/fus3"
+                environ_check = FUS3_DEFAULT_INSTALL_PATH + f"/bin/{FUS3_EXECUTABLE}"
             if os.path.exists(environ_check):
                 log.info(f"Environ check found fus3 at {environ_check}")
                 found_path = environ_check
