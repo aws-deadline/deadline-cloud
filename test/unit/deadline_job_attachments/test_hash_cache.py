@@ -77,13 +77,13 @@ class TestHashCache:
 
         with pytest.raises(JobAttachmentsError) as err:
             if os.name == "nt":
-                # On Windows, "/some/bad/path" will create a folder at the root of the current drive.
-                # If tests are run from a different drive, the test may fail since the path may be
-                # able to be created. Instead, we use a path that wont create a folder and will
-                # produce sqlite3.connect a permission error.
+                # For Windows, we use the system root folder which will produce a sqlite3.connect
+                # permission error.
                 HashCache(os.environ["SYSTEMROOT"])
             else:
-                HashCache("/some/bad/path")
+                # For Linux, we take a POSIX-defined non-directory as a directory, which will
+                # a sqlite3.connect invalid path situation.
+                HashCache("/dev/null/invalid")
             assert (
                 False
             ), "Context manager should throw an exception, this assert should not be reached"
