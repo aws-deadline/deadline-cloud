@@ -47,6 +47,7 @@ def test_opt_out(fresh_deadline_config):
     # Ensure nothing blows up if we try recording telemetry after we've opted out
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
+    client.record_error({}, str(type(Exception)))
 
 
 def test_get_telemetry_identifier(telemetry_client):
@@ -158,6 +159,25 @@ def test_record_upload_summary(telemetry_client):
 
     # WHEN
     telemetry_client.record_upload_summary(test_summary, from_gui=True)
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_error(telemetry_client):
+    """Test that recording an error sends the expected TelemetryEvent to the thread queue"""
+    # GIVEN
+    queue_mock = MagicMock()
+    test_error_details = {"some_field": "some_value"}
+    test_exc = Exception("some exception")
+    expected_event_details = {"some_field": "some_value", "exception_type": str(type(test_exc))}
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
+    )
+    telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    telemetry_client.record_error(test_error_details, str(type(test_exc)))
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)

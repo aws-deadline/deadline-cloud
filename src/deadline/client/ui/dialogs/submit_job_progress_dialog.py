@@ -467,6 +467,10 @@ class SubmitJobProgressDialog(QDialog):
         Handles the signal sent from the background CreateJob thread when the
         job creation has finished.
         """
+        api.get_deadline_cloud_library_telemetry_client().record_event(
+            event_type="com.amazon.rum.deadline.create_job", event_details={"is_success": success}
+        )
+
         if success:
             self._submission_complete = True
             self.status_label.setText("Submission Complete")

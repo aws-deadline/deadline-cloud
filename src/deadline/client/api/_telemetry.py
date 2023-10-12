@@ -220,6 +220,11 @@ class TelemetryClient:
             "com.amazon.rum.deadline.job_attachments.upload_summary", summary, from_gui
         )
 
+    def record_error(self, event_details: Dict[str, Any], exception_type: str):
+        event_details["exception_type"] = exception_type
+        # Possiblity to add stack trace here
+        self.record_event("com.amazon.rum.deadline.error", event_details)
+
     def record_event(self, event_type: str, event_details: Dict[str, Any]):
         self._put_telemetry_record(
             TelemetryEvent(
