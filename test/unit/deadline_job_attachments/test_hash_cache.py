@@ -3,9 +3,8 @@
 import concurrent.futures
 import multiprocessing
 import os
-from sqlite3 import OperationalError
 import threading
-from typing import Optional
+from typing import Optional, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -19,10 +18,9 @@ from deadline.job_attachments.models import HashCacheEntry
 # This function is used by the bellow function, so it requires to be a top-module function
 def parallelization_loop_function_hc(
     hc: HashCache, i: int
-) -> tuple[HashCacheEntry, Optional[HashCacheEntry]]:
+) -> Tuple[HashCacheEntry, Optional[HashCacheEntry]]:
     filepath = f"/no/file{i}"
     inserted = HashCacheEntry(filepath, f"hash{i}", str(i))
-    # print(f"Inserting {i} from {threading.get_ident()}")
     hc.put_entry(inserted)
     retrieved = hc.get_entry(filepath)
     return inserted, retrieved
@@ -30,7 +28,7 @@ def parallelization_loop_function_hc(
 
 def parallelization_loop_function_dir(
     tmpdir: str, i: int
-) -> tuple[HashCacheEntry, Optional[HashCacheEntry]]:
+) -> Tuple[HashCacheEntry, Optional[HashCacheEntry]]:
     with HashCache(tmpdir, False) as hc:
         return parallelization_loop_function_hc(hc, i)
 
@@ -75,14 +73,23 @@ class TestHashCache:
         """
         Tests that an error is raised when a bad path is provided to the HashCache constructor
         """
+
         with pytest.raises(JobAttachmentsError) as err:
-            hc = HashCache(tmpdir)
-            hc.cache_dir = "/some/bad/path"
-            with hc:
-                assert (
-                    False
-                ), "Context manager should throw an execption, this assert should not be reached"
-        assert isinstance(err.value.__cause__, OperationalError)
+            if os.name == "nt":
+                # For Windows, we use and invalid drive letter.
+                # Passing a folder with `/` considers the root of the current drive. A developer
+                # could be working out of a drive with access to the root folder.
+                # Passing a special folder like "Windows" could not fail if the developer/CI has
+                # admin permissions.
+                HashCache(os.path.join("A:", "bad", "folder"))
+            else:
+                # For Linux, we take the root which does not give permissions to the current user
+                HashCache(os.path.join("/", "bad", "folder"))
+            assert (
+                False
+            ), "Context manager should throw an exception, this assert should not be reached"
+        # The exceptions produced come from os.makedirs
+        assert isinstance(err.value.__cause__, (PermissionError, OSError))
 
     def test_get_entry_returns_valid_entry(self, tmpdir):
         """

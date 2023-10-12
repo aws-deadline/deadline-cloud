@@ -97,7 +97,8 @@ class DbConnection:
             ) from oe
 
     def __del__(self):
-        self.con.close()
+        if self.con:
+            self.con.close()
 
 
 class ReadDbCursor:
@@ -161,7 +162,7 @@ class WriteDbCursor(ReadDbCursor):
         super().__exit__(exc_type, exc_value, exc_traceback)
         with WriteDbCursor.lock:
             WriteDbCursor.ref_counter -= 1
-            if WriteDbCursor.ref_counter == 0:
+            if WriteDbCursor.ref_counter == 0 and WriteDbCursor.file_locking:
                 WriteDbCursor.file_locking.release()
                 del WriteDbCursor.file_locking
 
@@ -182,7 +183,6 @@ class HashCache:
     def __init__(self, cache_dir: Optional[str] = None, close_on_exit: bool = True) -> None:
         self.enabled = False
         self.close_on_exit = close_on_exit
-        self.cache_dir = cache_dir
         try:
             # SQLite is included in Python installers, but might not exist if building python from source.
             import sqlite3  # noqa
@@ -192,19 +192,27 @@ class HashCache:
             logger.warn("SQLite was not found, the Hash Cache will not be used.")
             return
 
-        if self.cache_dir is None:
-            self.cache_dir = _get_default_hash_cache_db_file_dir()
-        if self.cache_dir is None:
+        if cache_dir is None:
+            cache_dir = _get_default_hash_cache_db_file_dir()
+        if cache_dir is None:
             raise JobAttachmentsError(
                 "No default hash cache path found. Please provide a hash cache directory."
             )
-        os.makedirs(self.cache_dir, exist_ok=True)
-        self.cache_db_file: str = os.path.join(self.cache_dir, CACHE_FILE_NAME)
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+        except (PermissionError, OSError) as exc:
+            raise JobAttachmentsError(f"Could not access hash cache file in {cache_dir}") from exc
+        self.cache_dir: str = os.path.join(cache_dir, CACHE_FILE_NAME)
 
-        with WriteDbCursor(self.cache_db_file) as cur:
-            cur.execute(
-                "CREATE TABLE IF NOT EXISTS hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
-            )
+        with WriteDbCursor(self.cache_dir) as cur:
+            # "CREATE TABLE IF NOT EXISTS" seems to not work on macos
+            try:
+                cur.execute("SELECT * FROM hashesV1")
+            except Exception:
+                # DB file doesn't have our table, so we need to create it
+                cur.execute(
+                    "CREATE TABLE hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
+                )
 
     def __enter__(self):
         """Called when entering the context manager."""
@@ -221,7 +229,7 @@ class HashCache:
         if not self.enabled:
             return None
 
-        with ReadDbCursor(self.cache_db_file) as cur:
+        with ReadDbCursor(self.cache_dir) as cur:
             entry_vals = cur.execute(
                 "SELECT * FROM hashesV1 WHERE file_path=?", [file_path_key]
             ).fetchone()
@@ -239,7 +247,7 @@ class HashCache:
         if not self.enabled:
             return
 
-        with WriteDbCursor(self.cache_db_file) as cur:
+        with WriteDbCursor(self.cache_dir) as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO hashesV1 VALUES(:file_path, :file_hash, :last_modified_time)",
                 entry.to_dict(),
