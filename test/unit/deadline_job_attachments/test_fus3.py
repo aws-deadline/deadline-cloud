@@ -16,7 +16,10 @@ import pytest
 
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
-from deadline.job_attachments.exceptions import Fus3ExecutableMissingError
+from deadline.job_attachments.exceptions import (
+    Fus3ExecutableMissingError,
+    Fus3LaunchScriptMissingError,
+)
 from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.fus3 import (
     Fus3ProcessManager,
@@ -92,9 +95,14 @@ class TestFus3Processmanager:
                 os.environ["AWS_DEFAULT_REGION"],
             )
         ]
-        assert (
-            process_manager.build_launch_command(mount_point=local_root) == expected_launch_command
-        )
+        with patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            return_value=True,
+        ):
+            assert (
+                process_manager.build_launch_command(mount_point=local_root)
+                == expected_launch_command
+            )
 
         # Create process manager with CAS prefix
         test_CAS_prefix: str = "test_prefix"
@@ -117,9 +125,14 @@ class TestFus3Processmanager:
                 test_CAS_prefix,
             )
         ]
-        assert (
-            process_manager.build_launch_command(mount_point=local_root) == expected_launch_command
-        )
+        with patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            return_value=True,
+        ):
+            assert (
+                process_manager.build_launch_command(mount_point=local_root)
+                == expected_launch_command
+            )
 
     def test_find_fus3(
         self,
@@ -199,6 +212,46 @@ class TestFus3Processmanager:
 
             mock_find_fus3.assert_called_once()
 
+    def test_find_fus3_launch_script(
+        self,
+        tmp_path: Path,
+    ):
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        fus3_test_path = str((Path(__file__) / "fus3").resolve())
+        os.environ[FUS3_PATH_ENV_VAR] = fus3_test_path
+        # Reset fus3 script path so it isn't populated by a previous test
+        Fus3ProcessManager.fus3_script_path = None
+
+        # Create process manager without CAS prefix
+        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
+        ) as mock_os_path_exists:
+            mock_os_path_exists.return_value = True
+            fus3_launch_script_path: Union[
+                os.PathLike, str
+            ] = process_manager.find_fus3_launch_script()
+            assert str(fus3_launch_script_path) == fus3_test_path + FUS3_EXECUTABLE_SCRIPT
+
+            process_manager.find_fus3_launch_script()
+
+            mock_os_path_exists.assert_called_once()
+
+            Fus3ProcessManager.fus3_script_path = None
+            mock_os_path_exists.return_value = False
+
+            with pytest.raises(Fus3LaunchScriptMissingError):
+                process_manager.find_fus3_launch_script()
+
     def test_create_mount_point(
         self,
         tmp_path: Path,
@@ -264,6 +317,9 @@ class TestFus3Processmanager:
         ), patch(
             f"{deadline.__package__}.job_attachments.fus3.os.kill",
         ) as mock_os_kill, patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            return_value=True,
+        ), patch(
             f"{deadline.__package__}.job_attachments.fus3.subprocess.run"
         ) as mock_subprocess_run:
             # start first mock fus3 process
@@ -331,6 +387,9 @@ class TestFus3Processmanager:
             f"{deadline.__package__}.job_attachments.fus3.subprocess.Popen",
         ) as mock_popen, patch(
             f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.wait_for_mount",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
             return_value=True,
         ), patch(
             f"{deadline.__package__}.job_attachments.fus3.log"
