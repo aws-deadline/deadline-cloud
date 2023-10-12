@@ -11,12 +11,17 @@ import threading
 from signal import SIGTERM
 from typing import List, Union, Optional
 
-from .exceptions import Fus3ExecutableMissingError, Fus3FailedToMountError
+from .exceptions import (
+    Fus3ExecutableMissingError,
+    Fus3FailedToMountError,
+    Fus3LaunchScriptMissingError,
+)
 
 log = logging.getLogger(__name__)
 
 FUS3_EXECUTABLE = "fus3"
 FUS3_PATH_ENV_VAR = "FUS3_PATH"
+FUS3_DEFAULT_INSTALL_PATH = "/opt/fus3"
 FUS3_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_fus3_al2.sh"
 
 FUS3_PID_FILE_NAME = "fus3_pids.txt"
@@ -24,6 +29,7 @@ FUS3_PID_FILE_NAME = "fus3_pids.txt"
 
 class Fus3ProcessManager(object):
     fus3_path: Optional[str] = None
+    fus3_script_path: Optional[str] = None
     library_path: Optional[str] = None
     cwd_path: Optional[str] = None
 
@@ -145,7 +151,8 @@ class Fus3ProcessManager(object):
         :return: command
         """
         command = []
-        executable = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
+
+        executable = Fus3ProcessManager.find_fus3_launch_script()
         if self._cas_prefix is None:
             command = [
                 "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
@@ -168,6 +175,32 @@ class Fus3ProcessManager(object):
         return command
 
     @classmethod
+    def find_fus3_launch_script(cls) -> Union[os.PathLike, str]:
+        """
+        Determine where the fus3 launch script lives so we can build the launch command
+        :return: Path to fus3 launch script
+        """
+        if Fus3ProcessManager.fus3_script_path is not None:
+            log.info(f"Using saved path {Fus3ProcessManager.fus3_script_path} for launch script")
+            return Fus3ProcessManager.fus3_script_path
+
+        log.info("Searching for Fus3 launch script")
+        if FUS3_PATH_ENV_VAR in os.environ:
+            log.info(f"{FUS3_PATH_ENV_VAR} found in environment")
+            environ_check = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
+        else:
+            log.warning(f"{FUS3_PATH_ENV_VAR} not found in environment")
+            environ_check = FUS3_DEFAULT_INSTALL_PATH + FUS3_EXECUTABLE_SCRIPT
+        if os.path.exists(environ_check):
+            log.info(f"Environ check found fus3 launch script at {environ_check}")
+            found_path = environ_check
+        else:
+            log.error("Failed to find fus3 launch script!")
+            raise Fus3LaunchScriptMissingError
+        Fus3ProcessManager.fus3_script_path = found_path
+        return found_path  # type: ignore[return-value]
+
+    @classmethod
     def find_fus3(cls) -> Union[os.PathLike, str]:
         """
         Determine where the fus3 executable we'll be launching lives so we can
@@ -184,11 +217,12 @@ class Fus3ProcessManager(object):
             log.info(f"Cwd when finding fus3 is {os.getcwd()}")
             # If fus3 executable isn't on the PATH, check if environment variable is set
 
-            environ_check = (
-                os.environ[FUS3_PATH_ENV_VAR] + "/bin/fus3"
-                if FUS3_PATH_ENV_VAR in os.environ
-                else ""
-            )
+            if FUS3_PATH_ENV_VAR in os.environ:
+                log.info(f"{FUS3_PATH_ENV_VAR} found in environment")
+                environ_check = os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"
+            else:
+                log.warning(f"{FUS3_PATH_ENV_VAR} not found in environment")
+                environ_check = FUS3_DEFAULT_INSTALL_PATH + f"/bin/{FUS3_EXECUTABLE}"
             if os.path.exists(environ_check):
                 log.info(f"Environ check found fus3 at {environ_check}")
                 found_path = environ_check

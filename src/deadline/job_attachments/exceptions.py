@@ -119,6 +119,12 @@ class Fus3ExecutableMissingError(JobAttachmentsError):
     """
 
 
+class Fus3LaunchScriptMissingError(JobAttachmentsError):
+    """
+    Exception for when trying to retrieve Fus3 launch script path doesn't exist.
+    """
+
+
 class Fus3FailedToMountError(JobAttachmentsError):
     """
     Exception for when trying to mount Fus3 at a given path.
