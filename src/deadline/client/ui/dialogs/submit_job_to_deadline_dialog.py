@@ -438,6 +438,13 @@ class SubmitJobToDeadlineDialog(QDialog):
                     session=queue_role_session,
                 )
 
+            api.get_deadline_cloud_library_telemetry_client().record_event(
+                event_type="com.amazon.rum.deadline.submission",
+                event_details={
+                    "submitter_name": settings.submitter_name,
+                },
+            )
+
             self.create_job_response = job_progress_dialog.start_submission(
                 farm_id,
                 queue_id,
@@ -450,6 +457,10 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
         except Exception as exc:
             logger.exception("error submitting job")
+            api.get_deadline_cloud_library_telemetry_client().record_error(
+                event_details={"submitter_name": settings.submitter_name},
+                exception_type=str(type(exc)),
+            )
             QMessageBox.warning(self, f"{settings.submitter_name} Job Submission", str(exc))
 
         if self.create_job_response:
