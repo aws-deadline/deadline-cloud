@@ -12,8 +12,6 @@ import threading
 import textwrap
 from typing import Any, Dict, List, Optional, Set, cast
 
-from deadline.client.config import config_file
-
 from botocore.client import BaseClient  # type: ignore[import]
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtGui import QCloseEvent
@@ -29,9 +27,11 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
+from openjd.model import document_string_to_object, DocumentType, decode_template
+
 from deadline.client import api
 from deadline.client.exceptions import CreateJobWaiterCanceled
-from deadline.client.config import set_setting
+from deadline.client.config import set_setting, config_file
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
@@ -43,6 +43,7 @@ from deadline.job_attachments.models import AssetRootManifest
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
+from deadline.client.exceptions import DeadlineOperationError
 
 __all__ = ["SubmitJobProgressDialog"]
 
@@ -176,6 +177,18 @@ class SubmitJobProgressDialog(QDialog):
         file_contents, file_type = read_yaml_or_json(
             self._job_bundle_dir, "template", required=True
         )
+
+        # Validate the template prior to continuing with the submission.
+        document_type = DocumentType.JSON if file_type == "JSON" else DocumentType.YAML
+        try:
+            template_as_dict = document_string_to_object(
+                document=file_contents, document_type=document_type
+            )
+            _ = decode_template(template=template_as_dict)
+        except Exception as e:
+            # Close the submission progress dialog and raise an exception
+            self.close()
+            raise DeadlineOperationError("Invalid template: {}".format(e))
 
         self._create_job_args["farmId"] = self._farm_id
         self._create_job_args["queueId"] = self._queue_id
@@ -342,7 +355,10 @@ class SubmitJobProgressDialog(QDialog):
                 message += f"\n{job_id}\n"
             else:
                 message = "CreateJob response was empty, or did not contain a Job ID."
-            self.create_job_thread_succeeded.emit(success, message)
+            if success:
+                self.create_job_thread_succeeded.emit(success, message)
+            else:
+                self.create_job_thread_exception.emit(message)
         except CreateJobWaiterCanceled as e:
             # If it wasn't canceled, send the exception to the dialog
             if self._continue_submission:

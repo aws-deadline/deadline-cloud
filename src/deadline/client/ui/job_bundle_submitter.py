@@ -19,6 +19,7 @@ from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
     read_yaml_or_json_object,
+    validate_template_object,
 )
 from ..job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from .dataclasses import JobBundleSettings
@@ -121,6 +122,8 @@ def show_job_bundle_submitter(
 
     # Load the template to get the starting name
     template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
+    # Validate the template. Raises an exception if invalid
+    validate_template_object(template)
 
     asset_references_obj = (
         read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
