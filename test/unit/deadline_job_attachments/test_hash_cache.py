@@ -76,12 +76,15 @@ class TestHashCache:
 
         with pytest.raises(JobAttachmentsError) as err:
             if os.name == "nt":
-                # For Windows, we use the system root folder which will produce a sqlite3.connect
-                # permission error.
-                HashCache(os.environ["SYSTEMROOT"])
+                # For Windows, we use and invalid drive letter.
+                # Passing a folder with `/` considers the root of the current drive. A developer
+                # could be working out of a drive with access to the root folder.
+                # Passing a special folder like "Windows" could not fail if the developer/CI has
+                # admin permissions.
+                HashCache(os.path.join("A:", "bad", "folder"))
             else:
                 # For Linux, we take the root which does not give permissions to the current user
-                HashCache("/proc")
+                HashCache(os.path.join("/", "bad", "folder"))
             assert (
                 False
             ), "Context manager should throw an exception, this assert should not be reached"
