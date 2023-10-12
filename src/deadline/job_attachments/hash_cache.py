@@ -117,9 +117,10 @@ class ReadDbCursor:
 
     @staticmethod
     def _get_db_con(cache_db_file) -> sqlite3.Connection:
-        ReadDbCursor.thread_local_connection
         if "db" not in ReadDbCursor.thread_local_connection.__dict__:
-            ReadDbCursor.thread_local_connection.__dict__["db"] = DbConnection(cache_db_file)
+            ReadDbCursor.thread_local_connection.__dict__["db"] = dict()
+        if cache_db_file not in ReadDbCursor.thread_local_connection.db:
+            ReadDbCursor.thread_local_connection.db[cache_db_file] = DbConnection(cache_db_file)
         return ReadDbCursor.thread_local_connection.db.con
 
     def __init__(self, db_file_path: str):
