@@ -126,7 +126,7 @@ class TestFus3Processmanager:
         )
 
         # intermediate cleanup
-        Fus3ProcessManager.fus3_launch_script_path = None
+        Fus3ProcessManager.fus3_script_path = None
 
         expected_launch_command = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
@@ -198,7 +198,7 @@ class TestFus3Processmanager:
         )
 
         # intermediate cleanup
-        Fus3ProcessManager.fus3_launch_script_path = None
+        Fus3ProcessManager.fus3_script_path = None
 
         expected_launch_command = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
