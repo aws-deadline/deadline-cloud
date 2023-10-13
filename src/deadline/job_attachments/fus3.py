@@ -33,6 +33,11 @@ EXE_TO_SCRIPT = {
     FUS3_EXECUTABLE: FUS3_EXECUTABLE_SCRIPT,
 }
 
+EXE_TO_INSTALL_PATH = {
+    DEADLINE_VFS_EXECUTABLE: DEADLINE_VFS_INSTALL_PATH,
+    FUS3_EXECUTABLE: FUS3_DEFAULT_INSTALL_PATH,
+}
+
 FUS3_PID_FILE_NAME = "fus3_pids.txt"
 
 
@@ -203,7 +208,7 @@ class Fus3ProcessManager(object):
                 environ_check = os.environ[FUS3_PATH_ENV_VAR] + exe_script
             else:
                 log.warning(f"{FUS3_PATH_ENV_VAR} not found in environment")
-                environ_check = FUS3_DEFAULT_INSTALL_PATH + exe_script
+                environ_check = EXE_TO_INSTALL_PATH[exe] + exe_script
             # Test if script path exists
             if os.path.exists(environ_check):
                 log.info(f"Environ check found {exe} launch script at {environ_check}")
