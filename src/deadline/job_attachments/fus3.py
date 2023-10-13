@@ -37,8 +37,8 @@ FUS3_PID_FILE_NAME = "fus3_pids.txt"
 
 
 class Fus3ProcessManager(object):
-    fus3_path: Optional[str] = None
-    fus3_script_path: Optional[str] = None
+    exe_path: Optional[str] = None
+    launch_script_path: Optional[str] = None
     library_path: Optional[str] = None
     cwd_path: Optional[str] = None
 
@@ -189,9 +189,9 @@ class Fus3ProcessManager(object):
         Determine where the fus3 launch script lives so we can build the launch command
         :return: Path to fus3 launch script
         """
-        if Fus3ProcessManager.fus3_script_path is not None:
-            log.info(f"Using saved path {Fus3ProcessManager.fus3_script_path} for launch script")
-            return Fus3ProcessManager.fus3_script_path
+        if Fus3ProcessManager.launch_script_path is not None:
+            log.info(f"Using saved path {Fus3ProcessManager.launch_script_path} for launch script")
+            return Fus3ProcessManager.launch_script_path
 
         executables = [DEADLINE_VFS_EXECUTABLE, FUS3_EXECUTABLE]
         for exe in executables:
@@ -207,7 +207,7 @@ class Fus3ProcessManager(object):
             # Test if script path exists
             if os.path.exists(environ_check):
                 log.info(f"Environ check found {exe} launch script at {environ_check}")
-                Fus3ProcessManager.fus3_script_path = environ_check
+                Fus3ProcessManager.launch_script_path = environ_check
                 return environ_check  # type: ignore[return-value]
             else:
                 log.error(f"Failed to find {exe} launch script!")
@@ -222,9 +222,9 @@ class Fus3ProcessManager(object):
         find the correct relative paths around it for LD_LIBRARY_PATH and config files
         :return: Path to fus3
         """
-        if Fus3ProcessManager.fus3_path is not None:
-            log.info(f"Using saved path {Fus3ProcessManager.fus3_path}")
-            return Fus3ProcessManager.fus3_path
+        if Fus3ProcessManager.exe_path is not None:
+            log.info(f"Using saved path {Fus3ProcessManager.exe_path}")
+            return Fus3ProcessManager.exe_path
 
         executables = [DEADLINE_VFS_EXECUTABLE, FUS3_EXECUTABLE]
         for exe in executables:
@@ -253,7 +253,7 @@ class Fus3ProcessManager(object):
             # Run final check to see if exe path was found
             if found_path is not None:
                 log.info(f"Found {exe} at {found_path}")
-                Fus3ProcessManager.fus3_path = found_path
+                Fus3ProcessManager.exe_path = found_path
                 return found_path  # type: ignore[return-value]
 
         log.error("Failed to find both executables!")
@@ -265,9 +265,9 @@ class Fus3ProcessManager(object):
         Find our library dependencies which should be at ../lib relative to our executable
         """
         if Fus3ProcessManager.library_path is None:
-            fus3_path = Fus3ProcessManager.find_fus3()
+            exe_path = Fus3ProcessManager.find_fus3()
             Fus3ProcessManager.library_path = os.path.normpath(
-                os.path.join(os.path.dirname(fus3_path), "../lib")
+                os.path.join(os.path.dirname(exe_path), "../lib")
             )
         log.info(f"Using library path {Fus3ProcessManager.library_path}")
         return Fus3ProcessManager.library_path
@@ -293,10 +293,10 @@ class Fus3ProcessManager(object):
         We expect a config/logging.ini file to exist relative to this folder.
         """
         if Fus3ProcessManager.cwd_path is None:
-            fus3_path = Fus3ProcessManager.find_fus3()
+            exe_path = Fus3ProcessManager.find_fus3()
             # Use cwd one folder up from bin
             Fus3ProcessManager.cwd_path = os.path.normpath(
-                os.path.join(os.path.dirname(fus3_path), "..")
+                os.path.join(os.path.dirname(exe_path), "..")
             )
         return Fus3ProcessManager.cwd_path
 

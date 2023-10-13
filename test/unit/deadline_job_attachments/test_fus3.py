@@ -58,8 +58,8 @@ class TestFus3Processmanager:
         yield
 
         # reset Fus3ProcessManager fields
-        Fus3ProcessManager.fus3_path = None
-        Fus3ProcessManager.fus3_script_path = None
+        Fus3ProcessManager.exe_path = None
+        Fus3ProcessManager.launch_script_path = None
         Fus3ProcessManager.library_path = None
         Fus3ProcessManager.cwd_path = None
 
@@ -126,7 +126,7 @@ class TestFus3Processmanager:
         )
 
         # intermediate cleanup
-        Fus3ProcessManager.fus3_script_path = None
+        Fus3ProcessManager.launch_script_path = None
 
         expected_launch_command = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
@@ -198,7 +198,7 @@ class TestFus3Processmanager:
         )
 
         # intermediate cleanup
-        Fus3ProcessManager.fus3_script_path = None
+        Fus3ProcessManager.launch_script_path = None
 
         expected_launch_command = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
@@ -249,7 +249,7 @@ class TestFus3Processmanager:
 
             # Reset fus3 path and remove from PATH so other methods are checked
             mock_which.return_value = None
-            Fus3ProcessManager.fus3_path = None
+            Fus3ProcessManager.exe_path = None
 
             with patch(
                 f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
@@ -338,8 +338,6 @@ class TestFus3Processmanager:
         manifest_path: str = f"{local_root}/manifest.json"
         fus3_test_path = str((Path(__file__) / "fus3").resolve())
         os.environ[FUS3_PATH_ENV_VAR] = fus3_test_path
-        # Reset fus3 script path so it isn't populated by a previous test
-        Fus3ProcessManager.fus3_script_path = None
 
         # Create process manager without CAS prefix
         process_manager: Fus3ProcessManager = Fus3ProcessManager(
@@ -362,7 +360,7 @@ class TestFus3Processmanager:
 
             mock_os_path_exists.assert_called_once()
 
-            Fus3ProcessManager.fus3_script_path = None
+            Fus3ProcessManager.launch_script_path = None
             mock_os_path_exists.return_value = False
 
             with pytest.raises(Fus3LaunchScriptMissingError):
@@ -378,8 +376,6 @@ class TestFus3Processmanager:
         manifest_path: str = f"{local_root}/manifest.json"
         fus3_test_path = str((Path(__file__) / "fus3").resolve())
         os.environ[FUS3_PATH_ENV_VAR] = fus3_test_path
-        # Reset fus3 script path so it isn't populated by a previous test
-        Fus3ProcessManager.fus3_script_path = None
 
         # Create process manager without CAS prefix
         process_manager: Fus3ProcessManager = Fus3ProcessManager(
