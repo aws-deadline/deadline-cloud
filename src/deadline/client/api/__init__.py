@@ -26,7 +26,7 @@ __all__ = [
 
 from configparser import ConfigParser
 from logging import getLogger
-from typing import Optional
+from typing import Any, Optional
 
 from ._loginout import login, logout
 from ._session import (
@@ -74,14 +74,14 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            list_farm_params = {"maxResults": 1}
+            list_farm_params: dict[str, Any] = {"maxResults": 1}
             user_id, _ = get_user_and_identity_store_id(config=config)
             if user_id:
-                list_farm_params["principalId"] = user_id
+                list_farm_params["principalId"] = str(user_id)
 
             studio_id = get_studio_id(config=config)
             if studio_id:
-                list_farm_params["studioId"] = studio_id
+                list_farm_params["studioId"] = str(studio_id)
 
             deadline = get_boto3_client("deadline", config=config)
             deadline.list_farms(**list_farm_params)
