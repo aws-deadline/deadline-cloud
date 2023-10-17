@@ -160,7 +160,7 @@ def test_check_deadline_api_available(fresh_deadline_config):
         result = api.check_deadline_api_available()
 
         assert result is True
-        # It should have called list_farms with dry-run to check the API
+        # It should have called list_farms to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(
             maxResults=1, studioId="some-studio-id"
         )
@@ -175,7 +175,7 @@ def test_check_deadline_api_available_fails(fresh_deadline_config):
         result = api.check_deadline_api_available()
 
         assert result is False
-        # It should have called list_farms with dry-run to check the API
+        # It should have called list_farms with to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(
             maxResults=1, studioId="some-studio-id"
         )

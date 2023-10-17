@@ -61,8 +61,8 @@ logger = getLogger(__name__)
 def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
     """
     Returns True if Amazon Deadline Cloud APIs are authorized in the session,
-    False otherwise. This only checks the deadline:ListFarms API,
-    by performing a dry-run call.
+    False otherwise. This only checks the deadline:ListFarms API by performing
+    one call with just one result.
 
     Args:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
