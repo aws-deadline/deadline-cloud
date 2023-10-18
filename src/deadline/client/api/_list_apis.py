@@ -21,16 +21,13 @@ def _call_paginated_deadline_list_api(list_api, list_property_name, **kwargs):
                                 the list.
     """
     response = list_api(**kwargs)
-    if kwargs.get("dryRun", False):
-        return response
-    else:
-        result = {list_property_name: response[list_property_name]}
+    result = {list_property_name: response[list_property_name]}
 
-        while "nextToken" in response:
-            response = list_api(nextToken=response["nextToken"], **kwargs)
-            result[list_property_name].extend(response[list_property_name])
+    while "nextToken" in response:
+        response = list_api(nextToken=response["nextToken"], **kwargs)
+        result[list_property_name].extend(response[list_property_name])
 
-        return result
+    return result
 
 
 def list_farms(config=None, **kwargs):

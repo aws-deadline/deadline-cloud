@@ -26,7 +26,7 @@ __all__ = [
 
 from configparser import ConfigParser
 from logging import getLogger
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ._loginout import login, logout
 from ._session import (
@@ -37,6 +37,8 @@ from ._session import (
     get_boto3_client,
     get_boto3_session,
     get_credentials_type,
+    get_studio_id,
+    get_user_and_identity_store_id,
 )
 from ._list_apis import (
     list_farms,
@@ -59,8 +61,8 @@ logger = getLogger(__name__)
 def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
     """
     Returns True if Amazon Deadline Cloud APIs are authorized in the session,
-    False otherwise. This only checks the deadline:ListFarms API,
-    by performing a dry-run call.
+    False otherwise. This only checks the deadline:ListFarms API by performing
+    one call with just one result.
 
     Args:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
@@ -72,7 +74,17 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            list_farms(config=config, maxResults=1, dryRun=True)
+            list_farm_params: Dict[str, Any] = {"maxResults": 1}
+            user_id, _ = get_user_and_identity_store_id(config=config)
+            if user_id:
+                list_farm_params["principalId"] = str(user_id)
+
+            studio_id = get_studio_id(config=config)
+            if studio_id:
+                list_farm_params["studioId"] = str(studio_id)
+
+            deadline = get_boto3_client("deadline", config=config)
+            deadline.list_farms(**list_farm_params)
             return True
         except Exception:
             logger.exception("Error invoking ListFarms")
