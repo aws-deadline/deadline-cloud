@@ -111,6 +111,9 @@ class DeadlineConfigDialog(QDialog):
         self.button_box.addButton(self.logout_button, QDialogButtonBox.ResetRole)
         self.layout.addWidget(self.button_box)
 
+        # Refresh the lists so queue/farm show the description instead of the ID
+        self.config_box.refresh_lists()
+
     @property
     def changes_were_applied(self) -> bool:
         return self.config_box.changes_were_applied
