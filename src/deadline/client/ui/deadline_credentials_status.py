@@ -15,7 +15,7 @@ The status includes three parts:
   1. Are credentials configured and available for use?
      This is checked with an sts:GetCallerIdentity AWS API call.
   2. Do the credentials grant access to Amazon Deadline Cloud APIs?
-     This is checked with a dry-run deadline:ListFarms AWS API call.
+     This is checked with a simplified deadline:ListFarms AWS API call.
   3. Do the credentials use Deadline Cloud Monitor?
      This is checked by looking for the relevant properties
      in the AWS profile configuration.
