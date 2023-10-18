@@ -47,6 +47,7 @@ from .models import (
     JobAttachmentS3Settings,
     ManifestProperties,
     OutputFile,
+    PathFormat,
 )
 from .upload import S3AssetUploader
 from ._utils import (
@@ -184,7 +185,6 @@ class AssetSync:
 
     def _get_output_files(
         self,
-        source_profile: str,
         manifest_properties: ManifestProperties,
         s3_settings: JobAttachmentS3Settings,
         local_root: Path,
@@ -196,9 +196,18 @@ class AssetSync:
         """
         output_files: List[OutputFile] = []
 
+        source_path_format = manifest_properties.rootPathFormat
+        current_path_format = PathFormat.get_host_path_format()
+
         for output_dir in manifest_properties.outputRelativeDirectories or []:
-            # Don't fail if output dir hasn't been created yet; another task might be working on it
+            if source_path_format != current_path_format:
+                if source_path_format == PathFormat.WINDOWS:
+                    output_dir = output_dir.replace("\\", "/")
+                elif source_path_format == PathFormat.POSIX:
+                    output_dir = output_dir.replace("/", "\\")
             output_root: Path = local_root / output_dir
+
+            # Don't fail if output dir hasn't been created yet; another task might be working on it
             if not output_root.is_dir():
                 continue
 
@@ -460,7 +469,6 @@ class AssetSync:
                     local_root = session_dir.joinpath(dir_name)
 
                 output_files: List[OutputFile] = self._get_output_files(
-                    manifest_properties.rootPathFormat.value,
                     manifest_properties,
                     s3_settings,
                     local_root,

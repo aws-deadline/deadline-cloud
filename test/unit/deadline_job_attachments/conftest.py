@@ -153,7 +153,7 @@ def fixture_windows_attachments():
                 rootPathFormat=PathFormat.WINDOWS,
                 inputManifestPath="manifest.json",
                 inputManifestHash="manifesthash",
-                outputRelativeDirectories=["test/outputs"],
+                outputRelativeDirectories=["test\\outputs"],
             )
         ],
     )
