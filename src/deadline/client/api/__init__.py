@@ -24,6 +24,10 @@ __all__ = [
     "get_deadline_cloud_library_telemetry_client",
 ]
 
+# The following import is needed to prevent the following sporadic failure:
+# botocore.exceptions.HTTPClientError: An HTTP Client raised an unhandled exception: unknown
+# encoding: idna
+import encodings.idna  # noqa # pylint: disable=unused-import
 from configparser import ConfigParser
 from logging import getLogger
 from typing import Any, Dict, Optional
