@@ -101,6 +101,14 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             if name.startswith("deadline:"):
                 self.set_parameter_value({"name": name, "value": value})
 
+    def __del__(self):
+        self.canceled.set_canceled()
+        if (
+            self.__refresh_queue_parameters_thread
+            and self.__refresh_queue_parameters_thread.is_alive()
+        ):
+            self.__refresh_queue_parameters_thread.join()
+
     def refresh_ui(self, job_settings: Any):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
