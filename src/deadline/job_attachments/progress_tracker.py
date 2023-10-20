@@ -58,8 +58,8 @@ class SummaryStatistics:
 
     def __str__(self):
         return (
-            f"Processed {self.processed_files} files totaling"
-            + f" {_human_readable_file_size(self.processed_bytes)}.\n"
+            f"Processed {self.processed_files} file{'' if self.processed_files == 1 else 's'}"
+            + f" totaling {_human_readable_file_size(self.processed_bytes)}.\n"
             + f"Skipped re-processing {self.skipped_files} files totaling"
             + f" {_human_readable_file_size(self.skipped_bytes)}.\n"
             + f"Total processing time of {round(self.total_time, ndigits=5)} seconds"
@@ -206,7 +206,7 @@ class ProgressTracker:
                     self.processed_files += 1
                     self.completed_files_in_chunk += 1
                 # Logs progress message to the logger (if exists)
-                self.log_progress_message()
+                self._log_progress_message()
                 # Invokes the callback with current progress data
                 return self.report_progress()
 
@@ -342,7 +342,7 @@ class ProgressTracker:
         }
         return DownloadSummaryStatistics(**summary_statistics_dict)
 
-    def log_progress_message(self) -> None:
+    def _log_progress_message(self) -> None:
         """
         Logs progress message to the logger (if exists) on specific conditions:
         1. when the `log_interval` time has passed since the last call, (or since the
