@@ -24,6 +24,7 @@ FUS3_EXECUTABLE = "fus3"
 FUS3_DEFAULT_INSTALL_PATH = "/opt/fus3"
 FUS3_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_fus3_al2.sh"
 
+DEADLINE_VFS_ENV_VAR = "DEADLINE_VFS_PATH"
 DEADLINE_VFS_EXECUTABLE = "deadline_vfs"
 DEADLINE_VFS_INSTALL_PATH = "/opt/deadline_vfs"
 DEADLINE_VFS_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_deadline_vfs_al2.sh"
@@ -203,11 +204,16 @@ class Fus3ProcessManager(object):
             log.info(f"Searching for {exe} launch script")
             exe_script = EXE_TO_SCRIPT[exe]
             # Look for env var to construct script path
-            if FUS3_PATH_ENV_VAR in os.environ:
+            if DEADLINE_VFS_ENV_VAR in os.environ:
+                log.info(f"{DEADLINE_VFS_ENV_VAR} found in environment")
+                environ_check = os.environ[DEADLINE_VFS_ENV_VAR] + exe_script
+            elif FUS3_PATH_ENV_VAR in os.environ:
                 log.info(f"{FUS3_PATH_ENV_VAR} found in environment")
                 environ_check = os.environ[FUS3_PATH_ENV_VAR] + exe_script
             else:
-                log.warning(f"{FUS3_PATH_ENV_VAR} not found in environment")
+                log.warning(
+                    f"{FUS3_PATH_ENV_VAR} and {DEADLINE_VFS_ENV_VAR} not found in environment"
+                )
                 environ_check = EXE_TO_INSTALL_PATH[exe] + exe_script
             # Test if script path exists
             if os.path.exists(environ_check):
@@ -238,11 +244,15 @@ class Fus3ProcessManager(object):
             if found_path is None:
                 log.info(f"Cwd when finding {exe} is {os.getcwd()}")
                 # If fus3 executable isn't on the PATH, check if environment variable is set
-                environ_check = (
-                    os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{exe}"
-                    if FUS3_PATH_ENV_VAR in os.environ
-                    else ""
-                )
+                if DEADLINE_VFS_ENV_VAR in os.environ:
+                    log.info(f"{DEADLINE_VFS_ENV_VAR} set to {os.environ[DEADLINE_VFS_ENV_VAR]}")
+                    environ_check = os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{exe}"
+                elif FUS3_PATH_ENV_VAR in os.environ:
+                    log.info(f"{FUS3_PATH_ENV_VAR} set to {os.environ[FUS3_PATH_ENV_VAR]}")
+                    environ_check = os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{exe}"
+                else:
+                    log.info(f"{FUS3_PATH_ENV_VAR} and {DEADLINE_VFS_ENV_VAR} env vars not set")
+                    environ_check = ""
                 if os.path.exists(environ_check):
                     log.info(f"Environ check found {exe} at {environ_check}")
                     found_path = environ_check

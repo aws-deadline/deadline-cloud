@@ -26,6 +26,7 @@ from deadline.job_attachments.fus3 import (
     FUS3_EXECUTABLE,
     FUS3_EXECUTABLE_SCRIPT,
     FUS3_PATH_ENV_VAR,
+    DEADLINE_VFS_ENV_VAR,
     FUS3_PID_FILE_NAME,
     DEADLINE_VFS_EXECUTABLE,
     DEADLINE_VFS_EXECUTABLE_SCRIPT,
@@ -267,6 +268,57 @@ class TestFus3Processmanager:
                         call(os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{DEADLINE_VFS_EXECUTABLE}"),
                         call(os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")),
                         call(os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"),
+                        call(os.path.join(os.getcwd(), f"bin/{FUS3_EXECUTABLE}")),
+                    ]
+                )
+
+    def test_find_fus3_with_deadline_env_set(
+        self,
+        tmp_path: Path,
+    ):
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline").resolve())
+        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+
+        # Create process manager without CAS prefix
+        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+        )
+
+        # verify which is only called when class path is not set
+        with patch(f"{deadline.__package__}.job_attachments.fus3.shutil.which") as mock_which:
+            mock_which.return_value = "/test/path"
+            test_path: Union[os.PathLike, str] = process_manager.find_fus3()
+
+            assert str(test_path) == "/test/path"
+            test_path = process_manager.find_fus3()
+            mock_which.assert_called_once()
+
+            # Reset fus3 path and remove from PATH so other methods are checked
+            mock_which.return_value = None
+            Fus3ProcessManager.exe_path = None
+
+            with patch(
+                f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
+            ) as mock_path_exists:
+                mock_path_exists.return_value = False
+
+                with pytest.raises(Fus3ExecutableMissingError):
+                    process_manager.find_fus3()
+
+                # Verify DEADLINE_VFS_ENV_VAR location is checked
+                # Verify bin folder is checked as a last resort
+                mock_path_exists.assert_has_calls(
+                    [
+                        call(os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{DEADLINE_VFS_EXECUTABLE}"),
+                        call(os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")),
+                        call(os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"),
                         call(os.path.join(os.getcwd(), f"bin/{FUS3_EXECUTABLE}")),
                     ]
                 )
