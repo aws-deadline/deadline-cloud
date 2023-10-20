@@ -644,8 +644,13 @@ class _DeadlineResourceListComboBox(QWidget):
             if index >= 0:
                 self.box.setCurrentIndex(index)
             else:
-                self.box.insertItem(0, selected_id or "<none selected>", userData=selected_id)
-                self.box.setCurrentIndex(0)
+                # Some cases allow to select "nothing" and insert an item to indicate such
+                index = self.box.findText("<none selected>")
+                if index >= 0:
+                    self.box.setCurrentIndex(index)
+                else:
+                    self.box.insertItem(0, "<none selected>", userData="")
+                    self.box.setCurrentIndex(0)
 
     def _refresh_thread_function(self, refresh_id: int, config: Optional[ConfigParser] = None):
         """
@@ -702,6 +707,15 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
                 config=config, farmId=default_farm_id, queueId=default_queue_id
             )
             storage_profiles = response.get("storageProfiles", [])
+            # add a "<none selected>" option since its possible to select nothing for this type
+            # of resource
+            storage_profiles.append(
+                {
+                    "storageProfileId": "",
+                    "displayName": "<none selected>",
+                    "osFamily": self._get_current_os(),
+                }
+            )
             return sorted(
                 (item["displayName"], item["storageProfileId"])
                 for item in storage_profiles
