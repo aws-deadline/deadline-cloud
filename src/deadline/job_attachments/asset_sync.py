@@ -47,6 +47,7 @@ from .models import (
     JobAttachmentS3Settings,
     ManifestProperties,
     OutputFile,
+    PathFormat,
 )
 from .upload import S3AssetUploader
 from ._utils import (
@@ -54,6 +55,7 @@ from ._utils import (
     _get_unique_dest_dir_name,
     _hash_data,
     _hash_file,
+    _human_readable_file_size,
     _join_s3_paths,
 )
 
@@ -119,8 +121,6 @@ class AssetSync:
                 progress_tracker.increase_skipped(1, file.file_size)
                 continue
 
-            self.logger.info(f"Uploading output file to {file.s3_key}")
-
             self.s3_uploader.upload_file_to_s3(
                 file.full_path,
                 s3_settings.s3BucketName,
@@ -184,7 +184,6 @@ class AssetSync:
 
     def _get_output_files(
         self,
-        source_profile: str,
         manifest_properties: ManifestProperties,
         s3_settings: JobAttachmentS3Settings,
         local_root: Path,
@@ -196,10 +195,23 @@ class AssetSync:
         """
         output_files: List[OutputFile] = []
 
+        source_path_format = manifest_properties.rootPathFormat
+        current_path_format = PathFormat.get_host_path_format()
+
         for output_dir in manifest_properties.outputRelativeDirectories or []:
-            # Don't fail if output dir hasn't been created yet; another task might be working on it
+            if source_path_format != current_path_format:
+                if source_path_format == PathFormat.WINDOWS:
+                    output_dir = output_dir.replace("\\", "/")
+                elif source_path_format == PathFormat.POSIX:
+                    output_dir = output_dir.replace("/", "\\")
             output_root: Path = local_root / output_dir
+
+            total_file_count = 0
+            total_file_size = 0
+
+            # Don't fail if output dir hasn't been created yet; another task might be working on it
             if not output_root.is_dir():
+                self.logger.info(f"Found 0 files (Output directory {output_root} does not exist.)")
                 continue
 
             # Get all files in this directory (includes sub-directories)
@@ -218,6 +230,9 @@ class AssetSync:
                         s3_key = file_hash
                     in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
 
+                    total_file_count += 1
+                    total_file_size += file_path.lstat().st_size
+
                     output_files.append(
                         OutputFile(
                             file_size=file_size,
@@ -228,6 +243,12 @@ class AssetSync:
                             in_s3=in_s3,
                         )
                     )
+
+            self.logger.info(
+                f"Found {total_file_count} file{'' if total_file_count == 1 else 's'}"
+                f" totaling {_human_readable_file_size(total_file_size)}"
+                f" in output directory: {str(output_root)}"
+            )
 
         return output_files
 
@@ -460,7 +481,6 @@ class AssetSync:
                     local_root = session_dir.joinpath(dir_name)
 
                 output_files: List[OutputFile] = self._get_output_files(
-                    manifest_properties.rootPathFormat.value,
                     manifest_properties,
                     s3_settings,
                     local_root,
@@ -489,6 +509,11 @@ class AssetSync:
                     all_output_files.extend(output_files)
 
             if all_output_files:
+                num_output_files = len(all_output_files)
+                self.logger.info(
+                    f"Uploading {num_output_files} output file{'' if num_output_files == 1 else 's'}"
+                    f" to S3: {s3_settings.s3BucketName}/{s3_settings.full_cas_prefix()}"
+                )
                 summary_stats: SummaryStatistics = self._upload_output_files_to_s3(
                     s3_settings, all_output_files, on_uploading_files
                 )
