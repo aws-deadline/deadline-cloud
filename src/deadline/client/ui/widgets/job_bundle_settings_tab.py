@@ -24,7 +24,7 @@ from PySide2.QtWidgets import (  # type: ignore
 from ..dataclasses import JobBundleSettings
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...job_bundle.submission import AssetReferences
-from ...job_bundle.loader import read_yaml_or_json_object, validate_template_object
+from ...job_bundle.loader import read_yaml_or_json_object
 from ...job_bundle.parameters import read_job_bundle_parameters
 from ...config import config_file
 
@@ -106,10 +106,6 @@ class JobBundleSettingsWidget(QWidget):
 
             # Load the template to get the bundle name
             template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-            if template:
-                # Validate the template. Raises an exception if invalid
-                validate_template_object(template)
-
             name = (
                 template.get("name", "Job Bundle Submission")
                 if template

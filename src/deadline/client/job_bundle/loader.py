@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from openjd.model import decode_template
 from ..exceptions import DeadlineOperationError
 
 
@@ -93,11 +92,3 @@ def read_yaml_or_json_object(
         return parse_yaml_or_json_content(file_contents, file_type, bundle_dir, filename)
     else:
         return None
-
-
-def validate_template_object(template: Dict[str, Any]):
-    """Validate the template and raise an exception if it is invalid"""
-    try:
-        _ = decode_template(template=template)
-    except Exception as e:
-        raise DeadlineOperationError("Invalid Template: {}".format(e))

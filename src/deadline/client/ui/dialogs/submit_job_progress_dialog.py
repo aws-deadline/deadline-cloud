@@ -27,8 +27,6 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from openjd.model import document_string_to_object, DocumentType, decode_template
-
 from deadline.client import api
 from deadline.client.exceptions import CreateJobWaiterCanceled
 from deadline.client.config import set_setting, config_file
@@ -43,7 +41,6 @@ from deadline.job_attachments.models import AssetRootManifest
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
-from deadline.client.exceptions import DeadlineOperationError
 
 __all__ = ["SubmitJobProgressDialog"]
 
@@ -177,18 +174,6 @@ class SubmitJobProgressDialog(QDialog):
         file_contents, file_type = read_yaml_or_json(
             self._job_bundle_dir, "template", required=True
         )
-
-        # Validate the template prior to continuing with the submission.
-        document_type = DocumentType.JSON if file_type == "JSON" else DocumentType.YAML
-        try:
-            template_as_dict = document_string_to_object(
-                document=file_contents, document_type=document_type
-            )
-            _ = decode_template(template=template_as_dict)
-        except Exception as e:
-            # Close the submission progress dialog and raise an exception
-            self.close()
-            raise DeadlineOperationError("Invalid template: {}".format(e))
 
         self._create_job_args["farmId"] = self._farm_id
         self._create_job_args["queueId"] = self._queue_id
