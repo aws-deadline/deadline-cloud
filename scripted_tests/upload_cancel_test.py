@@ -18,7 +18,7 @@ configured for the given Farm's Queue.
 
 How to test:
 
-1. Run this script with the folowing command:
+1. Run this script with the following command:
    python3 upload_cancel_test.py -f <farm_id> -q <queue_id>
 2. In the middle of hashing or uploading those files, you can send a cancel
    signal by pressing 'k' and Enter keys in succession. Confirm that cancelling

@@ -41,15 +41,15 @@ from .download import (
 from .fus3 import Fus3ProcessManager
 from .exceptions import AssetSyncError, Fus3ExecutableMissingError
 from .models import (
-    JobAttachmentsFileSystem,
     Attachments,
-    FileSystemPermissionSettings,
+    JobAttachmentsFileSystem,
     JobAttachmentS3Settings,
     ManifestProperties,
     OutputFile,
     PathFormat,
 )
 from .upload import S3AssetUploader
+from .os_file_permission import FileSystemPermissionSettings
 from ._utils import (
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
@@ -346,7 +346,7 @@ class AssetSync:
                     local_root = storage_profiles_path_mapping_rules[manifest_properties.rootPath]
                 else:
                     raise AssetSyncError(
-                        "Error occured while attempting to sync input files: "
+                        "Error occurred while attempting to sync input files: "
                         f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                     )
             else:
@@ -473,7 +473,7 @@ class AssetSync:
                         )
                     else:
                         raise AssetSyncError(
-                            "Error occured while attempting to sync input files: "
+                            "Error occurred while attempting to sync input files: "
                             f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                         )
                 else:
