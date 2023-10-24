@@ -103,6 +103,12 @@ def _apply_cli_options_to_config(
         auto_accept = args.pop("yes", None)
         if auto_accept:
             config_file.set_setting("settings.auto_accept", "true", config=config)
+
+        conflict_resolution = args.pop("conflict_resolution", None)
+        if conflict_resolution:
+            config_file.set_setting(
+                "settings.conflict_resolution", conflict_resolution, config=config
+            )
     else:
         # Remove the standard option names from the args list
         for name in ["profile", "farm_id", "queue_id", "job_id"]:

@@ -221,7 +221,6 @@ def _download_job_output(
     job_id: str,
     step_id: Optional[str],
     task_id: Optional[str],
-    conflict_resolution: Optional[str] = None,
     is_json_format: bool = False,
 ):
     """
@@ -232,6 +231,7 @@ def _download_job_output(
     auto_accept = config_file.str2bool(
         config_file.get_setting("settings.auto_accept", config=config)
     )
+    conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
 
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
 
@@ -330,10 +330,10 @@ def _download_job_output(
                 )
             output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
-    # If the conflict resolution option was not provided as a command option, auto-accept is false,
-    # and if there are any conflicting files in local, prompt users to select a resolution method.
+    # If the conflict resolution option was not specified, auto-accept is false, and
+    # if there are any conflicting files in local, prompt users to select a resolution method.
     # (skip, overwrite, or make a copy.)
-    if conflict_resolution:
+    if conflict_resolution != FileConflictResolution.NOT_SELECTED.name:
         file_conflict_resolution = FileConflictResolution[conflict_resolution]
     elif auto_accept:
         file_conflict_resolution = FileConflictResolution.CREATE_COPY
@@ -565,7 +565,7 @@ def _is_path_in_windows_format(path_str: str) -> bool:
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def job_download_output(step_id, task_id, conflict_resolution, output, **args):
+def job_download_output(step_id, task_id, output, **args):
     """
     Download the output attached to an Amazon Deadline Cloud Job.
     """
@@ -582,9 +582,7 @@ def job_download_output(step_id, task_id, conflict_resolution, output, **args):
     is_json_format = True if output == "json" else False
 
     try:
-        _download_job_output(
-            config, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, is_json_format
-        )
+        _download_job_output(config, farm_id, queue_id, job_id, step_id, task_id, is_json_format)
     except Exception as e:
         if is_json_format:
             error_one_liner = str(e).replace("\n", ". ")

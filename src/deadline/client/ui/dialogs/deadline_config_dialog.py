@@ -18,6 +18,7 @@ from typing import Callable, List, Optional
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ProfileNotFound  # type: ignore[import]
+from deadline.job_attachments.models import FileConflictResolution
 from PySide2.QtCore import QSize, Qt, Signal
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QCheckBox,
@@ -274,6 +275,15 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
             group, layout, "settings.auto_accept", "Auto Accept Confirmation Prompts"
+        )
+
+        self._conflict_resolution_options = [option.name for option in FileConflictResolution]
+        self.conflict_resolution_box = self._init_combobox_setting(
+            group,
+            layout,
+            "settings.conflict_resolution",
+            "Conflict Resolution Option",
+            self._conflict_resolution_options,
         )
 
         self._log_levels = ["ERROR", "WARNING", "INFO", "DEBUG"]

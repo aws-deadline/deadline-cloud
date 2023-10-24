@@ -276,6 +276,7 @@ class FileSystemLocationType(str, Enum):
 
 
 class FileConflictResolution(Enum):
+    NOT_SELECTED = 0
     SKIP = 1
     OVERWRITE = 2
     CREATE_COPY = 3
