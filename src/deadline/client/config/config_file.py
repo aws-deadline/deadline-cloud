@@ -21,7 +21,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import boto3  # type: ignore[import]
+import boto3
+from deadline.job_attachments.models import FileConflictResolution
 
 from ..exceptions import DeadlineOperationError
 import re
@@ -97,6 +98,10 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "settings.auto_accept": {
         "default": "false",
+    },
+    "settings.conflict_resolution": {
+        "default": FileConflictResolution.NOT_SELECTED.name,
+        "description": "How to handle duplicate files when downloading (if a file with the same path/name already exists.)",
     },
     "settings.log_level": {
         "default": "WARNING",
