@@ -15,7 +15,6 @@ import pytest
 
 from deadline.client import config
 from deadline.client.config import (
-    DEFAULT_DEADLINE_ENDPOINT_URL,
     config_file,
 )
 from deadline.client.exceptions import DeadlineOperationError
@@ -23,11 +22,6 @@ from deadline.client.exceptions import DeadlineOperationError
 # This is imported by `test_cli_config.py` for a matching CLI test
 CONFIG_SETTING_ROUND_TRIP = [
     ("defaults.aws_profile_name", "(default)", "AnotherProfileName"),
-    (
-        "settings.deadline_endpoint_url",
-        DEFAULT_DEADLINE_ENDPOINT_URL,
-        "https://some-other-url",
-    ),
     ("defaults.farm_id", "", "farm-82934h23k4j23kjh"),
     ("defaults.job_attachments_file_system", "COPIED", "VIRTUAL"),
 ]
@@ -50,7 +44,6 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     """
     # First set some settings that apply to the defaults, changing the
     # hierarchy from queue inwards.
-    config.set_setting("settings.deadline_endpoint_url", "nondefault-endpoint-url")
     config.set_setting("settings.storage_profile_id", "storage-profile-for-farm-default")
     config.set_setting("defaults.queue_id", "queue-for-farm-default")
     config.set_setting("defaults.farm_id", "farm-for-profile-default")
@@ -58,14 +51,12 @@ def test_config_settings_hierarchy(fresh_deadline_config):
 
     # Confirm that all child settings we changed are default, because they were
     # for a different profile.
-    assert config.get_setting("settings.deadline_endpoint_url") == DEFAULT_DEADLINE_ENDPOINT_URL
     assert config.get_setting("defaults.farm_id") == ""
     assert config.get_setting("defaults.queue_id") == ""
     assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default profile, and check the next layer of the onion
     config.set_setting("defaults.aws_profile_name", "(default)")
-    assert config.get_setting("settings.deadline_endpoint_url") == "nondefault-endpoint-url"
     assert config.get_setting("defaults.farm_id") == "farm-for-profile-default"
     # The queue id is still default
     assert config.get_setting("defaults.queue_id") == ""
