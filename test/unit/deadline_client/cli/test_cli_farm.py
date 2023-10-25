@@ -4,6 +4,7 @@
 Tests for the CLI farm commands.
 """
 from unittest.mock import patch
+import os
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -24,6 +25,8 @@ MOCK_FARMS_LIST = [
         "displayName": "Another Farm",
     },
 ]
+
+os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
 
 def test_cli_farm_list(fresh_deadline_config):

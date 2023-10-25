@@ -29,7 +29,6 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -239,13 +238,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.default_farm_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_farm_box_label, self.default_farm_box)
 
-        self.deadline_endpoint_url_edit = QLineEdit(parent=group)
-        deadline_endpoint_url_label = self.labels["settings.deadline_endpoint_url"] = QLabel(
-            "Amazon Deadline Cloud Endpoint URL"
-        )
-        layout.addRow(deadline_endpoint_url_label, self.deadline_endpoint_url_edit)
-        self.deadline_endpoint_url_edit.editingFinished.connect(self.deadline_endpoint_url_edited)
-
     def _build_farm_settings_ui(self, group, layout):
         self.default_queue_box = DeadlineQueueListComboBox(parent=group)
         default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default Queue")
@@ -449,12 +441,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         self.default_farm_box.refresh_selected_id()
 
-        with block_signals(self.deadline_endpoint_url_edit):
-            deadline_endpoint_url = config_file.get_setting(
-                "settings.deadline_endpoint_url", config=self.config
-            )
-            self.deadline_endpoint_url_edit.setText(deadline_endpoint_url)
-
         for refresh_callback in self._refresh_callbacks:
             refresh_callback()
 
@@ -524,15 +510,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.refresh()
         self.default_queue_box.refresh_list()
         self.default_storage_profile_box.refresh_list()
-
-    def deadline_endpoint_url_edited(self):
-        deadline_endpoint_url = self.deadline_endpoint_url_edit.text()
-        # Only apply the change if the text was actually edited
-        if deadline_endpoint_url != config_file.get_setting(
-            "settings.deadline_endpoint_url", config=self.config
-        ):
-            self.changes["settings.deadline_endpoint_url"] = deadline_endpoint_url
-        self.refresh()
 
     def default_queue_changed(self, index):
         self.changes["defaults.queue_id"] = self.default_queue_box.box.itemData(index)

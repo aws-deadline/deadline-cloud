@@ -87,6 +87,7 @@ MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES = [
         "template": MOCK_QUEUE_ENV_TEMPLATE_1,
     },
 ]
+os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
 
 def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):

@@ -6,6 +6,7 @@ of the Deadline-configured IAM credentials.
 """
 from __future__ import annotations
 import logging
+import os
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
@@ -101,10 +102,19 @@ def invalidate_boto3_session_cache() -> None:
     __cached_queue_id_for_queue_session = None
 
 
+def get_deadline_endpoint_url(
+    config: Optional[ConfigParser] = None,
+) -> str:
+    url = os.getenv("AWS_ENDPOINT_URL_DEADLINE")
+    if not url:
+        url = f"https://deadline.{get_boto3_session(config=config).region_name}.amazonaws.com"
+    return url
+
+
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
     """
     Gets a client from the boto3 session returned by `get_boto3_session`.
-    If the client requested is `deadline`, it uses the configured
+    If the client requested is `deadline`, it uses the AWS_ENDPOINT_URL_DEADLINE
     deadline endpoint url.
 
     Args:
@@ -114,7 +124,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
     session = get_boto3_session(config=config)
 
     if service_name == "deadline":
-        deadline_endpoint_url = get_setting("settings.deadline_endpoint_url", config=config)
+        deadline_endpoint_url = get_deadline_endpoint_url(config=config)
         client = session.client(service_name, endpoint_url=deadline_endpoint_url)
         return DeadlineClient(client)
     else:

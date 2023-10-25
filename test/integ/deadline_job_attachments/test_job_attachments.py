@@ -79,9 +79,13 @@ class JobAttachmentTest:
 
         self.bucket = boto3.resource("s3").Bucket(self.job_attachment_resources.bucket_name)
         self.deadline_client = self.job_attachment_resources.deadline_client
-        self.deadline_endpoint = os.getenv("DEADLINE_ENDPOINT")
+
         self.hash_cache_dir = tmp_path_factory.mktemp("hash_cache")
         self.session = boto3.Session()
+        self.deadline_endpoint = os.getenv(
+            "AWS_ENDPOINT_URL_DEADLINE",
+            f"https://deadline.{self.session.region_name}.amazonaws.com",
+        )
 
         self.manifest_version = manifest_version
 

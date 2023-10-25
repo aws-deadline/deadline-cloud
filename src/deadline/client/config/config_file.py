@@ -9,7 +9,6 @@ __all__ = [
     "set_setting",
     "get_best_profile_for_farm",
     "str2bool",
-    "DEFAULT_DEADLINE_ENDPOINT_URL",
 ]
 
 import getpass
@@ -32,8 +31,11 @@ CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
 # Environment variable that, if set, overrides the value of CONFIG_FILE_PATH
 CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
 # The default Amazon Deadline Cloud endpoint URL
-# TODO: This is currently set to our closed-beta endpoint. We need to remove this for GA.
-DEFAULT_DEADLINE_ENDPOINT_URL = "https://btpdb6qczg.execute-api.us-west-2.amazonaws.com"
+# Environment variable that, if set, overrides the value of DEFAULT_DEADLINE_ENDPOINT_URL
+DEFAULT_DEADLINE_ENDPOINT_URL = os.getenv(
+    "AWS_ENDPOINT_URL_DEADLINE", f"https://deadline.{boto3.Session().region_name}.amazonaws.com"
+)
+
 # The default directory within which to save the history of created jobs.
 DEFAULT_JOB_HISTORY_DIR = os.path.join("~", ".deadline", "job_history", "{aws_profile_name}")
 
@@ -67,11 +69,6 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": DEFAULT_JOB_HISTORY_DIR,
         "depend": "defaults.aws_profile_name",
         "description": "The directory in which to place the job submission history for this AWS profile name.",
-    },
-    "settings.deadline_endpoint_url": {
-        "default": DEFAULT_DEADLINE_ENDPOINT_URL,
-        "depend": "defaults.aws_profile_name",
-        "description": "The endpoint URL for Amazon Deadline Cloud.",
     },
     "defaults.farm_id": {
         "default": "",

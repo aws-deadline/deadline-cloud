@@ -18,7 +18,7 @@ from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
 
-from ._session import get_studio_id, get_user_and_identity_store_id
+from ._session import get_studio_id, get_user_and_identity_store_id, get_deadline_endpoint_url
 from ..config import config_file
 from .. import version
 
@@ -76,7 +76,7 @@ class TelemetryClient:
             return
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
-        self.endpoint: str = f"{config_file.get_setting('settings.deadline_endpoint_url', config=config)}/2023-10-12/telemetry"
+        self.endpoint: str = f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry"
 
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())

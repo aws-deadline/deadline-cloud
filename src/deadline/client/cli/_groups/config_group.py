@@ -36,9 +36,6 @@ def cli_config():
         The directory in which to create new job bundles for
         submitting to Amazon Deadline Cloud, to produce a history of job submissions.
 
-    settings.deadline_endpoint_url:
-        The endpoint URL to access the Amazon Deadline Cloud service.
-
     settings.auto_accept:
         Flag to automatically confirm any confirmation prompts
 

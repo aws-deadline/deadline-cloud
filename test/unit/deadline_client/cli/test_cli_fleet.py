@@ -5,6 +5,7 @@ Tests for the CLI fleet commands.
 """
 from unittest.mock import patch
 from copy import deepcopy
+import os
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -43,6 +44,8 @@ MOCK_FLEETS_LIST = [
         "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin",
     },
 ]
+
+os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
 
 def test_cli_fleet_list(fresh_deadline_config):
