@@ -252,7 +252,7 @@ class Fus3ProcessManager(object):
                     environ_check = os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{exe}"
                 else:
                     log.info(f"{FUS3_PATH_ENV_VAR} and {DEADLINE_VFS_ENV_VAR} env vars not set")
-                    environ_check = ""
+                    environ_check = EXE_TO_INSTALL_PATH[exe] + f"/bin/{exe}"
                 if os.path.exists(environ_check):
                     log.info(f"Environ check found {exe} at {environ_check}")
                     found_path = environ_check
