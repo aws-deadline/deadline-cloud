@@ -28,7 +28,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from deadline.client import api
-from deadline.client.exceptions import CreateJobWaiterCanceled
+from deadline.client.exceptions import CreateJobWaiterCanceled, DeadlineOperationError
 from deadline.client.config import set_setting, config_file
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
@@ -343,7 +343,7 @@ class SubmitJobProgressDialog(QDialog):
             if success:
                 self.create_job_thread_succeeded.emit(success, message)
             else:
-                self.create_job_thread_exception.emit(message)
+                self.create_job_thread_exception.emit(DeadlineOperationError(message))
         except CreateJobWaiterCanceled as e:
             # If it wasn't canceled, send the exception to the dialog
             if self._continue_submission:
