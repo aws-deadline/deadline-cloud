@@ -116,7 +116,6 @@ class DeadlineCredentialsStatus(QObject):
             creds_config_changed = False
             for setting_name in [
                 "defaults.aws_profile_name",
-                "settings.deadline_endpoint_url",
             ]:
                 if config_file.get_setting(setting_name, self.config) != config_file.get_setting(
                     setting_name, config
