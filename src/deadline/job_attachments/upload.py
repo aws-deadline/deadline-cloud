@@ -68,7 +68,7 @@ logger = logging.getLogger("deadline.job_attachments.upload")
 
 class S3AssetUploader:
     """
-    Handler for uploading assets to S3 based off of an Assest Manifest. If no session is provided the default
+    Handler for uploading assets to S3 based off of an Asset Manifest. If no session is provided the default
     credentials path will be used, see
     https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials
     """
@@ -100,7 +100,7 @@ class S3AssetUploader:
             manifest: The asset manifest to upload.
             partial_manifest_prefix: The (partial) key prefix to use for uploading the manifest
                  to S3, excluding the initial section "<root-prefix>/Manifest/".
-                e.g. "farm-1234/queue-1234/Inputs/someguid"
+                e.g. "farm-1234/queue-1234/Inputs/<some-guid>"
             source_root: The local root path of the assets.
             job_attachment_settings: The settings for the job attachment configured in Queue.
             progress_tracker: Optional progress tracker to track progress.
@@ -583,7 +583,7 @@ class S3AssetManager:
         groupings: dict[str, AssetRootGroup] = {}
 
         # Resolve full path, then cast to pure path to get top-level directory
-        # Note for inputs, we only upload individual files so user doesn't unintentially upload entire harddrive
+        # Note for inputs, we only upload individual files so user doesn't unintentionally upload the entire hard drive
         for _path in input_paths:
             # Need to use absolute to not resolve symlinks, but need normpath to get rid of relative paths, i.e. '..'
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
@@ -870,7 +870,7 @@ class S3AssetManager:
             )
 
             if asset_root_manifest.asset_manifest:
-                (partial_manifest_key, asest_manifest_hash) = self.asset_uploader.upload_assets(
+                (partial_manifest_key, asset_manifest_hash) = self.asset_uploader.upload_assets(
                     job_attachment_settings=self.job_attachment_settings,
                     manifest=asset_root_manifest.asset_manifest,
                     partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(
@@ -881,7 +881,7 @@ class S3AssetManager:
                     progress_tracker=progress_tracker,
                 )
                 manifest_properties.inputManifestPath = partial_manifest_key
-                manifest_properties.inputManifestHash = asest_manifest_hash
+                manifest_properties.inputManifestHash = asset_manifest_hash
 
             manifest_properties_list.append(manifest_properties)
 
