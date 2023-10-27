@@ -60,6 +60,7 @@ jobs:
       CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
       CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
+      CUSTOMER_DOMAIN: ${{ secrets.CUSTOMER_DOMAIN }}
       CUSTOMER_REPOSITORY: ${{ secrets.CUSTOMER_REPOSITORY }}
     steps:
       - name: "Checkout"
@@ -95,6 +96,6 @@ jobs:
       - name: Publish to Customer CodeArtifact
         run: |
           export TWINE_USERNAME=aws
-          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
-          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
+          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
+          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
           twine upload dist/*
