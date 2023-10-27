@@ -54,6 +54,8 @@ class TestUtils:
         [
             ("C:/a/b/c", "C:/a/b", True),
             (Path("C:/a/b/c.txt"), "C:/a", True),
+            ("C:\\a\\b\\c", "C:\\a\\b", True),
+            (Path("C:\\a\\b\\c.txt"), "C:\\a", True),
             ("a/b/c", "a/b", True),
             (Path("a/b/c.txt"), "a", True),
             ("C:/a/b/c", "a/b", False),

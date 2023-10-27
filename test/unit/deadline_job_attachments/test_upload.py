@@ -157,7 +157,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[
@@ -180,7 +180,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, attachments) = asset_manager.upload_assets(
+            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -233,7 +233,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=4,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -241,7 +241,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=4,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -333,7 +333,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[input_c, input_d],
@@ -343,7 +343,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, attachments) = asset_manager.upload_assets(
+            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -400,7 +400,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -408,7 +408,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -505,7 +505,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
@@ -515,7 +515,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, attachments) = asset_manager.upload_assets(
+            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -560,7 +560,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=num_input_files,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -568,7 +568,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=num_input_files,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -656,7 +656,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
@@ -666,7 +666,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, _) = asset_manager.upload_assets(
+            (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -680,7 +680,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=num_input_files,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -688,7 +688,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_downloaded_bytes,
                 skipped_files=num_input_files - 1,
@@ -773,7 +773,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[already_uploaded_file, not_yet_uploaded_file],
@@ -783,7 +783,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, _) = asset_manager.upload_assets(
+            (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -803,7 +803,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=2,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -811,7 +811,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_uploaded_bytes,
                 skipped_files=1,
@@ -910,7 +910,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=input_files,
@@ -920,7 +920,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, _) = asset_manager.upload_assets(
+            (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -939,7 +939,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=num_input_files,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -947,7 +947,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=0,
                 processed_bytes=0,
                 skipped_files=num_input_files,
@@ -1013,7 +1013,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[],
@@ -1023,7 +1023,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, attachments) = asset_manager.upload_assets(
+            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -1052,7 +1052,7 @@ class TestUpload:
             }
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=0,
                 processed_bytes=0,
                 skipped_files=0,
@@ -1060,7 +1060,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=0,
                 processed_bytes=0,
                 skipped_files=0,
@@ -1450,7 +1450,7 @@ class TestUpload:
 
             # When
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[input_not_exist, scene_file],
@@ -1460,7 +1460,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, _) = asset_manager.upload_assets(
+            (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -1476,7 +1476,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -1484,7 +1484,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -1567,7 +1567,7 @@ class TestUpload:
             )
 
             (
-                hash_summary_statstics,
+                hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
                 input_paths=[str(symlink_input_path)],
@@ -1577,7 +1577,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statstics, attachments) = asset_manager.upload_assets(
+            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
             )
@@ -1606,7 +1606,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=hash_summary_statstics,
+                actual_summary_statistics=hash_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -1614,7 +1614,7 @@ class TestUpload:
             )
 
             assert_progress_report_summary_statistics(
-                actual_summary_statstics=upload_summary_statstics,
+                actual_summary_statistics=upload_summary_statistics,
                 processed_files=1,
                 processed_bytes=expected_total_input_bytes,
                 skipped_files=0,
@@ -1785,7 +1785,7 @@ class TestUpload:
                 {"/home/username/movie1/outputs"},  # output paths
                 set(),  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
-                {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
+                {"/mnt/shared/movie1": "Movie 1 - Shared"},  # File System Location (SHARED type)
                 [
                     AssetRootGroup(
                         file_system_location_name="Movie 1 - Local",
@@ -1812,7 +1812,7 @@ class TestUpload:
                 },  # output paths
                 {"/home/username/movie1/outputs1/referenced/path"},  # referenced paths
                 {"/home/username/movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
-                {"/mnt/shared/movie1": "Movi 1 - Shared"},  # File System Location (SHARED type)
+                {"/mnt/shared/movie1": "Movie 1 - Shared"},  # File System Location (SHARED type)
                 [
                     AssetRootGroup(
                         file_system_location_name="Movie 1 - Local",
@@ -1869,6 +1869,192 @@ class TestUpload:
 
         assert sorted_result == sorted_expected_result
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is for paths in Windows path format and will be skipped on POSIX-based system.",
+    )
+    @patch.object(Path, "exists", return_value=True)
+    @pytest.mark.parametrize(
+        "input_paths, output_paths, referenced_paths, local_type_locations, shared_type_locations, expected_result",
+        [
+            (
+                set(),  # input paths
+                set(),  # output paths
+                set(),  # referenced paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [],
+            ),
+            (
+                {"C:\\username\\docs\\inputs\\input1.txt"},  # input paths
+                {"C:\\username\\docs\\outputs"},  # output paths
+                set(),  # referenced paths
+                {"C:\\username\\movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="C:\\username\\docs",
+                        inputs={
+                            Path("C:\\username\\docs\\inputs\\input1.txt"),
+                        },
+                        outputs={
+                            Path("C:\\username\\docs\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {"C:\\username\\movie1\\inputs\\input1.txt"},  # input paths
+                {"C:\\username\\movie1\\outputs"},  # output paths
+                set(),  # referenced paths
+                {"C:\\username\\movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="C:\\username\\movie1",
+                        inputs={
+                            Path("C:\\username\\movie1\\inputs\\input1.txt"),
+                        },
+                        outputs={
+                            Path("C:\\username\\movie1\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {"X:\\mnt\\shared\\movie1\\something.txt"},  # input paths
+                {"C:\\username\\movie1\\outputs"},  # output paths
+                set(),  # referenced paths
+                {"C:\\username\\movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {
+                    "X:\\mnt\\shared\\movie1": "Movie 1 - Shared"
+                },  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="C:\\username\\movie1\\outputs",
+                        inputs=set(),
+                        outputs={
+                            Path("C:\\username\\movie1\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {
+                    "C:\\username\\movie1\\inputs\\input1.txt",
+                    "C:\\username\\movie1\\inputs\\input2.txt",
+                    "C:\\username\\docs\\doc1.txt",
+                    "C:\\username\\docs\\doc2.txt",
+                    "C:\\username\\extra1.txt",
+                    "X:\\mnt\\shared\\movie1\\something.txt",
+                },  # input paths
+                {
+                    "C:\\username\\movie1\\outputs1",
+                    "C:\\username\\movie1\\outputs2",
+                },  # output paths
+                {"C:\\username\\movie1\\outputs1\\referenced\\path"},  # referenced paths
+                {"C:\\username\\movie1": "Movie 1 - Local"},  # File System Location (LOCAL type)
+                {
+                    "X:\\mnt\\shared\\movie1": "Movie 1 - Shared"
+                },  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        file_system_location_name="Movie 1 - Local",
+                        root_path="C:\\username\\movie1",
+                        inputs={
+                            Path("C:\\username\\movie1\\inputs\\input1.txt"),
+                            Path("C:\\username\\movie1\\inputs\\input2.txt"),
+                        },
+                        outputs={
+                            Path("C:\\username\\movie1\\outputs1"),
+                            Path("C:\\username\\movie1\\outputs2"),
+                        },
+                        references={Path("C:\\username\\movie1\\outputs1\\referenced\\path")},
+                    ),
+                    AssetRootGroup(
+                        root_path="C:\\username",
+                        inputs={
+                            Path("C:\\username\\docs\\doc1.txt"),
+                            Path("C:\\username\\docs\\doc2.txt"),
+                            Path("C:\\username\\extra1.txt"),
+                        },
+                        outputs=set(),
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_get_asset_groups_for_windows(
+        self,
+        farm_id: str,
+        queue_id: str,
+        input_paths: Set[str],
+        output_paths: Set[str],
+        referenced_paths: Set[str],
+        local_type_locations: Dict[str, str],
+        shared_type_locations: Dict[str, str],
+        expected_result: List[AssetRootGroup],
+    ):
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+        )
+        result = asset_manager._get_asset_groups(
+            input_paths,
+            output_paths,
+            referenced_paths,
+            local_type_locations,
+            shared_type_locations,
+        )
+
+        sorted_result = sorted(result, key=lambda x: x.root_path)
+        sorted_expected_result = sorted(expected_result, key=lambda x: x.root_path)
+
+        assert sorted_result == sorted_expected_result
+
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is for paths in Windows path format and will be skipped on POSIX-based system.",
+    )
+    @patch.object(Path, "exists", return_value=True)
+    def test_get_asset_groups_for_windows_case_insensitive(
+        self,
+        farm_id: str,
+        queue_id: str,
+    ):
+        """
+        Tests that the asset manager can handle Windows paths and ignore case.
+        (Verifies if two paths are treated as the same when they differ only in letter case.)
+        """
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+        )
+
+        input_paths = {
+            "C:\\username\\docs\\inputs\\input1.txt",
+            "C:\\username\\DOCS\\inputs\\input1.txt",
+        }
+        output_paths = {"C:\\username\\docs\\outputs"}
+
+        result = asset_manager._get_asset_groups(
+            input_paths,
+            output_paths,
+            referenced_paths=set(),
+            local_type_locations={},
+            shared_type_locations={},
+        )
+
+        assert result[0].root_path == "C:\\username\\docs" or "C:\\username\\DOCS"
+        assert result[0].inputs == {Path("C:\\username\\docs\\inputs\\input1.txt")} or {
+            Path("C:\\username\\DOCS\\inputs\\input1.txt")
+        }
+        assert result[0].outputs == {Path("C:\\username\\docs\\outputs")}
+
 
 def assert_progress_report_last_callback(
     num_input_files: int,
@@ -1902,7 +2088,7 @@ def assert_progress_report_last_callback(
 
 
 def assert_progress_report_summary_statistics(
-    actual_summary_statstics: SummaryStatistics,
+    actual_summary_statistics: SummaryStatistics,
     processed_files: int,
     processed_bytes: int,
     skipped_files: int,
@@ -1911,14 +2097,14 @@ def assert_progress_report_summary_statistics(
     """
     Assert that the reported summary statistics are as expected.
     """
-    expected_summary_statstics = SummaryStatistics(
-        total_time=actual_summary_statstics.total_time,
+    expected_summary_statistics = SummaryStatistics(
+        total_time=actual_summary_statistics.total_time,
         total_files=processed_files + skipped_files,
         total_bytes=processed_bytes + skipped_bytes,
         processed_files=processed_files,
         processed_bytes=processed_bytes,
         skipped_files=skipped_files,
         skipped_bytes=skipped_bytes,
-        transfer_rate=processed_bytes / actual_summary_statstics.total_time,
+        transfer_rate=processed_bytes / actual_summary_statistics.total_time,
     )
-    assert actual_summary_statstics == expected_summary_statstics
+    assert actual_summary_statistics == expected_summary_statistics
