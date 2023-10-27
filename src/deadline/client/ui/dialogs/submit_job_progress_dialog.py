@@ -12,8 +12,6 @@ import threading
 import textwrap
 from typing import Any, Dict, List, Optional, Set, cast
 
-from deadline.client.config import config_file
-
 from botocore.client import BaseClient  # type: ignore[import]
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtGui import QCloseEvent
@@ -30,8 +28,8 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from deadline.client import api
-from deadline.client.exceptions import CreateJobWaiterCanceled
-from deadline.client.config import set_setting
+from deadline.client.exceptions import CreateJobWaiterCanceled, DeadlineOperationError
+from deadline.client.config import set_setting, config_file
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
 from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from deadline.client.job_bundle.submission import (
@@ -342,7 +340,10 @@ class SubmitJobProgressDialog(QDialog):
                 message += f"\n{job_id}\n"
             else:
                 message = "CreateJob response was empty, or did not contain a Job ID."
-            self.create_job_thread_succeeded.emit(success, message)
+            if success:
+                self.create_job_thread_succeeded.emit(success, message)
+            else:
+                self.create_job_thread_exception.emit(DeadlineOperationError(message))
         except CreateJobWaiterCanceled as e:
             # If it wasn't canceled, send the exception to the dialog
             if self._continue_submission:
