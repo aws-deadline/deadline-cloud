@@ -1432,6 +1432,11 @@ class TestFullDownload:
                 ]
             },
             {
+                "C:/Users": [
+                    ManifestPathv2023_03_03(path="C:/inputs/input1.txt", hash="a", size=1, mtime=1),
+                ]
+            },
+            {
                 "/C:": [
                     ManifestPathv2023_03_03(path="inputs/input1.txt", hash="a", size=1, mtime=1),
                 ]
@@ -1801,6 +1806,7 @@ def test_ensure_paths_within_directory_windows_no_error(root_path: str, output_p
     "root_path, output_paths",
     [
         ("C:/Users", ["../test.png"]),
+        ("C:/Users", ["test.png", "../test.png"]),
         ("C:/Users", ["outputs/../../test.png"]),
         ("C:/Users", ["../home/../outputs/test.png"]),
         ("C:/Users", ["C:/Temp/outputs/test.png"]),
