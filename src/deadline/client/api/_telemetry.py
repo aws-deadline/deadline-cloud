@@ -139,7 +139,6 @@ class TelemetryClient:
         success = False
         while not success:
             try:
-                logger.warning(f"Sending telemetry data: {req.data}")
                 with request.urlopen(req):
                     logger.debug("Successfully sent telemetry.")
                     success = True
@@ -188,6 +187,7 @@ class TelemetryClient:
             request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
             req = request.Request(url=self.endpoint, data=request_body_encoded, headers=headers)
             try:
+                logger.debug("Sending telemetry data: %s", request_body)
                 self._send_request(req)
             except Exception:
                 # Silently swallow any kind of uncaught exception and stop sending telemetry
