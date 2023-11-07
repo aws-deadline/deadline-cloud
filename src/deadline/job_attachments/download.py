@@ -347,7 +347,7 @@ def download_file(
     if not s3_client:
         s3_client = get_s3_client(session=session)
 
-    #  The modified time in the manifest is in microseconds, but utime requires the time be expressed in seconds.
+    # The modified time in the manifest is in microseconds, but utime requires the time be expressed in seconds.
     modified_time_override = file.mtime / 1000000  # type: ignore[attr-defined]
 
     file_bytes = file.size

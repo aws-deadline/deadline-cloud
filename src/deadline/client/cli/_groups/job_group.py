@@ -286,6 +286,11 @@ def _download_job_output(
 
     output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
+    # If no output paths were found, log a message and exit.
+    if output_paths_by_root == {}:
+        click.echo(_get_no_output_message(is_json_format))
+        return
+
     # Check if the asset roots came from different OS. If so, prompt users to
     # select alternative root paths to download to, (regardless of the auto-accept.)
     asset_roots = list(output_paths_by_root.keys())
@@ -454,6 +459,17 @@ def _get_start_message(
                     + "}"
                 )
             return f"Downloading output from Job {job_name!r} Step {step_name!r} Task {task_parameters_summary}"
+
+
+def _get_no_output_message(is_json_format: bool) -> str:
+    msg = (
+        "There are no output files available for download at this moment. Please verify that"
+        " the Job/Step/Task you are trying to download output from has completed successfully."
+    )
+    if is_json_format:
+        return _get_json_line(JSON_MSG_TYPE_SUMMARY, msg)
+    else:
+        return msg
 
 
 def _get_mismatch_os_root_warning(root: str, root_path_format: str, is_json_format: bool) -> str:
