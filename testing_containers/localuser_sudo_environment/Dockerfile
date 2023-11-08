@@ -2,8 +2,8 @@
 
 FROM python:3.9-buster
 
-# Let our tests know that we"re in an environment that can run the sudo
-# tests
+# Set environment variables, and let our tests know that we are in an
+# environment that can run the sudo tests
 ENV DEADLINE_JOB_ATTACHMENT_TEST_SUDO_TARGET_USER=targetuser
 ENV DEADLINE_JOB_ATTACHMENT_TEST_SUDO_TARGET_GROUP=targetgroup
 ENV DEADLINE_JOB_ATTACHMENT_TEST_SUDO_DISJOINT_USER=disjointuser

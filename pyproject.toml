@@ -22,6 +22,7 @@ dependencies = [
     "xxhash >= 3.4",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
     "jsonschema == 4.17.*",
+    "pywin32 == 306; sys_platform == 'win32'",
 ]
 
 [project.scripts]

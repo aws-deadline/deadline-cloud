@@ -54,7 +54,6 @@ from deadline.job_attachments.exceptions import (
 from deadline.job_attachments.models import (
     Attachments,
     FileConflictResolution,
-    PosixFileSystemPermissionSettings,
     Job,
     JobAttachmentS3Settings,
     Queue,
@@ -65,6 +64,12 @@ from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
 )
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
+
+from deadline.job_attachments.os_file_permission import (
+    PosixFileSystemPermissionSettings,
+    WindowsFileSystemPermissionSettings,
+    WindowsPermissionEnum,
+)
 from deadline.job_attachments._utils import _human_readable_file_size
 
 from .conftest import has_posix_target_user, has_posix_disjoint_user
@@ -654,6 +659,7 @@ class TestFullDownload:
         ManifestPathv2023_03_03(path="test11.txt", hash="test11", size=1, mtime=1234000000),
         ManifestPathv2023_03_03(path="test/test12.txt", hash="test12", size=1, mtime=1234000000),
     ]
+
     MANIFEST_VERSION_TO_ASSET_ROOT_PATHS: dict[ManifestVersion, list[BaseManifestPath]] = {
         ManifestVersion.v2023_03_03: MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03,
     }
@@ -695,12 +701,32 @@ class TestFullDownload:
             manifest_version,
         )
 
+    EXPECTED_DOWNLOAD_FILE_PATHS_RELATIVE = [
+        "inputs/input1.txt",
+        "inputs/subdir/input2.txt",
+        "inputs/subdir/input3.txt",
+        "inputs/subdir/subdir2/input4.txt",
+        "inputs/input5.txt",
+    ]
+
+    TARGET_PERMISSION_CHANGE_PATHS_RELATIVE = [
+        "inputs/input1.txt",
+        ".",
+        "inputs",
+        "inputs/subdir/input2.txt",
+        "inputs/subdir",
+        "inputs/subdir/input3.txt",
+        "inputs/subdir/subdir2/input4.txt",
+        "inputs/subdir/subdir2",
+        "inputs/input5.txt",
+    ]
+
     @mock_sts
     @pytest.mark.skipif(
         sys.platform == "win32",
         reason="This test is for testing file permission changes in Posix-based OS.",
     )
-    def test_download_files_from_manifests_with_posix_fs_permission_settings(
+    def test_download_files_from_manifests_with_fs_permission_settings_posix(
         self,
         tmp_path: Path,
         manifest_version: ManifestVersion,
@@ -708,20 +734,20 @@ class TestFullDownload:
         """
         Tests whether the files listed in the given manifest are downloaded correctly from the
         S3 bucket. Also, verifies that the functions for changing file ownership and permissions
-        (i.e., chown, chmod) are correctly called with the given file system permission settings.
+        (i.e., chown & chmod for POSIX) are correctly called with the given permission settings.
         """
-
-        mannifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+        manifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
             0
         ].manifests.decode("utf-8")
-        manifest = decode_manifest(mannifest_str)
-
+        manifest = decode_manifest(manifest_str)
         manifests_by_root = {str(tmp_path): manifest}
+
         fs_permission_settings = PosixFileSystemPermissionSettings(
             os_group="test-group",
             dir_mode=0o20,
             file_mode=0o20,
         )
+
         mock_on_downloading_files = MagicMock(return_value=True)
 
         # IF
@@ -735,24 +761,10 @@ class TestFullDownload:
             )
 
         # THEN
-        expected_files = [
-            tmp_path / "inputs/input1.txt",
-            tmp_path / "inputs/subdir/input2.txt",
-            tmp_path / "inputs/subdir/input3.txt",
-            tmp_path / "inputs/subdir/subdir2/input4.txt",
-            tmp_path / "inputs/input5.txt",
-        ]
-
+        # Ensure that `chown` and `chmod` are properly called with the given permission settings
+        # for the downloaded files (and directory) paths.
         expected_changed_paths = [
-            tmp_path / "inputs/input1.txt",
-            tmp_path,
-            tmp_path / "inputs",
-            tmp_path / "inputs/subdir/input2.txt",
-            tmp_path / "inputs/subdir",
-            tmp_path / "inputs/subdir/input3.txt",
-            tmp_path / "inputs/subdir/subdir2/input4.txt",
-            tmp_path / "inputs/subdir/subdir2",
-            tmp_path / "inputs/input5.txt",
+            tmp_path / rel_path for rel_path in self.TARGET_PERMISSION_CHANGE_PATHS_RELATIVE
         ]
 
         chown_expected_calls = [
@@ -768,11 +780,91 @@ class TestFullDownload:
         assert Counter(chmod_actual_calls) == Counter(chmod_expected_calls)
 
         # Ensure that only the expected files are there and no extras.
+        expected_files = [
+            tmp_path / rel_path for rel_path in self.EXPECTED_DOWNLOAD_FILE_PATHS_RELATIVE
+        ]
         assert set(expected_files) == set(
             [path for path in tmp_path.glob("**/*") if path.is_file()]
         )
 
     @mock_sts
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is for testing file permission changes in Windows.",
+    )
+    def test_download_files_from_manifests_with_fs_permission_settings_windows(
+        self,
+        tmp_path: Path,
+        manifest_version: ManifestVersion,
+    ):
+        """
+        Tests whether the files listed in the given manifest are downloaded correctly from the
+        S3 bucket. Also, verifies that the function for changing file ownership and permissions
+        is correctly called with the given permission settings.
+        """
+        manifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+            0
+        ].manifests.decode("utf-8")
+        manifest = decode_manifest(manifest_str)
+        manifests_by_root = {str(tmp_path): manifest}
+
+        fs_permission_settings = WindowsFileSystemPermissionSettings(
+            os_group="test-group",
+            dir_mode=WindowsPermissionEnum.FULL_CONTROL,
+            file_mode=WindowsPermissionEnum.FULL_CONTROL,
+        )
+
+        mock_on_downloading_files = MagicMock(return_value=True)
+
+        # IF
+        with patch(
+            f"{deadline.__package__}.job_attachments.os_file_permission._change_permission_for_windows"
+        ) as mock_change_permission:
+            _ = download_files_from_manifests(
+                s3_bucket=self.job_attachment_settings.s3BucketName,
+                manifests_by_root=manifests_by_root,
+                cas_prefix=self.job_attachment_settings.full_cas_prefix(),
+                fs_permission_settings=fs_permission_settings,
+                on_downloading_files=mock_on_downloading_files,
+            )
+
+        # THEN
+        # Ensure that `_change_permission_for_windows` are properly called with the given
+        # permission settings for the downloaded files (and directory) paths.
+        expected_changed_paths = [
+            tmp_path / rel_path for rel_path in self.TARGET_PERMISSION_CHANGE_PATHS_RELATIVE
+        ]
+
+        mock_change_permission_expected_calls = [
+            str(
+                call(
+                    str(path),
+                    "test-group",
+                    WindowsPermissionEnum.FULL_CONTROL,
+                )
+            )
+            for path in expected_changed_paths
+        ]
+        mock_change_permission_actual_calls = [
+            str(call_args) for call_args in mock_change_permission.call_args_list
+        ]
+        assert Counter(mock_change_permission_actual_calls) == Counter(
+            mock_change_permission_expected_calls
+        )
+
+        # Ensure that only the expected files are there and no extras.
+        expected_files = [
+            tmp_path / rel_path for rel_path in self.EXPECTED_DOWNLOAD_FILE_PATHS_RELATIVE
+        ]
+        assert set(expected_files) == set(
+            [path for path in tmp_path.glob("**/*") if path.is_file()]
+        )
+
+    @mock_sts
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="This test is for testing file permission changes in Posix-based OS.",
+    )
     @pytest.mark.xfail(
         not (has_posix_target_user() and has_posix_disjoint_user()),
         reason="Must be running inside of the sudo_environment testing container.",
@@ -785,11 +877,12 @@ class TestFullDownload:
         posix_disjoint_group: str,
     ):
         """
-        Tests whether the file system ownership and permissions of the files downloaded using the given
-        manifest are correctly changed.
+        Tests whether the file system ownership and permissions of the downloaded files
+        are correctly changed on POSIX-based environment.
         """
+        import grp
 
-        # Creates some files that were not downloaded through Job Attachment.
+        # Creates some files in the root directory that were not downloaded by Job Attachment.
         Path(tmp_path / "inputs/subdir/subdir2").mkdir(parents=True, exist_ok=True)
         random_paths = [
             tmp_path / "not_asset.txt",
@@ -799,12 +892,12 @@ class TestFullDownload:
         ]
         for path in random_paths:
             with open(str(path), "w") as f:
-                f.write("I am not an asset file")
+                f.write("I am a pre-existing file, not downloaded by Job Attachment.")
 
-        mannifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+        manifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
             0
         ].manifests.decode("utf-8")
-        manifest = decode_manifest(mannifest_str)
+        manifest = decode_manifest(manifest_str)
         manifests_by_root = {str(tmp_path): manifest}
 
         fs_permission_settings = PosixFileSystemPermissionSettings(
@@ -826,15 +919,7 @@ class TestFullDownload:
 
         # THEN
         expected_changed_paths = [
-            tmp_path / "inputs/input1.txt",
-            tmp_path,
-            tmp_path / "inputs",
-            tmp_path / "inputs/subdir/input2.txt",
-            tmp_path / "inputs/subdir",
-            tmp_path / "inputs/subdir/input3.txt",
-            tmp_path / "inputs/subdir/subdir2/input4.txt",
-            tmp_path / "inputs/subdir/subdir2",
-            tmp_path / "inputs/input5.txt",
+            tmp_path / rel_path for rel_path in self.TARGET_PERMISSION_CHANGE_PATHS_RELATIVE
         ]
 
         # Verify that the group ownership and permissions of files downloaded through Job Attachment
@@ -846,23 +931,98 @@ class TestFullDownload:
             updated_mode = file_stat.st_mode
             assert updated_mode == updated_mode | 0o20
 
-            if os.name == "posix":
-                import grp
-
-                updated_group_name = grp.getgrgid(file_stat.st_gid).gr_name  # type: ignore
-                assert updated_group_name == posix_target_group
+            updated_group_name = grp.getgrgid(file_stat.st_gid).gr_name  # type: ignore
+            assert updated_group_name == posix_target_group
 
             with pytest.raises(PermissionError):
                 shutil.chown(path, group=posix_disjoint_group)
 
         # For the files that were not downloaded through Job Attachment, confirm that the group ownership
         # has not been changed to the target group.
-        if os.name == "posix":
-            import grp
+        for path in random_paths:
+            group_name = grp.getgrgid(os.stat(str(path)).st_gid).gr_name  # type: ignore
+            assert group_name != posix_target_group
 
-            for path in random_paths:
-                group_name = grp.getgrgid(os.stat(str(path)).st_gid).gr_name  # type: ignore
-                assert group_name != posix_target_group
+    @mock_sts
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is for testing file permission changes in Windows.",
+    )
+    def test_download_files_from_manifests_have_correct_group_windows(
+        self,
+        tmp_path: Path,
+        manifest_version: ManifestVersion,
+    ):
+        """
+        Tests whether the file system ownership and permissions of the downloaded files
+        are correctly changed on Windows environment.
+        """
+        import win32security
+        import ntsecuritycon
+
+        # Creates some files in the root directory that were not downloaded by Job Attachment.
+        Path(tmp_path / "inputs/subdir/subdir2").mkdir(parents=True, exist_ok=True)
+        random_paths = [
+            tmp_path / "not_asset.txt",
+            tmp_path / "inputs/not_asset.txt",
+            tmp_path / "inputs/subdir/not_asset.txt",
+            tmp_path / "inputs/subdir/subdir2/not_asset.txt",
+        ]
+        for path in random_paths:
+            with open(str(path), "w") as f:
+                f.write("I am a pre-existing file, not downloaded by Job Attachment.")
+
+        manifest_str = MANIFEST_VERSION_TO_INPUT_ASSET_MANIFESTS[manifest_version][
+            0
+        ].manifests.decode("utf-8")
+        manifest = decode_manifest(manifest_str)
+        manifests_by_root = {str(tmp_path): manifest}
+
+        # Use a builtin group, so we can expect it to exist on any Windows machine
+        fs_permission_settings = WindowsFileSystemPermissionSettings(
+            os_group="Users",
+            dir_mode=WindowsPermissionEnum.FULL_CONTROL,
+            file_mode=WindowsPermissionEnum.FULL_CONTROL,
+        )
+
+        mock_on_downloading_files = MagicMock(return_value=True)
+
+        # IF
+        _ = download_files_from_manifests(
+            s3_bucket=self.job_attachment_settings.s3BucketName,
+            manifests_by_root=manifests_by_root,
+            cas_prefix=self.job_attachment_settings.full_cas_prefix(),
+            fs_permission_settings=fs_permission_settings,
+            on_downloading_files=mock_on_downloading_files,
+        )
+
+        # THEN
+        expected_changed_paths = [
+            tmp_path / rel_path for rel_path in self.TARGET_PERMISSION_CHANGE_PATHS_RELATIVE
+        ]
+
+        # Verify that the group ownership and permissions of files downloaded through Job Attachment
+        # have been appropriately modified.
+        for path in expected_changed_paths:
+            # Get the file's security information
+            sd = win32security.GetFileSecurity(str(path), win32security.DACL_SECURITY_INFORMATION)
+            # Get the discretionary access control list (DACL)
+            dacl = sd.GetSecurityDescriptorDacl()
+            # Get groups and permissions info from ACE
+            group_permissions: dict[str, int] = {}
+            for ace_no in range(dacl.GetAceCount()):
+                trustee_sid = dacl.GetAce(ace_no)[2]
+                trustee_name, _, _ = win32security.LookupAccountSid(None, trustee_sid)
+                if trustee_name:
+                    trustee = {
+                        "TrusteeForm": win32security.TRUSTEE_IS_SID,
+                        "TrusteeType": win32security.TRUSTEE_IS_GROUP,
+                        "Identifier": trustee_sid,
+                    }
+                    result = dacl.GetEffectiveRightsFromAcl(trustee)
+                    group_permissions[trustee_name] = result
+            assert group_permissions["Users"] == ntsecuritycon.FILE_ALL_ACCESS
+            assert "Guests" not in group_permissions
 
     @mock_sts
     def test_download_task_output(
@@ -1119,7 +1279,7 @@ class TestFullDownload:
         When path conflicts occur during file download and the resolution method is set to SKIP,
         test whether the files has actually been skipped.
         Note: This test relies on `st_ctime` for checking if a file has been skipped. On Linux,
-        `st_ctime` represents the time of the last metadta change, but on Windows, it represents
+        `st_ctime` represents the time of the last metadata change, but on Windows, it represents
         the file creation time. So the skipping verification is only available on Linux.
         """
         expected_files = [
@@ -1182,7 +1342,7 @@ class TestFullDownload:
         When path conflicts occur during file download and the resolution method is set to OVERWRITE,
         test whether the files has actually been overwritten.
         Note: This test relies on `st_ctime` for checking if a file has been overwritten. On Linux,
-        `st_ctime` represents the time of the last metadta change, but on Windows, it represents
+        `st_ctime` represents the time of the last metadata change, but on Windows, it represents
         the file creation time. So the overwriting verification is only available on Linux.
         """
         expected_files = [
@@ -1487,13 +1647,13 @@ class TestFullDownload:
             f"{deadline.__package__}.job_attachments.download.get_s3_client", return_value=s3_client
         ):
             with pytest.raises(JobAttachmentsS3ClientError) as exc:
-                _get_asset_root_from_s3("not/existsed/test.txt", "my-bucket")
+                _get_asset_root_from_s3("not/existed/test.txt", "my-bucket")
                 assert isinstance(exc.value.__cause__, ClientError)
                 assert (
                     exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 404  # type: ignore[attr-defined]
                 )
                 assert (
-                    "Error checking if object exists in bucket 'my-bucket'. Target key or prefix: 'not/existsed/test.txt'. "
+                    "Error checking if object exists in bucket 'my-bucket'. Target key or prefix: 'not/existed/test.txt'. "
                     "HTTP Status Code: 404 Not found. "
                 ) in str(exc.value)
 

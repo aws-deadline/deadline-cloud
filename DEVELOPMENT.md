@@ -95,4 +95,4 @@ class MyCustomWidget(QWidget):
 ## Running Docker-based Unit Tests
 
 - Some of the unit tests in this package require a docker environment to run. These tests are marked with `@pytest.mark.docker`. In order to execute these tests, please run the `run_sudo_tests.sh` script located in the `scripts` directory. For detailed instructions, please refer to [scripts/README.md](./scripts/README.md).
-- If you make changes to the `download` or `asset_sync` modules, it's highly recommended to run an ensure these tests pass.
+- If you make changes to the `download` or `asset_sync` modules, it's highly recommended to run and ensure these tests pass.

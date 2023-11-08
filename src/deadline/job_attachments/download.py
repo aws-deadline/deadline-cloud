@@ -6,7 +6,6 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import re
-import shutil
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -20,16 +19,8 @@ import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
-from deadline.job_attachments.progress_tracker import (
-    DownloadSummaryStatistics,
-    ProgressReportMetadata,
-    ProgressStatus,
-    ProgressTracker,
-)
-
 from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
 from .asset_manifests.decode import decode_manifest
-from ._aws.aws_clients import get_account_id, get_s3_client
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
@@ -42,10 +33,21 @@ from .fus3 import Fus3ProcessManager
 from .models import (
     Attachments,
     FileConflictResolution,
-    FileSystemPermissionSettings,
     JobAttachmentS3Settings,
+)
+from .progress_tracker import (
+    DownloadSummaryStatistics,
+    ProgressReportMetadata,
+    ProgressStatus,
+    ProgressTracker,
+)
+from ._aws.aws_clients import get_account_id, get_s3_client
+from .os_file_permission import (
+    FileSystemPermissionSettings,
     PosixFileSystemPermissionSettings,
     WindowsFileSystemPermissionSettings,
+    _set_fs_group_for_posix,
+    _set_fs_group_for_windows,
 )
 from ._utils import _is_relative_to, _join_s3_paths
 
@@ -343,7 +345,7 @@ def download_file(
 
     file_bytes = file.size
 
-    # Python will handle the path seperator '/' correctly on every platform.
+    # Python will handle the path separator '/' correctly on every platform.
     local_file_name = Path(local_download_dir).joinpath(file.path)
 
     s3_key = f"{cas_prefix}/{file.hash}" if cas_prefix else file.hash
@@ -711,42 +713,11 @@ def _set_fs_group(
     else:  # if os.name is not "posix"
         if not isinstance(fs_permission_settings, WindowsFileSystemPermissionSettings):
             raise TypeError("The file system permission settings must be specific to Windows.")
-        # TODO: implement _set_fs_group_for_windows()
-
-
-def _set_fs_group_for_posix(
-    file_paths: list[str],
-    local_root: str,
-    fs_permission_settings: PosixFileSystemPermissionSettings,
-) -> None:
-    os_group = fs_permission_settings.os_group
-    dir_mode = fs_permission_settings.dir_mode
-    file_mode = fs_permission_settings.file_mode
-
-    # Initialize set to track changed path
-    dir_paths_to_change_fs_group = set()
-
-    # 1. Set group ownership and permissions for each file.
-    for file_path in file_paths:
-        # The file path must be relative to the root path (ie. local_root).
-        if not _is_relative_to(file_path, local_root):
-            raise PathOutsideDirectoryError(
-                f"The provided path '{file_path}' is not under the root directory: {local_root}"
-            )
-
-        shutil.chown(Path(file_path), group=os_group)
-        os.chmod(Path(file_path), Path(file_path).stat().st_mode | file_mode)
-
-        # Accumulate unique parent directories for each file
-        path_components = Path(file_path).relative_to(local_root).parents
-        for path_component in path_components:
-            path_to_change = Path(local_root).joinpath(path_component)
-            dir_paths_to_change_fs_group.add(path_to_change)
-
-    # 2. Set group ownership and permissions for the directories in the path starting from root.
-    for path_to_change in dir_paths_to_change_fs_group:
-        shutil.chown(path_to_change, group=os_group)
-        os.chmod(path_to_change, path_to_change.stat().st_mode | dir_mode)
+        _set_fs_group_for_windows(
+            file_paths=file_paths,
+            local_root=local_root,
+            fs_permission_settings=fs_permission_settings,
+        )
 
 
 def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManifest | None:
