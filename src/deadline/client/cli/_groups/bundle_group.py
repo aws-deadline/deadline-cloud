@@ -330,8 +330,9 @@ def _hash_attachments(
     Starts the job attachments hashing and handles the progress reporting
     callback. Returns a list of the asset manifests of the hashed files.
     """
-
-    with click.progressbar(length=100, label="Hashing Attachments") as hashing_progress:
+    # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
+    # not annotating the type of hashing_progress.
+    with click.progressbar(length=100, label="Hashing Attachments") as hashing_progress:  # type: ignore[var-annotated]
 
         def _update_hash_progress(hashing_metadata: ProgressReportMetadata) -> bool:
             new_progress = int(hashing_metadata.progress) - hashing_progress.pos
@@ -370,19 +371,20 @@ def _upload_attachments(
     # TODO: remove logging level setting when the max number connections for boto3 client
     # in Job Attachments library can be increased (currently using default number, 10, which
     # makes it keep logging urllib3 warning messages when uploading large files)
-    with click.progressbar(
-        length=100, label="Uploading Attachments"
-    ) as upload_progress, _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+        # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
+        # not annotating the type of hashing_progress.
+        with click.progressbar(length=100, label="Uploading Attachments") as upload_progress:  # type: ignore[var-annotated]
 
-        def _update_upload_progress(upload_metadata: ProgressReportMetadata) -> bool:
-            new_progress = int(upload_metadata.progress) - upload_progress.pos
-            if new_progress > 0:
-                upload_progress.update(new_progress)
-            return continue_submission
+            def _update_upload_progress(upload_metadata: ProgressReportMetadata) -> bool:
+                new_progress = int(upload_metadata.progress) - upload_progress.pos
+                if new_progress > 0:
+                    upload_progress.update(new_progress)
+                return continue_submission
 
-        upload_summary, attachment_settings = asset_manager.upload_assets(
-            manifests, _update_upload_progress
-        )
+            upload_summary, attachment_settings = asset_manager.upload_assets(
+                manifests, _update_upload_progress
+            )
 
     api.get_deadline_cloud_library_telemetry_client(config=config).record_upload_summary(
         upload_summary

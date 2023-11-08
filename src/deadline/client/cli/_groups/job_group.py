@@ -359,7 +359,9 @@ def _download_job_output(
     # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
         if not is_json_format:
-            with click.progressbar(length=100, label="Downloading Outputs") as download_progress:
+            # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
+            # not annotating the type of download_progress.
+            with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
 
                 def _update_download_progress(download_metadata: ProgressReportMetadata) -> bool:
                     new_progress = int(download_metadata.progress) - download_progress.pos

@@ -9,14 +9,17 @@ readme = "README.md"
 license = ""
 requires-python = ">=3.7"
 
+# Note: All deps should be using >= since this is a *library* as well as an application.
+# Applications that consume this library should be the ones that are more strictly
+# limiting dependencies if they want/need to.
 dependencies = [
-    "boto3 ~= 1.26",
-    # 8.1.4 failing with mypy
-    "click == 8.1.3",
-    "pyyaml ~= 6.0",
+    "boto3 >= 1.28.80",
+    "click >= 8.1.7",
+    "pyyaml >= 6.0",
     # Job Attachments
-    "typing_extensions ~= 4.5",
-    "xxhash ~= 3.2",
+    "typing_extensions == 4.7.*; python_version == '3.7'",
+    "typing_extensions >= 4.8; python_version > '3.7'",
+    "xxhash >= 3.4",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
     "jsonschema == 4.17.*",
 ]
