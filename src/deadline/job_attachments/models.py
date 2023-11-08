@@ -5,11 +5,11 @@ Data classes for AWS objects.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-import sys
-from typing import List, Optional, Set, Any, Union
+from typing import List, Optional, Set, Any
 
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 
@@ -112,7 +112,7 @@ class JobAttachmentsFileSystem(str, Enum):
 class ManifestProperties:
     """The assets for a Step under an asset root"""
 
-    # The path assests were relative to on submitting machine
+    # The path that assets were relative to on submitting machine
     rootPath: str
     # Used for path mapping.
     rootPathFormat: PathFormat
@@ -146,7 +146,7 @@ class ManifestProperties:
 class Attachments:
     """An object that holds the job attachments for a Job"""
 
-    # The list of required assests per asset root
+    # The list of required assets per asset root
     manifests: List[ManifestProperties] = field(default_factory=list)
     # Method to use when loading assets required for a job
     fileSystem: str = JobAttachmentsFileSystem.COPIED.value
@@ -245,7 +245,7 @@ class Queue:
 
 @dataclass
 class Job:
-    """A non-exaustive DataClass to store job objects"""
+    """A non-exhaustive DataClass to store job objects"""
 
     jobId: str
     attachments: Optional[Attachments] = None  # pylint: disable=invalid-name
@@ -282,6 +282,7 @@ class FileConflictResolution(Enum):
     CREATE_COPY = 3
 
 
+# TODO: remove once we fixed worker agent to import PosixFileSystemPermissionSettings from os_file_permission
 @dataclass
 class PosixFileSystemPermissionSettings:
     """
@@ -291,26 +292,10 @@ class PosixFileSystemPermissionSettings:
 
     Attributes:
         os_group (str): The target operating system group for ownership.
-        dir_mode (int): The permission mode to be applied to directories.
-        file_mode (int): The permission mode to be applied to files.
+        dir_mode (int): The permission mode to be added to directories.
+        file_mode (int): The permission mode to be added to files.
     """
 
     os_group: str
     dir_mode: int
     file_mode: int
-
-
-@dataclass
-class WindowsFileSystemPermissionSettings:
-    """
-    A dataclass representing file system permission-related information
-    for Windows.
-    """
-
-    # TODO: Implement this
-
-
-# A union of different file system permission settings that are based on the underlying OS.
-FileSystemPermissionSettings = Union[
-    PosixFileSystemPermissionSettings, WindowsFileSystemPermissionSettings
-]
