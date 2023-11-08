@@ -39,6 +39,7 @@ from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ...job_bundle.submission import AssetReferences
+from ._types import JobBundlePurpose
 
 logger = logging.getLogger(__name__)
 
@@ -350,11 +351,17 @@ class SubmitJobToDeadlineDialog(QDialog):
                     queue_parameters,
                     asset_references,
                     requirements,
+                    purpose=JobBundlePurpose.EXPORT,
                 )
             else:
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
-                    self, job_history_bundle_dir, settings, queue_parameters, asset_references
+                    self,
+                    job_history_bundle_dir,
+                    settings,
+                    queue_parameters,
+                    asset_references,
+                    purpose=JobBundlePurpose.EXPORT,
                 )
 
             logger.info(f"Saved the submission as a job bundle: {job_history_bundle_dir}")
@@ -407,11 +414,17 @@ class SubmitJobToDeadlineDialog(QDialog):
                     queue_parameters,
                     asset_references,
                     requirements,
+                    purpose=JobBundlePurpose.SUBMISSION,
                 )
             else:
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
-                    self, job_history_bundle_dir, settings, queue_parameters, asset_references
+                    self,
+                    job_history_bundle_dir,
+                    settings,
+                    queue_parameters,
+                    asset_references,
+                    purpose=JobBundlePurpose.SUBMISSION,
                 )
 
             farm_id = get_setting("defaults.farm_id")
