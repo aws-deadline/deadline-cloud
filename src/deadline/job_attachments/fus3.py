@@ -17,6 +17,8 @@ from .exceptions import (
     Fus3LaunchScriptMissingError,
 )
 
+from .models import AWSConfigFileDescriptor
+
 log = logging.getLogger(__name__)
 
 FUS3_PATH_ENV_VAR = "FUS3_PATH"
@@ -56,6 +58,7 @@ class Fus3ProcessManager(object):
     _asset_bucket: str
     _region: str
     _manifest_path: str
+    _aws_config_file: AWSConfigFileDescriptor
     _cas_prefix: Optional[str]
 
     def __init__(
@@ -64,6 +67,7 @@ class Fus3ProcessManager(object):
         region: str,
         manifest_path: str,
         mount_point: str,
+        aws_config_file: AWSConfigFileDescriptor,
         cas_prefix: Optional[str] = None,
     ):
         # TODO: Once Windows pathmapping is implemented we can remove this
@@ -79,6 +83,7 @@ class Fus3ProcessManager(object):
         self._region = region
         self._manifest_path = manifest_path
         self._cas_prefix = cas_prefix
+        self._aws_config_file = aws_config_file
 
     @classmethod
     def kill_all_processes(cls, session_dir: Path) -> None:
@@ -315,8 +320,8 @@ class Fus3ProcessManager(object):
             )
         return Fus3ProcessManager.cwd_path
 
-    @classmethod
-    def get_launch_environ(cls) -> dict:
+    # @classmethod
+    def get_launch_environ(self) -> dict:
         """
         Get the environment variables we'll pass to the launch command.
         :returns: dictionary of default environment variables with fus3 changes applied
@@ -326,6 +331,10 @@ class Fus3ProcessManager(object):
             "PATH"
         ] = f"{Fus3ProcessManager.find_fus3_link_dir()}{os.pathsep}{os.environ['PATH']}"
         my_env["LD_LIBRARY_PATH"] = Fus3ProcessManager.get_library_path()  # type: ignore[assignment]
+
+        config_file_path = self._aws_config_file.path.as_posix()
+        my_env["AWS_CONFIG_FILE"] = config_file_path
+        my_env["AWS_PROFILE"] = self._aws_config_file.profile_name
 
         return my_env
 
@@ -339,7 +348,7 @@ class Fus3ProcessManager(object):
         log.info(f"Using mount_point {self._mount_point}")
         Fus3ProcessManager.create_mount_point(self._mount_point)
         start_command = self.build_launch_command(self._mount_point)
-        launch_env = Fus3ProcessManager.get_launch_environ()
+        launch_env = self.get_launch_environ()
         log.info(f"Launching fus3 with command {start_command}")
         log.info(f"Launching with environment {launch_env}")
 

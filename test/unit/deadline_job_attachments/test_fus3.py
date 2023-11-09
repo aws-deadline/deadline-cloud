@@ -12,6 +12,7 @@ from typing import List, Union
 from unittest.mock import Mock, patch, call, MagicMock
 from signal import SIGTERM
 
+
 import pytest
 
 import deadline
@@ -20,7 +21,7 @@ from deadline.job_attachments.exceptions import (
     Fus3ExecutableMissingError,
     Fus3LaunchScriptMissingError,
 )
-from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.job_attachments.models import JobAttachmentS3Settings, AWSConfigFileDescriptor
 from deadline.job_attachments.fus3 import (
     Fus3ProcessManager,
     FUS3_EXECUTABLE,
@@ -56,6 +57,10 @@ class TestFus3Processmanager:
         create_s3_bucket(bucket_name=default_job_attachment_s3_settings.s3BucketName)
         self.default_asset_sync = default_asset_sync
         self.s3_settings = default_job_attachment_s3_settings
+        self.aws_config_file_descriptor = AWSConfigFileDescriptor(
+            profile_name="test_proile",
+            path=Path("/test/path"),
+        )
 
         yield
 
@@ -76,6 +81,7 @@ class TestFus3Processmanager:
                 region=os.environ["AWS_DEFAULT_REGION"],
                 manifest_path="/test/manifest/path",
                 mount_point="/test/mount/point",
+                aws_config_file=self.aws_config_file_descriptor,
             )
 
     def test_build_launch_command(
@@ -94,6 +100,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
@@ -125,6 +132,7 @@ class TestFus3Processmanager:
             manifest_path=manifest_path,
             mount_point=local_root,
             cas_prefix=test_CAS_prefix,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # intermediate cleanup
@@ -166,6 +174,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
@@ -197,6 +206,7 @@ class TestFus3Processmanager:
             manifest_path=manifest_path,
             mount_point=local_root,
             cas_prefix=test_CAS_prefix,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # intermediate cleanup
@@ -238,6 +248,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # verify which is only called when class path is not set
@@ -289,6 +300,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # verify which is only called when class path is not set
@@ -339,6 +351,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # Verify that fus3 can be picked up if deadline_vfs is not found
@@ -366,6 +379,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         bin_check = os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")
@@ -401,6 +415,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -432,6 +447,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -473,6 +489,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -503,6 +520,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -544,6 +562,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         # Verify mount point is created and others have rwx access to it
@@ -574,12 +593,14 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
+            aws_config_file=self.aws_config_file_descriptor,
         )
         process_manager2: Fus3ProcessManager = Fus3ProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
             mount_point=local_root2,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -654,6 +675,7 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
+            aws_config_file=self.aws_config_file_descriptor,
         )
 
         with patch(
@@ -711,3 +733,31 @@ class TestFus3Processmanager:
             # Verify all output was logged
             assert call_count == 3
             assert exception_count == 1
+
+    def test_config_properly_set_in_env(self, tmp_path: Path):
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+
+        # Create process manager without CAS prefix
+        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+            aws_config_file=self.aws_config_file_descriptor,
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3_link_dir",
+            return_value="/test/directory/path",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_library_path",
+            return_value="/test/directory/path",
+        ):
+            env_vars: dict = process_manager.get_launch_environ()
+
+        assert env_vars["AWS_PROFILE"] == self.aws_config_file_descriptor.profile_name
+        assert env_vars["AWS_CONFIG_FILE"] == self.aws_config_file_descriptor.path.as_posix()

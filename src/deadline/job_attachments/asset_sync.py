@@ -47,6 +47,7 @@ from .models import (
     ManifestProperties,
     OutputFile,
     PathFormat,
+    AWSConfigFileDescriptor,
 )
 from .upload import S3AssetUploader
 from .os_file_permission import FileSystemPermissionSettings
@@ -288,6 +289,7 @@ class AssetSync:
         storage_profiles_path_mapping_rules: dict[str, str] = {},
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+        aws_config_file_details: Optional[AWSConfigFileDescriptor] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -312,6 +314,9 @@ class AssetSync:
             on_downloading_files: a function that will be called with a ProgressReportMetadata object
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
+            aws_config_file_details: a data class holding the AWS config file information for use
+                by the deadline VFS. If the object doesn't isn't set, the COPIED behavior is performed
+
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -400,6 +405,7 @@ class AssetSync:
         if (
             attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
+            and aws_config_file_details is not None
         ):
             try:
                 Fus3ProcessManager.find_fus3()
@@ -408,6 +414,7 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
+                    aws_config_file=aws_config_file_details,
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
                 summary_statistics = SummaryStatistics()

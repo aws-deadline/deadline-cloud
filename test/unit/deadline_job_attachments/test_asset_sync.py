@@ -26,6 +26,7 @@ from deadline.job_attachments.models import (
     ManifestProperties,
     PathFormat,
     Queue,
+    AWSConfigFileDescriptor,
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
@@ -800,3 +801,78 @@ class TestAssetSync:
                 }
             ]
             mock_mount_vfs.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_sync_inputs_successful_using_vfs(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        vfs_job: Job,
+        s3_settings_fixture_name: str,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that a valid manifest can be processed to download attachments from S3"""
+        # GIVEN
+        job: Job = vfs_job
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        assert job.attachments
+        aws_config_file = AWSConfigFileDescriptor(
+            profile_name="test_profile",
+            path=Path("/test/path"),
+        )
+
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            side_effect=[f"{local_root}/manifest.json"],
+        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
+            side_effect=["test_manifest_data"],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ) as mock_mount_vfs, patch(
+            "sys.platform", "linux"
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
+                s3_settings,
+                job.attachments,
+                default_queue.queueId,
+                job.jobId,
+                tmp_path,
+                on_downloading_files=mock_on_downloading_files,
+                aws_config_file_details=aws_config_file,
+            )
+
+            # THEN
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+            mock_mount_vfs.assert_called_once()

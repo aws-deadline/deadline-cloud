@@ -299,3 +299,17 @@ class PosixFileSystemPermissionSettings:
     os_group: str
     dir_mode: int
     file_mode: int
+
+
+@dataclass
+class AWSConfigFileDescriptor:
+    """
+    Dataclass holding the credential information for the worker agent session.
+
+    Attributes:
+        profile_name (str): Profile name to use with the session
+        file_path (str): Path to the aws config file
+    """
+
+    profile_name: str
+    path: Path
