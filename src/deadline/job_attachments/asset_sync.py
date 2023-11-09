@@ -30,7 +30,6 @@ from .asset_manifests import BaseManifestPath as RelativeFilePath
 from ._aws.aws_clients import get_boto3_session
 from ._aws.deadline import get_job, get_queue
 from .download import (
-    _progress_logger,
     merge_asset_manifests,
     download_files_from_manifests,
     get_manifest_from_s3,
@@ -122,12 +121,10 @@ class AssetSync:
                 continue
 
             self.s3_uploader.upload_file_to_s3(
-                file.full_path,
+                Path(file.full_path),
                 s3_settings.s3BucketName,
                 file.s3_key,
-                progress_handler=_progress_logger(
-                    file.file_size, progress_tracker.track_progress_callback
-                ),
+                progress_tracker,
             )
 
         progress_tracker.total_time = time.perf_counter() - start_time
@@ -480,7 +477,7 @@ class AssetSync:
                         )
                     else:
                         raise AssetSyncError(
-                            "Error occurred while attempting to sync input files: "
+                            "Error occurred while attempting to sync output files: "
                             f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                         )
                 else:
