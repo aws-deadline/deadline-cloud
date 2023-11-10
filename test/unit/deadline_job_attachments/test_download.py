@@ -743,6 +743,7 @@ class TestFullDownload:
         manifests_by_root = {str(tmp_path): manifest}
 
         fs_permission_settings = PosixFileSystemPermissionSettings(
+            os_user="test-user",
             os_group="test-group",
             dir_mode=0o20,
             file_mode=0o20,
@@ -809,6 +810,7 @@ class TestFullDownload:
         manifests_by_root = {str(tmp_path): manifest}
 
         fs_permission_settings = WindowsFileSystemPermissionSettings(
+            os_user="test-user",
             os_group="test-group",
             dir_mode=WindowsPermissionEnum.FULL_CONTROL,
             file_mode=WindowsPermissionEnum.FULL_CONTROL,
@@ -901,6 +903,7 @@ class TestFullDownload:
         manifests_by_root = {str(tmp_path): manifest}
 
         fs_permission_settings = PosixFileSystemPermissionSettings(
+            os_user="test-user",
             os_group=posix_target_group,
             dir_mode=0o20,
             file_mode=0o20,
@@ -980,6 +983,7 @@ class TestFullDownload:
 
         # Use a builtin group, so we can expect it to exist on any Windows machine
         fs_permission_settings = WindowsFileSystemPermissionSettings(
+            os_user="test-user",
             os_group="Users",
             dir_mode=WindowsPermissionEnum.FULL_CONTROL,
             file_mode=WindowsPermissionEnum.FULL_CONTROL,

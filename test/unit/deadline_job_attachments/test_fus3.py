@@ -76,6 +76,8 @@ class TestFus3Processmanager:
                 region=os.environ["AWS_DEFAULT_REGION"],
                 manifest_path="/test/manifest/path",
                 mount_point="/test/mount/point",
+                queue_id="test-queue",
+                os_user="test-user",
             )
 
     def test_build_launch_command(
@@ -94,6 +96,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
@@ -124,6 +128,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
             cas_prefix=test_CAS_prefix,
         )
 
@@ -166,6 +172,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
@@ -196,6 +204,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
             cas_prefix=test_CAS_prefix,
         )
 
@@ -238,6 +248,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         # verify which is only called when class path is not set
@@ -289,6 +301,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         # verify which is only called when class path is not set
@@ -339,6 +353,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         # Verify that fus3 can be picked up if deadline_vfs is not found
@@ -366,6 +382,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         bin_check = os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")
@@ -401,6 +419,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -432,6 +452,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -473,6 +495,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -503,6 +527,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -544,6 +570,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         # Verify mount point is created and others have rwx access to it
@@ -574,12 +602,16 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
+            queue_id="test-queue",
+            os_user="test-user",
         )
         process_manager2: Fus3ProcessManager = Fus3ProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
             mount_point=local_root2,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -597,7 +629,10 @@ class TestFus3Processmanager:
             return_value=True,
         ), patch(
             f"{deadline.__package__}.job_attachments.fus3.subprocess.run"
-        ) as mock_subprocess_run:
+        ) as mock_subprocess_run, patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ):
             # start first mock fus3 process
             mock_subprocess = MagicMock()
             mock_subprocess.pid = test_pid1
@@ -654,6 +689,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
+            queue_id="test-queue",
+            os_user="test-user",
         )
 
         with patch(
@@ -669,7 +706,10 @@ class TestFus3Processmanager:
             return_value=True,
         ), patch(
             f"{deadline.__package__}.job_attachments.fus3.log"
-        ) as mock_logger:
+        ) as mock_logger, patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ):
             call_count = 0
             exception_count = 0
             signal = threading.Semaphore(0)

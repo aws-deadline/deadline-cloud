@@ -56,6 +56,8 @@ class Fus3ProcessManager(object):
     _asset_bucket: str
     _region: str
     _manifest_path: str
+    _queue_id: str
+    _os_user: str
     _cas_prefix: Optional[str]
 
     def __init__(
@@ -64,6 +66,8 @@ class Fus3ProcessManager(object):
         region: str,
         manifest_path: str,
         mount_point: str,
+        queue_id: str,
+        os_user: str,
         cas_prefix: Optional[str] = None,
     ):
         # TODO: Once Windows pathmapping is implemented we can remove this
@@ -78,6 +82,8 @@ class Fus3ProcessManager(object):
         self._asset_bucket = asset_bucket
         self._region = region
         self._manifest_path = manifest_path
+        self._queue_id = queue_id
+        self._os_user = os_user
         self._cas_prefix = cas_prefix
 
     @classmethod
@@ -315,8 +321,7 @@ class Fus3ProcessManager(object):
             )
         return Fus3ProcessManager.cwd_path
 
-    @classmethod
-    def get_launch_environ(cls) -> dict:
+    def get_launch_environ(self) -> dict:
         """
         Get the environment variables we'll pass to the launch command.
         :returns: dictionary of default environment variables with fus3 changes applied
@@ -326,6 +331,9 @@ class Fus3ProcessManager(object):
             "PATH"
         ] = f"{Fus3ProcessManager.find_fus3_link_dir()}{os.pathsep}{os.environ['PATH']}"
         my_env["LD_LIBRARY_PATH"] = Fus3ProcessManager.get_library_path()  # type: ignore[assignment]
+
+        my_env["AWS_CONFIG_FILE"] = Path(f"~{self._os_user}/.aws/config").expanduser().as_posix()
+        my_env["AWS_PROFILE"] = f"deadline-{self._queue_id}"
 
         return my_env
 
@@ -339,7 +347,7 @@ class Fus3ProcessManager(object):
         log.info(f"Using mount_point {self._mount_point}")
         Fus3ProcessManager.create_mount_point(self._mount_point)
         start_command = self.build_launch_command(self._mount_point)
-        launch_env = Fus3ProcessManager.get_launch_environ()
+        launch_env = self.get_launch_environ()
         log.info(f"Launching fus3 with command {start_command}")
         log.info(f"Launching with environment {launch_env}")
 

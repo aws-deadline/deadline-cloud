@@ -400,6 +400,7 @@ class AssetSync:
         if (
             attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
+            and fs_permission_settings is not None
         ):
             try:
                 Fus3ProcessManager.find_fus3()
@@ -408,6 +409,8 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
+                    queue_id=queue_id,
+                    os_user=fs_permission_settings.os_user,
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
                 summary_statistics = SummaryStatistics()
