@@ -332,7 +332,7 @@ class Fus3ProcessManager(object):
         ] = f"{Fus3ProcessManager.find_fus3_link_dir()}{os.pathsep}{os.environ['PATH']}"
         my_env["LD_LIBRARY_PATH"] = Fus3ProcessManager.get_library_path()  # type: ignore[assignment]
 
-        my_env["AWS_CONFIG_FILE"] = Path(f"~{self._os_user}/.aws/config").expanduser().as_posix()
+        my_env["AWS_CONFIG_FILE"] = str(Path(f"~{self._os_user}/.aws/config").expanduser())
         my_env["AWS_PROFILE"] = f"deadline-{self._queue_id}"
 
         return my_env

@@ -410,7 +410,7 @@ class AssetSync:
                     boto3_session=self.session,
                     session_dir=session_dir,
                     queue_id=queue_id,
-                    os_user=fs_permission_settings.os_user,
+                    os_user=fs_permission_settings.os_user, # type: ignore[union-attr]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
                 summary_statistics = SummaryStatistics()
