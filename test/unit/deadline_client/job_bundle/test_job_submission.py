@@ -10,6 +10,8 @@ from typing import Any, Dict
 import pytest
 
 from deadline.client.job_bundle import submission
+from deadline.client.job_bundle.parameters import JobParameter
+from deadline.client.job_bundle.submission import AssetReferences
 
 MOCK_FARM_ID = "farm-0123456789abcdef0123456789abcdef"
 MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
@@ -20,7 +22,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
     [
         pytest.param(
             {},
-            submission.AssetReferences(),
+            AssetReferences(),
         ),
         pytest.param(
             {
@@ -29,7 +31,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": []},
                 }
             },
-            submission.AssetReferences(),
+            AssetReferences(),
         ),
         pytest.param(
             {
@@ -41,7 +43,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": ["output_dir_1"]},
                 }
             },
-            submission.AssetReferences(
+            AssetReferences(
                 input_filenames=set(["input_file_1.txt", "input_file_2.txt"]),
                 output_directories=set(["output_dir_1"]),
             ),
@@ -56,7 +58,7 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
                     "outputs": {"directories": ["output_dir_1"]},
                 }
             },
-            submission.AssetReferences(
+            AssetReferences(
                 input_filenames=set(
                     [
                         "input_file_1.txt",
@@ -71,13 +73,13 @@ MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
 )
 def test_flatten_asset_references(
     assets_input: Dict[str, Any],
-    expected_output: submission.AssetReferences,
+    expected_output: AssetReferences,
 ) -> None:
     """
     Test that FlatAssetReferences.from_dict creates a FlatAssetReferences object with
     all of the filenames/directories from an input.
     """
-    response = submission.AssetReferences.from_dict(assets_input)
+    response = AssetReferences.from_dict(assets_input)
 
     assert response.input_filenames == expected_output.input_filenames
     assert response.input_directories == expected_output.input_directories
@@ -90,7 +92,7 @@ def test_split_parameter_args() -> None:
     and creates properly formatted app/job parameter dictionaries as returns.
     """
 
-    input_bundle_params: list[Dict[str, Any]] = [
+    input_bundle_params: list[JobParameter] = [
         {"name": "param_1", "value": "TESTING", "type": "STRING"},
         {"name": "param_2", "value": 10, "type": "INT"},
         {"name": "param_3", "value": 10.123, "type": "FLOAT"},
@@ -133,7 +135,7 @@ def test_split_parameter_args_custom_app() -> None:
     This case provides a custom app name for the prefix.
     """
 
-    input_bundle_params: list[Dict[str, Any]] = [
+    input_bundle_params: list[JobParameter] = [
         {"name": "param_1", "value": "TESTING", "type": "STRING"},
         {"name": "param_2", "value": 10, "type": "INT"},
         {"name": "param_3", "value": 10.123, "type": "FLOAT"},

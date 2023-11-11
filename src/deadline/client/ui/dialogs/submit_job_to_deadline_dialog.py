@@ -33,12 +33,12 @@ from .. import block_signals
 from ...config import get_setting
 from ...config.config_file import str2bool
 from ...job_bundle import create_job_history_bundle_dir
+from ...job_bundle.submission import AssetReferences
 from ..widgets.deadline_credentials_status_widget import DeadlineCredentialsStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
-from ...job_bundle.submission import AssetReferences
 from ._types import JobBundlePurpose
 
 logger = logging.getLogger(__name__)

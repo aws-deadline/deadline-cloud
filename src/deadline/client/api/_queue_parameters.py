@@ -4,20 +4,21 @@ from __future__ import annotations
 __all__ = ["get_queue_parameter_definitions"]
 
 import yaml
-from typing import Any
 
 from ._list_apis import _call_paginated_deadline_list_api
 from ._session import get_boto3_client
 from ..exceptions import DeadlineOperationError
 from ..job_bundle.parameters import (
+    JobParameter,
     get_ui_control_for_parameter_definition,
     parameter_definition_difference,
+    validate_job_parameter,
 )
 
 
 def get_queue_parameter_definitions(
     *, farmId: str, queueId: str, config=None
-) -> list[dict[str, Any]]:
+) -> list[JobParameter]:
     """
     This gets all the queue parameters definitions from the specified Queue. It does so
     by getting all the full templates for queue environments, and then combining
@@ -45,16 +46,11 @@ def get_queue_parameter_definitions(
         yaml.safe_load(queue_env["template"]) for queue_env in queue_environments
     ]
 
-    queue_parameters_definitions: dict[str, dict[str, Any]] = {}
+    queue_parameters_definitions: dict[str, JobParameter] = {}
     for template in queue_environment_templates:
-        param_definitions = template.get("parameterDefinitions")
-        # Template is not valid if the parameterDefinitions value is missing, empty, or not a list
-        if not param_definitions or not isinstance(param_definitions, list):
-            raise DeadlineOperationError(
-                "'parameterDefinitions' not in queue template keys: %s" % template.keys()
-            )
+        for parameter in template.get("parameterDefinitions", []):
+            parameter = validate_job_parameter(parameter, type_required=True, default_required=True)
 
-        for parameter in param_definitions:
             # If there is no group label, set it to the name of the Queue Environment
             if not parameter.get("userInterface", {}).get("groupLabel"):
                 if "userInterface" not in parameter:
