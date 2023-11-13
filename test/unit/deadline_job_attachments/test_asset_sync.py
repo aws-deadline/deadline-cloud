@@ -7,7 +7,7 @@ from logging import getLogger
 import shutil
 from math import trunc
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from unittest.mock import ANY, MagicMock, call, mock_open, patch
 
 import boto3
@@ -225,6 +225,7 @@ class TestAssetSync:
                 file_mode=0o20,
             )
         )
+        os_env_vars: Dict[str, str] = {"AWS_PROFILE": "test-profile"}
         assert job.attachments
 
         # WHEN
@@ -255,6 +256,7 @@ class TestAssetSync:
                 tmp_path,
                 on_downloading_files=mock_on_downloading_files,
                 fs_permission_settings=test_fs_permission_settings,
+                os_env_vars=os_env_vars,
             )
 
             # THEN

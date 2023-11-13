@@ -778,8 +778,8 @@ def mount_vfs_from_manifests(
     manifests_by_root: dict[str, BaseAssetManifest],
     boto3_session: boto3.Session,
     session_dir: Path,
-    queue_id: str,
     os_user: str,
+    os_env_vars: dict[str, str],
     cas_prefix: Optional[str] = None,
 ) -> None:
     """
@@ -789,9 +789,9 @@ def mount_vfs_from_manifests(
         s3_bucket: The name of the S3 bucket.
         manifests_by_root: a map from each local root path to a corresponding list of tuples of manifest contents and their path.
         boto3_session: The boto3 session to use.
-        session_dir: the directory that the session is going to use.z
-        queue_id: the ID of the queue.
+        session_dir: the directory that the session is going to use.
         os_user: the user executing the job.
+        os_env_vars: environment variables to set for launched subprocesses
         cas_prefix: The CAS prefix of the files.
 
     Returns:
@@ -811,8 +811,8 @@ def mount_vfs_from_manifests(
             boto3_session.region_name,
             manifest_path,
             local_download_dir,
-            queue_id,
             os_user,
+            os_env_vars,
             cas_prefix,
         )
         vfs_manager.start(session_dir=session_dir)

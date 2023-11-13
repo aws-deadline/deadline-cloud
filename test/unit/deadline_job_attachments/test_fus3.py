@@ -76,8 +76,8 @@ class TestFus3Processmanager:
                 region=os.environ["AWS_DEFAULT_REGION"],
                 manifest_path="/test/manifest/path",
                 mount_point="/test/mount/point",
-                queue_id="test-queue",
                 os_user="test-user",
+                os_env_vars={"AWS_PROFILE": "test-profile"},
             )
 
     def test_build_launch_command(
@@ -96,8 +96,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
@@ -128,8 +128,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
             cas_prefix=test_CAS_prefix,
         )
 
@@ -172,8 +172,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         test_executable = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
@@ -204,8 +204,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
             cas_prefix=test_CAS_prefix,
         )
 
@@ -248,8 +248,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         # verify which is only called when class path is not set
@@ -301,8 +301,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         # verify which is only called when class path is not set
@@ -353,8 +353,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         # Verify that fus3 can be picked up if deadline_vfs is not found
@@ -382,8 +382,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         bin_check = os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")
@@ -419,8 +419,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
@@ -452,8 +452,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
@@ -495,8 +495,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
@@ -527,8 +527,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
@@ -570,8 +570,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         # Verify mount point is created and others have rwx access to it
@@ -602,16 +602,16 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
         process_manager2: Fus3ProcessManager = Fus3ProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
             mount_point=local_root2,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
@@ -689,8 +689,8 @@ class TestFus3Processmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
-            queue_id="test-queue",
             os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         with patch(
