@@ -15,7 +15,10 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 
 from ..job_bundle import deadline_yaml_dump
 from .dataclasses import CliJobSettings
-from .dialogs.submit_job_to_deadline_dialog import SubmitJobToDeadlineDialog
+from .dialogs.submit_job_to_deadline_dialog import (
+    SubmitJobToDeadlineDialog,
+    JobBundlePurpose,
+)
 from .widgets.cli_job_settings_tab import CliJobSettingsWidget
 from ..job_bundle.submission import AssetReferences
 
@@ -47,6 +50,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         settings: CliJobSettings,
         queue_parameters: list[dict[str, Any]],
         asset_references: AssetReferences,
+        purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
     ) -> None:
         """
         Perform a submission when the submit button is pressed
