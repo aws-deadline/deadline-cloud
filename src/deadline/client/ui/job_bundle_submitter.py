@@ -22,7 +22,10 @@ from ..job_bundle.loader import (
 )
 from ..job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
 from .dataclasses import JobBundleSettings
-from .dialogs.submit_job_to_deadline_dialog import SubmitJobToDeadlineDialog
+from .dialogs.submit_job_to_deadline_dialog import (
+    SubmitJobToDeadlineDialog,
+    JobBundlePurpose,
+)
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
 from ..job_bundle.submission import AssetReferences
 
@@ -61,6 +64,7 @@ def show_job_bundle_submitter(
         settings: JobBundleSettings,
         queue_parameters: list[dict[str, Any]],
         asset_references: AssetReferences,
+        purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
     ) -> None:
         """
         Perform a submission when the submit button is pressed
