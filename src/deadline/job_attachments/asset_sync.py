@@ -288,6 +288,7 @@ class AssetSync:
         storage_profiles_path_mapping_rules: dict[str, str] = {},
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+        os_env_vars: Dict[str, str] | None = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -312,6 +313,7 @@ class AssetSync:
             on_downloading_files: a function that will be called with a ProgressReportMetadata object
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
+            os_env_vars: environment variables to set for launched subprocesses
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -400,6 +402,9 @@ class AssetSync:
         if (
             attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
+            and fs_permission_settings is not None
+            and os_env_vars is not None
+            and "AWS_PROFILE" in os_env_vars
         ):
             try:
                 Fus3ProcessManager.find_fus3()
@@ -408,6 +413,8 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
+                    os_user=fs_permission_settings.os_user,  # type: ignore[union-attr]
+                    os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
                 summary_statistics = SummaryStatistics()

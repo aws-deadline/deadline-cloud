@@ -291,11 +291,13 @@ class PosixFileSystemPermissionSettings:
     the directory or file's existing permissions.
 
     Attributes:
+        os_user (str): The target operating system user for ownership.
         os_group (str): The target operating system group for ownership.
         dir_mode (int): The permission mode to be added to directories.
         file_mode (int): The permission mode to be added to files.
     """
 
+    os_user: str
     os_group: str
     dir_mode: int
     file_mode: int
