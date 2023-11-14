@@ -7,7 +7,7 @@ from logging import getLogger
 import shutil
 from math import trunc
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from unittest.mock import ANY, MagicMock, call, mock_open, patch
 
 import boto3
@@ -17,6 +17,7 @@ from moto import mock_sts
 
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
+from deadline.job_attachments.os_file_permission import PosixFileSystemPermissionSettings
 from deadline.job_attachments.download import _progress_logger
 from deadline.job_attachments.exceptions import Fus3ExecutableMissingError
 from deadline.job_attachments.models import (
@@ -216,6 +217,15 @@ class TestAssetSync:
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
         local_root = str(Path(session_dir) / dest_dir)
+        test_fs_permission_settings: PosixFileSystemPermissionSettings = (
+            PosixFileSystemPermissionSettings(
+                os_user="test-user",
+                os_group="test-group",
+                dir_mode=0o20,
+                file_mode=0o20,
+            )
+        )
+        os_env_vars: Dict[str, str] = {"AWS_PROFILE": "test-profile"}
         assert job.attachments
 
         # WHEN
@@ -245,6 +255,8 @@ class TestAssetSync:
                 job.jobId,
                 tmp_path,
                 on_downloading_files=mock_on_downloading_files,
+                fs_permission_settings=test_fs_permission_settings,
+                os_env_vars=os_env_vars,
             )
 
             # THEN

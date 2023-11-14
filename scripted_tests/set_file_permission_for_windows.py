@@ -94,6 +94,7 @@ def run_test():
         start_time = time.perf_counter()
 
         fs_permission_settings = WindowsFileSystemPermissionSettings(
+            os_user=args.target_user,
             os_group=args.group,
             dir_mode=dir_permission,
             file_mode=file_permission,
