@@ -22,7 +22,11 @@ from botocore.stub import Stubber
 from moto import mock_sts
 
 import deadline
-from deadline.job_attachments.asset_manifests import BaseManifestModel, ManifestVersion
+from deadline.job_attachments.asset_manifests import (
+    BaseManifestModel,
+    BaseManifestPath,
+    ManifestVersion,
+)
 from deadline.job_attachments.exceptions import (
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
@@ -2059,6 +2063,63 @@ class TestUpload:
             Path("C:\\username\\DOCS\\inputs\\input1.txt")
         }
         assert result[0].outputs == {Path("C:\\username\\docs\\outputs")}
+
+    @pytest.mark.parametrize(
+        "input_files, size_threshold, expected_queues",
+        [
+            (
+                [],
+                100 * (1024**2),  # 100 MB
+                ([], []),
+            ),
+            (
+                [
+                    BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
+                    BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                    BaseManifestPath(path="", hash="", size=1000 * (1024**2), mtime=1),
+                ],
+                100 * (1024**2),  # 100 MB
+                (
+                    [
+                        BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
+                        BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                    ],
+                    [
+                        BaseManifestPath(path="", hash="", size=1000 * (1024**2), mtime=1),
+                    ],
+                ),
+            ),
+            (
+                [
+                    BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
+                    BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                ],
+                800 * (1024**2),  # 800 MB
+                (
+                    [
+                        BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
+                        BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                    ],
+                    [],
+                ),
+            ),
+        ],
+    )
+    def test_separate_files_by_size(
+        self,
+        input_files: List[BaseManifestPath],
+        size_threshold: int,
+        expected_queues: Tuple[List[BaseManifestPath], List[BaseManifestPath]],
+    ):
+        """
+        Tests that a helper method `_separate_files_by_size` is working as expected.
+        """
+        a3_asset_uploader = S3AssetUploader()
+        actual_queues = a3_asset_uploader._separate_files_by_size(
+            files_to_upload=input_files,
+            size_threshold=size_threshold,
+        )
+        assert actual_queues == expected_queues
 
 
 def assert_progress_report_last_callback(
