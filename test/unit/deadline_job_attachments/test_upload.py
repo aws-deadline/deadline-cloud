@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, patch
 import boto3
 import py.path
 import pytest
-from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError
 from botocore.stub import Stubber
 from moto import mock_sts
@@ -25,7 +24,6 @@ from moto import mock_sts
 import deadline
 from deadline.job_attachments.asset_manifests import BaseManifestModel, ManifestVersion
 from deadline.job_attachments.exceptions import (
-    AssetSyncError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
@@ -1313,7 +1311,7 @@ class TestUpload:
 
         # This is the error that's surfaced when a bucket is in a different account than expected.
         stubber.add_client_error(
-            "put_object",
+            "create_multipart_upload",
             service_error_code="AccessDenied",
             service_message="Access Denied",
             http_status_code=403,
@@ -1327,11 +1325,18 @@ class TestUpload:
         file.write_text("")
 
         with stubber:
-            with pytest.raises(AssetSyncError, match=r"Error uploading ") as err:
+            with pytest.raises(JobAttachmentsS3ClientError) as err:
                 uploader.upload_file_to_s3(
-                    str(file), self.job_attachment_s3_settings.s3BucketName, "test_key"
+                    file, self.job_attachment_s3_settings.s3BucketName, "test_key"
                 )
-            assert isinstance(err.value.__cause__, S3UploadFailedError)
+            assert isinstance(err.value.__cause__, ClientError)
+            assert (
+                err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
+            )
+            assert (
+                "Error uploading file in bucket 'test-bucket'. Target key or prefix: 'test_key'. "
+                "HTTP Status Code: 403 Forbidden or Access denied. "
+            ) in str(err.value)
 
     @pytest.mark.parametrize(
         "manifest_version",

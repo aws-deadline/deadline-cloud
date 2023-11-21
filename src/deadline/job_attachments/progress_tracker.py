@@ -105,7 +105,7 @@ class DownloadSummaryStatistics(SummaryStatistics):
 
 class ProgressStatus(Enum):
     """
-    Reperesents the current stage of asset/file processing
+    Represents the current stage of asset/file processing
     """
 
     NONE = ("NONE", "")
@@ -194,7 +194,7 @@ class ProgressTracker:
 
         self._lock = Lock()
 
-        def track_progress(bytes_amount: int, current_file_done: bool) -> bool:
+        def track_progress(bytes_amount: int, current_file_done: Optional[bool] = False) -> bool:
             """
             When uploading or downloading files using boto3, pass this to the `Callback` argument
             so that the progress can be updated with the amount of bytes processed.

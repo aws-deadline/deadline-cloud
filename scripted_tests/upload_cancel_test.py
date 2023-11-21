@@ -23,6 +23,9 @@ How to test:
 2. In the middle of hashing or uploading those files, you can send a cancel
    signal by pressing 'k' and Enter keys in succession. Confirm that cancelling
    is working as expected by checking the console output.
+
+Note: This script generates test files in the /tmp/test_submit directory for testing
+purpose. But it does not delete these files after the test is completed.
 """
 
 MESSAGE_HOW_TO_CANCEL = (
@@ -30,7 +33,7 @@ MESSAGE_HOW_TO_CANCEL = (
 )
 
 NUM_SMALL_FILES = 0
-NUM_MEDIUM_FILES = 5
+NUM_MEDIUM_FILES = 0
 NUM_LARGE_FILES = 1
 
 continue_reporting = True
@@ -74,7 +77,7 @@ def run():
             file_path = root_path / f"medium_test{i}.txt"
             if not os.path.exists(file_path):
                 with file_path.open("wb") as f:
-                    f.write(os.urandom(102428800))  # 100 MB files
+                    f.write(os.urandom(100 * (1024**2)))  # 100 MB files
             files.append(str(file_path))
 
     # Make large files
@@ -82,9 +85,8 @@ def run():
         for i in range(0, NUM_LARGE_FILES):
             file_path = root_path / f"large_test{i}.txt"
             if not os.path.exists(file_path):
-                for i in range(1):
-                    with file_path.open("ab") as f:
-                        f.write(os.urandom(1073741824))  # Write 1 GB at a time
+                with file_path.open("ab") as f:
+                    f.write(os.urandom(1 * (1024**3)))  # Write 1 GB at a time
             files.append(str(file_path))
 
     queue = get_queue(farm_id=farm_id, queue_id=queue_id)
@@ -117,7 +119,7 @@ def run():
         )
     except AssetSyncCancelledError as asce:
         print(f"AssetSyncCancelledError: {asce}")
-        print(f"payload: {asce.summary_statistics}")
+        print(f"payload:\n{asce.summary_statistics}")
 
     print(f"\nTotal test runtime: {time.perf_counter() - start_time}")
 
