@@ -6,7 +6,9 @@ Classes for handling uploading of assets.
 from __future__ import annotations
 
 import concurrent.futures
+import functools
 import logging
+import math
 import os
 import time
 from datetime import datetime
@@ -16,8 +18,9 @@ from pathlib import Path, PurePath
 from typing import Any, Callable, Optional, Tuple, Type, Union
 
 import boto3
-from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError
+from s3transfer import ReadFileChunk
+from s3transfer.utils import ChunksizeAdjuster
 
 from .asset_manifests import (
     BaseAssetManifest,
@@ -31,7 +34,6 @@ from ._aws.deadline import get_storage_profile_for_queue
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
-    AssetSyncError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
@@ -59,9 +61,10 @@ from ._utils import (
     _join_s3_paths,
 )
 
-# TODO: full performance analysis to determine the ideal threshold
+# TODO: full performance analysis to determine the ideal thresholds
 LIST_OBJECT_THRESHOLD: int = 100
-
+CHUNK_SIZE_FOR_MULTIPART_UPLOAD = 8 * (1024**2)  # 8 MB (Default chunk size for multipart upload)
+MAX_WORKERS_FOR_MULTIPART_UPLOAD = 10  # Max workers for multipart upload
 
 logger = logging.getLogger("deadline.job_attachments.upload")
 
@@ -229,43 +232,180 @@ class S3AssetUploader:
         progress_tracker: Optional[ProgressTracker] = None,
     ) -> Tuple[bool, int]:
         """
-        Uploads an object to the S3 content-addressable storage (CAS) prefix.
-        Optionally, does a head-object check and only uploads the file if it doesn't exist in S3 already.
-        returns a tuple (whether it has been uploaded, the file size).
-        An AssetSyncCancelledError exception is thrown when the caller cancels the job submission
-        in the middle.
+        Uploads an object to the S3 content-addressable storage (CAS) prefix. Optionally,
+        does a head-object check and only uploads the file if it doesn't exist in S3 already.
+        Returns a tuple (whether it has been uploaded, the file size).
         """
-        # If it's cancelled, raise an AssetSyncCancelledError exception
-        if progress_tracker and not progress_tracker.continue_reporting:
-            raise AssetSyncCancelledError(
-                "File upload cancelled.", progress_tracker.get_summary_statistics()
-            )
-
         local_path = source_root.joinpath(file.path)
         if s3_cas_prefix:
             s3_upload_key = _join_s3_paths(s3_cas_prefix, file.hash)
         else:
             s3_upload_key = file.hash
-
         is_uploaded = False
         file_size = local_path.stat().st_size
-        if not check_if_in_s3 or not self.file_already_uploaded(s3_bucket, s3_upload_key):
-            self.upload_file_to_s3(
-                str(local_path),
-                s3_bucket,
-                s3_upload_key,
-                self._progress_logger(
-                    local_path,
-                    progress_tracker.track_progress_callback if progress_tracker else None,
-                ),
-            )
-            is_uploaded = True
-        else:
+
+        if check_if_in_s3 and self.file_already_uploaded(s3_bucket, s3_upload_key):
             logger.debug(
                 f"skipping {local_path} because it has already been uploaded to s3://{s3_bucket}/{s3_upload_key}"
             )
+            return (is_uploaded, file_size)
 
+        self.upload_file_to_s3(
+            local_path=local_path,
+            s3_bucket=s3_bucket,
+            s3_upload_key=s3_upload_key,
+            progress_tracker=progress_tracker,
+        )
+        is_uploaded = True
         return (is_uploaded, file_size)
+
+    def upload_file_to_s3(
+        self,
+        local_path: Path,
+        s3_bucket: str,
+        s3_upload_key: str,
+        progress_tracker: Optional[ProgressTracker] = None,
+    ) -> None:
+        """
+        Uploads a single file to an S3 bucket using multipart upload, meaning that it
+        splits the file into multiple parts and uploads them in parallel. It checks for
+        cancellation at each part upload. If the callback in `progress_tracker` returns
+        a cancel signal (False) from the caller, the upload is aborted immediately.
+
+        Note: It uses boto3's low-level APIs for multipart upload to allow for granular
+        control, specifically to enable cancellation of the upload mid-way.
+        """
+        file_size = local_path.stat().st_size
+        upload_id = None
+        expected_bucket_owner = get_account_id(session=self._session)
+        try:
+            # Initiate a multipart upload
+            upload_id = self._s3.create_multipart_upload(
+                Bucket=s3_bucket,
+                Key=s3_upload_key,
+                ExpectedBucketOwner=expected_bucket_owner,
+            )["UploadId"]
+            parts = []
+            chunk_size_adjuster = ChunksizeAdjuster()
+            chunk_size = chunk_size_adjuster.adjust_chunksize(
+                current_chunksize=CHUNK_SIZE_FOR_MULTIPART_UPLOAD,
+                file_size=file_size,
+            )
+            num_parts = int(math.ceil(file_size / float(chunk_size)))
+
+            # Start uploading parts
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=MAX_WORKERS_FOR_MULTIPART_UPLOAD
+            ) as executor:
+                upload_partial = functools.partial(
+                    self._upload_part,
+                    s3_bucket,
+                    s3_upload_key,
+                    local_path,
+                    upload_id,
+                    chunk_size,
+                    progress_tracker,
+                )
+                for result in executor.map(upload_partial, range(1, num_parts + 1)):
+                    if result is False:
+                        # If canceled, the upload is aborted immediately.
+                        self._s3.abort_multipart_upload(
+                            Bucket=s3_bucket,
+                            Key=s3_upload_key,
+                            UploadId=upload_id,
+                            ExpectedBucketOwner=expected_bucket_owner,
+                        )
+                        if progress_tracker:
+                            raise AssetSyncCancelledError(
+                                "File upload cancelled.", progress_tracker.get_summary_statistics()
+                            )
+                    parts.append(result)
+
+            # Complete the multipart upload
+            self._s3.complete_multipart_upload(
+                Bucket=s3_bucket,
+                Key=s3_upload_key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": parts},
+                ExpectedBucketOwner=expected_bucket_owner,
+            )
+            is_uploaded = True
+            if progress_tracker and is_uploaded:
+                progress_tracker.increase_processed(1, 0)
+
+        except ClientError as exc:
+            if upload_id:
+                # If any error occurs, the multipart upload must be aborted.
+                self._s3.abort_multipart_upload(
+                    Bucket=s3_bucket,
+                    Key=s3_upload_key,
+                    UploadId=upload_id,
+                    ExpectedBucketOwner=expected_bucket_owner,
+                )
+            status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
+            status_code_guidance = {
+                **COMMON_ERROR_GUIDANCE_FOR_S3,
+                403: (
+                    "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
+                    "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket."
+                ),
+                404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
+            }
+            raise JobAttachmentsS3ClientError(
+                action="uploading file",
+                status_code=status_code,
+                bucket_name=s3_bucket,
+                key_or_prefix=s3_upload_key,
+                message=status_code_guidance.get(status_code, ""),
+            ) from exc
+        except Exception as exc:
+            if upload_id:
+                # If any error occurs, the multipart upload must be aborted.
+                self._s3.abort_multipart_upload(
+                    Bucket=s3_bucket,
+                    Key=s3_upload_key,
+                    UploadId=upload_id,
+                    ExpectedBucketOwner=expected_bucket_owner,
+                )
+            raise exc
+
+    def _upload_part(
+        self,
+        bucket: str,
+        key: str,
+        file_name: str,
+        upload_id: str,
+        part_size: int,
+        progress_tracker: Optional[ProgressTracker],
+        part_number: int,
+    ):
+        """
+        As a helper function to be used within `upload_file_to_s3`, it uploads a single part
+        of a file. Reads a chunk of the file, and uploads it using boto3's `upload_part` API.
+        Returns a dictionary with the part number and ETag.
+        """
+        open_chunk_reader = ReadFileChunk.from_filename
+        with open_chunk_reader(
+            file_name,
+            part_size * (part_number - 1),
+            part_size,
+            progress_tracker.track_progress_callback if progress_tracker else None,
+        ) as body:
+            response = self._s3.upload_part(
+                Bucket=bucket,
+                Key=key,
+                UploadId=upload_id,
+                PartNumber=part_number,
+                Body=body,
+                ExpectedBucketOwner=get_account_id(session=self._session),
+            )
+            # Update the upload progress
+            if progress_tracker:
+                is_continue = progress_tracker.continue_reporting
+                if not is_continue:
+                    return False  # return false it if gets a signal to cancel
+            etag = response["ETag"]
+            return {"ETag": etag, "PartNumber": part_number}
 
     def filter_objects_to_upload(self, bucket: str, prefix: str, upload_set: set[str]) -> set[str]:
         """
@@ -367,63 +507,6 @@ class S3AssetUploader:
                 key_or_prefix=key,
                 message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
             ) from exc
-
-    def upload_file_to_s3(
-        self,
-        path: str,
-        bucket: str,
-        key: str,
-        progress_handler: Optional[Callable[[int], None]] = None,
-    ) -> None:
-        try:
-            self._s3.upload_file(
-                path,
-                bucket,
-                key,
-                ExtraArgs={"ExpectedBucketOwner": get_account_id(session=self._session)},
-                Callback=progress_handler,
-            )
-        except S3UploadFailedError as exc:
-            raise AssetSyncError(f"Error uploading {path} to s3://{bucket}/{key}: {exc}") from exc
-        except ClientError as exc:
-            status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
-            status_code_guidance = {
-                **COMMON_ERROR_GUIDANCE_FOR_S3,
-                403: (
-                    "Forbidden or Access denied. Please check your AWS credentials, or ensure that "
-                    "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket."
-                ),
-                404: "Not found. Please check your bucket name, and ensure that it exists in the AWS account.",
-            }
-            raise JobAttachmentsS3ClientError(
-                action="uploading file",
-                status_code=status_code,
-                bucket_name=bucket,
-                key_or_prefix=key,
-                message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
-            ) from exc
-
-    def _progress_logger(
-        self, path: Path, track_progress_callback: Optional[Callable] = None
-    ) -> Callable[[int], None]:
-        file_size = path.stat().st_size
-        total_uploaded = 0
-        last_reported_percentage = -1
-
-        def handler(bytes_uploaded):
-            nonlocal total_uploaded
-            nonlocal last_reported_percentage
-
-            total_uploaded += bytes_uploaded
-            percentage = round(total_uploaded / file_size * 100)
-            if last_reported_percentage < percentage:
-                logger.debug(f"Uploading {path}: uploaded {percentage}%")
-                last_reported_percentage = percentage
-
-            if track_progress_callback:
-                track_progress_callback(bytes_uploaded, total_uploaded == file_size)
-
-        return handler
 
 
 class S3AssetManager:
