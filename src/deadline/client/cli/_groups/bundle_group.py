@@ -22,11 +22,12 @@ from deadline.client.api import get_boto3_client, get_queue_user_boto3_session
 from deadline.client.api._session import _modified_logging_level
 from deadline.client.config import config_file, get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
-from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
-from deadline.client.job_bundle.submission import (
-    AssetReferences,
-    split_parameter_args,
+from deadline.client.job_bundle.parameters import (
+    apply_job_parameters,
+    merge_queue_job_parameters,
+    read_job_bundle_parameters,
 )
+from deadline.client.job_bundle.submission import AssetReferences, split_parameter_args
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import (
     JobAttachmentsFileSystem,
@@ -151,15 +152,20 @@ def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, *
         )
         asset_references = AssetReferences.from_dict(asset_references_obj)
 
+        parameters = merge_queue_job_parameters(
+            job_parameters=job_bundle_parameters,
+            queue_parameters=queue_parameter_definitions,
+            queue_id=queue_id,
+        )
+
         apply_job_parameters(
             parameter,
             job_bundle_dir,
-            job_bundle_parameters,
-            queue_parameter_definitions,
+            parameters,
             asset_references,
         )
         app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-            job_bundle_parameters, job_bundle_dir
+            parameters, job_bundle_dir
         )
 
         # Hash and upload job attachments if there are any

@@ -31,7 +31,12 @@ from deadline.client import api
 from deadline.client.exceptions import CreateJobWaiterCanceled, DeadlineOperationError
 from deadline.client.config import set_setting, config_file
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
-from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
+from deadline.client.job_bundle.parameters import (
+    JobParameter,
+    apply_job_parameters,
+    merge_queue_job_parameters,
+    read_job_bundle_parameters,
+)
 from deadline.client.job_bundle.submission import (
     AssetReferences,
     split_parameter_args,
@@ -78,7 +83,7 @@ class SubmitJobProgressDialog(QDialog):
         queue_id: str,
         storage_profile_id: str,
         job_bundle_dir: str,
-        queue_parameters: list[dict[str, Any]],
+        queue_parameters: list[JobParameter],
         asset_manager: Optional[S3AssetManager],
         deadline_client: BaseClient,
         auto_accept: bool = False,
@@ -191,16 +196,21 @@ class SubmitJobProgressDialog(QDialog):
         )
         self.asset_references = AssetReferences.from_dict(asset_references_obj)
 
+        parameter_definitions = merge_queue_job_parameters(
+            queue_id=self._queue_id,
+            job_parameters=job_bundle_parameters,
+            queue_parameters=self._queue_parameters,
+        )
+
         apply_job_parameters(
             [],
             self._job_bundle_dir,
-            job_bundle_parameters,
-            self._queue_parameters,
+            parameter_definitions,
             self.asset_references,
         )
 
         app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-            job_bundle_parameters, self._job_bundle_dir
+            parameter_definitions, self._job_bundle_dir
         )
 
         self._create_job_args.update(app_parameters_formatted)

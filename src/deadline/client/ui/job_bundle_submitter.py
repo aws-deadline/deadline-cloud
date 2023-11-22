@@ -20,7 +20,12 @@ from ..job_bundle.loader import (
     read_yaml_or_json,
     read_yaml_or_json_object,
 )
-from ..job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
+from ..job_bundle.parameters import (
+    JobParameter,
+    apply_job_parameters,
+    merge_queue_job_parameters,
+    read_job_bundle_parameters,
+)
 from .dataclasses import JobBundleSettings
 from .dialogs.submit_job_to_deadline_dialog import (
     SubmitJobToDeadlineDialog,
@@ -62,7 +67,7 @@ def show_job_bundle_submitter(
         widget: SubmitJobToDeadlineDialog,
         job_bundle_dir: str,
         settings: JobBundleSettings,
-        queue_parameters: list[dict[str, Any]],
+        queue_parameters: list[JobParameter],
         asset_references: AssetReferences,
         purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
     ) -> None:
@@ -112,11 +117,15 @@ def show_job_bundle_submitter(
             {"name": param["name"], "value": param["value"]} for param in settings.parameters
         )
 
+        parameters = merge_queue_job_parameters(
+            queue_parameters=queue_parameters,
+            job_parameters=settings.parameters,
+        )
+
         apply_job_parameters(
             parameters_values,
             job_bundle_dir,
-            settings.parameters,
-            queue_parameters,
+            parameters,
             AssetReferences(),
         )
 
