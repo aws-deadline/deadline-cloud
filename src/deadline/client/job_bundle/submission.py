@@ -4,13 +4,13 @@
 Helper functions to enable submission of a Job Bundle to CreateJob
 """
 from __future__ import annotations
-
 import dataclasses
 import logging
 import os
 from typing import Any, Tuple, Optional
 
 from ..exceptions import DeadlineOperationError
+from .parameters import JobParameter
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class AssetReferences:
 
 
 def split_parameter_args(
-    job_bundle_parameters: list[dict[str, Any]],
+    parameters: list[JobParameter],
     job_bundle_dir: str,
     app_name: Optional[str] = None,
     supported_app_parameter_names: Optional[list[str]] = None,
@@ -108,7 +108,7 @@ def split_parameter_args(
     and job specific parameters.
 
     Args:
-        job_bundle_parameters (list): The list of parameter values from the job bundle.
+        parameters (list): The list of submission parameters.
         job_bundle_dir (str): The job bundle directory, used for error messages.
         app_name (str): The name of the application prefix to accept for application-specific
             parameters.
@@ -124,8 +124,8 @@ def split_parameter_args(
     job_parameters: dict[str, Any] = {}
     app_parameters: dict[str, Any] = {}
 
-    if job_bundle_parameters:
-        for parameter in job_bundle_parameters:
+    if parameters:
+        for parameter in parameters:
             if "value" in parameter:
                 parameter_name = parameter["name"]
                 parameter_value = parameter["value"]

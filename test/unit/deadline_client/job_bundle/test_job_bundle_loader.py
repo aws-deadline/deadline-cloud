@@ -28,7 +28,7 @@ parameterDefinitions:
   description: "Unrestricted line of text!"
   default: Default line edit value.
 - name: IntSpinner
-  type: NUMBER
+  type: INT
   description: A default integer spinner.
   default: 42
 - name: StringDropdown
@@ -90,7 +90,7 @@ READ_JOB_BUNDLE_PARAMETERS_RESULT = """
   default: Default line edit value.
   value: Testing one two three.
 - name: IntSpinner
-  type: NUMBER
+  type: INT
   description: A default integer spinner.
   default: 42
 - name: StringDropdown

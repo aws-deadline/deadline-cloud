@@ -13,7 +13,7 @@ from deadline.client import exceptions
 
 
 @pytest.mark.parametrize(
-    "job_parameters, job_bundle_dir, job_bundle_parameters, asset_references",
+    "job_parameters, job_bundle_dir, parameter_definitions, asset_references",
     [
         pytest.param(
             [],
@@ -77,7 +77,7 @@ from deadline.client import exceptions
     ],
 )
 def test_apply_job_parameters_parameter_without_value(
-    job_parameters, job_bundle_dir, job_bundle_parameters, asset_references
+    job_parameters, job_bundle_dir, parameter_definitions, asset_references
 ):
     """
     Test that a job bundle parameter with no default value, and without
@@ -85,11 +85,209 @@ def test_apply_job_parameters_parameter_without_value(
     """
     with pytest.raises(exceptions.DeadlineOperationError) as excinfo:
         parameters.apply_job_parameters(
-            job_parameters, job_bundle_dir, job_bundle_parameters, [], asset_references
+            job_parameters, job_bundle_dir, parameter_definitions, asset_references
         )
     assert "TestParameterName" in str(excinfo)
     assert "no default value" in str(excinfo).lower()
     assert "no parameter value" in str(excinfo).lower()
+
+
+class TestMergeQueueJobParameters:
+    """Test cases for deadline.client.job_bundle.parameters.merge_queue_job_parameters"""
+
+    def test_merge_queue_job_parameters_distinct(self) -> None:
+        """
+        Tests that distinct queue and job parameters are merged like a set-union operation
+        """
+
+        # GIVEN
+        job_parameter: parameters.JobParameter = {
+            "name": "a",
+            "type": "STRING",
+        }
+        queue_parameter: parameters.JobParameter = {
+            "name": "b",
+            "type": "INT",
+        }
+
+        # WHEN
+        merged = parameters.merge_queue_job_parameters(
+            job_parameters=[job_parameter],
+            queue_parameters=[queue_parameter],
+        )
+
+        # THEN
+        assert len(merged) == 2
+        assert job_parameter in merged
+        assert queue_parameter in merged
+        # Ensure that the merged parameters are copies and not references to the job/queue parameters
+        # passed in
+        for merged_param in merged:
+            assert merged_param is not job_parameter
+            assert merged_param is not queue_parameter
+
+    def test_merge_queue_job_parameters_intersect(self) -> None:
+        """
+        Tests that intersection queue and job parameters are unioned such that only one parameter is
+        returned
+        """
+
+        # GIVEN
+        job_parameter: parameters.JobParameter = {
+            "name": "a",
+            "type": "STRING",
+        }
+        queue_parameter: parameters.JobParameter = {
+            "name": "a",
+            "type": "STRING",
+        }
+
+        # WHEN
+        merged_params = parameters.merge_queue_job_parameters(
+            job_parameters=[job_parameter],
+            queue_parameters=[queue_parameter],
+        )
+
+        # THEN
+        assert len(merged_params) == 1
+        assert job_parameter in merged_params
+        assert queue_parameter in merged_params
+        # Ensure that the merged parameters are copies and not references to the job/queue parameters
+        # passed in
+        merged_param = merged_params[0]
+        assert merged_param is not job_parameter
+        assert merged_param is not queue_parameter
+
+    @pytest.mark.parametrize(
+        argnames=("queue_default", "job_default", "expected_merged_default"),
+        argvalues=(
+            # The job parameter's default should take priority
+            pytest.param(1, 2, 2, id="both"),
+            pytest.param(1, None, 1, id="only-queue-has-default"),
+            pytest.param(None, 2, 2, id="only-job-has-default"),
+        ),
+    )
+    def test_merge_queue_job_parameters_default(
+        self,
+        queue_default: int | None,
+        job_default: int | None,
+        expected_merged_default: int,
+    ) -> None:
+        """
+        Tests that intersection queue and job parameters are unioned such that only one parameter is
+        returned
+        """
+        # GIVEN
+        job_parameter: parameters.JobParameter = {
+            "name": "a",
+            "type": "INT",
+        }
+        if job_default is not None:
+            job_parameter["default"] = job_default
+        queue_parameter: parameters.JobParameter = {
+            "name": "a",
+            "type": "INT",
+        }
+        if queue_default is not None:
+            queue_parameter["default"] = queue_default
+
+        # WHEN
+        merged_params = parameters.merge_queue_job_parameters(
+            job_parameters=[job_parameter],
+            queue_parameters=[queue_parameter],
+        )
+
+        # THEN
+        assert len(merged_params) == 1
+        merged_param = merged_params[0]
+        assert "default" in merged_param
+        assert merged_param["default"] == expected_merged_default
+
+    @pytest.mark.parametrize(
+        argnames="queue_id",
+        argvalues=(
+            pytest.param("queue-12345", id="with-queue-id"),
+            pytest.param(None, id="without-queue-id"),
+        ),
+    )
+    def test_merge_queue_job_parameters_type_mismatch(
+        self,
+        queue_id: str | None,
+    ) -> None:
+        """
+        Tests that a DeadlineOperationError is raised when:
+
+        1.  there is a parameter with the same name defined in the job bundle and in one of the target
+            queue's environments
+        2.  the parameter definitions have mismatched types
+        """
+
+        # GIVEN
+        job_bundle_param_type = "STRING"
+        job_bundle_parameters: list[parameters.JobParameter] = [
+            {
+                "name": "foo",
+                "type": job_bundle_param_type,
+            }
+        ]
+        queue_param_type = "PATH"
+        queue_parameters: list[parameters.JobParameter] = [
+            {
+                "name": "foo",
+                "type": queue_param_type,
+            }
+        ]
+        expected_queue_str = f"queue ({queue_id})" if queue_id else "queue"
+
+        # WHEN
+        def when() -> None:
+            parameters.merge_queue_job_parameters(
+                queue_id=queue_id,
+                job_parameters=job_bundle_parameters,
+                queue_parameters=queue_parameters,
+            )
+
+        # THEN
+        with pytest.raises(exceptions.DeadlineOperationError) as excinfo:
+            when()
+
+        assert (
+            str(excinfo.value)
+            == f'The target {expected_queue_str} and job bundle have conflicting parameter definitions:\n\n\tfoo: differences for fields "{["type"]}"'
+        )
+
+    def test_merge_queue_job_parameters_value_only(self) -> None:
+        """Tests that when the job bundle provides a parameter value without a definition and there
+        is no corresponding parameter definition from the queue that a DeadlineOperationError is
+        raised"""
+
+        # GIVEN
+        queue_id = "queue-123"
+        job_parameter_name = "foo"
+        queue_parameters: list[parameters.JobParameter] = []
+        job_bundle_parameters: list[parameters.JobParameter] = [
+            {
+                "name": job_parameter_name,
+                "value": "bar",
+            },
+        ]
+
+        # WHEN
+        def when() -> None:
+            parameters.merge_queue_job_parameters(
+                queue_id=queue_id,
+                job_parameters=job_bundle_parameters,
+                queue_parameters=queue_parameters,
+            )
+
+        # THEN
+        with pytest.raises(exceptions.DeadlineOperationError) as excinfo:
+            when()
+
+        assert (
+            str(excinfo.value)
+            == f'Parameter value was provided for an undefined parameter "{job_parameter_name}"'
+        )
 
 
 @pytest.mark.parametrize(

@@ -27,7 +27,7 @@ from PySide2.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ...job_bundle.parameters import get_ui_control_for_parameter_definition
+from ...job_bundle.parameters import JobParameter, get_ui_control_for_parameter_definition
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -59,7 +59,7 @@ class OpenJDParametersWidget(QWidget):
     def __init__(
         self,
         *,
-        parameter_definitions: List[Dict[str, Any]] = [],
+        parameter_definitions: List[JobParameter] = [],
         async_loading_state: str = "",
         parent=None,
     ):
@@ -70,7 +70,10 @@ class OpenJDParametersWidget(QWidget):
         )
 
     def rebuild_ui(
-        self, *, parameter_definitions: list[dict[str, Any]] = [], async_loading_state: str = ""
+        self,
+        *,
+        parameter_definitions: list[JobParameter] = [],
+        async_loading_state: str = "",
     ):
         """
         Rebuilds the widget's UI to the new parameter_definitions, or to display the

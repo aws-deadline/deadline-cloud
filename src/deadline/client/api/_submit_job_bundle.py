@@ -16,11 +16,12 @@ from deadline.client import api
 from deadline.client.exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from deadline.client.config import get_setting, set_setting
 from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
-from deadline.client.job_bundle.parameters import apply_job_parameters, read_job_bundle_parameters
-from deadline.client.job_bundle.submission import (
-    AssetReferences,
-    split_parameter_args,
+from deadline.client.job_bundle.parameters import (
+    apply_job_parameters,
+    merge_queue_job_parameters,
+    read_job_bundle_parameters,
 )
+from deadline.client.job_bundle.submission import AssetReferences, split_parameter_args
 from deadline.job_attachments.models import (
     AssetRootManifest,
     JobAttachmentS3Settings,
@@ -28,13 +29,15 @@ from deadline.job_attachments.models import (
 from deadline.job_attachments.upload import S3AssetManager
 from botocore.client import BaseClient
 
+from ..job_bundle.parameters import JobParameter
+
 logger = logging.getLogger(__name__)
 
 
 def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
-    queue_parameter_definitions: list[dict[str, Any]] = [],
+    queue_parameter_definitions: list[JobParameter] = [],
     config: Optional[ConfigParser] = None,
     hashing_progress_callback: Optional[Callable] = None,
     upload_progress_callback: Optional[Callable] = None,
@@ -93,9 +96,10 @@ def create_job_from_job_bundle(
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
 
+    queue_id = get_setting("defaults.queue_id", config=config)
     create_job_args: Dict[str, Any] = {
         "farmId": get_setting("defaults.farm_id", config=config),
-        "queueId": get_setting("defaults.queue_id", config=config),
+        "queueId": queue_id,
         "template": file_contents,
         "templateType": file_type,
     }
@@ -112,15 +116,20 @@ def create_job_from_job_bundle(
     )
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
+    parameters = merge_queue_job_parameters(
+        queue_id=queue_id,
+        job_parameters=job_bundle_parameters,
+        queue_parameters=queue_parameter_definitions,
+    )
+
     apply_job_parameters(
         job_parameters,
         job_bundle_dir,
-        job_bundle_parameters,
-        queue_parameter_definitions,
+        parameters,
         asset_references,
     )
     app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-        job_bundle_parameters, job_bundle_dir
+        parameters, job_bundle_dir
     )
 
     queue = deadline.get_queue(farmId=create_job_args["farmId"], queueId=create_job_args["queueId"])

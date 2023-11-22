@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any
+
+from ...job_bundle.parameters import JobParameter
 
 
 @dataclass
@@ -25,7 +26,7 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
 
     # Job Bundle settings
     input_job_bundle_dir: str = field(default="")
-    parameters: list[dict[str, Any]] = field(default_factory=list)
+    parameters: list[JobParameter] = field(default_factory=list)
 
     # Whether to allow ability to "Load a different job bundle"
     browse_enabled: bool = field(default=False)
