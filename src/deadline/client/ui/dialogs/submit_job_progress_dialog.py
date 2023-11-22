@@ -22,6 +22,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QLabel,
     QMessageBox,
     QProgressBar,
+    QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -513,7 +514,7 @@ class SubmitJobProgressDialog(QDialog):
     def _confirm_job_attachments_upload(self, num_files: int, upload_size: int) -> bool:
         """
         Creates a dialog to prompt the user to confirm that they want to proceed
-        with uploding the specified number of files totaling a certain size.
+        with uploading the specified number of files totaling a certain size.
         """
         message_box = QMessageBox(self)
         message_box.setText(
@@ -522,10 +523,17 @@ class SubmitJobProgressDialog(QDialog):
         )
         message_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         message_box.setDefaultButton(QMessageBox.Ok)
+
+        # Add the "Do not ask again" button that acts like 'OK' but sets the config
+        # setting to always auto-accept similar prompts in the future.
+        dont_ask_button = QPushButton("Do not ask again", self)
+        dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
+        message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
+
         message_box.setWindowTitle("Job Attachments Upload Confirmation")
         selection = message_box.exec_()
 
-        return selection == QMessageBox.Ok
+        return selection != QMessageBox.Cancel
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """
