@@ -146,44 +146,54 @@ def test_validate_resource_ids_successful(ids: Dict[str, str]):
 @pytest.mark.parametrize(
     ("ids", "exception_message"),
     [
-        ({"": ""}, 'The ID "": "" is not valid.'),
-        ({"farm_id": "farm-123"}, 'The ID "farm_id": "farm-123" is not valid.'),
+        ({"": ""}, 'The given resource ID "": "" has invalid format.'),
+        (
+            {"farm_id": "farm-123"},
+            'The given resource ID "farm_id": "farm-123" has invalid format.',
+        ),
         (
             {"farm_id": "farm-0123456789abcdefabcdefabcdefabc"},
-            'The ID "farm_id": "farm-0123456789abcdefabcdefabcdefabc" is not valid.',
+            'The given resource ID "farm_id": "farm-0123456789abcdefabcdefabcdefabc" has invalid format.',
         ),
         (
             {"farm_id": "farm-0123456789abcdefabcdefabcdefabcdef"},
-            'The ID "farm_id": "farm-0123456789abcdefabcdefabcdefabcdef" is not valid.',
+            'The given resource ID "farm_id": "farm-0123456789abcdefabcdefabcdefabcdef" has invalid format.',
         ),
         (
             {"farm_id": "0123456789abcdefabcdefabcdefabcd"},
-            'The ID "farm_id": "0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "farm_id": "0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
         (
             {"farm_id": "far-0123456789abcdefabcdefabcdefabcd"},
-            'The ID "farm_id": "far-0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "farm_id": "far-0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
         (
             {"farm_id": "-farm-0123456789abcdefabcdefabcdefabcd"},
-            'The ID "farm_id": "-farm-0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "farm_id": "-farm-0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
         (
             {"farm_id": "farm--0123456789abcdefabcdefabcdefabcd"},
-            'The ID "farm_id": "farm--0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "farm_id": "farm--0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
         (
             {"farm_id": "farm-farm-0123456789abcdefabcdefabcdefabcd"},
-            'The ID "farm_id": "farm-farm-0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "farm_id": "farm-farm-0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
         (
             {"mission_id": "mission-0123456789abcdefabcdefabcdefabcd"},
-            'The ID "mission_id": "mission-0123456789abcdefabcdefabcdefabcd" is not valid.',
+            'The given resource ID "mission_id": "mission-0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
-        ({"farm_id": MOCK_QUEUE_ID}, f'The ID "farm_id": "{MOCK_QUEUE_ID}" is not valid.'),
+        (
+            {"farm_id": MOCK_QUEUE_ID},
+            f'The given resource ID "farm_id": "{MOCK_QUEUE_ID}" has invalid format.',
+        ),
         (
             {"farm_id": MOCK_FARM_ID, "queue_id": "queue-123"},
-            'The ID "queue_id": "queue-123" is not valid.',
+            'The given resource ID "queue_id": "queue-123" has invalid format.',
+        ),
+        (
+            {"task_id": "task-0123456789abcdefabcdefabcdefabcd"},
+            'The given resource ID "task_id": "task-0123456789abcdefabcdefabcdefabcd" has invalid format.',
         ),
     ],
 )
@@ -228,6 +238,9 @@ def test_validate_id_format_successful(resource_type: str, full_id_str: str):
         ("farm", "queue-0123456789abcdefabcdefabcdefabcd"),
         ("farmfarm", "farmfarm-0123456789abcdefabcdefabcdefabcd"),
         ("mission", "mission-0123456789abcdefabcdefabcdefabcd"),
+        ("task", "task-0123456789abcdefabcdefabcdefabcd"),
+        ("task", "task-0123456789abcdefabcdefabcdefabcd-00"),
+        ("task", "task-0123456789abcdefabcdefabcdefabcd-12345678912345"),
     ],
 )
 def test_validate_id_format_failed(resource_type: str, full_id_str: str):
