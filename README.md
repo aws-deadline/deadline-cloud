@@ -30,7 +30,7 @@ This submodule contains Qt GUIs, based on PySide2, for common controls
 and widgets used in interactive submitters, and to display the status
 of various Amazon Deadline Cloud resoruces.
 
-### job_history
+### job_bundle
 
 This submodule contains code related to the history of job submissions
 performed on the workstation. Its initial functionality is to create
