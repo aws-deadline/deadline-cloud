@@ -63,6 +63,8 @@ class TelemetryClient:
     MAX_BACKOFF_SECONDS = 10  # The maximum amount of time to wait between retries
     MAX_RETRY_ATTEMPTS = 4
 
+    ENDPOINT_PREFIX = "management."
+
     def __init__(
         self,
         package_name: str,
@@ -76,7 +78,10 @@ class TelemetryClient:
             return
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
-        self.endpoint: str = f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry"
+        self.endpoint: str = self._get_prefixed_endpoint(
+            f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
+            TelemetryClient.ENDPOINT_PREFIX,
+        )
 
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())
@@ -85,6 +90,13 @@ class TelemetryClient:
         self.system_metadata = self._get_system_metadata(config=config)
 
         self._start_threads()
+
+    def _get_prefixed_endpoint(self, endpoint: str, prefix: str) -> str:
+        """Insert the prefix right after 'https://'"""
+        if endpoint.startswith("https://"):
+            prefixed_endpoint = endpoint[:8] + prefix + endpoint[8:]
+            return prefixed_endpoint
+        return endpoint
 
     def _get_telemetry_identifier(self, config: Optional[ConfigParser] = None):
         identifier = config_file.get_setting("telemetry.identifier", config=config)
@@ -222,7 +234,7 @@ class TelemetryClient:
 
     def record_error(self, event_details: Dict[str, Any], exception_type: str):
         event_details["exception_type"] = exception_type
-        # Possiblity to add stack trace here
+        # Possibility to add stack trace here
         self.record_event("com.amazon.rum.deadline.error", event_details)
 
     def record_event(self, event_type: str, event_details: Dict[str, Any]):
