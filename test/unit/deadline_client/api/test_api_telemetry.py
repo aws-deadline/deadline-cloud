@@ -181,3 +181,33 @@ def test_record_error(telemetry_client):
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+@pytest.mark.parametrize(
+    "endpoint,prefix,expected_result",
+    [
+        pytest.param(
+            "test.endpoint.url",
+            "",
+            "test.endpoint.url",
+            id="The endpoint is not prefixed if the prefix is empty.",
+        ),
+        pytest.param(
+            "test.endpoint.url",
+            "management.",
+            "test.endpoint.url",
+            id="The endpoint is not prefixed if the endpoint does not start with 'https://'.",
+        ),
+        pytest.param(
+            "https://test.endpoint.url",
+            "management.",
+            "https://management.test.endpoint.url",
+            id="The prefix is inserted right after 'https://'.",
+        ),
+    ],
+)
+def test_get_prefixed_endpoint(
+    telemetry_client: TelemetryClient, endpoint: str, prefix: str, expected_result: str
+):
+    """Test that the _get_prefixed_endpoint function returns the expected prefixed endpoint"""
+    assert telemetry_client._get_prefixed_endpoint(endpoint, prefix) == expected_result
