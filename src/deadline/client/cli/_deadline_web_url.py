@@ -22,6 +22,7 @@ __all__ = [
 
 DEADLINE_URL_SCHEME_NAME = "deadline"
 DEADLINE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+DEADLINE_TASK_ID_PATTERN = re.compile(r"^[0-9a-f]{32}-(0|([1-9][0-9]{0,9}))$")
 VALID_RESOURCE_NAMES_IN_ID = ["farm", "queue", "job", "step", "task"]
 
 
@@ -73,6 +74,7 @@ def validate_resource_ids(ids: Dict[str, str]) -> None:
     """
     Validates that the resource IDs are all valid.
     i.e. "<name of resource>-<a hexadecimal string of length 32>"
+    for Task ID: "task-<a hexadecimal string of length 32>-<0 or a number up to 10 digits long>"
 
     Args:
         ids (Dict[str, str]): The resource IDs to validate.
@@ -82,16 +84,17 @@ def validate_resource_ids(ids: Dict[str, str]) -> None:
         resource_type = id_str.split("-")[0]
         if not id_name.startswith(resource_type) or not validate_id_format(resource_type, id_str):
             raise DeadlineOperationError(
-                f'The ID "{id_name}": "{id_str}" is not valid. '
-                "The ID format must be a valid resource name followed by a hyphen, then a hexadecimal string of 32 characters."
+                f'The given resource ID "{id_name}": "{id_str}" has invalid format.'
             )
 
 
 def validate_id_format(resource_type: str, full_id_str: str) -> bool:
     """
     Validates if the ID is in correct format. The ID must
-    - start with one of the resource names, and immediately followed by "-", and
-    - the rest of the string that follows must be a hexadecimal string of length 32.
+    - start with one of the resource names, and followed by a hyphen ("-"), and
+    - the string that follows must be a hexadecimal string of length 32.
+    - Additional for "task": followed by another hyphen ("-"), and ends with
+      a string of either 0 or a number up to 10 digits long.
 
     Args:
         full_id_str (str): The ID to validate.
@@ -105,9 +108,13 @@ def validate_id_format(resource_type: str, full_id_str: str) -> bool:
         return False
 
     id_str = full_id_str[len(prefix) :]
-    if len(id_str) != 32:
-        return False
-    return bool(DEADLINE_ID_PATTERN.fullmatch(id_str))
+
+    if resource_type == "task":
+        return bool(DEADLINE_TASK_ID_PATTERN.fullmatch(id_str))
+    else:
+        if len(id_str) != 32:
+            return False
+        return bool(DEADLINE_ID_PATTERN.fullmatch(id_str))
 
 
 def install_deadline_web_url_handler(all_users: bool) -> None:
