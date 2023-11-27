@@ -22,7 +22,7 @@ How to test:
       python3 download_cancel_test.py sync_inputs -f <farm_id> -q <queue_id> -j <job_id>
   (2) To test canceling downloading outputs, run the following command:
       python3 download_cancel_test.py download_outputs -f <farm_id> -q <queue_id> -j <job_id>
-2. In the middle of downloading files, you can send a cencel signal by pressing 'k' key
+2. In the middle of downloading files, you can send a cancel signal by pressing 'k' key
    and then pressing 'Enter' key in succession. Confirm that cancelling is working as expected.
 """
 

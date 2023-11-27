@@ -73,6 +73,7 @@ class TestAssetSync:
         """
         # GIVEN
         mock_progress_tracker_callback = MagicMock()
+        mock_progress_tracker_callback.return_value = True
         callback = _progress_logger(
             file_size_in_bytes=10,
             progress_tracker_callback=mock_progress_tracker_callback,

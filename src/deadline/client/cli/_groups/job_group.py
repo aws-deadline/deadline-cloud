@@ -13,7 +13,7 @@ import sys
 from typing import Optional, Union
 
 import click
-from botocore.exceptions import ClientError  # type: ignore[import]
+from botocore.exceptions import ClientError
 
 from deadline.client.api._session import _modified_logging_level
 from deadline.job_attachments.download import OutputDownloader
@@ -31,6 +31,7 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from ._sigint_handler import SigIntHandler
 
 JSON_MSG_TYPE_TITLE = "title"
 JSON_MSG_TYPE_PATH = "path"
@@ -38,6 +39,10 @@ JSON_MSG_TYPE_PATHCONFIRM = "pathconfirm"
 JSON_MSG_TYPE_PROGRESS = "progress"
 JSON_MSG_TYPE_SUMMARY = "summary"
 JSON_MSG_TYPE_ERROR = "error"
+
+
+# Set up the signal handler for handling Ctrl + C interruptions.
+sigint_handler = SigIntHandler()
 
 
 @click.group(name="job")
@@ -367,7 +372,7 @@ def _download_job_output(
                     new_progress = int(download_metadata.progress) - download_progress.pos
                     if new_progress > 0:
                         download_progress.update(new_progress)
-                    return True
+                    return sigint_handler.continue_operation
 
                 download_summary: DownloadSummaryStatistics = (
                     job_output_downloader.download_job_output(
@@ -381,6 +386,7 @@ def _download_job_output(
                 click.echo(
                     _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
                 )
+                # TODO: enable download cancellation for JSON format
                 return True
 
             download_summary = job_output_downloader.download_job_output(

@@ -9,13 +9,12 @@ import json
 import logging
 import os
 import re
-import signal
 import textwrap
 from configparser import ConfigParser
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
-from botocore.exceptions import ClientError  # type: ignore[import]
+from botocore.exceptions import ClientError
 
 from deadline.client import api
 from deadline.client.api import get_boto3_client, get_queue_user_boto3_session
@@ -40,19 +39,12 @@ from deadline.job_attachments._utils import _human_readable_file_size
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from .._common import _apply_cli_options_to_config, _handle_error
+from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger(__name__)
 
-
-continue_submission = True
-
-
-def _handle_sigint(signum, frame) -> None:
-    global continue_submission
-    continue_submission = False
-
-
-signal.signal(signal.SIGINT, _handle_sigint)
+# Set up the signal handler for handling Ctrl + C interruptions.
+sigint_handler = SigIntHandler()
 
 
 @click.group(name="bundle")
@@ -244,7 +236,7 @@ def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, *
                 set_setting("defaults.job_id", job_id)
 
             def _check_create_job_wait_canceled() -> bool:
-                return continue_submission
+                return sigint_handler.continue_operation
 
             success, status_message = api.wait_for_create_job_to_complete(
                 create_job_args["farmId"],
@@ -259,7 +251,7 @@ def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, *
                 "CreateJob response was empty, or did not contain a Job ID."
             )
     except AssetSyncCancelledError as exc:
-        if continue_submission:
+        if sigint_handler.continue_operation:
             raise DeadlineOperationError(f"Job submission unexpectedly canceled:\n{exc}") from exc
         else:
             click.echo("Job submission canceled.")
@@ -267,7 +259,7 @@ def bundle_submit(job_bundle_dir, job_attachments_file_system, parameter, yes, *
     except AssetSyncError as exc:
         raise DeadlineOperationError(f"Failed to upload job attachments:\n{exc}") from exc
     except CreateJobWaiterCanceled as exc:
-        if continue_submission:
+        if sigint_handler.continue_operation:
             raise DeadlineOperationError(
                 f"Unexpectedly canceled during wait for final status of CreateJob:\n{exc}"
             ) from exc
@@ -344,7 +336,7 @@ def _hash_attachments(
             new_progress = int(hashing_metadata.progress) - hashing_progress.pos
             if new_progress > 0:
                 hashing_progress.update(new_progress)
-            return continue_submission
+            return sigint_handler.continue_operation
 
         hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
             input_paths=sorted(asset_references.input_filenames),
@@ -386,7 +378,7 @@ def _upload_attachments(
                 new_progress = int(upload_metadata.progress) - upload_progress.pos
                 if new_progress > 0:
                     upload_progress.update(new_progress)
-                return continue_submission
+                return sigint_handler.continue_operation
 
             upload_summary, attachment_settings = asset_manager.upload_assets(
                 manifests, _update_upload_progress

@@ -331,12 +331,6 @@ def download_file(
     - The file size of 0 means that this file comes from a manifest version that does not provide file sizes.
     - The filename of None indicates that this file has been skipped or has not been downloaded.
     """
-    # If it's cancelled, raise an AssetSyncCancelledError.
-    if progress_tracker and not progress_tracker.continue_reporting:
-        raise AssetSyncCancelledError(
-            "File download cancelled.", progress_tracker.get_summary_statistics()
-        )
-
     if not s3_client:
         s3_client = get_s3_client(session=session)
 
@@ -415,7 +409,12 @@ def _progress_logger(
 
         nonlocal total_downloaded
         total_downloaded += bytes_downloaded
-        progress_tracker_callback(bytes_downloaded, total_downloaded == file_size_in_bytes)
+        should_continue = progress_tracker_callback(
+            bytes_downloaded, total_downloaded == file_size_in_bytes
+        )
+        # If it's cancelled, raise an AssetSyncCancelledError.
+        if not should_continue:
+            raise AssetSyncCancelledError("File download cancelled.")
 
     return handler
 
@@ -470,17 +469,9 @@ def _download_files_parallel(
                     progress_tracker.increase_skipped(1, file_bytes)
                     progress_tracker.report_progress()
 
-    # to report progress 100% at the end, and
-    # to check if the download was canceled in the middle of processing the last batch of files.
+    # to report progress 100% at the end
     if progress_tracker:
         progress_tracker.report_progress()
-        if not progress_tracker.continue_reporting:
-            raise AssetSyncCancelledError(
-                "File download cancelled.",
-                progress_tracker.get_download_summary_statistics(
-                    {local_download_dir: downloaded_file_names}
-                ),
-            )
 
     return downloaded_file_names
 
@@ -944,19 +935,26 @@ class OutputDownloader:
         start_time = time.perf_counter()
         downloaded_files_paths_by_root: DefaultDict[str, list[str]] = DefaultDict(list)
 
-        for root, output_files in self.outputs_by_root.items():
-            # Validate the file paths to see if they are under the given download directory.
-            _ensure_paths_within_directory(root, [file.path for file in output_files])
+        try:
+            for root, output_files in self.outputs_by_root.items():
+                # Validate the file paths to see if they are under the given download directory.
+                _ensure_paths_within_directory(root, [file.path for file in output_files])
 
-            downloaded_files_paths = download_files(
-                files=output_files,
-                local_download_dir=root,
-                s3_settings=self.s3_settings,
-                session=self.session,
-                progress_tracker=progress_tracker,
-                file_conflict_resolution=file_conflict_resolution,
+                downloaded_files_paths = download_files(
+                    files=output_files,
+                    local_download_dir=root,
+                    s3_settings=self.s3_settings,
+                    session=self.session,
+                    progress_tracker=progress_tracker,
+                    file_conflict_resolution=file_conflict_resolution,
+                )
+                downloaded_files_paths_by_root[root].extend(downloaded_files_paths)
+        except AssetSyncCancelledError:
+            downloaded_files = progress_tracker.processed_files
+            raise AssetSyncCancelledError(
+                "Download cancelled. "
+                f"(Downloaded {downloaded_files} file{'' if downloaded_files == 1 else 's'} before cancellation.)"
             )
-            downloaded_files_paths_by_root[root].extend(downloaded_files_paths)
 
         progress_tracker.total_time = time.perf_counter() - start_time
 
