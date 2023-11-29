@@ -9,6 +9,7 @@ from configparser import ConfigParser
 from logging import getLogger
 from typing import Callable, Optional
 import subprocess
+import sys
 
 
 from ._session import (
@@ -47,6 +48,10 @@ def _login_deadline_cloud_monitor(
         p = subprocess.Popen(
             args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE
         )
+        # Linux takes time to start DCM binary, which causes the TTY to suspend the process and send it to background job
+        # With wait here, the DCM binary starts and TTY does not suspend the deadline process.
+        if sys.platform == "linux":
+            time.sleep(0.5)
     except FileNotFoundError:
         raise DeadlineOperationError(
             f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
