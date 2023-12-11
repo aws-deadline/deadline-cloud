@@ -14,13 +14,14 @@ import sys
 import threading
 from configparser import ConfigParser
 from logging import getLogger, root
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ProfileNotFound  # type: ignore[import]
-from deadline.job_attachments.models import FileConflictResolution
+from deadline.job_attachments.models import FileConflictResolution, JobAttachmentsFileSystem
 from PySide2.QtCore import QSize, Qt, Signal
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -256,12 +257,25 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.handle_background_exception
         )
         layout.addRow(default_storage_profile_box_label, self.default_storage_profile_box)
-        self.file_system_box = self._init_combobox_setting(
-            group,
-            layout,
-            "defaults.job_attachments_file_system",
-            "Job Attachments FileSystem Options",
-            ["COPIED", "VIRTUAL"],
+
+        item_name_copied = JobAttachmentsFileSystem.COPIED.value
+        item_name_virtual = JobAttachmentsFileSystem.VIRTUAL.value
+        job_attachments_file_system_tooltip = (
+            "This setting determines how job attachments are loaded on the worker instance. "
+            f"'{item_name_copied}' may be faster if every task needs all attachments, while "
+            f"'{item_name_virtual}' may perform better if tasks only require a subset of attachments."
+        )
+        values_with_tooltips = {
+            item_name_copied: "When selected, the worker downloads all job attachments to disk before rendering begins.",
+            item_name_virtual: "When selected, the worker downloads attachments only when needed by each task.",
+        }
+        self.job_attachments_file_system_box = self._init_combobox_setting_with_tooltips(
+            group=group,
+            layout=layout,
+            setting_name="defaults.job_attachments_file_system",
+            label_text="Job Attachments FileSystem Options",
+            label_tooltip=job_attachments_file_system_tooltip,
+            values_with_tooltips=values_with_tooltips,
         )
 
     def _build_general_settings_ui(self, group, layout):
@@ -365,6 +379,71 @@ class DeadlineWorkstationConfigWidget(QWidget):
                     logger.warning(f"'{value}' is not one of {values}. Defaulting to '{default}'.")
                     value = default
                 combo_box.setCurrentText(value)
+
+        def combo_box_changed(new_value):
+            """Callback for if the state of a given checkbox has changed"""
+            self.changes[setting_name] = new_value
+            self.refresh()
+
+        combo_box.currentTextChanged.connect(combo_box_changed)
+
+        self._refresh_callbacks.append(refresh_combo_box)
+
+    def _init_combobox_setting_with_tooltips(
+        self,
+        group: QWidget,
+        layout: QFormLayout,
+        setting_name: str,
+        label_text: str,
+        label_tooltip: str,
+        values_with_tooltips: Dict[str, str],
+    ):
+        """
+        Creates and adds a combo box setting to the given group and layout, similar to `_init_combobox_setting`
+        method. This method differentiates itself by adding tooltips for label and combo box items. Also,
+        appends an (PySide2's built-in) Information icon at the label end to indicate tooltip availability.
+
+        Args:
+            group (QWidget): The parent of the combobox
+            layout (QFormLayout): The layout to add a row to for the combobox
+            setting_name (str): The setting name as provided to the config. E.g. "settings.foo_bar"
+            label_text (str): The displayed description. E.g. "Foo Bar"
+            label_tooltip (str): The tooltip for the label.
+            values_with_tooltips (Dict[str, str]): The list of values that can be selected, along with their
+                tooltips. E.g. {"Option A": "If A is selected, ...", "Option B": "If B is selected, ..."}
+        """
+        label = QLabel(label_text)
+        icon_label = QLabel()
+        icon = QApplication.style().standardIcon(QStyle.SP_MessageBoxInformation)
+        icon_label.setPixmap(icon.pixmap(16, 16))
+        icon_label.setToolTip(label_tooltip)
+
+        combo_box = QComboBox(parent=group)
+
+        row_layout = QHBoxLayout()
+        row_layout.addWidget(label)
+        row_layout.addWidget(icon_label)
+        row_layout.addWidget(combo_box)
+        row_layout.setStretchFactor(combo_box, 1)
+        row_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        layout.addRow(row_layout)
+
+        for index, (value, tooltip) in enumerate(values_with_tooltips.items()):
+            combo_box.addItem(value)
+            combo_box.setItemData(index, tooltip, Qt.ToolTipRole)
+
+        def refresh_combo_box():
+            """Function that refreshes the state of the combo box based on the setting name"""
+            with block_signals(combo_box):
+                value = config_file.get_setting(setting_name, config=self.config)
+                values = list(values_with_tooltips.keys())
+                if value not in values:
+                    default = get_setting_default(setting_name, config=self.config)
+                    logger.warning(f"'{value}' is not one of {values}. Defaulting to '{default}'.")
+                    value = default
+                combo_box.setCurrentText(value)
+                combo_box.setToolTip(values_with_tooltips[value])
 
         def combo_box_changed(new_value):
             """Callback for if the state of a given checkbox has changed"""
