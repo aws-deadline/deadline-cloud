@@ -21,6 +21,7 @@ import boto3
 from botocore.exceptions import ClientError
 from s3transfer import ReadFileChunk
 from s3transfer.utils import ChunksizeAdjuster
+from deadline.client.config import config_file
 
 from .asset_manifests import (
     BaseAssetManifest,
@@ -34,6 +35,7 @@ from ._aws.deadline import get_storage_profile_for_queue
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
+    AssetSyncError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
@@ -61,15 +63,6 @@ from ._utils import (
     _join_s3_paths,
 )
 
-# TODO: full performance analysis to determine the ideal thresholds
-LIST_OBJECT_THRESHOLD: int = 100
-CHUNK_SIZE_FOR_MULTIPART_UPLOAD = 8 * (1024**2)  # 8 MB (Default chunk size for multipart upload)
-MAX_WORKERS_FOR_MULTIPART_UPLOAD = 10  # Max workers for multipart upload
-# We split the input files into two queues - one for small files, the other for large files.
-# The threshold to draw a line on large vs. small file must be a multiple of the S3 multipart
-# upload chunk size, 8 MB, which is a default size.
-SMALL_FILE_THRESHOLD: int = 160 * (1024**2)  # 160 MB
-
 logger = logging.getLogger("deadline.job_attachments.upload")
 
 
@@ -90,6 +83,49 @@ class S3AssetUploader:
             self._session = session
 
         self._s3 = get_s3_client(self._session)  # pylint: disable=invalid-name
+
+        # TODO: full performance analysis to determine the ideal thresholds
+        try:
+            self.list_object_threshold = int(
+                config_file.get_setting("settings.list_object_threshold")
+            )
+            self.multipart_upload_chunk_size = int(
+                config_file.get_setting("settings.multipart_upload_chunk_size")
+            )
+            self.multipart_upload_max_workers = int(
+                config_file.get_setting("settings.multipart_upload_max_workers")
+            )
+            # The small file threshold is the chunk size multiplied by the small file threshold multiplier.
+            small_file_threshold_multiplier = int(
+                config_file.get_setting("settings.small_file_threshold_multiplier")
+            )
+            self.small_file_threshold = (
+                self.multipart_upload_chunk_size * small_file_threshold_multiplier
+            )
+        except ValueError as ve:
+            raise AssetSyncError(
+                "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
+                "list_object_threshold, multipart_upload_chunk_size, multipart_upload_max_workers, small_file_threshold_multiplier"
+            ) from ve
+
+        # Confirm that the settings values are all positive.
+        error_msg = ""
+        if self.list_object_threshold <= 0:
+            error_msg = (
+                f"list_object_threshold ({self.list_object_threshold}) must be positive integer."
+            )
+
+        elif self.multipart_upload_chunk_size <= 0:
+            error_msg = f"multipart_upload_chunk_size ({self.multipart_upload_chunk_size}) must be positive integer."
+
+        elif self.multipart_upload_max_workers <= 0:
+            error_msg = f"multipart_upload_max_workers ({self.multipart_upload_max_workers}) must be positive integer."
+
+        elif small_file_threshold_multiplier <= 0:
+            error_msg = f"small_file_threshold_multiplier ({small_file_threshold_multiplier}) must be positive integer."
+
+        if error_msg:
+            raise AssetSyncError("Invalid value for configuration setting: " + error_msg)
 
     def upload_assets(
         self,
@@ -170,7 +206,7 @@ class S3AssetUploader:
         files_to_upload: list[base_manifest.BaseManifestPath] = manifest.paths
         check_if_in_s3 = True
 
-        if len(files_to_upload) >= LIST_OBJECT_THRESHOLD:
+        if len(files_to_upload) >= self.list_object_threshold:
             # If different files have the same content (and thus the same hash), they are counted as skipped files.
             file_dict: dict[str, base_manifest.BaseManifestPath] = {}
             for file in files_to_upload:
@@ -199,7 +235,9 @@ class S3AssetUploader:
         # Separate 'large' files from 'small' files so that we can process 'large' files serially.
         # This wastes less bandwidth if uploads are cancelled, as it's better to use the multi-threaded
         # multi-part upload for a single large file than multiple large files at the same time.
-        (small_file_queue, large_file_queue) = self._separate_files_by_size(files_to_upload)
+        (small_file_queue, large_file_queue) = self._separate_files_by_size(
+            files_to_upload, self.small_file_threshold
+        )
 
         # First, process the whole 'small file' queue with parallel object uploads.
         # TODO: tune this. max_worker defaults to 5 * number of processors. We can run into issues here
@@ -249,7 +287,7 @@ class S3AssetUploader:
     def _separate_files_by_size(
         self,
         files_to_upload: list[base_manifest.BaseManifestPath],
-        size_threshold: int = SMALL_FILE_THRESHOLD,
+        size_threshold: int,
     ) -> Tuple[list[base_manifest.BaseManifestPath], list[base_manifest.BaseManifestPath]]:
         """
         Splits the given list of files into two queues: one for small files and one for large files.
@@ -329,14 +367,14 @@ class S3AssetUploader:
             parts = []
             chunk_size_adjuster = ChunksizeAdjuster()
             chunk_size = chunk_size_adjuster.adjust_chunksize(
-                current_chunksize=CHUNK_SIZE_FOR_MULTIPART_UPLOAD,
+                current_chunksize=self.multipart_upload_chunk_size,
                 file_size=file_size,
             )
             num_parts = int(math.ceil(file_size / float(chunk_size)))
 
             # Start uploading parts
             with concurrent.futures.ThreadPoolExecutor(
-                max_workers=MAX_WORKERS_FOR_MULTIPART_UPLOAD
+                max_workers=self.multipart_upload_max_workers
             ) as executor:
                 upload_partial = functools.partial(
                     self._upload_part,
