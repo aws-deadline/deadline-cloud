@@ -1,0 +1,2 @@
+0c516d4a2173307d85e8db180b8639fd  ./template.yaml
+8166f4890d84a66740f9e1a0a3c04fda  ./computed_hashes.txt
