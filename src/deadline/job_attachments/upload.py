@@ -6,6 +6,7 @@ Classes for handling uploading of assets.
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 import functools
 import logging
 import math
@@ -691,6 +692,8 @@ class S3AssetManager:
             ManifestVersion.v2023_03_03,
         }:
             paths: list[base_manifest.BaseManifestPath] = []
+
+            callback_lock = threading.Lock()
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(
@@ -706,7 +709,9 @@ class S3AssetManager:
                             progress_tracker.increase_processed(1, file_size)
                         else:
                             progress_tracker.increase_skipped(1, file_size)
-                        progress_tracker.report_progress()
+
+                        with callback_lock:
+                            progress_tracker.report_progress()
 
             # Need to sort the list to keep it canonical
             paths.sort(key=lambda x: x.path, reverse=True)

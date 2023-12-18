@@ -23,7 +23,7 @@ from deadline.job_attachments.models import (
     PathFormat,
 )
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments.progress_tracker import SummaryStatistics
+from deadline.job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
 
 from ..shared_constants import (
     MOCK_BUCKET_NAME,
@@ -304,7 +304,10 @@ def test_create_job_from_job_bundle(
                     f.write(parameters)
 
             # This is the function under test
-            response = api.create_job_from_job_bundle(temp_job_bundle_dir)
+            response = api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
 
         # The response from the API is returned verbatim
         assert response == MOCK_JOB_ID
@@ -344,7 +347,10 @@ def test_create_job_from_job_bundle_error_missing_template(
 
         # This is the function under test
         with pytest.raises(exceptions.DeadlineOperationError):
-            api.create_job_from_job_bundle(temp_job_bundle_dir)
+            api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
 
 
 def test_create_job_from_job_bundle_error_duplicate_template(
@@ -373,7 +379,10 @@ def test_create_job_from_job_bundle_error_duplicate_template(
 
         # This is the function under test
         with pytest.raises(exceptions.DeadlineOperationError):
-            api.create_job_from_job_bundle(temp_job_bundle_dir)
+            api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
 
 
 def test_create_job_from_job_bundle_error_duplicate_parameters(
@@ -400,7 +409,10 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
 
         # This is the function under test
         with pytest.raises(exceptions.DeadlineOperationError):
-            api.create_job_from_job_bundle(temp_job_bundle_dir)
+            api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
 
 
 def _write_asset_files(assets_dir: str, asset_contents: Dict[str, str]):
@@ -435,7 +447,7 @@ def test_create_job_from_job_bundle_job_attachments(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        api._submit_job_bundle, "_hash_attachments"
+        api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
@@ -478,22 +490,27 @@ def test_create_job_from_job_bundle_job_attachments(
         ) as f:
             json.dump({"assetReferences": asset_references}, f)
 
-        def fake_hashing_callback(metadata: Dict[str, Any]) -> bool:
+        def fake_hashing_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_upload_callback(metadata: Dict[str, Any]) -> bool:
+        def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
+
+        def fake_ux_callback(msg: str) -> None:
+            pass
 
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
+            handle_echo_messages_callback=fake_ux_callback,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
+            queue_parameter_definitions=[],
         )
 
         mock_hash_attachments.assert_called_once_with(
-            ANY,
-            AssetReferences(
+            asset_manager=ANY,
+            asset_references=AssetReferences(
                 input_filenames=set(
                     [
                         os.path.join(temp_assets_dir, "asset-1.txt"),
@@ -504,8 +521,9 @@ def test_create_job_from_job_bundle_job_attachments(
                 output_directories=set([os.path.join(temp_assets_dir, "somedir")]),
                 referenced_paths=set(),
             ),
-            MOCK_STORAGE_PROFILE_ID,
-            fake_hashing_callback,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            handle_echo_messages_callback=fake_ux_callback,
+            hashing_progress_callback=fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
@@ -558,7 +576,10 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
                 json.dump({"assetReferences": asset_references}, f)
 
             # This is the function under test
-            response = api.create_job_from_job_bundle(temp_job_bundle_dir)
+            response = api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
 
             assert response == MOCK_JOB_ID
             # There should be no job attachments section in the result
@@ -585,7 +606,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        api._submit_job_bundle, "_hash_attachments"
+        api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
@@ -634,24 +655,32 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         ) as f:
             json.dump({"assetReferences": asset_references}, f)
 
-        def fake_hashing_callback(metadata: Dict[str, Any]) -> bool:
+        def fake_hashing_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_upload_callback(metadata: Dict[str, Any]) -> bool:
+        def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
+
+        def fake_ux_callback(msg: str) -> None:
+            pass
 
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
+            handle_echo_messages_callback=fake_ux_callback,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
+            queue_parameter_definitions=[],
         )
 
         mock_hash_attachments.assert_called_once_with(
-            ANY,
-            AssetReferences(input_filenames=set([os.path.join(temp_assets_dir, "asset-1.txt")])),
-            MOCK_STORAGE_PROFILE_ID,
-            fake_hashing_callback,
+            asset_manager=ANY,
+            asset_references=AssetReferences(
+                input_filenames=set([os.path.join(temp_assets_dir, "asset-1.txt")])
+            ),
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            handle_echo_messages_callback=fake_ux_callback,
+            hashing_progress_callback=fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
