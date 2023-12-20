@@ -1650,16 +1650,16 @@ class TestFullDownload:
         with stubber, patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_client", return_value=s3_client
         ):
-            with pytest.raises(JobAttachmentsS3ClientError) as exc:
-                _get_asset_root_from_s3("not/existed/test.txt", "my-bucket")
-                assert isinstance(exc.value.__cause__, ClientError)
-                assert (
-                    exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 404  # type: ignore[attr-defined]
-                )
-                assert (
-                    "Error checking if object exists in bucket 'my-bucket'. Target key or prefix: 'not/existed/test.txt'. "
-                    "HTTP Status Code: 404 Not found. "
-                ) in str(exc.value)
+            with pytest.raises(JobAttachmentsS3ClientError) as err:
+                _get_asset_root_from_s3("not/existed/test.txt", "test-bucket")
+            assert isinstance(err.value.__cause__, ClientError)
+            assert (
+                err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 404  # type: ignore[attr-defined]
+            )
+            assert (
+                "Error checking if object exists in bucket 'test-bucket', Target key or prefix: 'not/existed/test.txt', "
+                "HTTP Status Code: 404, Not found. "
+            ) in str(err.value)
 
     @mock_sts
     def test_get_manifest_from_s3_error_message_on_access_denied(self):
@@ -1680,15 +1680,15 @@ class TestFullDownload:
             f"{deadline.__package__}.job_attachments.download.get_s3_client", return_value=s3_client
         ):
             with pytest.raises(JobAttachmentsS3ClientError) as exc:
-                get_manifest_from_s3("test-key", "my-bucket")
-                assert isinstance(exc.value.__cause__, ClientError)
-                assert (
-                    exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
-                )
-                assert (
-                    "Error downloading binary file in bucket 'my-bucket'. Target key or prefix: 'test-key'. "
-                    "HTTP Status Code: 403 Forbidden or Access denied. "
-                ) in str(exc.value)
+                get_manifest_from_s3("test-key", "test-bucket")
+            assert isinstance(exc.value.__cause__, ClientError)
+            assert (
+                exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
+            )
+            assert (
+                "Error downloading binary file in bucket 'test-bucket', Target key or prefix: 'test-key', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(exc.value)
 
     @mock_sts
     def test_get_tasks_manifests_keys_from_s3_error_message_on_access_denied(self):
@@ -1710,17 +1710,17 @@ class TestFullDownload:
         ):
             with pytest.raises(JobAttachmentsS3ClientError) as exc:
                 _get_tasks_manifests_keys_from_s3(
-                    "test_prefix",
-                    "my-bucket",
+                    "assetRoot",
+                    "test-bucket",
                 )
-                assert isinstance(exc.value.__cause__, ClientError)
-                assert (
-                    exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
-                )
-                assert (
-                    "Error listing bucket contents in bucket 'my-bucket'. Target key or prefix: 'test_prefix'. "
-                    "HTTP Status Code: 403 Forbidden or Access denied. "
-                ) in str(exc.value)
+            assert isinstance(exc.value.__cause__, ClientError)
+            assert (
+                exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
+            )
+            assert (
+                "Error listing bucket contents in bucket 'test-bucket', Target key or prefix: 'assetRoot', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(exc.value)
 
     @mock_sts
     def test_download_file_error_message_on_access_denied(self):
@@ -1746,16 +1746,18 @@ class TestFullDownload:
         ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(JobAttachmentsS3ClientError) as exc:
                 download_file(
-                    file_path, "/home/username/assets", "my-bucket", "rootPrefix/Data", s3_client
+                    file_path, "/home/username/assets", "test-bucket", "rootPrefix/Data", s3_client
                 )
-                assert isinstance(exc.value.__cause__, ClientError)
-                assert (
-                    exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
-                )
-                assert (
-                    "Error downloading file in bucket 'my-bucket'. Target key or prefix: 'rootPrefix/Data/relative_file_path'. "
-                    "HTTP Status Code: 403 Forbidden or Access denied. "
-                ) in str(exc.value)
+            assert isinstance(exc.value.__cause__, ClientError)
+            assert (
+                exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
+            )
+            assert (
+                "Error downloading file in bucket 'test-bucket', Target key or prefix: 'rootPrefix/Data/input1', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(exc.value)
+            failed_file_path = Path("/home/username/assets/inputs/input1.txt")
+            assert (f"(Failed to download the file to {str(failed_file_path)})") in str(exc.value)
 
 
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])

@@ -342,7 +342,7 @@ class S3AssetUploader:
                     self._upload_part,
                     s3_bucket,
                     s3_upload_key,
-                    local_path,
+                    str(local_path),
                     upload_id,
                     chunk_size,
                     progress_tracker,
@@ -397,7 +397,7 @@ class S3AssetUploader:
                 status_code=status_code,
                 bucket_name=s3_bucket,
                 key_or_prefix=s3_upload_key,
-                message=status_code_guidance.get(status_code, ""),
+                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to upload {str(local_path)})",
             ) from exc
         except Exception as exc:
             if upload_id:
