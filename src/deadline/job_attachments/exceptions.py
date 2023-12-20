@@ -48,13 +48,13 @@ class JobAttachmentsS3ClientError(AssetSyncError):
         self.key_or_prefix = key_or_prefix
 
         message_parts = [
-            f"Error {action} in bucket '{bucket_name}'. Target key or prefix: '{key_or_prefix}'.",
+            f"Error {action} in bucket '{bucket_name}', Target key or prefix: '{key_or_prefix}'",
             f"HTTP Status Code: {status_code}",
         ]
         if message:
             message_parts.append(message)
 
-        super().__init__(" ".join(message_parts))
+        super().__init__(", ".join(message_parts))
 
 
 class MissingS3BucketError(JobAttachmentsError):
@@ -89,7 +89,7 @@ class MissingManifestError(JobAttachmentsError):
 
 class MissingAssetRootError(JobAttachmentsError):
     """
-    Exception for when trying to retrieve asset root from metatdata (in S3) that doesn't exist.
+    Exception for when trying to retrieve asset root from metadata (in S3) that doesn't exist.
     """
 
 
