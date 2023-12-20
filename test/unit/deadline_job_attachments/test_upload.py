@@ -1231,8 +1231,8 @@ class TestUpload:
                 err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
             )
             assert (
-                "Error checking if object exists in bucket 'test-bucket'. Target key or prefix: 'test_key'. "
-                "HTTP Status Code: 403 Access denied. Ensure that the bucket is in the account 123456789012, "
+                "Error checking if object exists in bucket 'test-bucket', Target key or prefix: 'test_key', "
+                "HTTP Status Code: 403, Access denied. Ensure that the bucket is in the account 123456789012, "
                 "and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket."
             ) in str(err.value)
 
@@ -1265,8 +1265,8 @@ class TestUpload:
                 err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
             )
             assert (
-                "Error listing bucket contents in bucket 'test-bucket'. Target key or prefix: 'test_prefix'. "
-                "HTTP Status Code: 403 Forbidden or Access denied. "
+                "Error listing bucket contents in bucket 'test-bucket', Target key or prefix: 'test_prefix', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
 
     @mock_sts
@@ -1300,9 +1300,60 @@ class TestUpload:
                 err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
             )
             assert (
-                "Error uploading binary file in bucket 'test-bucket'. Target key or prefix: 'test_key'. "
-                "HTTP Status Code: 403 Forbidden or Access denied. "
+                "Error uploading binary file in bucket 'test-bucket', Target key or prefix: 'test_key', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
+
+    @mock_sts
+    def test_upload_file_to_s3_upload_part_failure(self, tmp_path: Path):
+        """
+        Test that the error message correctly includes the failed file path when a multipart upload
+        (upload_part method) fails with a 400 error code.
+        """
+        bucket_name = self.job_attachment_s3_settings.s3BucketName
+        s3 = boto3.client("s3")
+        stubber = Stubber(s3)
+        stubber.add_response(
+            "create_multipart_upload",
+            service_response={"UploadId": "test_upload_id"},
+            expected_params={
+                "Bucket": bucket_name,
+                "Key": "test_key",
+                "ExpectedBucketOwner": "123456789012",
+            },
+        )
+        stubber.add_client_error(
+            "upload_part",
+            service_error_code="InvalidPart",
+            service_message="Invalid Part",
+            http_status_code=400,
+        )
+        stubber.add_response(
+            "abort_multipart_upload",
+            service_response={},
+            expected_params={
+                "Bucket": bucket_name,
+                "Key": "test_key",
+                "UploadId": "test_upload_id",
+                "ExpectedBucketOwner": "123456789012",
+            },
+        )
+
+        uploader = S3AssetUploader()
+        uploader._s3 = s3
+
+        file = tmp_path / "test_file.txt"
+        file.write_text("test file")
+
+        with stubber:
+            with pytest.raises(JobAttachmentsS3ClientError) as err:
+                uploader.upload_file_to_s3(file, bucket_name, "test_key")
+            assert isinstance(err.value.__cause__, ClientError)
+            assert err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 400
+            assert (
+                "Error uploading file in bucket 'test-bucket', Target key or prefix: 'test_key', HTTP Status Code: 400"
+            ) in str(err.value)
+            assert (f"(Failed to upload {str(file)})") in str(err.value)
 
     @mock_sts
     def test_upload_file_to_s3_bucket_in_different_account(self, tmp_path: Path):
@@ -1338,9 +1389,10 @@ class TestUpload:
                 err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
             )
             assert (
-                "Error uploading file in bucket 'test-bucket'. Target key or prefix: 'test_key'. "
-                "HTTP Status Code: 403 Forbidden or Access denied. "
+                "Error uploading file in bucket 'test-bucket', Target key or prefix: 'test_key', "
+                "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
+            assert (f"(Failed to upload {str(file)})") in str(err.value)
 
     @pytest.mark.parametrize(
         "manifest_version",
