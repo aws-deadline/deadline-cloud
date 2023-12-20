@@ -22,12 +22,14 @@ from botocore.stub import Stubber
 from moto import mock_sts
 
 import deadline
+from deadline.client import config
 from deadline.job_attachments.asset_manifests import (
     BaseManifestModel,
     BaseManifestPath,
     ManifestVersion,
 )
 from deadline.job_attachments.exceptions import (
+    AssetSyncError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
@@ -438,11 +440,11 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_input_files",
+        "num_additional_input_files",
         [
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 1,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 100,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 200,
+            1,
+            100,
+            200,
         ],
     )
     @pytest.mark.parametrize(
@@ -460,7 +462,7 @@ class TestUpload:
         assert_expected_files_on_s3,
         caplog,
         manifest_version: ManifestVersion,
-        num_input_files: int,
+        num_additional_input_files: int,
     ):
         """
         Test that the correct files get uploaded to S3 and the asset manifest
@@ -468,6 +470,17 @@ class TestUpload:
         """
         # Given
         asset_root = str(tmpdir)
+
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+
+        num_input_files = (
+            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
+        )
 
         with patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
@@ -486,13 +499,6 @@ class TestUpload:
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
-
-            asset_manager = S3AssetManager(
-                farm_id=farm_id,
-                queue_id=queue_id,
-                job_attachment_settings=self.job_attachment_s3_settings,
-                asset_manifest_version=manifest_version,
-            )
 
             input_files = []
             expected_total_input_bytes = 0
@@ -595,11 +601,11 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_input_files",
+        "num_additional_input_files",
         [
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 1,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 100,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 200,
+            1,
+            100,
+            200,
         ],
     )
     @pytest.mark.parametrize(
@@ -614,7 +620,7 @@ class TestUpload:
         farm_id,
         queue_id,
         manifest_version: ManifestVersion,
-        num_input_files: int,
+        num_additional_input_files: int,
     ):
         """
         Test that the asset management can handle many input files with the same hash.
@@ -622,6 +628,17 @@ class TestUpload:
         they should be counted as skipped files.
         """
         asset_root = str(tmpdir)
+
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+
+        num_input_files = (
+            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
+        )
 
         # Given
         with patch(
@@ -636,13 +653,6 @@ class TestUpload:
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
-
-            asset_manager = S3AssetManager(
-                farm_id=farm_id,
-                queue_id=queue_id,
-                job_attachment_settings=self.job_attachment_s3_settings,
-                asset_manifest_version=manifest_version,
-            )
 
             input_files = []
             expected_total_input_bytes = 0
@@ -831,11 +841,11 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_input_files",
+        "num_additional_input_files",
         [
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 1,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 100,
-            deadline.job_attachments.upload.LIST_OBJECT_THRESHOLD + 200,
+            1,
+            100,
+            200,
         ],
     )
     @pytest.mark.parametrize(
@@ -852,12 +862,23 @@ class TestUpload:
         assert_expected_files_on_s3,
         caplog,
         manifest_version: ManifestVersion,
-        num_input_files: int,
+        num_additional_input_files: int,
     ):
         """
         Test the input files that have already been uploaded to S3 are skipped.
         """
         # Given
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+
+        num_input_files = (
+            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
+        )
+
         with patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
@@ -883,13 +904,6 @@ class TestUpload:
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
-
-            asset_manager = S3AssetManager(
-                farm_id=farm_id,
-                queue_id=queue_id,
-                job_attachment_settings=self.job_attachment_s3_settings,
-                asset_manifest_version=manifest_version,
-            )
 
             input_files = []
             expected_total_input_bytes = 0
@@ -1201,6 +1215,66 @@ class TestUpload:
                 asset_manager.hash_assets_and_create_manifest(
                     [test_file], [], [], hash_cache_dir=cache_dir
                 )
+
+    def test_asset_uploader_constructor(self, fresh_deadline_config):
+        """
+        Test that when the asset uploader is created, the instance variables are correctly set.
+        """
+        uploader = S3AssetUploader()
+        assert uploader.list_object_threshold == 100
+        assert uploader.multipart_upload_chunk_size == 8 * (1024**2)
+        assert uploader.multipart_upload_max_workers == 10
+        assert uploader.small_file_threshold == 20 * 8 * (1024**2)
+
+    def test_asset_uploader_constructor_with_non_integer_config_settings(
+        self, fresh_deadline_config
+    ):
+        """
+        Tests that when the asset uploader is created with non-integer config settings, an AssetSyncError is raised.
+        """
+        config.set_setting("settings.list_object_threshold", "!@#$")
+        with pytest.raises(AssetSyncError) as err:
+            _ = S3AssetUploader()
+        assert isinstance(err.value.__cause__, ValueError)
+        assert "Failed to parse configuration settings." in str(err.value)
+
+    @pytest.mark.parametrize(
+        "setting_name, invalid_value",
+        [
+            pytest.param(
+                "list_object_threshold",
+                "0",
+                id="Invalid list_object_threshold value: 0",
+            ),
+            pytest.param(
+                "multipart_upload_chunk_size",
+                "-100",
+                id="Invalid multipart_upload_chunk_size value: negative",
+            ),
+            pytest.param(
+                "multipart_upload_max_workers",
+                "0",
+                id="Invalid multipart_upload_max_workers value: 0",
+            ),
+            pytest.param(
+                "small_file_threshold_multiplier",
+                "-12",
+                id="Invalid small_file_threshold_multiplier value: negative",
+            ),
+        ],
+    )
+    def test_asset_uploader_constructor_with_invalid_config_settings(
+        self, setting_name, invalid_value, fresh_deadline_config
+    ):
+        """
+        Tests that when the asset uploader is created with invalid config settings, an AssetSyncError is raised.
+        """
+        config.set_setting(f"settings.{setting_name}", invalid_value)
+        with pytest.raises(AssetSyncError) as err:
+            _ = S3AssetUploader()
+        assert (
+            f"Invalid value for configuration setting: {setting_name} ({invalid_value}) must be positive integer."
+        ) in str(err.value)
 
     @mock_sts
     def test_file_already_uploaded_bucket_in_different_account(self):

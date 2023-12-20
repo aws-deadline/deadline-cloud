@@ -35,7 +35,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 13
+    assert len(settings.keys()) == 17
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -102,6 +102,10 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.log_level", "DEBUG")
     config.set_setting("telemetry.opt_out", "True")
     config.set_setting("telemetry.identifier", "user-id-123abc-456def")
+    config.set_setting("settings.list_object_threshold", "200")
+    config.set_setting("settings.multipart_upload_chunk_size", "10000000")
+    config.set_setting("settings.multipart_upload_max_workers", "16")
+    config.set_setting("settings.small_file_threshold_multiplier", "15")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])

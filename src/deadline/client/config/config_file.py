@@ -107,6 +107,25 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     "telemetry.opt_out": {"default": "false"},
     "telemetry.identifier": {"default": ""},
     "defaults.job_attachments_file_system": {"default": "COPIED", "depend": "defaults.farm_id"},
+    "settings.list_object_threshold": {
+        "default": "100",
+        "description": "If the number of files to be uploaded are bigger than this threshold, it switches to call list-objects S3 API from head-object call to check if files have already been uploaded.",
+    },
+    "settings.multipart_upload_chunk_size": {
+        "default": "8388608",  # 8 MB (Default chunk size for multipart upload)
+        "description": "The chunk size to use when uploading files in multi-parts.",
+    },
+    "settings.multipart_upload_max_workers": {
+        "default": "10",
+        "description": "The maximum number of workers (processes) to use when uploading files in multi-parts.",
+    },
+    "settings.small_file_threshold_multiplier": {
+        "default": "20",  # By default, the small file threshold is 160 MB (since the default S3 multipart-upload chunk size is 8 MB.)
+        "description": (
+            "When uploading job attachments, the file size threshold is set to separate 'large' files from 'small' files so that 'large' files can be processed serially. "
+            "This multiplier is used to calculate the size threshold. (Small files are defined as those smaller than or equal to the chunk size multiplied by this factor.)"
+        ),
+    },
 }
 
 
