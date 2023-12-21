@@ -643,7 +643,7 @@ class _DeadlineResourceListComboBox(QWidget):
         layout.addWidget(self.box)
         self.refresh_button = QPushButton("")
         layout.addWidget(self.refresh_button)
-        self.refresh_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self.refresh_button.setIcon(QApplication.style().standardIcon(QStyle.SP_BrowserReload))
         self.refresh_button.setFixedSize(QSize(22, 22))  # Make the button square
         self.refresh_button.clicked.connect(self.refresh_list)
         self._list_update.connect(self.handle_list_update)
