@@ -425,23 +425,29 @@ def get_best_profile_for_farm(farm_id: str, queue_id: Optional[str] = None) -> s
     """
     Finds the best AWS profile for the specified farm and queue IDs. Chooses
     the first match from:
-    1. AWS profiles whose default farm and queue IDs match.
-    2. AWS profiles whose default farm matches.
-    3. The default AWS profile.
+    1. The default AWS profile if its default farm matches.
+    2. AWS profiles whose default farm and queue IDs match.
+    3. AWS profiles whose default farm matches.
+    4. If there were no matches, returns the default AWS profile.
     """
     # Get the full list of AWS profiles
     session = boto3.Session()
     aws_profile_names = session._session.full_config["profiles"].keys()
 
-    config = read_config()
+    # Make a deep copy of the return from read_config(), since we modify
+    # it during the profile name search.
+    config = ConfigParser()
+    config.read_dict(read_config())
 
-    # (For 2.) We'll accumulate the profiles whose farms matched here
+    # (For 1.) Save the default profile and return it if its default farm matches.
+    default_aws_profile_name: str = str(get_setting("defaults.aws_profile_name", config=config))
+    if get_setting("defaults.farm_id", config=config) == farm_id:
+        return default_aws_profile_name
+
+    # (For 3.) We'll accumulate the profiles whose farms matched here
     first_farm_aws_profile_name: Optional[str] = None
 
-    # (For 3.) Save the default profile
-    default_aws_profile_name: str = str(get_setting("defaults.aws_profile_name", config=config))
-
-    # (For 1.) Search for a profile with both a farm and queue match
+    # (For 2.) Search for a profile with both a farm and queue match
     for aws_profile_name in aws_profile_names:
         set_setting("defaults.aws_profile_name", aws_profile_name, config=config)
         if get_setting("defaults.farm_id", config=config) == farm_id:
