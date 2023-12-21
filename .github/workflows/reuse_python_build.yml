@@ -6,6 +6,9 @@ on:
       branch:
         required: false
         type: string
+      commit:
+        required: false
+        type: string
 
 jobs:
   Python:
@@ -25,13 +28,18 @@ jobs:
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
     - uses: actions/checkout@v4
-      if: ${{ !inputs.branch }}
+      if: ${{ !inputs.branch && !inputs.commit }}
 
     - uses: actions/checkout@v4
       if: ${{ inputs.branch }}
       with:
         ref: ${{ inputs.branch }}
         fetch-depth: 0
+
+    - uses: actions/checkout@v4
+      if: ${{ inputs.commit }}
+      with:
+        ref: ${{ inputs.commit }}
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
