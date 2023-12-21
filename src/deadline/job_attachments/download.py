@@ -389,7 +389,7 @@ def download_file(
             status_code=status_code,
             bucket_name=s3_bucket,
             key_or_prefix=s3_key,
-            message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
+            message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_name)})",
         ) from exc
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")

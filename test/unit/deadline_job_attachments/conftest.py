@@ -299,6 +299,7 @@ def fixture_default_queue(farm_id, queue_id, default_job_attachment_s3_settings)
         queueId=queue_id,
         farmId=farm_id,
         status="ENABLED",
+        defaultBudgetAction="None",
         jobAttachmentSettings=default_job_attachment_s3_settings,
     )
 

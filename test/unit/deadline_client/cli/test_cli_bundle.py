@@ -197,6 +197,61 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
         assert result.exit_code == 0
 
 
+def test_cli_bundle_priority_retries(fresh_deadline_config):
+    """
+    Confirm that --priority, --max-failed-tasks-count, and --max-retries-per-task get passed in from the CLI.
+    """
+    # Use a temporary directory for the job bundle
+    with patch(
+        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
+    ) as input_shape_mock:
+        input_shape_mock.return_value = {}
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            boto3, "Session"
+        ) as session_mock:
+            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+            session_mock.reset_mock()
+
+            # Write a JSON template
+            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                [
+                    "bundle",
+                    "submit",
+                    tmpdir,
+                    "--farm-id",
+                    MOCK_FARM_ID,
+                    "--queue-id",
+                    MOCK_QUEUE_ID,
+                    "--priority",
+                    "25",
+                    "--max-failed-tasks-count",
+                    "12",
+                    "--max-retries-per-task",
+                    "4",
+                ],
+            )
+
+        assert tmpdir in result.output
+        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+        session_mock().client().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType="JSON",
+            priority=25,
+            maxFailedTasksCount=12,
+            maxRetriesPerTask=4,
+        )
+        assert result.exit_code == 0
+
+
 @pytest.mark.parametrize("loading_method", [e.value for e in JobAttachmentsFileSystem] + [None])
 def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir, loading_method):
     """
@@ -329,6 +384,8 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                     "sceneFile=/path/to/scenefile",
                     "--parameter",
                     "priority=90",
+                    "--priority",
+                    "45",
                 ],
             )
 
@@ -341,7 +398,7 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                     "sceneFile": {"string": "/path/to/scenefile"},
                     "priority": {"int": "90"},
                 },
-                priority=50,
+                priority=45,
             )
 
             assert result.exit_code == 0

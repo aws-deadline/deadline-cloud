@@ -63,6 +63,7 @@ def get_queue(
         queueId=response["queueId"],
         farmId=response["farmId"],
         status=response[status_key],
+        defaultBudgetAction=response["defaultBudgetAction"],
         jobAttachmentSettings=job_attachment_settings,
     )
 
