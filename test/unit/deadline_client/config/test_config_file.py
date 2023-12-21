@@ -175,6 +175,7 @@ def test_get_best_profile_for_farm(fresh_deadline_config):
         ("Profile3", "farm-1", "queue-3"),
         ("Profile4", "farm-3", "queue-4"),
         ("Profile5", "farm-3", "queue-5"),
+        ("Profile6", "", ""),
     ]
     for profile_name, farm_id, queue_id in PROFILE_SETTINGS:
         config.set_setting("defaults.aws_profile_name", profile_name)
@@ -195,9 +196,13 @@ def test_get_best_profile_for_farm(fresh_deadline_config):
             },
         }
 
-        # In each case, an exact match of farm/queue id should return the corresponding profile
+        # In each case, when the default profile doesn't match the farm,
+        # an exact match of farm/queue id should return the corresponding profile
         for profile_name, farm_id, queue_id in PROFILE_SETTINGS:
-            assert config.get_best_profile_for_farm(farm_id, queue_id) == profile_name
+            if farm_id:
+                assert config.get_best_profile_for_farm(farm_id, queue_id) == profile_name
+                # Getting the best profile should not have modified the default
+                assert config.get_setting("defaults.aws_profile_name") == "Profile6"
 
         # Matching just the farm id should return the first matching profile
         assert config.get_best_profile_for_farm("farm-1") == "Profile1"
@@ -209,9 +214,16 @@ def test_get_best_profile_for_farm(fresh_deadline_config):
         assert config.get_best_profile_for_farm("farm-2", "queue-missing") == "Profile2"
         assert config.get_best_profile_for_farm("farm-3", "queue-missing") == "Profile4"
 
-        # If the farm id doesn't match, should return the default (which is Profile5)
-        assert config.get_best_profile_for_farm("farm-missing") == "Profile5"
-        assert config.get_best_profile_for_farm("farm-missing", "queue-missing") == "Profile5"
+        # If the farm id doesn't match, should return the default (which is Profile6)
+        assert config.get_best_profile_for_farm("farm-missing") == "Profile6"
+        assert config.get_best_profile_for_farm("farm-missing", "queue-missing") == "Profile6"
+
+        # If the farm id does match, should return the default even if it isn't the first match
+        config.set_setting("defaults.aws_profile_name", "Profile5")
+        assert config.get_best_profile_for_farm("farm-1") == "Profile1"
+        assert config.get_best_profile_for_farm("farm-2") == "Profile2"
+        # For farm-3, the first match is Profile4, but the default is Profile5
+        assert config.get_best_profile_for_farm("farm-3") == "Profile5"
 
 
 def test_str2bool():
