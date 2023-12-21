@@ -630,13 +630,16 @@ Session Total Duration: 0:01:00
 Session Action Count: 1
 Session Action Total Duration: 0:00:30
 Task Run Count: 1
-Task Run Total Duration: 0:00:30
+Task Run Total Duration: 0:00:30 (50.0%)
 Non-Task Run Count: 0
-Non-Task Run Total Duration: 0:00:00
+Non-Task Run Total Duration: 0:00:00 (0.0%)
+Sync Job Attachments Count: 0
+Sync Job Attachments Total Duration: 0:00:00 (0.0%)
+Env Action Count: 0
+Env Action Total Duration: 0:00:00 (0.0%)
 
-Within-session Overhead Duration: 0:00:30
+Within-session Overhead Duration: 0:00:30 (50.0%)
 Within-session Overhead Duration Per Action: 0:00:30
-Within-session Overhead: 50.0%
 """
         )
         assert result.exit_code == 0

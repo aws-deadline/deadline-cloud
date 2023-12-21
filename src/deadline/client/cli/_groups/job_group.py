@@ -744,9 +744,13 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
         "sessionCount": 0,
         "sessionActionCount": 0,
         "taskRunCount": 0,
+        "envActionCount": 0,
+        "syncJobAttachmentsCount": 0,
         "sessionDuration": 0,
         "sessionActionDuration": 0,
         "taskRunDuration": 0,
+        "envActionDuration": 0,
+        "syncJobAttachmentsDuration": 0,
     }
 
     for session in sessions:
@@ -763,6 +767,12 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                 "ts": time_int(session["startedAt"]),
                 "pid": pid,
                 "tid": 0,
+                "args": {
+                    "sessionId": session["sessionId"],
+                    "workerId": session["workerId"],
+                    "fleetId": session["fleetId"],
+                    "lifecycleStatus": session["lifecycleStatus"],
+                },
             }
         )
 
@@ -782,9 +792,20 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                     f"{param}={list(parameters[param].values())[0]}" for param in parameters
                 )
                 if not name:
-                    name = "*"
+                    name = "<No Task Params>"
             elif action_type in ("envEnter", "envExit"):
+                accumulators["envActionCount"] += 1
+                accumulators["envActionDuration"] += duration_of(action)
+
                 name = action["definition"][action_type]["environmentId"].split(":")[-1]
+            elif action_type == "syncInputJobAttachments":
+                accumulators["syncJobAttachmentsCount"] += 1
+                accumulators["syncJobAttachmentsDuration"] += duration_of(action)
+
+                if "stepId" in action["definition"][action_type]:
+                    name = "Sync Job Attchmnt (Dependencies)"
+                else:
+                    name = "Sync Job Attchmnt (Submitted)"
             if "startedAt" in action:
                 trace_events.append(
                     {
@@ -795,6 +816,11 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                         "dur": duration_of(action),
                         "pid": pid,
                         "tid": 0,
+                        "args": {
+                            "sessionActionId": action["sessionActionId"],
+                            "status": action["status"],
+                            "stepName": session["step"]["name"],
+                        },
                     }
                 )
         trace_events.append(
@@ -818,32 +844,45 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     click.echo(" ==== SUMMARY ====")
     click.echo("")
     click.echo(f"Session Count: {accumulators['sessionCount']}")
-    click.echo(
-        f"Session Total Duration: {datetime.timedelta(microseconds=accumulators['sessionDuration'])}"
-    )
+    session_total_duration = accumulators["sessionDuration"]
+    click.echo(f"Session Total Duration: {datetime.timedelta(microseconds=session_total_duration)}")
     click.echo(f"Session Action Count: {accumulators['sessionActionCount']}")
     click.echo(
         f"Session Action Total Duration: {datetime.timedelta(microseconds=accumulators['sessionActionDuration'])}"
     )
     click.echo(f"Task Run Count: {accumulators['taskRunCount']}")
+    task_run_total_duration = accumulators["taskRunDuration"]
     click.echo(
-        f"Task Run Total Duration: {datetime.timedelta(microseconds=accumulators['taskRunDuration'])}"
+        f"Task Run Total Duration: {datetime.timedelta(microseconds=task_run_total_duration)} ({100 * task_run_total_duration / session_total_duration:.1f}%)"
     )
     click.echo(
         f"Non-Task Run Count: {accumulators['sessionActionCount'] - accumulators['taskRunCount']}"
     )
+    non_task_run_total_duration = (
+        accumulators["sessionActionDuration"] - accumulators["taskRunDuration"]
+    )
     click.echo(
-        f"Non-Task Run Total Duration: {datetime.timedelta(microseconds=accumulators['sessionActionDuration'] - accumulators['taskRunDuration'])}"
+        f"Non-Task Run Total Duration: {datetime.timedelta(microseconds=non_task_run_total_duration)} ({100 * non_task_run_total_duration / session_total_duration:.1f}%)"
+    )
+    click.echo(f"Sync Job Attachments Count: {accumulators['syncJobAttachmentsCount']}")
+    sync_job_attachments_total_duration = accumulators["syncJobAttachmentsDuration"]
+    click.echo(
+        f"Sync Job Attachments Total Duration: {datetime.timedelta(microseconds=sync_job_attachments_total_duration)} ({100 * sync_job_attachments_total_duration / session_total_duration:.1f}%)"
+    )
+    click.echo(f"Env Action Count: {accumulators['envActionCount']}")
+    env_action_total_duration = accumulators["envActionDuration"]
+    click.echo(
+        f"Env Action Total Duration: {datetime.timedelta(microseconds=env_action_total_duration)} ({100 * env_action_total_duration / session_total_duration:.1f}%)"
     )
     click.echo("")
+    within_session_overhead_duration = (
+        accumulators["sessionDuration"] - accumulators["sessionActionDuration"]
+    )
     click.echo(
-        f"Within-session Overhead Duration: {datetime.timedelta(microseconds=(accumulators['sessionDuration'] - accumulators['sessionActionDuration']))}"
+        f"Within-session Overhead Duration: {datetime.timedelta(microseconds=within_session_overhead_duration)} ({100 * within_session_overhead_duration / session_total_duration:.1f}%)"
     )
     click.echo(
         f"Within-session Overhead Duration Per Action: {datetime.timedelta(microseconds=(accumulators['sessionDuration'] - accumulators['sessionActionDuration']) / accumulators['sessionActionCount'])}"
-    )
-    click.echo(
-        f"Within-session Overhead: {100 * (accumulators['sessionDuration'] - accumulators['sessionActionDuration']) / accumulators['sessionDuration']:.1f}%"
     )
 
     tracing_data: dict[str, Any] = {
