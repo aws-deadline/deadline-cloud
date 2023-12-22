@@ -76,7 +76,6 @@ class SubmitJobProgressDialog(QDialog):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
-        self._submission_complete = False
         self._continue_submission = True
         self._submission_complete = False
         self._create_job_args: Dict[str, Any] = {}
