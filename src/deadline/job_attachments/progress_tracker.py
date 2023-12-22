@@ -208,7 +208,7 @@ class ProgressTracker:
                 # Logs progress message to the logger (if exists)
                 self._log_progress_message()
                 # Invokes the callback with current progress data
-                return self.report_progress()
+            return self.report_progress()
 
         self.track_progress_callback = track_progress
 
@@ -239,18 +239,20 @@ class ProgressTracker:
         """
         Adds the number and size of processed files.
         """
-        self._initialize_timestamps_if_none()
-        self.processed_files += num_files
-        self.completed_files_in_chunk += num_files
-        self.processed_bytes += file_bytes
+        with self._lock:
+            self._initialize_timestamps_if_none()
+            self.processed_files += num_files
+            self.completed_files_in_chunk += num_files
+            self.processed_bytes += file_bytes
 
     def increase_skipped(self, num_files: int = 1, file_bytes: int = 0) -> None:
         """
         Adds the number and size of skipped files.
         """
-        self.skipped_files += num_files
-        self.completed_files_in_chunk += num_files
-        self.skipped_bytes += file_bytes
+        with self._lock:
+            self.skipped_files += num_files
+            self.completed_files_in_chunk += num_files
+            self.skipped_bytes += file_bytes
 
     def report_progress(self) -> bool:
         """
@@ -263,23 +265,24 @@ class ProgressTracker:
         Sets the flag `continue_reporting` True if the operation should continue as normal,
         or False to cancel, and returns the flag.
         """
-        if not self.continue_reporting:
-            return False
+        with self._lock:
+            if not self.continue_reporting:
+                return False
 
-        current_time = time.perf_counter()
-        if (
-            self.last_report_time is None
-            or current_time - self.last_report_time >= self.reporting_interval
-            or self.completed_files_in_chunk >= self.reporting_files_per_chunk
-            or self.processed_files + self.skipped_files == self.total_files
-        ):
-            self.continue_reporting = self.on_progress_callback(
-                self._get_progress_report_metadata()
-            )
-            self.last_report_processed_bytes = self.processed_bytes
-            self.last_report_time = current_time
-            self.completed_files_in_chunk = 0
-        return self.continue_reporting
+            current_time = time.perf_counter()
+            if (
+                self.last_report_time is None
+                or current_time - self.last_report_time >= self.reporting_interval
+                or self.completed_files_in_chunk >= self.reporting_files_per_chunk
+                or self.processed_files + self.skipped_files == self.total_files
+            ):
+                self.continue_reporting = self.on_progress_callback(
+                    self._get_progress_report_metadata()
+                )
+                self.last_report_processed_bytes = self.processed_bytes
+                self.last_report_time = current_time
+                self.completed_files_in_chunk = 0
+            return self.continue_reporting
 
     def _get_progress_report_metadata(self) -> ProgressReportMetadata:
         completed_bytes = self.processed_bytes + self.skipped_bytes
