@@ -76,6 +76,15 @@ class SubmitJobProgressDialog(QDialog):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
+        self._submission_complete = False
+        self._continue_submission = True
+        self._submission_complete = False
+        self._create_job_args: Dict[str, Any] = {}
+        self._create_job_response: Dict[str, Any] = {}
+        self.__hashing_thread: Optional[threading.Thread] = None
+        self.__upload_thread: Optional[threading.Thread] = None
+        self.__create_job_thread: Optional[threading.Thread] = None
+
         self._build_ui()
 
     def start_submission(
@@ -114,14 +123,6 @@ class SubmitJobProgressDialog(QDialog):
         self._asset_manager = asset_manager
         self._deadline_client = deadline_client
         self._auto_accept = auto_accept
-
-        self._continue_submission = True
-        self._submission_complete = False
-        self._create_job_args: Dict[str, Any] = {}
-        self._create_job_response: Dict[str, Any] = {}
-        self.__hashing_thread: Optional[threading.Thread] = None
-        self.__upload_thread: Optional[threading.Thread] = None
-        self.__create_job_thread: Optional[threading.Thread] = None
 
         self._start_submission()
         return self.exec()
