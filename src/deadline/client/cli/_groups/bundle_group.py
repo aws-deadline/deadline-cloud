@@ -228,7 +228,7 @@ class _ProgressBarCallbackManager:
 
     def callback(self, upload_metadata: ProgressReportMetadata) -> bool:
         if self._bar_status == self.BAR_CLOSED:
-            logger.error("Unexpected call of progress bar callback after bar was already closed")
+            # from multithreaded execution this can be called after completion somtimes.
             return sigint_handler.continue_operation
         elif self._bar_status == self.BAR_NOT_CREATED:
             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
