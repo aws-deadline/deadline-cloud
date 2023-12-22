@@ -1,7 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 
-from deadline.job_attachments.progress_tracker import SummaryStatistics, DownloadSummaryStatistics, ProgressTracker, ProgressStatus
+from deadline.job_attachments.progress_tracker import (
+    SummaryStatistics,
+    DownloadSummaryStatistics,
+    ProgressTracker,
+    ProgressStatus,
+)
 import pytest
 import concurrent
 
@@ -21,12 +26,10 @@ class TestProgressTracker:
         def increment(id):
             for k in range(N):
                 progress_tracker.increase_processed(1, 0)
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             for i in range(K):
                 executor.submit(increment, i)
-                    
 
         assert progress_tracker.processed_files == N * K
 
