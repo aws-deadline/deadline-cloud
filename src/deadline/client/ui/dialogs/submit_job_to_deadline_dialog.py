@@ -475,6 +475,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
             )
             QMessageBox.warning(self, f"{settings.submitter_name} Job Submission", str(exc))
+            job_progress_dialog.close()
 
         if self.create_job_response:
             # Close the submitter window to signal the submission is done
