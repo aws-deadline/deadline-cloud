@@ -208,7 +208,7 @@ class ProgressTracker:
                 # Logs progress message to the logger (if exists)
                 self._log_progress_message()
                 # Invokes the callback with current progress data
-            return self._report_progress()
+                return self._report_progress()
 
         self.track_progress_callback = track_progress
 
