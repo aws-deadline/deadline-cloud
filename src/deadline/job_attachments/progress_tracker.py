@@ -208,7 +208,7 @@ class ProgressTracker:
                 # Logs progress message to the logger (if exists)
                 self._log_progress_message()
                 # Invokes the callback with current progress data
-            return self.report_progress()
+            return self._report_progress()
 
         self.track_progress_callback = track_progress
 
@@ -254,7 +254,7 @@ class ProgressTracker:
             self.completed_files_in_chunk += num_files
             self.skipped_bytes += file_bytes
 
-    def report_progress(self) -> bool:
+    def _report_progress(self) -> bool:
         """
         Invokes the callback with current progress metadata in one of the following cases:
         1. when a specific time interval has passed since the last call, (or since the
@@ -265,24 +265,27 @@ class ProgressTracker:
         Sets the flag `continue_reporting` True if the operation should continue as normal,
         or False to cancel, and returns the flag.
         """
-        with self._lock:
-            if not self.continue_reporting:
-                return False
+        if not self.continue_reporting:
+            return False
 
-            current_time = time.perf_counter()
-            if (
-                self.last_report_time is None
-                or current_time - self.last_report_time >= self.reporting_interval
-                or self.completed_files_in_chunk >= self.reporting_files_per_chunk
-                or self.processed_files + self.skipped_files == self.total_files
-            ):
-                self.continue_reporting = self.on_progress_callback(
-                    self._get_progress_report_metadata()
-                )
-                self.last_report_processed_bytes = self.processed_bytes
-                self.last_report_time = current_time
-                self.completed_files_in_chunk = 0
-            return self.continue_reporting
+        current_time = time.perf_counter()
+        if (
+            self.last_report_time is None
+            or current_time - self.last_report_time >= self.reporting_interval
+            or self.completed_files_in_chunk >= self.reporting_files_per_chunk
+            or self.processed_files + self.skipped_files == self.total_files
+        ):
+            self.continue_reporting = self.on_progress_callback(
+                self._get_progress_report_metadata()
+            )
+            self.last_report_processed_bytes = self.processed_bytes
+            self.last_report_time = current_time
+            self.completed_files_in_chunk = 0
+        return self.continue_reporting
+
+    def report_progress(self) -> bool:
+        with self._lock:
+            return self._report_progress()
 
     def _get_progress_report_metadata(self) -> ProgressReportMetadata:
         completed_bytes = self.processed_bytes + self.skipped_bytes
