@@ -4,7 +4,7 @@ pytest ~= 7.4
 pytest-cov ~= 4.1
 pytest-timeout ~= 2.2
 pytest-xdist ~= 3.5
-freezegun ~= 1.2
+freezegun ~= 1.4
 types-pyyaml ~= 6.0
 twine ~= 4.0
 black == 23.3.*; python_version == '3.7'
