@@ -23,13 +23,13 @@ class TestProgressTracker:
         N = 10**5
         K = 10
 
-        def increment(id):
-            for k in range(N):
+        def increment():
+            for _ in range(N):
                 progress_tracker.increase_processed(1, 0)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            for i in range(K):
-                executor.submit(increment, i)
+            for _ in range(K):
+                executor.submit(increment)
 
         assert progress_tracker.processed_files == N * K
 
