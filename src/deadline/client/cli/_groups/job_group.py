@@ -9,6 +9,7 @@ import json
 import logging
 from configparser import ConfigParser
 from pathlib import Path
+import os
 import sys
 from typing import Optional, Union
 import datetime
@@ -241,8 +242,18 @@ def _download_job_output(
     conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
 
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    step = {}
+    task = {}
+    if step_id:
+        step = deadline.get_step(farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id)
+    if task_id:
+        task = deadline.get_task(
+            farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id, taskId=task_id
+        )
 
-    click.echo(_get_start_message(job["name"], step_id, task_id, is_json_format))
+    click.echo(
+        _get_start_message(job["name"], step.get("name"), task.get("parameters"), is_json_format)
+    )
 
     queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 
@@ -366,6 +377,16 @@ def _download_job_output(
     # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
         if not is_json_format:
+            # Print some information about what we will download before we start the progress bar
+            paths_message_joined = "    " + "\n    ".join(
+                f"{os.path.commonpath([os.path.join(directory, p) for p in output_paths])} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
+                for directory, output_paths in output_paths_by_root.items()
+            )
+            click.echo()
+            click.echo("Summary of files to download:")
+            click.echo(paths_message_joined)
+            click.echo()
+
             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
             # not annotating the type of download_progress.
             with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
@@ -400,17 +421,26 @@ def _download_job_output(
 
 
 def _get_start_message(
-    job_name: str, step_id: Optional[str], task_id: Optional[str], is_json_format: bool
+    job_name: str, step_name: Optional[str], task_parameters: Optional[dict], is_json_format: bool
 ) -> str:
     if is_json_format:
         return _get_json_line(JSON_MSG_TYPE_TITLE, job_name)
     else:
-        if step_id is None and task_id is None:
+        if step_name is None:
             return f"Downloading output from Job {job_name!r}"
-        elif task_id is None:
-            return f"Downloading output from Job {job_name!r} Step {step_id}"
+        elif task_parameters is None:
+            return f"Downloading output from Job {job_name!r} Step {step_name!r}"
         else:
-            return f"Downloading output from Job {job_name!r} Step {step_id} Task {task_id}"
+            task_parameters_summary = "{}"
+            if task_parameters:
+                task_parameters_summary = (
+                    "{"
+                    + ",".join(
+                        f"{key}={list(value.values())[0]}" for key, value in task_parameters.items()
+                    )
+                    + "}"
+                )
+            return f"Downloading output from Job {job_name!r} Step {step_name!r} Task {task_parameters_summary}"
 
 
 def _get_mismatch_os_root_warning(root: str, is_json_format: bool) -> str:
