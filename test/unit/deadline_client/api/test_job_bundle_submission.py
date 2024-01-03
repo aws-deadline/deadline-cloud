@@ -496,13 +496,13 @@ def test_create_job_from_job_bundle_job_attachments(
         def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_ux_callback(msg: str) -> None:
+        def fake_print_callback(msg: str) -> None:
             pass
 
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
-            handle_echo_messages_callback=fake_ux_callback,
+            print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
             queue_parameter_definitions=[],
@@ -522,7 +522,7 @@ def test_create_job_from_job_bundle_job_attachments(
                 referenced_paths=set(),
             ),
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
-            handle_echo_messages_callback=fake_ux_callback,
+            print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(
@@ -661,13 +661,13 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_ux_callback(msg: str) -> None:
+        def fake_print_callback(msg: str) -> None:
             pass
 
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
-            handle_echo_messages_callback=fake_ux_callback,
+            print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
             queue_parameter_definitions=[],
@@ -679,7 +679,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
                 input_filenames=set([os.path.join(temp_assets_dir, "asset-1.txt")])
             ),
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
-            handle_echo_messages_callback=fake_ux_callback,
+            print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
         )
         client_mock().create_job.assert_called_once_with(

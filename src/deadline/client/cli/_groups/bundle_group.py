@@ -9,6 +9,7 @@ import logging
 import re
 
 import click
+from contextlib import ExitStack
 from botocore.exceptions import ClientError
 
 from deadline.client import api
@@ -109,9 +110,6 @@ def bundle_submit(
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
-    def _echo_message(message: str) -> None:
-        click.echo(message)
-
     hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
     upload_callback_manager = _ProgressBarCallbackManager(length=100, label="Uploading Attachments")
 
@@ -144,7 +142,7 @@ def bundle_submit(
             hashing_progress_callback=hash_callback_manager.callback,
             upload_progress_callback=upload_callback_manager.callback,
             create_job_result_callback=_check_create_job_wait_canceled,
-            handle_echo_messages_callback=_echo_message,
+            print_function_callback=click.echo,
             decide_cancel_submission_callback=_decide_cancel_submission,
         )
     except AssetSyncCancelledError as exc:
@@ -225,6 +223,7 @@ class _ProgressBarCallbackManager:
         self._length = length
         self._label = label
         self._bar_status = self.BAR_NOT_CREATED
+        self._exit_stack = ExitStack()
 
     def callback(self, upload_metadata: ProgressReportMetadata) -> bool:
         if self._bar_status == self.BAR_CLOSED:
@@ -234,6 +233,7 @@ class _ProgressBarCallbackManager:
             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
             # not annotating the type of hashing_progress.
             self._upload_progress = click.progressbar(length=self._length, label=self._label)  # type: ignore[var-annotated]
+            self._exit_stack.enter_context(self._upload_progress)
             self._bar_status = self.BAR_CREATED
 
         total_progress = int(upload_metadata.progress)
@@ -243,6 +243,6 @@ class _ProgressBarCallbackManager:
 
         if total_progress == self._length or not sigint_handler.continue_operation:
             self._bar_status = self.BAR_CLOSED
-            self._upload_progress.__exit__(None, None, None)
+            self._exit_stack.close()
 
         return sigint_handler.continue_operation

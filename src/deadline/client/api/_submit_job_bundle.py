@@ -41,13 +41,13 @@ def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
     queue_parameter_definitions: Optional[list[JobParameter]] = None,
-    job_attachments_file_system: str = "COPIED",
+    job_attachments_file_system: Optional[str] = None,
     should_save_job_id: Optional[bool] = None,
     config: Optional[ConfigParser] = None,
     priority: Optional[int] = None,
     max_failed_tasks_count: Optional[int] = None,
     max_retries_per_task: Optional[int] = None,
-    handle_echo_messages_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[str], None] = lambda msg: None,
     decide_cancel_submission_callback: Callable[
         [AssetReferences, SummaryStatistics], bool
     ] = lambda ar, hs: False,
@@ -99,8 +99,28 @@ def create_job_from_job_bundle(
         job_bundle_dir (str): The directory containing the job bundle.
         job_parameters (List[Dict[str, Any]], optional): A list of job parameters in the following format:
             [{"name": "<name>", "value": "<value>"}, ...]
+        queue_parameter_definitions (list[JobParameter], optional) A list of queue_parameters to use
+                instead of retrieving queue_parameters from the queue with get_queue_parameter_definitions.
+        job_attachments_file_system (str, optional): define which file system to use;
+                (valid values: "COPIED", "VIRTUAL") instead of using the value in the config file.
+        should_save_job_id (bool, optional): Whether or not to defaults.job_id to the newely created job's id.
+                default behavior is to save the job_id only if no argument is passed in for config.
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
+        priority (int, optional): explicit value for the priority of the job.
+        max_failed_tasks_count (int, optional): explicit value for the maximum allowed failed tasks.
+        max_retries_per_task (int, optional): explicit value for the maximum retries per task.
+        print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
+                Used in the CLI to print to stdout using click.echo. By default ignores messages.
+        decide_cancel_submission_callback (Callable AssetReferences, SummaryStatstics -> bool): If the job has job
+                attachments, decide whether or not to cancel the submission given what assets will
+                or will not be uploaded. If returns true, the submission is canceled. If False,
+                the submission continues. By default the submission always continues.
+        hashing_progress_callback / upload_progress_callback / create_job_result_callback (Callable -> bool):
+                Callbacks periodically called while hashing / uploading / waiting for job creation. If returns false,
+                the operation will be cancelled. If return true, the operation continues. Default behavior for each
+                is to not cancel the operation. hashing_progress_callback and upload_progress_callback both recieve
+                ProgressReport as a parameter, which can be used for projecting remaining time, as in done in the CLI.
     """
 
     # Read in the job template
@@ -119,7 +139,7 @@ def create_job_from_job_bundle(
         farmId=farm_id,
         queueId=queue_id,
     )
-    handle_echo_messages_callback(f"Submitting to Queue: {queue['displayName']}")
+    print_function_callback(f"Submitting to Queue: {queue['displayName']}")
 
     create_job_args: Dict[str, Any] = {
         "farmId": farm_id,
@@ -190,16 +210,16 @@ def create_job_from_job_bundle(
             asset_manager=asset_manager,
             asset_references=asset_references,
             storage_profile_id=storage_profile_id,
-            handle_echo_messages_callback=handle_echo_messages_callback,
+            print_function_callback=print_function_callback,
             hashing_progress_callback=hashing_progress_callback,
         )
 
         if decide_cancel_submission_callback(asset_references, hash_summary):
-            handle_echo_messages_callback("Job submission canceled.")
+            print_function_callback("Job submission canceled.")
             return None
 
         attachment_settings = _upload_attachments(
-            asset_manager, asset_manifests, handle_echo_messages_callback, upload_progress_callback
+            asset_manager, asset_manifests, print_function_callback, upload_progress_callback
         )
 
         attachment_settings["fileSystem"] = JobAttachmentsFileSystem(job_attachments_file_system)
@@ -225,7 +245,7 @@ def create_job_from_job_bundle(
 
     if create_job_response and "jobId" in create_job_response:
         job_id = create_job_response["jobId"]
-        handle_echo_messages_callback("Waiting for Job to be created...")
+        print_function_callback("Waiting for Job to be created...")
 
         # If saving job id is not otherwise specified, then if using the default config,
         # set the default job id so it holds the most-recently submitted job.
@@ -252,9 +272,9 @@ def create_job_from_job_bundle(
         if not success:
             raise DeadlineOperationError(status_message)
 
-        handle_echo_messages_callback("Submitted job bundle:")
-        handle_echo_messages_callback(f"   {job_bundle_dir}")
-        handle_echo_messages_callback(status_message + f"\n{job_id}\n")
+        print_function_callback("Submitted job bundle:")
+        print_function_callback(f"   {job_bundle_dir}")
+        print_function_callback(status_message + f"\n{job_id}\n")
 
         return job_id
     else:
@@ -306,7 +326,7 @@ def _hash_attachments(
     asset_manager: S3AssetManager,
     asset_references: AssetReferences,
     storage_profile_id: Optional[str] = None,
-    handle_echo_messages_callback: Callable = lambda msg: None,
+    print_function_callback: Callable = lambda msg: None,
     hashing_progress_callback: Optional[Callable] = None,
     config: Optional[ConfigParser] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
@@ -332,8 +352,8 @@ def _hash_attachments(
     api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
         hashing_summary
     )
-    handle_echo_messages_callback("Hashing Summary:")
-    handle_echo_messages_callback(textwrap.indent(str(hashing_summary), "    "))
+    print_function_callback("Hashing Summary:")
+    print_function_callback(textwrap.indent(str(hashing_summary), "    "))
 
     return hashing_summary, manifests
 
@@ -341,7 +361,7 @@ def _hash_attachments(
 def _upload_attachments(
     asset_manager: S3AssetManager,
     manifests: List[AssetRootManifest],
-    handle_echo_messages_callback: Callable = lambda msg: None,
+    print_function_callback: Callable = lambda msg: None,
     upload_progress_callback: Optional[Callable] = None,
     config: Optional[ConfigParser] = None,
 ) -> Dict[str, Any]:
@@ -363,7 +383,7 @@ def _upload_attachments(
         upload_summary
     )
 
-    handle_echo_messages_callback("Upload Summary:")
-    handle_echo_messages_callback(textwrap.indent(str(upload_summary), "    "))
+    print_function_callback("Upload Summary:")
+    print_function_callback(textwrap.indent(str(upload_summary), "    "))
 
     return attachment_settings.to_dict()
