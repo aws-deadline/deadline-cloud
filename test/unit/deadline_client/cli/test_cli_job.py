@@ -6,6 +6,7 @@ Tests for the CLI job commands.
 import datetime
 import json
 import os
+import pytest
 from pathlib import Path
 import sys
 from unittest.mock import ANY, MagicMock, patch
@@ -338,8 +339,8 @@ def test_cli_job_download_output_stdout_with_only_required_input(
     fresh_deadline_config, tmp_path: Path
 ):
     """
-    Tests whether the ouptut messages printed to stdout match expected messages
-    when download-output command is executed.
+    Tests whether the output messages printed to stdout match expected messages
+    when `download-output` command is executed.
     """
     with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
         session_endpoint.return_value = "some-endpoint-url"
@@ -374,21 +375,26 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             },
         ]
 
-        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+        mock_host_path_format = PathFormat.get_host_path_format()
 
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
             "attachments": {
                 "manifests": [
                     {
-                        "rootPath": "/root/path",
-                        "rootPathFormat": PathFormat(mock_host_path_format_name),
+                        "rootPath": f"{mock_root_path}",
+                        "rootPathFormat": mock_host_path_format,
                         "outputRelativeDirectories": ["."],
-                    }
+                    },
+                    {
+                        "rootPath": f"{mock_root_path}2",
+                        "rootPathFormat": mock_host_path_format,
+                        "outputRelativeDirectories": ["."],
+                    },
                 ],
             },
         }
-        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
 
         runner = CliRunner()
         result = runner.invoke(
@@ -425,13 +431,194 @@ Outputs will be downloaded to the following root paths:
         assert result.exit_code == 0
 
 
-def test_cli_job_dowuload_output_stdout_with_json_format(
+def test_cli_job_download_output_stdout_with_mismatching_path_format(
+    fresh_deadline_config, tmp_path: Path
+):
+    """
+    Tests that the `download-output` command handles cross-platform situations,
+    where the output files of the job submitted on Windows need to be downloaded
+    on non-Windows and vice versa, by verifying that the output messages printed
+    to stdout match expected messages.
+    """
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "some-endpoint-url"
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(
+        job_group, "round", return_value=0
+    ), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        MockOutputDownloader.return_value.download_job_output = mock_download
+
+        mock_root_path = "C:\\Users\\username" if sys.platform != "win32" else "/root/path"
+        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+            {
+                f"{mock_root_path}": mock_files_list,
+            },
+            {
+                str(tmp_path): mock_files_list,
+            },
+            {
+                str(tmp_path): mock_files_list,
+            },
+        ]
+
+        # Get the opposite path format of the current operating system
+        current_format = PathFormat.get_host_path_format()
+        other_format = (
+            PathFormat.WINDOWS if current_format == PathFormat.POSIX else PathFormat.POSIX
+        )
+
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": f"{mock_root_path}",
+                        "rootPathFormat": other_format,
+                        "outputRelativeDirectories": ["."],
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+            input=f"{str(tmp_path)}\ny\n",
+        )
+
+        MockOutputDownloader.assert_called_once_with(
+            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            step_id=None,
+            task_id=None,
+            session=ANY,
+        )
+
+        assert (
+            f"""Downloading output from Job 'Mock Job'
+This root path format does not match the operating system you're using. Where would you like to save the files?
+The location was {mock_root_path}, on {other_format[0].upper() + other_format[1:]}.
+> Please enter a new root path: {str(tmp_path)}
+Outputs will be downloaded to the following root paths:
+[0] {str(tmp_path)}
+> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: y
+"""
+            in result.output
+        )
+        assert "Download Summary:" in result.output
+        assert result.exit_code == 0
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="This test is for testing Windows downloading job outputs located at a UNC root path.",
+)
+def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_config, tmp_path: Path):
+    """
+    This tests only runs on Windows OS.
+    Executes the `download-output` command on a job that has a root path of UNC format,
+    and verifies that the output messages printed to stdout match expected messages.
+    """
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "some-endpoint-url"
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(
+        job_group, "round", return_value=0
+    ), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        MockOutputDownloader.return_value.download_job_output = mock_download
+
+        # UNC format (which refers to the same location as 'C:\Users\username')
+        mock_root_path = "\\\\127.0.0.1\\c$\\Users\\username"
+        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+            {
+                f"{mock_root_path}": mock_files_list,
+            },
+            {
+                f"{mock_root_path}": mock_files_list,
+            },
+            {
+                str(tmp_path): mock_files_list,
+            },
+        ]
+
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": f"{mock_root_path}",
+                        "rootPathFormat": PathFormat.WINDOWS,
+                        "outputRelativeDirectories": ["."],
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+            input=f"0\n{str(tmp_path)}\ny\n",
+        )
+
+        MockOutputDownloader.assert_called_once_with(
+            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            step_id=None,
+            task_id=None,
+            session=ANY,
+        )
+
+        assert (
+            f"""Downloading output from Job 'Mock Job'
+Outputs will be downloaded to the following root paths:
+[0] {mock_root_path}
+> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: 0
+> Please enter a new path for the root directory [{mock_root_path}]: {str(tmp_path)}
+Outputs will be downloaded to the following root paths:
+[0] {str(tmp_path)}
+> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: y
+"""
+            in result.output
+        )
+        assert "Download Summary:" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_download_output_stdout_with_json_format(
     fresh_deadline_config,
     tmp_path: Path,
 ):
     """
-    Tests whether the ouptut messages printed to stdout match expected messages
-    when download-output command is executed with `--output json` option.
+    Tests whether the output messages printed to stdout match expected messages
+    when `download-output` command is executed with `--output json` option.
     """
     with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
         session_endpoint.return_value = "fake-endpoint-url"
@@ -466,21 +653,26 @@ def test_cli_job_dowuload_output_stdout_with_json_format(
                 },
             ]
 
-            mock_host_path_format_name = PathFormat.get_host_path_format_string()
+            mock_host_path_format = PathFormat.get_host_path_format()
 
+            boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
             boto3_client_mock().get_job.return_value = {
                 "name": "Mock Job",
                 "attachments": {
                     "manifests": [
                         {
-                            "rootPath": "/root/path",
-                            "rootPathFormat": PathFormat(mock_host_path_format_name),
+                            "rootPath": f"{mock_root_path}",
+                            "rootPathFormat": mock_host_path_format,
                             "outputRelativeDirectories": ["."],
-                        }
+                        },
+                        {
+                            "rootPath": f"{mock_root_path}2",
+                            "rootPathFormat": mock_host_path_format,
+                            "outputRelativeDirectories": ["."],
+                        },
                     ],
                 },
             }
-            boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
 
             runner = CliRunner()
             result = runner.invoke(
