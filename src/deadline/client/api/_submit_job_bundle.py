@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
+    *,
     queue_parameter_definitions: Optional[list[JobParameter]] = None,
     job_attachments_file_system: Optional[str] = None,
     should_save_job_id: Optional[bool] = None,
