@@ -14,11 +14,11 @@ from ..config import get_setting, get_setting_default
 from ._common import _PROMPT_WHEN_COMPLETE
 from ._groups.bundle_group import cli_bundle
 from ._groups.config_group import cli_config
+from ._groups.creds_group import cli_creds
 from ._groups.farm_group import cli_farm
 from ._groups.fleet_group import cli_fleet
 from ._groups.handle_web_url_command import cli_handle_web_url
 from ._groups.job_group import cli_job
-from ._groups.loginout_commands import cli_login, cli_logout
 from ._groups.queue_group import cli_queue
 from ._groups.worker_group import cli_worker
 
@@ -69,11 +69,10 @@ def main(ctx: click.Context, log_level: str):
 
 main.add_command(cli_bundle)
 main.add_command(cli_config)
+main.add_command(cli_creds)
 main.add_command(cli_farm)
 main.add_command(cli_fleet)
 main.add_command(cli_handle_web_url)
 main.add_command(cli_job)
-main.add_command(cli_login)
-main.add_command(cli_logout)
 main.add_command(cli_queue)
 main.add_command(cli_worker)
