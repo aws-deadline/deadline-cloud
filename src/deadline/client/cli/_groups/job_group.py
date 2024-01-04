@@ -23,6 +23,7 @@ from deadline.job_attachments.download import OutputDownloader
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
+    PathFormat,
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
@@ -265,6 +266,14 @@ def _download_job_output(
         queue_display_name=queue["displayName"],
     )
 
+    # Get a dictionary mapping rootPath to rootPathFormat (OS) from job's manifests
+    root_path_format_mapping: dict[str, str] = {}
+    job_attachments = job.get("attachments", None)
+    if job_attachments:
+        job_attachments_manifests = job_attachments["manifests"]
+        for manifest in job_attachments_manifests:
+            root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
+
     job_output_downloader = OutputDownloader(
         s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
         farm_id=farm_id,
@@ -281,8 +290,12 @@ def _download_job_output(
     # select alternative root paths to download to, (regardless of the auto-accept.)
     asset_roots = list(output_paths_by_root.keys())
     for asset_root in asset_roots:
-        if _is_current_os_windows() != _is_path_in_windows_format(asset_root):
-            click.echo(_get_mismatch_os_root_warning(asset_root, is_json_format))
+        root_path_format = root_path_format_mapping.get(asset_root, "")
+        if root_path_format == "":
+            # There must be a corresponding root path format for each root path, by design.
+            raise DeadlineOperationError(f"No root path format found for {asset_root}.")
+        if PathFormat.get_host_path_format_string() != root_path_format:
+            click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
 
             if not is_json_format:
                 new_root = click.prompt(
@@ -443,14 +456,15 @@ def _get_start_message(
             return f"Downloading output from Job {job_name!r} Step {step_name!r} Task {task_parameters_summary}"
 
 
-def _get_mismatch_os_root_warning(root: str, is_json_format: bool) -> str:
+def _get_mismatch_os_root_warning(root: str, root_path_format: str, is_json_format: bool) -> str:
     if is_json_format:
         return _get_json_line(JSON_MSG_TYPE_PATH, [root])
     else:
+        path_format_capitalized_first_letter = root_path_format[0].upper() + root_path_format[1:]
         return (
             "This root path format does not match the operating system you're using. "
             "Where would you like to save the files?\n"
-            f"The location was {root}, on {'Windows' if _is_path_in_windows_format(root) else 'POSIX OS'}."
+            f"The location was {root}, on {path_format_capitalized_first_letter}."
         )
 
 
@@ -534,35 +548,11 @@ def _assert_valid_path(path: str) -> None:
     """
     Validates that the path exists and has the format of the OS currently running.
     """
-    if not Path(path).is_dir():
+    path_obj = Path(path)
+    if not path_obj.is_dir():
         raise ValueError(f"Path {path} does not exist.")
-    if _is_current_os_windows() != _is_path_in_windows_format(path):
-        raise ValueError(f"Path {path} is not in the format of the operating system you're using.")
-
-
-def _is_current_os_windows() -> bool:
-    """
-    Checks whether the current OS is Windows.
-    """
-    return sys.platform.startswith("win")
-
-
-def _is_path_in_windows_format(path_str: str) -> bool:
-    """
-    Checks the format of a path and determines whether it's in POSIX or Windows format.
-    Returns True if the path is in Windows format, False if it's in POSIX format.
-
-    Note:
-        This function assumes that path_str is an absolute path.
-        A path is considered to be in POSIX format if it starts with "/".
-        For Windows format, it starts with a drive letter followed by ":" (e.g., C:).
-    """
-    if path_str.startswith("/"):
-        return False
-    elif path_str[0:1].isalpha() and path_str[1:2] == ":":
-        return True
-    else:
-        raise ValueError(f"Path {path_str} is not an absolute path.")
+    if not path_obj.is_absolute():
+        raise ValueError(f"Path {path} is not an absolute path.")
 
 
 @cli_job.command(name="download-output")
