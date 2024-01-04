@@ -88,9 +88,9 @@ class PathFormat(str, Enum):
     def get_host_path_format(cls) -> PathFormat:
         """Get the current path format."""
         if sys.platform.startswith("win"):
-            return PathFormat.WINDOWS
+            return cls.WINDOWS
         if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
-            return PathFormat.POSIX
+            return cls.POSIX
         else:
             raise NotImplementedError(f"Operating system {sys.platform} is not supported.")
 
