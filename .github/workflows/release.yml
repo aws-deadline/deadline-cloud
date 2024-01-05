@@ -1,100 +1,23 @@
 name: Release
 
-env:
-  RELEASE_COMMIT: ${{ github.sha }}
-  OVERRIDE_RELEASE_TAG_VERSION: ${{ inputs.override_version_to_publish }}
-
 on:
   workflow_dispatch:
     inputs:
-      override_version_to_publish:
-        description: "Override the version to publish (Optional)"
+      version_to_publish:
+        description: "Version to be release"
         required: false
 
-concurrency:
-  group: ${{ github.workflow }}
-
 jobs:
-  Setup:
-    runs-on: ubuntu-latest
-    outputs: 
-      release-commit: ${{ env.RELEASE_COMMIT }}
-    steps:
-      - name: set outputs with default values
-        id: release-commit
-        run: |   
-          echo "release-commit = ${{ env.RELEASE_COMMIT }}" >> $GITHUB_OUTPUT
-
-  UnitTests:
-    needs: Setup
-    name: Unit Tests
+  TestMainline:
+    name: Test Mainline
     uses: ./.github/workflows/reuse_python_build.yml
     with:
-      commit: ${{ needs.Setup.outputs.release-commit }}
+      branch: mainline
     secrets: inherit
 
-  IntegrationTests:
-    needs: UnitTests
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_COMMIT }}
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_INTEG_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
-      - name: Run CodeBuild
-        uses: aws-actions/aws-codebuild-run-build@v1
-        with:
-          project-name: deadline-cloud-IntegTest
-          hide-cloudwatch-logs: true
-          env-vars-for-codebuild: |
-            TEST_TYPE
-        env:
-          TEST_TYPE: WHEEL
-  
-  Version:
-    needs: IntegrationTests
-    runs-on: ubuntu-latest
-    outputs:
-      release-tag-version: ${{ steps.release-tag-version.outputs.release-tag-version }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: mainline
-        fetch-depth: 0
-    - name: Get next semver
-      run: |
-        pip install python-semantic-release
-        semantic-release --noop version --changelog
-        NEXT_SEMVER=`semantic-release version --no-push --no-commit --no-changelog`
-        echo NEXT_SEMVER=$NEXT_SEMVER >> $GITHUB_ENV
-    # Sets the next tag version as an output so that it is accessible by other jobs.
-    # A seperate step is intentional. The output is returned as an empty string when
-    # combined with the step above
-    - name: Set tag version
-      id: release-tag-version
-      run: |
-        if [[ -z $OVERRIDE_RELEASE_TAG_VERSION ]]; then
-          echo "Setting next semantic version: $NEXT_SEMVER"
-          echo "release-tag-version=$NEXT_SEMVER" >> $GITHUB_OUTPUT
-        else
-          echo "Setting override release tag version: $OVERRIDE_RELEASE_TAG_VERSION"
-          echo "release-tag-version=$OVERRIDE_RELEASE_TAG_VERSION" >> $GITHUB_OUTPUT
-        fi
-  
   Merge:
-    needs: Version
+    needs: TestMainline
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: write
     steps:
@@ -105,19 +28,30 @@ jobs:
           token: ${{ secrets.CI_TOKEN }}
       - name: Set Git config
         run: |
-          git config --local user.email ${{ secrets.EMAIL}}
-          git config --local user.name ${{ secrets.USER }}
+          git config --local user.email "client-software-ci@amazon.com"
+          git config --local user.name "client-software-ci"
       - name: Update Release
-        run: git merge --ff-only ${{ env.RELEASE_COMMIT }} -v
-      - name: Push next version to release
+        run: git merge --ff-only origin/mainline -v
+      - name: Push new release
+        if: ${{ inputs.version_to_publish}}
         run: |
-          git tag -a ${{ needs.Version.outputs.release-tag-version }} -m "Release ${{ needs.Version.outputs.release-tag-version }}"
-          git push origin release ${{ needs.Version.outputs.release-tag-version }}
+          git tag -a ${{ inputs.version_to_publish }} -m "Release ${{ inputs.version_to_publish }}"
+          git push origin release ${{ inputs.version_to_publish }}
+      - name: Push post release
+        if: ${{ !inputs.version_to_publish}}
+        run: git push origin release
 
-  PublishExternalCodeArtifacts:
+  TestRelease:
     needs: Merge
+    name: Test Release
+    uses: ./.github/workflows/reuse_python_build.yml
+    with:
+      branch: release
+    secrets: inherit
+
+  PublishMirror:
+    needs: TestRelease
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       id-token: write
       contents: read
@@ -153,34 +87,15 @@ jobs:
           pip install --upgrade twine
       - name: Run Build
         run: hatch build
-      - name: Publish to GitHub CodeArtifact Repository
+      - name: Publish
         run: |
           export TWINE_USERNAME=aws
           export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
           export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CODEARTIFACT_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
           twine upload dist/*
-      - name: Publish to Customer Beta CodeArtifact Repository
+      - name: Publish to Customer CodeArtifact
         run: |
           export TWINE_USERNAME=aws
           export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
           export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
           twine upload dist/*
-
-  PublishInternal:
-    needs: PublishExternalCodeArtifacts
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
-      - name: Run CodeBuild
-        uses: aws-actions/aws-codebuild-run-build@v1
-        with:
-          project-name: deadline-cloud-Publish
-          hide-cloudwatch-logs: true
