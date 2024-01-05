@@ -1,20 +1,15 @@
-name: Mainline Integration Test
+name: Integ Tests
 
 on:
   workflow_dispatch:
 
 jobs:
-  MainlineIntegrationTest:
-    name: Integration Test
+  Integ:
     runs-on: ubuntu-latest
     environment: mainline
     permissions:
       id-token: write
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: mainline
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

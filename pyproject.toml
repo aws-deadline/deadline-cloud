@@ -150,28 +150,3 @@ source = [ "src/" ]
 [tool.coverage.report]
 show_missing = true
 fail_under = 80
-
-[tool.semantic_release]
-major_on_zero = "false"
-tag_format = "{version}"
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = [
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "feat",
-    "fix",
-    "perf",
-    "style",
-    "refactor",
-    "test",
-]
-minor_tags = []
-patch_tags = [
-  "chore",
-  "feat",
-  "fix",
-  "refactor",
-]
