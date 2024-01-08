@@ -386,7 +386,6 @@ def test_create_job_max_errors_to_max_retries(kwargs_input, name_in_model, kwarg
     1. Calling the underlying client method
     2. Replacing the appropriate key
     """
-    kwargs_output["priority"] = 50
     fake_client = MagicMock()
     deadline_client = DeadlineClient(fake_client)
     with patch.object(deadline_client, "_get_deadline_api_input_shape") as input_shape_mock:
@@ -446,34 +445,6 @@ def test_create_job_old_api_compatibility(kwargs_input, kwargs_output) -> None:
     1. Calling the underlying client method
     2. Replacing the appropriate key
 
-    """
-    fake_client = MagicMock()
-    kwargs_output["priority"] = 50
-    deadline_client = DeadlineClient(fake_client)
-    with patch.object(deadline_client, "_get_deadline_api_input_shape") as input_shape_mock:
-        input_shape_mock.return_value = kwargs_output
-        deadline_client.create_job(**kwargs_input)
-    fake_client.create_job.assert_called_once_with(**kwargs_output)
-
-
-@pytest.mark.parametrize(
-    "kwargs_input, kwargs_output",
-    [
-        pytest.param(
-            {"jobTemplate": "", "jobTemplateType": "", "jobParameters": ""},
-            {"jobTemplate": "", "jobTemplateType": "", "jobParameters": "", "priority": 50},
-            id="jobTemplate_addPriority",
-        ),
-        pytest.param(
-            {"jobTemplate": "", "jobTemplateType": "", "jobParameters": "", "priority": 99},
-            {"jobTemplate": "", "jobTemplateType": "", "jobParameters": "", "priority": 99},
-            id="jobTemplate_leavePriority",
-        ),
-    ],
-)
-def test_create_job_priority_api_compatibility(kwargs_input, kwargs_output) -> None:
-    """
-    create_job will either leave priority parameter as is or add if missing
     """
     fake_client = MagicMock()
     deadline_client = DeadlineClient(fake_client)

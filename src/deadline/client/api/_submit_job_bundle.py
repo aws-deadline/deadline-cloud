@@ -13,26 +13,31 @@ import textwrap
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from deadline.client import api
-from deadline.client.exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from deadline.client.config import get_setting, set_setting
-from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
-from deadline.client.job_bundle.parameters import (
+from botocore.client import BaseClient  # type: ignore[import]
+
+from .. import api
+from ..exceptions import DeadlineOperationError, CreateJobWaiterCanceled
+from ..config import get_setting, set_setting
+from ..job_bundle import deadline_yaml_dump
+from ..job_bundle.loader import (
+    read_yaml_or_json,
+    read_yaml_or_json_object,
+    parse_yaml_or_json_content,
+)
+from ..job_bundle.parameters import (
     apply_job_parameters,
     merge_queue_job_parameters,
     read_job_bundle_parameters,
+    JobParameter,
 )
-from deadline.client.job_bundle.submission import AssetReferences, split_parameter_args
-from deadline.job_attachments.models import (
+from ..job_bundle.submission import AssetReferences, split_parameter_args
+from ...job_attachments.models import (
     JobAttachmentsFileSystem,
     AssetRootManifest,
     JobAttachmentS3Settings,
 )
-from deadline.job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
-from deadline.job_attachments.upload import S3AssetManager
-from botocore.client import BaseClient
-
-from ..job_bundle.parameters import JobParameter
+from ...job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
+from ...job_attachments.upload import S3AssetManager
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,7 @@ def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
     *,
+    name: Optional[str] = None,
     queue_parameter_definitions: Optional[list[JobParameter]] = None,
     job_attachments_file_system: Optional[str] = None,
     config: Optional[ConfigParser] = None,
@@ -99,6 +105,7 @@ def create_job_from_job_bundle(
         job_bundle_dir (str): The directory containing the job bundle.
         job_parameters (List[Dict[str, Any]], optional): A list of job parameters in the following format:
             [{"name": "<name>", "value": "<value>"}, ...]
+        name (str, optional): The name of the job to submit, replacing the name defined in the job bundle.
         queue_parameter_definitions (list[JobParameter], optional) A list of queue_parameters to use
                 instead of retrieving queue_parameters from the queue with get_queue_parameter_definitions.
         job_attachments_file_system (str, optional): define which file system to use;
@@ -124,6 +131,17 @@ def create_job_from_job_bundle(
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
 
+    # If requested, substitute the job name in the template
+    if name is not None:
+        template_obj = parse_yaml_or_json_content(
+            file_contents, file_type, job_bundle_dir, "template"
+        )
+        template_obj["name"] = name
+        if file_type == "YAML":
+            file_contents = deadline_yaml_dump(template_obj)
+        else:
+            file_contents = json.dumps(template_obj)
+
     deadline = api.get_boto3_client("deadline", config=config)
     queue_id = get_setting("defaults.queue_id", config=config)
     farm_id = get_setting("defaults.farm_id", config=config)
@@ -144,6 +162,7 @@ def create_job_from_job_bundle(
         "queueId": queue_id,
         "template": file_contents,
         "templateType": file_type,
+        "priority": 50,
     }
 
     storage_profile_id = get_setting("settings.storage_profile_id", config=config)

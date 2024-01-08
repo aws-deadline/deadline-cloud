@@ -28,6 +28,7 @@ from ..api.test_job_bundle_submission import (
     MOCK_JOB_TEMPLATE_CASES,
     MOCK_PARAMETERS_CASES,
     MOCK_QUEUE_ID,
+    get_minimal_json_job_template,
 )
 
 MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE = {
@@ -142,6 +143,7 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
             parameters=MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][2]["parameters"],  # type: ignore
             template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
             templateType="JSON",
+            priority=50,
         )
         assert temp_job_bundle_dir in result.output
         assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
@@ -255,6 +257,55 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
         assert result.exit_code == 0
 
 
+def test_cli_bundle_job_name(fresh_deadline_config):
+    """
+    Confirm that --name sets the job name in the template.
+    """
+    # Use a temporary directory for the job bundle
+    with patch(
+        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
+    ) as input_shape_mock:
+        input_shape_mock.return_value = {}
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            boto3, "Session"
+        ) as session_mock:
+            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+            session_mock.reset_mock()
+
+            # Write a JSON template
+            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                [
+                    "bundle",
+                    "submit",
+                    tmpdir,
+                    "--farm-id",
+                    MOCK_FARM_ID,
+                    "--queue-id",
+                    MOCK_QUEUE_ID,
+                    "--name",
+                    "Replacement Name For The Job",
+                ],
+            )
+
+        assert tmpdir in result.output
+        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+        session_mock().client().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=get_minimal_json_job_template("Replacement Name For The Job"),
+            templateType="JSON",
+            priority=50,
+        )
+        assert result.exit_code == 0
+
+
 @pytest.mark.parametrize("loading_method", [e.value for e in JobAttachmentsFileSystem] + [None])
 def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir, loading_method):
     """
@@ -348,6 +399,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
             templateType="JSON",
             attachments={"fileSystem": expected_loading_method},
+            priority=50,
         )
         assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
         assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
@@ -514,6 +566,7 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
             template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
             templateType="JSON",
             attachments=ANY,
+            priority=50,
         )
         assert result.exit_code == 0
 
