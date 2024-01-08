@@ -13,7 +13,7 @@ from contextlib import ExitStack
 from botocore.exceptions import ClientError
 
 from deadline.client import api
-from deadline.client.config import config_file, get_setting
+from deadline.client.config import config_file, get_setting, set_setting
 
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import JobAttachmentsFileSystem
@@ -102,11 +102,6 @@ def bundle_submit(
     """
     Submits an Open Job Description job bundle to Amazon Deadline Cloud.
     """
-    # Check Whether the CLI options are modifying any of the default settings that affect
-    # the job id. If not, we'll save the job id submitted as the default job id.
-    should_save_job_id = (
-        args.get("profile") is None and args.get("farm_id") is None and args.get("queue_id") is None
-    )
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
@@ -130,11 +125,10 @@ def bundle_submit(
         )
 
     try:
-        api.create_job_from_job_bundle(
+        job_id = api.create_job_from_job_bundle(
             job_bundle_dir=job_bundle_dir,
             job_parameters=parameter,
             job_attachments_file_system=job_attachments_file_system,
-            should_save_job_id=should_save_job_id,
             config=config,
             priority=priority,
             max_failed_tasks_count=max_failed_tasks_count,
@@ -145,6 +139,18 @@ def bundle_submit(
             print_function_callback=click.echo,
             decide_cancel_submission_callback=_decide_cancel_submission,
         )
+
+        # Check Whether the CLI options are modifying any of the default settings that affect
+        # the job id. If not, we'll save the job id submitted as the default job id.
+        # If the submission is canceled by the user job_id will be None, so ignore this case as well.
+        if (
+            job_id is not None
+            and args.get("profile") is None
+            and args.get("farm_id") is None
+            and args.get("queue_id") is None
+        ):
+            set_setting("defaults.job_id", job_id)
+
     except AssetSyncCancelledError as exc:
         if sigint_handler.continue_operation:
             raise DeadlineOperationError(f"Job submission unexpectedly canceled:\n{exc}") from exc

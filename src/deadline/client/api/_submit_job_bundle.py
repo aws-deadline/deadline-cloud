@@ -43,7 +43,6 @@ def create_job_from_job_bundle(
     *,
     queue_parameter_definitions: Optional[list[JobParameter]] = None,
     job_attachments_file_system: Optional[str] = None,
-    should_save_job_id: Optional[bool] = None,
     config: Optional[ConfigParser] = None,
     priority: Optional[int] = None,
     max_failed_tasks_count: Optional[int] = None,
@@ -104,8 +103,6 @@ def create_job_from_job_bundle(
                 instead of retrieving queue_parameters from the queue with get_queue_parameter_definitions.
         job_attachments_file_system (str, optional): define which file system to use;
                 (valid values: "COPIED", "VIRTUAL") instead of using the value in the config file.
-        should_save_job_id (bool, optional): Whether or not to defaults.job_id to the newely created job's id.
-                default behavior is to save the job_id only if no argument is passed in for config.
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
         priority (int, optional): explicit value for the priority of the job.
@@ -248,12 +245,9 @@ def create_job_from_job_bundle(
         job_id = create_job_response["jobId"]
         print_function_callback("Waiting for Job to be created...")
 
-        # If saving job id is not otherwise specified, then if using the default config,
-        # set the default job id so it holds the most-recently submitted job.
-        if should_save_job_id is None:
-            should_save_job_id = config is None
-
-        if should_save_job_id:
+        # If using the default config, set the default job id so it holds the
+        # most-recently submitted job.
+        if config is None:
             set_setting("defaults.job_id", job_id)
 
         def _default_create_job_result_callback() -> bool:
