@@ -1,8 +1,37 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 
-from deadline.job_attachments.progress_tracker import SummaryStatistics, DownloadSummaryStatistics
+from deadline.job_attachments.progress_tracker import (
+    SummaryStatistics,
+    DownloadSummaryStatistics,
+    ProgressTracker,
+    ProgressStatus,
+)
 import pytest
+import concurrent
+
+
+# += operator doesn't seem to be non-threadsafe in python 3.10 or later, but can be an issue in earlier versions.
+class TestProgressTracker:
+    """
+    Tests for ProgressTracker class
+    """
+
+    def test_increment_race_condition(self):
+        progress_tracker = ProgressTracker(ProgressStatus.NONE, 0, 0)
+
+        N = 10**5
+        K = 10
+
+        def increment():
+            for _ in range(N):
+                progress_tracker.increase_processed(1, 0)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            for _ in range(K):
+                executor.submit(increment)
+
+        assert progress_tracker.processed_files == N * K
 
 
 class TestSummaryStatistics:
