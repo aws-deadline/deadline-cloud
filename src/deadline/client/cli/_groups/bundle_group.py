@@ -14,7 +14,6 @@ from botocore.exceptions import ClientError
 
 from deadline.client import api
 from deadline.client.config import config_file, get_setting, set_setting
-
 from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
@@ -64,7 +63,8 @@ def validate_parameters(ctx, param, value):
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--priority", type=int, help="The priority of the job.")
+@click.option("--name", help="The job name to use in place of the one in the job bundle.")
+@click.option("--priority", type=int, default=50, help="The priority of the job.")
 @click.option(
     "--max-failed-tasks-count",
     type=int,
@@ -94,6 +94,7 @@ def bundle_submit(
     job_attachments_file_system,
     parameter,
     yes,
+    name,
     priority,
     max_failed_tasks_count,
     max_retries_per_task,
@@ -128,6 +129,7 @@ def bundle_submit(
         job_id = api.create_job_from_job_bundle(
             job_bundle_dir=job_bundle_dir,
             job_parameters=parameter,
+            name=name,
             job_attachments_file_system=job_attachments_file_system,
             config=config,
             priority=priority,

@@ -382,8 +382,6 @@ class DeadlineClient:
         if "targetTaskRunStatus" in kwargs:
             if "initialState" in create_job_input_members:
                 kwargs["initialState"] = kwargs.pop("targetTaskRunStatus")
-        if "priority" not in kwargs:
-            kwargs["priority"] = 50
         return self._real_client.create_job(*args, **kwargs)
 
     def assume_queue_role_for_user(self, *args, **kwargs) -> Any:

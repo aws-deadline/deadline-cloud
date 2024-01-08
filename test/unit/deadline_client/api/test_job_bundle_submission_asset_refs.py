@@ -294,6 +294,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             queueId=MOCK_QUEUE_ID,
             template=ANY,
             templateType="YAML",
+            priority=50,
             attachments={
                 "manifests": [
                     {

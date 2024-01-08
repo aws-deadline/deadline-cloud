@@ -58,49 +58,42 @@ MOCK_STATUS_MESSAGE = "Testing123"
 
 MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
 
+
+def get_minimal_json_job_template(job_name):
+    return json.dumps(
+        {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": job_name,
+            "parameterDefinitions": [
+                {"name": "priority", "type": "INT", "default": 10},
+                {"name": "sceneFile", "type": "STRING", "default": "/tmp/scene"},
+            ],
+            "steps": [
+                {
+                    "name": "CliScript",
+                    "script": {
+                        "embeddedFiles": [
+                            {
+                                "name": "runScript",
+                                "type": "TEXT",
+                                "runnable": True,
+                                "data": '#!/usr/bin/env bash\n\necho "Running the task"\nsleep 35\n',
+                            }
+                        ],
+                        "actions": {"onRun": {"command": "{{Task.File.runScript}}"}},
+                    },
+                }
+            ],
+        }
+    )
+
+
 # This contains tuples of:
 #    (file type, JSON/YAML content)
 MOCK_JOB_TEMPLATE_CASES = {
     "MINIMAL_JSON": (
         "JSON",
-        """
-{
- "specificationVersion": "jobtemplate-2023-09",
- "name": "CLI Job",
- "parameterDefinitions": [
-  {
-    "name": "priority",
-    "type": "INT",
-    "default": 10
-  },
-  {
-    "name": "sceneFile",
-    "type": "STRING",
-    "default": "/tmp/scene"
-  }
- ],
- "steps": [
-  {
-   "name": "CliScript",
-   "script": {
-    "embeddedFiles": [
-     {
-      "name": "runScript",
-      "type": "TEXT",
-      "runnable": true,
-      "data": "#!/usr/bin/env bash\\n\\necho \\"Running the task\\"\\nsleep 35\\n"
-     }
-    ],
-    "actions": {
-     "onRun": {
-      "command": "{{Task.File.runScript}}"
-     }
-    }
-   }
-  }
- ]
-}
-""",
+        get_minimal_json_job_template(job_name="CLI Job"),
     ),
     "MINIMAL_YAML": (
         "YAML",
@@ -530,6 +523,7 @@ def test_create_job_from_job_bundle_job_attachments(
             queueId=MOCK_QUEUE_ID,
             template=ANY,
             templateType=ANY,
+            priority=50,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments={
                 "manifests": [],
@@ -687,6 +681,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
             queueId=MOCK_QUEUE_ID,
             template=ANY,
             templateType=ANY,
+            priority=50,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments={
                 "manifests": [
