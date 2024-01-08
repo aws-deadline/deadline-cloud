@@ -16,6 +16,7 @@ from deadline.client import config
 from deadline.client.api import _queue_parameters
 from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
+from deadline.client.api import _submit_job_bundle
 from deadline.client.config.config_file import set_setting
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import SummaryStatistics
@@ -110,14 +111,16 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
     ) as f:
         f.write(MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][1])
 
-    with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
+    with patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as get_boto3_client_mock, patch.object(
         _queue_parameters, "get_boto3_client"
     ) as qp_boto3_client_mock, patch.object(
-        bundle_group, "_hash_attachments", return_value=[]
+        _submit_job_bundle, "_hash_attachments", return_value=[]
     ), patch.object(
-        bundle_group, "get_queue_user_boto3_session"
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        bundle_group, "_upload_attachments"
+        _submit_job_bundle, "_upload_attachments"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
@@ -294,16 +297,18 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     attachment_mock.total_bytes = 0
     attachment_mock.total_files.return_value = 0
 
-    with patch.object(bundle_group, "get_boto3_client") as bundle_boto3_client_mock, patch.object(
+    with patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as bundle_boto3_client_mock, patch.object(
         _queue_parameters, "get_boto3_client"
     ) as qp_boto3_client_mock, patch.object(
-        bundle_group, "_hash_attachments", return_value=(attachment_mock, {})
+        _submit_job_bundle, "_hash_attachments", return_value=(attachment_mock, {})
     ), patch.object(
-        bundle_group, "_upload_attachments", return_value={}
+        _submit_job_bundle, "_upload_attachments", return_value={}
     ), patch.object(
-        bundle_group.api, "get_boto3_session"
+        _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
-        bundle_group, "get_queue_user_boto3_session"
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
@@ -465,14 +470,18 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
         }
         json.dump(data, f)
 
-    with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
-        bundle_group, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
-    ), patch.object(bundle_group, "_upload_attachments"), patch.object(
-        bundle_group.api, "get_boto3_session"
+    with patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as get_boto3_client_mock, patch.object(
+        _submit_job_bundle, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
     ), patch.object(
-        bundle_group.api, "get_queue_parameter_definitions", return_value=[]
+        _submit_job_bundle, "_upload_attachments"
     ), patch.object(
-        bundle_group, "get_queue_user_boto3_session"
+        _submit_job_bundle.api, "get_boto3_session"
+    ), patch.object(
+        _submit_job_bundle.api, "get_queue_parameter_definitions", return_value=[]
+    ), patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):
@@ -536,16 +545,18 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
         }
         json.dump(data, f)
 
-    with patch.object(bundle_group, "get_boto3_client") as get_boto3_client_mock, patch.object(
+    with patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as get_boto3_client_mock, patch.object(
         _queue_parameters, "get_boto3_client"
     ) as qp_boto3_client_mock, patch.object(
-        bundle_group, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
+        _submit_job_bundle, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
     ), patch.object(
-        bundle_group, "_upload_attachments"
+        _submit_job_bundle, "_upload_attachments"
     ) as upload_attachments_mock, patch.object(
-        bundle_group.api, "get_boto3_session"
+        _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
-        bundle_group, "get_queue_user_boto3_session"
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_telemetry_client"
     ):

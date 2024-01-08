@@ -691,6 +691,7 @@ class S3AssetManager:
             ManifestVersion.v2023_03_03,
         }:
             paths: list[base_manifest.BaseManifestPath] = []
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(

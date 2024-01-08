@@ -208,7 +208,7 @@ class ProgressTracker:
                 # Logs progress message to the logger (if exists)
                 self._log_progress_message()
                 # Invokes the callback with current progress data
-                return self.report_progress()
+                return self._report_progress()
 
         self.track_progress_callback = track_progress
 
@@ -239,20 +239,22 @@ class ProgressTracker:
         """
         Adds the number and size of processed files.
         """
-        self._initialize_timestamps_if_none()
-        self.processed_files += num_files
-        self.completed_files_in_chunk += num_files
-        self.processed_bytes += file_bytes
+        with self._lock:
+            self._initialize_timestamps_if_none()
+            self.processed_files += num_files
+            self.completed_files_in_chunk += num_files
+            self.processed_bytes += file_bytes
 
     def increase_skipped(self, num_files: int = 1, file_bytes: int = 0) -> None:
         """
         Adds the number and size of skipped files.
         """
-        self.skipped_files += num_files
-        self.completed_files_in_chunk += num_files
-        self.skipped_bytes += file_bytes
+        with self._lock:
+            self.skipped_files += num_files
+            self.completed_files_in_chunk += num_files
+            self.skipped_bytes += file_bytes
 
-    def report_progress(self) -> bool:
+    def _report_progress(self) -> bool:
         """
         Invokes the callback with current progress metadata in one of the following cases:
         1. when a specific time interval has passed since the last call, (or since the
@@ -280,6 +282,10 @@ class ProgressTracker:
             self.last_report_time = current_time
             self.completed_files_in_chunk = 0
         return self.continue_reporting
+
+    def report_progress(self) -> bool:
+        with self._lock:
+            return self._report_progress()
 
     def _get_progress_report_metadata(self) -> ProgressReportMetadata:
         completed_bytes = self.processed_bytes + self.skipped_bytes

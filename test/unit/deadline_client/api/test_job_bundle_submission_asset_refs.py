@@ -242,7 +242,9 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         )
 
         # This is the function we're testing
-        api.create_job_from_job_bundle(temp_job_bundle_dir, job_parameters=job_parameters)
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir, job_parameters=job_parameters, queue_parameter_definitions=[]
+        )
 
         # The values of input_paths and output_paths are the first
         # thing this test needs to verify, confirming that the
