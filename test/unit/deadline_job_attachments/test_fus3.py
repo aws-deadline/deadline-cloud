@@ -647,8 +647,8 @@ class TestFus3Processmanager:
             pid_file_path = (tmp_path / FUS3_PID_FILE_NAME).resolve()
             with open(pid_file_path, "r") as pid_file:
                 pid_file_contents = pid_file.readlines()
-                assert f"{test_pid1}\n" in pid_file_contents
-                assert f"{test_pid2}\n" in pid_file_contents
+                assert f"{local_root1}:{test_pid1}:{manifest_path1}\n" in pid_file_contents
+                assert f"{local_root2}:{test_pid2}:{manifest_path2}\n" in pid_file_contents
 
             assert os.path.exists(local_root1)
             assert os.path.exists(local_root2)
@@ -659,13 +659,15 @@ class TestFus3Processmanager:
                 [
                     call(test_pid1, SIGTERM),
                     call(test_pid2, SIGTERM),
-                ]
+                ],
+                any_order=True,
             )
             mock_subprocess_run.assert_has_calls(
                 [
                     call(["/bin/pkill", "-P", str(test_pid1)]),
                     call(["/bin/pkill", "-P", str(test_pid2)]),
-                ]
+                ],
+                any_order=True,
             )
             with pytest.raises(FileNotFoundError):
                 open(pid_file_path, "r")
