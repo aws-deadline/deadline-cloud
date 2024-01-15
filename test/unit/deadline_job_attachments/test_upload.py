@@ -1657,7 +1657,7 @@ class TestUpload:
         the link.
 
         /tmp/source_folder/test.txt
-            /symlink-folder
+            /symlink_folder
         """
         # Given
         test_file = tmpdir.mkdir("source_folder").join("test.txt")

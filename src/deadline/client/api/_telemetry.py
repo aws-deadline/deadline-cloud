@@ -237,7 +237,25 @@ class TelemetryClient:
         # Possibility to add stack trace here
         self.record_event("com.amazon.rum.deadline.error", event_details)
 
-    def record_event(self, event_type: str, event_details: Dict[str, Any]):
+    def record_event(
+        self,
+        event_type: str,
+        event_details: Dict[str, Any],
+        farm_id: Optional[str] = None,
+        queue_id: Optional[str] = None,
+        job_id: Optional[str] = None,
+    ):
+        if farm_id or queue_id or job_id:
+            resource_ids = {}
+            if farm_id:
+                resource_ids["farm_id"] = farm_id
+            if queue_id:
+                resource_ids["queue_id"] = queue_id
+            if job_id:
+                resource_ids["job_id"] = job_id
+            if len(resource_ids) > 0:
+                event_details["resource_ids"] = resource_ids
+
         self._put_telemetry_record(
             TelemetryEvent(
                 event_type=event_type,
