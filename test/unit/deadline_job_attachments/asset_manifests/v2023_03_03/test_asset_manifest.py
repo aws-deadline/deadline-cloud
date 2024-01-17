@@ -7,6 +7,7 @@ from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import 
     AssetManifest,
     ManifestPath,
 )
+from deadline.job_attachments.asset_manifests import HashAlgorithm
 
 
 def test_encode():
@@ -14,7 +15,7 @@ def test_encode():
     Ensure the expected JSON string is returned from the encode function.
     """
     manifest = AssetManifest(
-        hash_alg="xxh128",
+        hash_alg=HashAlgorithm("xxh128"),
         total_size=10,
         paths=[
             ManifestPath(path="test_file", hash="a", size=1, mtime=167907934333848),
@@ -63,7 +64,7 @@ def test_decode(default_manifest_str_v2023_03_03: str):
     Ensure the expected AssetManifest is returned from the decode function.
     """
     expected = AssetManifest(
-        hash_alg="xxh128",
+        hash_alg=HashAlgorithm("xxh128"),
         total_size=10,
         paths=[
             ManifestPath(path="\r", hash="Carriage Return", size=1, mtime=1679079744833848),

@@ -23,6 +23,7 @@ import pytest
 from moto import mock_sts
 
 import deadline
+from deadline.job_attachments.asset_manifests import HashAlgorithm
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath as BaseManifestPath,
@@ -56,6 +57,7 @@ from deadline.job_attachments.models import (
     FileConflictResolution,
     Job,
     JobAttachmentS3Settings,
+    ManifestPathGroup,
     Queue,
 )
 from deadline.job_attachments.progress_tracker import (
@@ -83,63 +85,63 @@ class Manifest:
 
 MANIFESTS_v2022_03_03: List[Manifest] = [
     Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest1v2023-03-03_output.xxh128",
+        "job-1/step-1/task-1-1/session-action-9/manifest1v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test1","mtime":1234000000,"path":"test1.txt","size":1},'
         b'{"hash":"test2","mtime":1234000000,"path":"test/test2.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest2v2023-03-03_output.xxh128",
+        "job-1/step-1/task-1-1/session-action-9/manifest2v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test3","mtime":1234000000,"path":"test/test3.txt","size":1},'
         b'{"hash":"test4","mtime":1234000000,"path":"test4.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-1/task-1-1/session-action-1/manifest2v2023-03-03_output.xxh128",
+        "job-1/step-1/task-1-1/session-action-1/manifest2v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test3","mtime":1234000000,"path":"test/test33.txt","size":1},'
         b'{"hash":"test4","mtime":1234000000,"path":"test44.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-1/task-1-11/session-action-9/manifest7v2023-03-03_output.xxh128",
+        "job-1/step-1/task-1-11/session-action-9/manifest7v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test13","mtime":1234000000,"path":"test13.txt","size":1},'
         b'{"hash":"test14","mtime":1234000000,"path":"test/test14.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-1/task-1-2/session-action-9/manifest3v2023-03-03_output.xxh128",
+        "job-1/step-1/task-1-2/session-action-9/manifest3v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test5","mtime":1234000000,"path":"test5.txt","size":1},'
         b'{"hash":"test6","mtime":1234000000,"path":"test/test6.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-2/task-2-3/session-action-9/manifest4v2023-03-03_output.xxh128",
+        "job-1/step-2/task-2-3/session-action-9/manifest4v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test7","mtime":1234000000,"path":"test7.txt","size":1},'
         b'{"hash":"test8","mtime":1234000000,"path":"test/test8.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-2/task-2-3/session-action-9/manifest5v2023-03-03_output.xxh128",
+        "job-1/step-2/task-2-3/session-action-9/manifest5v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test9","mtime":1234000000,"path":"test/test9.txt","size":1},'
         b'{"hash":"test10","mtime":1234000000,"path":"test10.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-2/task-2-3/session-action-1/manifest5v2023-03-03_output.xxh128",
+        "job-1/step-2/task-2-3/session-action-1/manifest5v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test9","mtime":1234000000,"path":"test/test99.txt","size":1},'
         b'{"hash":"test100","mtime":1234000000,"path":"test10.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-2/task-2-4/session-action-9/manifest6v2023-03-03_output.xxh128",
+        "job-1/step-2/task-2-4/session-action-9/manifest6v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test11","mtime":1234000000,"path":"test11.txt","size":1},'
         b'{"hash":"test12","mtime":1234000000,"path":"test/test12.txt","size":1}],'
@@ -155,7 +157,7 @@ MANIFEST_VERSION_TO_MANIFESTS: dict[ManifestVersion, List[Manifest]] = {
 
 INPUT_ASSET_MANIFESTS_V2023_03_03: List[Manifest] = [
     Manifest(
-        "Inputs/0000/manifest_input.xxh128",
+        "Inputs/0000/manifest_input",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":['
         b'{"hash":"input1","mtime":1234000000,"path":"inputs/input1.txt","size":1},'
@@ -444,26 +446,33 @@ def assert_get_job_input_paths_by_asset_root(
     manifest_version: ManifestVersion,
 ):
     """
-    Assert that get_job_input_paths_by_asset_root returns a list of (hash, path) pairs of all asset files.
+    Assert that get_job_input_paths_by_asset_root returns a dict of (asset root, manifest path group) of all asset files.
     """
     with patch(
         f"{deadline.__package__}.job_attachments.download.get_job_output_paths_by_asset_root",
-        return_value=(
-            0,
-            {
-                "/tmp": [
-                    ManifestPathv2023_03_03(
-                        path="outputs/output.txt", hash="outputhash", size=100, mtime=1234567
-                    )
-                ]
-            },
-        ),
+        return_value={
+            "/tmp": ManifestPathGroup(
+                total_bytes=100,
+                files_by_hash_alg={
+                    HashAlgorithm.XXH128: [
+                        ManifestPathv2023_03_03(
+                            path="outputs/output.txt", hash="outputhash", size=100, mtime=1234567
+                        )
+                    ],
+                },
+            )
+        },
     ):
-        (total_bytes, assets) = get_job_input_paths_by_asset_root(
+        paths_by_root = get_job_input_paths_by_asset_root(
             s3_settings=s3_settings,
             attachments=attachments,
         )
-    assert assets == expected_files
+    assert len(paths_by_root) == len(expected_files)
+    total_bytes = 0
+    for root, path_group in paths_by_root.items():
+        assert len(path_group.files_by_hash_alg) == 1  # assume only one hash alg
+        assert path_group.files_by_hash_alg[HashAlgorithm.XXH128] == expected_files[root]
+        total_bytes += path_group.total_bytes
 
     assert total_bytes == expected_total_bytes
 
@@ -483,10 +492,16 @@ def assert_get_job_output_paths_by_asset_root(
         f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
         return_value="/test",
     ):
-        (total_bytes, outputs) = get_job_output_paths_by_asset_root(
+        paths_by_root = get_job_output_paths_by_asset_root(
             s3_settings=s3_settings, farm_id=farm_id, queue_id=queue_id, job_id="job-1"
         )
-    assert outputs == expected_files
+
+    assert len(paths_by_root) == len(expected_files)
+    total_bytes = 0
+    for root, path_group in paths_by_root.items():
+        assert len(path_group.files_by_hash_alg) == 1  # assume only one hash alg
+        assert path_group.files_by_hash_alg[HashAlgorithm.XXH128] == expected_files[root]
+        total_bytes += path_group.total_bytes
 
     assert total_bytes == expected_total_bytes
 
@@ -524,10 +539,17 @@ def assert_get_job_input_output_paths_by_asset_root(
         f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
         return_value="/tmp",
     ):
-        (total_bytes, paths_hashes) = get_job_input_output_paths_by_asset_root(
+        paths_by_root = get_job_input_output_paths_by_asset_root(
             s3_settings, attachments, farm_id, queue_id, "job-1"
         )
-    assert paths_hashes == expected_files
+
+    assert len(paths_by_root) == len(expected_files)
+    total_bytes = 0
+    for root, path_group in paths_by_root.items():
+        assert len(path_group.files_by_hash_alg) == 1  # assume only one hash alg
+        assert path_group.files_by_hash_alg[HashAlgorithm.XXH128] == expected_files[root]
+        if manifest_version == ManifestVersion.v2023_03_03:
+            total_bytes += path_group.total_bytes
 
     if manifest_version == ManifestVersion.v2023_03_03:
         assert total_bytes == expected_total_bytes
@@ -574,13 +596,13 @@ class TestFullDownload:
         for i in range(1, 15):
             bucket.upload_fileobj(
                 BytesIO(b"a"),
-                f"{self.job_attachment_settings.rootPrefix}/Data/test{i}",
+                f"{self.job_attachment_settings.rootPrefix}/Data/test{i}.xxh128",
             )
 
         for i in range(1, 6):
             bucket.upload_fileobj(
                 BytesIO(b"a"),
-                f"{self.job_attachment_settings.rootPrefix}/Data/input{i}",
+                f"{self.job_attachment_settings.rootPrefix}/Data/input{i}.xxh128",
             )
 
         for manifest in MANIFEST_VERSION_TO_MANIFESTS[manifest_version]:
@@ -1154,20 +1176,20 @@ class TestFullDownload:
 
         assert output_downloader.get_output_paths_by_root() == {
             str(tmp_path.resolve()): [
-                "test1.txt",
+                "test/test12.txt",
+                "test/test14.txt",
                 "test/test2.txt",
                 "test/test3.txt",
-                "test4.txt",
-                "test13.txt",
-                "test/test14.txt",
-                "test5.txt",
                 "test/test6.txt",
-                "test7.txt",
                 "test/test8.txt",
                 "test/test9.txt",
+                "test1.txt",
                 "test10.txt",
                 "test11.txt",
-                "test/test12.txt",
+                "test13.txt",
+                "test4.txt",
+                "test5.txt",
+                "test7.txt",
             ]
         }
 
@@ -1194,20 +1216,20 @@ class TestFullDownload:
 
         assert output_downloader.get_output_paths_by_root() == {
             new_root_path: [
-                "test1.txt",
+                "test/test12.txt",
+                "test/test14.txt",
                 "test/test2.txt",
                 "test/test3.txt",
-                "test4.txt",
-                "test13.txt",
-                "test/test14.txt",
-                "test5.txt",
                 "test/test6.txt",
-                "test7.txt",
                 "test/test8.txt",
                 "test/test9.txt",
+                "test1.txt",
                 "test10.txt",
                 "test11.txt",
-                "test/test12.txt",
+                "test13.txt",
+                "test4.txt",
+                "test5.txt",
+                "test7.txt",
             ]
         }
 
@@ -1245,9 +1267,9 @@ class TestFullDownload:
 
         assert output_downloader.get_output_paths_by_root() == {
             str(tmp_path / "symlink_folder"): [
-                "test1.txt",
                 "test/test2.txt",
                 "test/test3.txt",
+                "test1.txt",
                 "test4.txt",
             ]
         }
@@ -1542,33 +1564,59 @@ class TestFullDownload:
         "outputs_by_root",
         [
             {
-                "/local/home": [
-                    ManifestPathv2023_03_03(path="../inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "/local/home": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="../inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "/local/home": [
-                    ManifestPathv2023_03_03(path="/inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "/local/home": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="/inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "home": [
-                    ManifestPathv2023_03_03(path="inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "home": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="/inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "/local/home": [
-                    ManifestPathv2023_03_03(path="////", hash="a", size=1, mtime=1),
-                ]
+                "/local/home": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(path="////", hash="a", size=1, mtime=1)
+                        ],
+                    },
+                ),
             },
         ],
     )
     def test_OutputDownloader_download_job_output_posix_invalid_file_path_fails(
-        self, farm_id, queue_id, outputs_by_root: dict[str, list[BaseManifestPath]]
+        self, farm_id, queue_id, outputs_by_root: dict[str, ManifestPathGroup]
     ):
         with patch(
             f"{deadline.__package__}.job_attachments.download.get_job_output_paths_by_asset_root",
-            return_value=(1, outputs_by_root),
+            return_value=outputs_by_root,
         ):
             output_downloader = OutputDownloader(
                 s3_settings=self.job_attachment_settings,
@@ -1591,33 +1639,59 @@ class TestFullDownload:
         "outputs_by_root",
         [
             {
-                "C:/Users": [
-                    ManifestPathv2023_03_03(path="../inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "C:/Users": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="../inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "C:/Users": [
-                    ManifestPathv2023_03_03(path="C:/inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "C:/Users": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="C:/inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "/C:": [
-                    ManifestPathv2023_03_03(path="inputs/input1.txt", hash="a", size=1, mtime=1),
-                ]
+                "/C:": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(
+                                path="inputs/input1.txt", hash="a", size=1, mtime=1
+                            )
+                        ],
+                    },
+                ),
             },
             {
-                "C:/Users": [
-                    ManifestPathv2023_03_03(path="////", hash="a", size=1, mtime=1),
-                ]
+                "C:/Users": ManifestPathGroup(
+                    total_bytes=1,
+                    files_by_hash_alg={
+                        HashAlgorithm.XXH128: [
+                            ManifestPathv2023_03_03(path="////", hash="a", size=1, mtime=1)
+                        ],
+                    },
+                ),
             },
         ],
     )
     def test_OutputDownloader_download_job_output_windows_invalid_file_path_fails(
-        self, farm_id, queue_id, outputs_by_root: dict[str, list[BaseManifestPath]]
+        self, farm_id, queue_id, outputs_by_root: dict[str, ManifestPathGroup]
     ):
         with patch(
             f"{deadline.__package__}.job_attachments.download.get_job_output_paths_by_asset_root",
-            return_value=(1, outputs_by_root),
+            return_value=outputs_by_root,
         ):
             output_downloader = OutputDownloader(
                 s3_settings=self.job_attachment_settings,
@@ -1746,14 +1820,19 @@ class TestFullDownload:
         ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(JobAttachmentsS3ClientError) as exc:
                 download_file(
-                    file_path, "/home/username/assets", "test-bucket", "rootPrefix/Data", s3_client
+                    file_path,
+                    HashAlgorithm.XXH128,
+                    "/home/username/assets",
+                    "test-bucket",
+                    "rootPrefix/Data",
+                    s3_client,
                 )
             assert isinstance(exc.value.__cause__, ClientError)
             assert (
                 exc.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
             )
             assert (
-                "Error downloading file in bucket 'test-bucket', Target key or prefix: 'rootPrefix/Data/input1', "
+                "Error downloading file in bucket 'test-bucket', Target key or prefix: 'rootPrefix/Data/input1.xxh128', "
                 "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(exc.value)
             failed_file_path = Path("/home/username/assets/inputs/input1.txt")
@@ -1796,7 +1875,7 @@ class TestFullDownloadPrefixesWithSlashes:
         for i in range(1, 15):
             bucket.upload_fileobj(
                 BytesIO(b"a"),
-                f"{self.queue.jobAttachmentSettings.rootPrefix}/Data/test{i}",
+                f"{self.queue.jobAttachmentSettings.rootPrefix}/Data/test{i}.xxh128",
             )
 
         for manifest in MANIFEST_VERSION_TO_MANIFESTS[manifest_version]:
@@ -2003,23 +2082,6 @@ def test_merge_asset_manifests(
     actual_merged_manifest = merge_asset_manifests(manifests)
 
     assert decode_manifest(json.dumps(merged_manifest)) == actual_merged_manifest
-
-
-def test_merge_asset_manifests_different_hashes(
-    test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
-):
-    """
-    Test that merging two manifests with different hash algorithms raises an exception
-    """
-    manifests: list[BaseAssetManifest] = [
-        decode_manifest(json.dumps(test_manifest_one)),
-        decode_manifest(json.dumps(test_manifest_two)),
-    ]
-
-    manifests[1].hashAlg = "crc"
-
-    with pytest.raises(NotImplementedError):
-        merge_asset_manifests(manifests)
 
 
 def test_merge_asset_manifests_empty():

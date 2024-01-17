@@ -1,17 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import datetime
-import io
 import os
 from hashlib import shake_256
 from pathlib import Path
 from typing import Optional, Tuple, Union
 import uuid
-import xxhash
+
 
 __all__ = [
-    "_hash_file",
-    "_hash_data",
     "_join_s3_paths",
     "_generate_random_guid",
     "_float_to_iso_datetime_string",
@@ -24,23 +21,6 @@ __all__ = [
 
 CONFIG_ROOT = ".deadline"
 COMPONENT_NAME = "job_attachments"
-
-
-def _hash_file(file_path: str) -> str:
-    with open(file_path, "rb") as file:
-        hasher = xxhash.xxh3_128()
-        while True:
-            chunk = file.read(io.DEFAULT_BUFFER_SIZE)
-            if not chunk:
-                break
-            hasher.update(chunk)
-        return hasher.hexdigest()
-
-
-def _hash_data(data: bytes) -> str:
-    hasher = xxhash.xxh3_128()
-    hasher.update(data)
-    return hasher.hexdigest()
 
 
 def _join_s3_paths(root: str, *args: str):
