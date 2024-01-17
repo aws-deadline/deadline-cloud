@@ -117,7 +117,7 @@ class Fus3ProcessManager(object):
     @classmethod
     def kill_process_at_mount(cls, session_dir: Path, mount_point: str) -> bool:
         """
-        Kill the VFS instance running at the given mount_point and modify the VFS pip tracking
+        Kill the VFS instance running at the given mount_point and modify the VFS pid tracking
         file to remove the entry.
 
         :param session_dir: tmp directory for session
@@ -135,23 +135,29 @@ class Fus3ProcessManager(object):
             with open(pid_file_path, "w") as file:
                 for line in lines:
                     line = line.strip()
-                    mount_for_pid, pid, manifest_path = line.split(":")
-                    if mount_for_pid == mount_point:
-                        log.info(f"Sending SIGTERM to child processes of {pid}.")
-                        subprocess.run(["/bin/pkill", "-P", pid])
-                        log.info(f"Sending SIGTERM to {pid}.")
-                        try:
-                            os.kill(int(pid), SIGTERM)
-                        except OSError as e:
-                            # This is raised when the Fus3 process has already terminated.
-                            # This shouldn't happen, but won't cause an error if ignored
-                            if e.errno == 3:
-                                log.error(f"No process found for {pid}")
-                        mount_point_found = True
-                    else:
+                    if mount_point_found:
                         file.write(line)
-
-            os.remove(pid_file_path)
+                    else:
+                        mount_for_pid, pid, manifest_path = line.split(":")
+                        if mount_for_pid == mount_point:
+                            log.info(f"Sending SIGTERM to child processes of {pid}.")
+                            subprocess.run(["/bin/pkill", "-P", pid])
+                            log.info(f"Sending SIGTERM to {pid}.")
+                            try:
+                                os.kill(int(pid), SIGTERM)
+                            except OSError as e:
+                                # This is raised when the Fus3 process has already terminated.
+                                # This shouldn't happen, but won't cause an error if ignored
+                                if e.errno == 3:
+                                    log.error(f"No process found for {pid}")
+                                else:
+                                    log.error(
+                                        f"{e} when attempting to kill VFS process at {mount_for_pid}"
+                                    )
+                                    raise e
+                            mount_point_found = True
+                        else:
+                            file.write(line)
         except FileNotFoundError:
             log.warning(f"Fus3 pid file not found at {pid_file_path}")
             return False
@@ -174,8 +180,12 @@ class Fus3ProcessManager(object):
                 for line in file.readlines():
                     line = line.strip()
                     mount_for_pid, pid, manifest_path = line.split(":")
-                    if mount_for_pid in mount_point:
-                        return Path(manifest_path)
+                    if mount_for_pid == mount_point:
+                        if os.path.exists(manifest_path):
+                            return Path(manifest_path)
+                        else:
+                            log.warn(f"Expected VFS input manifest at {manifest_path}")
+                            return None
         except FileNotFoundError:
             log.warning(f"Fus3 pid file not found at {pid_file_path}")
 
@@ -453,17 +463,22 @@ class Fus3ProcessManager(object):
             log.error("Failed to mount, shutting down")
             raise Fus3FailedToMountError
 
-        pid_file_path = (session_dir / FUS3_PID_FILE_NAME).resolve()
         try:
+            # if the pid file exists, add the new VFS instance and remove any it replaced
             pid_file_path = (session_dir / FUS3_PID_FILE_NAME).resolve()
             with open(pid_file_path, "r") as file:
                 lines = file.readlines()
             with open(pid_file_path, "w") as file:
                 file.write(f"{self._mount_point}:{self._fus3_proc.pid}:{self._manifest_path}\n")
                 for line in lines:
-                    if self._mount_point not in line:
+                    line = line.strip()
+                    entry_mount_point, entry_pid, entry_manifest_path = line.split(":")
+                    if self._mount_point != entry_mount_point:
                         file.write(f"{line}\n")
+                    else:
+                        log.warning(f"Pid {entry_pid} entry not removed at {entry_mount_point}")
         except FileNotFoundError:
+            # if the pid file doesn't exist, this will create it
             with open(pid_file_path, "a") as file:
                 file.write(f"{self._mount_point}:{self._fus3_proc.pid}:{self._manifest_path}")
 
