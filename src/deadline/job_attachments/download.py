@@ -764,6 +764,44 @@ def write_manifest_to_temp_file(manifest: BaseAssetManifest) -> str:
         return file.name
 
 
+def handle_existing_vfs(
+    manifest: BaseAssetManifest, session_dir: Path, mount_point: str
+) -> BaseAssetManifest:
+    """
+    Combines provided manifest with the input manifest of the running VFS at the
+    given mount_point if it exists. Then kills the running process at that mount so
+    it can be replaced
+
+    Args:
+        manifests (BaseAssetManifest): The manifest for the new inputs to be mounted
+        mount_point (str): The local directory where the manifest is to be mounted
+
+    Returns:
+        BaseAssetManifest : A single manifest containing the merged paths or the original manifest
+    """
+    if not os.path.ismount(mount_point):
+        return manifest
+
+    input_manifest_path: Optional[Path] = Fus3ProcessManager.get_manifest_path_for_mount(
+        session_dir=session_dir, mount_point=mount_point
+    )
+    if input_manifest_path is not None:
+        with open(input_manifest_path) as input_manifest_file:
+            input_manifest: BaseAssetManifest = decode_manifest(input_manifest_file.read())
+
+        merged_input_manifest: Optional[BaseAssetManifest] = merge_asset_manifests(
+            [input_manifest, manifest]
+        )
+        manifest = merged_input_manifest if merged_input_manifest is not None else manifest
+    else:
+        download_logger.error(f"input manifest not found for mount at {mount_point}")
+        return manifest
+
+    Fus3ProcessManager.kill_process_at_mount(session_dir=session_dir, mount_point=mount_point)
+
+    return manifest
+
+
 def mount_vfs_from_manifests(
     s3_bucket: str,
     manifests_by_root: dict[str, BaseAssetManifest],
@@ -789,19 +827,24 @@ def mount_vfs_from_manifests(
         None
     """
 
-    for local_download_dir, manifest in manifests_by_root.items():
-        # Write out a temporary file with the contents of the newly merged manifest
-        manifest_path: str = write_manifest_to_temp_file(manifest)
-
+    for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.
         _ensure_paths_within_directory(
-            local_download_dir, [path.path for path in manifest.paths]  # type: ignore
+            mount_point, [path.path for path in manifest.paths]  # type: ignore
         )
+
+        final_manifest: BaseAssetManifest = handle_existing_vfs(
+            manifest=manifest, session_dir=session_dir, mount_point=mount_point
+        )
+
+        # Write out a temporary file with the contents of the newly merged manifest
+        manifest_path: str = write_manifest_to_temp_file(final_manifest)
+
         vfs_manager: Fus3ProcessManager = Fus3ProcessManager(
             s3_bucket,
             boto3_session.region_name,
             manifest_path,
-            local_download_dir,
+            mount_point,
             os_user,
             os_env_vars,
             cas_prefix,

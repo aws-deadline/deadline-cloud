@@ -647,8 +647,8 @@ class TestFus3Processmanager:
             pid_file_path = (tmp_path / FUS3_PID_FILE_NAME).resolve()
             with open(pid_file_path, "r") as pid_file:
                 pid_file_contents = pid_file.readlines()
-                assert f"{test_pid1}\n" in pid_file_contents
-                assert f"{test_pid2}\n" in pid_file_contents
+                assert f"{local_root1}:{test_pid1}:{manifest_path1}\n" in pid_file_contents
+                assert f"{local_root2}:{test_pid2}:{manifest_path2}\n" in pid_file_contents
 
             assert os.path.exists(local_root1)
             assert os.path.exists(local_root2)
@@ -659,13 +659,15 @@ class TestFus3Processmanager:
                 [
                     call(test_pid1, SIGTERM),
                     call(test_pid2, SIGTERM),
-                ]
+                ],
+                any_order=True,
             )
             mock_subprocess_run.assert_has_calls(
                 [
                     call(["/bin/pkill", "-P", str(test_pid1)]),
                     call(["/bin/pkill", "-P", str(test_pid2)]),
-                ]
+                ],
+                any_order=True,
             )
             with pytest.raises(FileNotFoundError):
                 open(pid_file_path, "r")
@@ -751,3 +753,115 @@ class TestFus3Processmanager:
             # Verify all output was logged
             assert call_count == 3
             assert exception_count == 1
+
+    def test_pids_file_behavior(
+        self,
+        tmp_path: Path,
+    ):
+        # Test to verify the spawned process output is captured and redirected to log.info
+
+        session_dir: str = str(tmp_path)
+        dest_dir1: str = "assetroot-27bggh78dd2b568ab123"
+        local_root1: str = f"{session_dir}/{dest_dir1}"
+        manifest_path1: str = f"{local_root1}/manifest.json"
+        dest_dir2: str = "assetroot-27bggh78dd23131d221"
+        local_root2: str = f"{session_dir}/{dest_dir2}"
+        manifest_path2: str = f"{local_root2}/manifest.json"
+        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        test_pid1 = 12345
+        test_pid2 = 67890
+
+        # Create process managers
+        process_manager1: Fus3ProcessManager = Fus3ProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path1,
+            mount_point=local_root1,
+            os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
+        )
+        process_manager2: Fus3ProcessManager = Fus3ProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path2,
+            mount_point=local_root2,
+            os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3",
+            return_value="/test/directory/path",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.subprocess.Popen",
+        ) as mock_popen, patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.wait_for_mount",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.kill",
+        ) as mock_os_kill, patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.subprocess.run"
+        ) as mock_subprocess_run, patch(
+            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.fus3.os.path.ismount",
+            return_value=True,
+        ):
+            # start first mock fus3 process
+            mock_subprocess = MagicMock()
+            mock_subprocess.pid = test_pid1
+            mock_popen.return_value = mock_subprocess
+            process_manager1.start(tmp_path)
+
+            # Verify only the first processes' pid is written
+            assert Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root1
+            ) == Path(manifest_path1)
+            assert not Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root2
+            )
+
+            # start second mock fus3 process
+            mock_subprocess.pid = test_pid2
+            process_manager2.start(tmp_path)
+
+            # Verify both pids are written
+            assert Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root1
+            ) == Path(manifest_path1)
+            assert Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root2
+            ) == Path(manifest_path2)
+
+            # Verify killing process 1 removes pid entry
+            assert Fus3ProcessManager.kill_process_at_mount(
+                session_dir=tmp_path, mount_point=local_root1
+            )
+            mock_os_kill.assert_called_once_with(test_pid1, SIGTERM)
+            assert not Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root1
+            )
+            assert Fus3ProcessManager.get_manifest_path_for_mount(
+                session_dir=tmp_path, mount_point=local_root2
+            ) == Path(manifest_path2)
+
+            Fus3ProcessManager.kill_all_processes(tmp_path)
+
+            mock_os_kill.assert_has_calls(
+                [
+                    call(test_pid1, SIGTERM),
+                    call(test_pid2, SIGTERM),
+                ],
+                any_order=True,
+            )
+            mock_subprocess_run.assert_has_calls(
+                [
+                    call(["/bin/pkill", "-P", str(test_pid1)]),
+                    call(["/bin/pkill", "-P", str(test_pid2)]),
+                ],
+                any_order=True,
+            )
