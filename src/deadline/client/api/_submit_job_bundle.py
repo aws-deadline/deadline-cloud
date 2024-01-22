@@ -23,6 +23,7 @@ from ..job_bundle.loader import (
     read_yaml_or_json,
     read_yaml_or_json_object,
     parse_yaml_or_json_content,
+    validate_directory_symlink_containment,
 )
 from ..job_bundle.parameters import (
     apply_job_parameters,
@@ -33,6 +34,7 @@ from ..job_bundle.parameters import (
 from ..job_bundle.submission import AssetReferences, split_parameter_args
 from ...job_attachments.models import (
     JobAttachmentsFileSystem,
+    AssetRootGroup,
     AssetRootManifest,
     JobAttachmentS3Settings,
 )
@@ -55,8 +57,8 @@ def create_job_from_job_bundle(
     max_retries_per_task: Optional[int] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
     decide_cancel_submission_callback: Callable[
-        [AssetReferences, SummaryStatistics], bool
-    ] = lambda ar, hs: False,
+        [dict[str, int], int, int], bool
+    ] = lambda paths, files, bytes: False,
     hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
@@ -117,7 +119,7 @@ def create_job_from_job_bundle(
         max_retries_per_task (int, optional): explicit value for the maximum retries per task.
         print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
                 Used in the CLI to print to stdout using click.echo. By default ignores messages.
-        decide_cancel_submission_callback (Callable AssetReferences, SummaryStatstics -> bool): If the job has job
+        decide_cancel_submission_callback (Callable dict[str, int], int, int -> bool): If the job has job
                 attachments, decide whether or not to cancel the submission given what assets will
                 or will not be uploaded. If returns true, the submission is canceled. If False,
                 the submission continues. By default the submission always continues.
@@ -127,6 +129,9 @@ def create_job_from_job_bundle(
                 is to not cancel the operation. hashing_progress_callback and upload_progress_callback both recieve
                 ProgressReport as a parameter, which can be used for projecting remaining time, as in done in the CLI.
     """
+
+    # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
+    validate_directory_symlink_containment(job_bundle_dir)
 
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
@@ -223,17 +228,30 @@ def create_job_from_job_bundle(
             session=queue_role_session,
         )
 
-        hash_summary, asset_manifests = _hash_attachments(
-            asset_manager=asset_manager,
-            asset_references=asset_references,
+        upload_group = asset_manager.prepare_paths_for_upload(
+            job_bundle_path=job_bundle_dir,
+            input_paths=sorted(asset_references.input_filenames),
+            output_paths=sorted(asset_references.output_directories),
+            referenced_paths=sorted(asset_references.referenced_paths),
             storage_profile_id=storage_profile_id,
+        )
+
+        if decide_cancel_submission_callback(
+            upload_group.num_outside_files_by_root,
+            upload_group.total_input_files,
+            upload_group.total_input_bytes,
+        ):
+            print_function_callback("Job submission canceled.")
+            return None
+
+        _, asset_manifests = _hash_attachments(
+            asset_manager=asset_manager,
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
             print_function_callback=print_function_callback,
             hashing_progress_callback=hashing_progress_callback,
         )
-
-        if decide_cancel_submission_callback(asset_references, hash_summary):
-            print_function_callback("Job submission canceled.")
-            return None
 
         attachment_settings = _upload_attachments(
             asset_manager, asset_manifests, print_function_callback, upload_progress_callback
@@ -338,8 +356,9 @@ def wait_for_create_job_to_complete(
 
 def _hash_attachments(
     asset_manager: S3AssetManager,
-    asset_references: AssetReferences,
-    storage_profile_id: Optional[str] = None,
+    asset_groups: list[AssetRootGroup],
+    total_input_files: int,
+    total_input_bytes: int,
     print_function_callback: Callable = lambda msg: None,
     hashing_progress_callback: Optional[Callable] = None,
     config: Optional[ConfigParser] = None,
@@ -356,10 +375,9 @@ def _hash_attachments(
         hashing_progress_callback = _default_update_hash_progress
 
     hashing_summary, manifests = asset_manager.hash_assets_and_create_manifest(
-        input_paths=sorted(asset_references.input_filenames),
-        output_paths=sorted(asset_references.output_directories),
-        referenced_paths=sorted(asset_references.referenced_paths),
-        storage_profile_id=storage_profile_id,
+        asset_groups=asset_groups,
+        total_input_files=total_input_files,
+        total_input_bytes=total_input_bytes,
         hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
         on_preparing_to_submit=hashing_progress_callback,
     )

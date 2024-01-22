@@ -8,12 +8,16 @@ relative default paths into absolute paths rooted in the job bundle.
 
 import json
 import os
+import sys
 
 import pytest
 import yaml
 
 from deadline.client.exceptions import DeadlineOperationError
-from deadline.client.job_bundle.loader import parse_yaml_or_json_content
+from deadline.client.job_bundle.loader import (
+    parse_yaml_or_json_content,
+    validate_directory_symlink_containment,
+)
 from deadline.client.job_bundle.parameters import read_job_bundle_parameters
 
 JOB_TEMPLATE_WITH_PARAMETERS_2023_09 = """
@@ -187,3 +191,48 @@ def test_parse_yaml_or_json_content_fail(content, type):
     """Test success cases of parsing YAML and JSON"""
     with pytest.raises(DeadlineOperationError):
         parse_yaml_or_json_content(content, type, "", "")
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows requires Admin to create symlinks, skipping this test.",
+)
+def test_validate_directory_symlink_containment_success(tmpdir):
+    """Test success cases for processing the job bundle from a given directory"""
+    test_root = tmpdir.mkdir("root_dir")
+    root_file = test_root.join("root_file.txt")
+    root_file.write("test data")
+
+    target_dir = test_root.mkdir("target_dir")
+    target_file = target_dir.join("target_file.txt")
+    target_file.write("this is the target")
+
+    os.symlink(target_dir, test_root.join("symlink_dir"), target_is_directory=True)
+    os.symlink(target_file, test_root.join("symlink_file.txt"))
+
+    validate_directory_symlink_containment(str(test_root))
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows requires Admin to create symlinks, skipping this test.",
+)
+def test_validate_directory_symlink_containment_fail(tmpdir):
+    """Test failure cases for processing the job bundle from a given directory"""
+    test_root = tmpdir.mkdir("root_dir")
+    root_file = test_root.join("root_file.txt")
+    root_file.write("test data")
+
+    target_dir = tmpdir.mkdir("target_dir")
+    target_file = target_dir.join("target_file.txt")
+    target_file.write("this is the target")
+
+    symlink_dir = test_root.join("symlink_dir")
+    os.symlink(target_dir, test_root.join("symlink_dir"), target_is_directory=True)
+    with pytest.raises(DeadlineOperationError):
+        validate_directory_symlink_containment(str(test_root))
+    os.unlink(symlink_dir)
+
+    os.symlink(target_file, test_root.join("symlink_file.txt"))
+    with pytest.raises(DeadlineOperationError):
+        validate_directory_symlink_containment(str(test_root))

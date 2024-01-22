@@ -6,15 +6,39 @@ __all__ = [
     "read_yaml_or_json",
     "read_yaml_or_json_object",
     "parse_yaml_or_json_content",
+    "validate_directory_symlink_containment",
 ]
 
 import json
 import os
+from itertools import chain
 from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
 from ..exceptions import DeadlineOperationError
+
+
+def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
+    """
+    Validates the integrity of the job bundle, validating that all files
+    contained in the job bundle resolve inside of the job bundle directory.
+    """
+    # The job bundle could itself be a symlink dir
+    resolved_root = os.path.realpath(job_bundle_dir)
+    if not os.path.isdir(resolved_root):
+        raise DeadlineOperationError(
+            f"Job bundle path provided is not a directory:\n{job_bundle_dir}"
+        )
+    for root_dir, dir_names, file_names in os.walk(resolved_root):
+        for path in chain(dir_names, file_names):
+            norm_path = os.path.normpath(os.path.join(root_dir, path))
+            resolved_path = os.path.realpath(norm_path)
+            common_path = os.path.commonpath([resolved_root, resolved_path])
+            if common_path != resolved_root:
+                raise DeadlineOperationError(
+                    f"Job bundle cannot contain a path that resolves outside of the resolved bundle directory:\n{resolved_root}\n\nPath in bundle:\n{norm_path}\nResolves to:\n{resolved_path}"
+                )
 
 
 def read_yaml_or_json(job_bundle_dir: str, filename: str, required: bool) -> Tuple[str, str]:
