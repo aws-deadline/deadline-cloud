@@ -7,10 +7,15 @@ from dataclasses import dataclass
 from typing import Any, Type
 
 from .._canonical_json import canonical_path_comparator, manifest_to_canonical_json_string
-from ..base_manifest import BaseAssetManifest
-from ..base_manifest import BaseManifestPath
+from ..base_manifest import BaseAssetManifest, BaseManifestPath
+from ..hash_algorithms import HashAlgorithm
 from ..manifest_model import BaseManifestModel
 from ..versions import ManifestVersion
+from ...exceptions import ManifestDecodeValidationError
+
+
+SUPPORTED_HASH_ALGS: set[HashAlgorithm] = {HashAlgorithm.XXH128}
+DEFAULT_HASH_ALG: HashAlgorithm = HashAlgorithm.XXH128
 
 
 @dataclass
@@ -31,7 +36,14 @@ class AssetManifest(BaseAssetManifest):
 
     totalSize: int  # pyline: disable=invalid-name
 
-    def __init__(self, *, hash_alg: str, paths: list[BaseManifestPath], total_size: int) -> None:
+    def __init__(
+        self, *, hash_alg: HashAlgorithm, paths: list[BaseManifestPath], total_size: int
+    ) -> None:
+        if hash_alg not in SUPPORTED_HASH_ALGS:
+            raise ManifestDecodeValidationError(
+                f"Unsupported hashing algorithm: {hash_alg}. Must be one of: {[e.value for e in SUPPORTED_HASH_ALGS]}"
+            )
+
         super().__init__(hash_alg=hash_alg, paths=paths)
         self.totalSize = total_size
         self.manifestVersion = ManifestVersion.v2023_03_03
@@ -42,8 +54,15 @@ class AssetManifest(BaseAssetManifest):
         Return an instance of this class given a manifest dictionary.
         Assumes the manifest has been validated prior to calling.
         """
+        try:
+            hash_alg: HashAlgorithm = HashAlgorithm(manifest_data["hashAlg"])
+        except ValueError:
+            raise ManifestDecodeValidationError(
+                f"Unsupported hashing algorithm: {hash_alg}. Must be one of: {[e.value for e in SUPPORTED_HASH_ALGS]}"
+            )
+
         return cls(
-            hash_alg=manifest_data["hashAlg"],
+            hash_alg=hash_alg,
             paths=[
                 ManifestPath(
                     path=path["path"], hash=path["hash"], size=path["size"], mtime=path["mtime"]
@@ -52,6 +71,11 @@ class AssetManifest(BaseAssetManifest):
             ],
             total_size=manifest_data["totalSize"],
         )
+
+    @classmethod
+    def get_default_hash_alg(cls) -> HashAlgorithm:  # pragma: no cover
+        """Returns the default hashing algorithm for the Asset Manifest, represented as a string"""
+        return DEFAULT_HASH_ALG
 
     def encode(self) -> str:
         """

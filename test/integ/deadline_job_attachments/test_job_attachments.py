@@ -17,7 +17,12 @@ from deadline_test_fixtures.job_attachment_manager import JobAttachmentManager
 from pytest import LogCaptureFixture, TempPathFactory
 
 from deadline.job_attachments import asset_sync, download, upload
-from deadline.job_attachments.asset_manifests import ManifestVersion
+from deadline.job_attachments.asset_manifests import (
+    ManifestVersion,
+    HashAlgorithm,
+    hash_data,
+    hash_file,
+)
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import AssetSyncError, JobAttachmentsS3ClientError
 from deadline.job_attachments.models import (
@@ -28,8 +33,6 @@ from deadline.job_attachments.models import (
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
     _get_unique_dest_dir_name,
-    _hash_data,
-    _hash_file,
 )
 
 
@@ -47,7 +50,7 @@ class JobAttachmentTest:
     OUTPUT_PATH = ASSET_ROOT / "outputs"
     INPUT_PATH = ASSET_ROOT / "inputs"
     SCENE_MA_PATH = INPUT_PATH / "scene.ma"
-    SCENE_MA_HASH = _hash_file(str(SCENE_MA_PATH))
+    SCENE_MA_HASH = hash_file(str(SCENE_MA_PATH), HashAlgorithm.XXH128)
     BRICK_PNG_PATH = INPUT_PATH / "textures" / "brick.png"
     CLOTH_PNG_PATH = INPUT_PATH / "textures" / "cloth.png"
     FIRST_RENDER_OUTPUT_PATH = Path("outputs/render0000.exr")
@@ -151,7 +154,7 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
 
     # THEN
     scene_ma_s3_path = (
-        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}"
+        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}.xxh128"
     )
 
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
@@ -197,7 +200,7 @@ def upload_input_files_one_asset_in_cas(
     ]
 
     scene_ma_s3_path = (
-        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}"
+        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}.xxh128"
     )
 
     # This file has already been uploaded
@@ -220,11 +223,11 @@ def upload_input_files_one_asset_in_cas(
     )
 
     # THEN
-    brick_png_hash = _hash_file(str(job_attachment_test.BRICK_PNG_PATH))
-    cloth_png_hash = _hash_file(str(job_attachment_test.CLOTH_PNG_PATH))
+    brick_png_hash = hash_file(str(job_attachment_test.BRICK_PNG_PATH), HashAlgorithm.XXH128)
+    cloth_png_hash = hash_file(str(job_attachment_test.CLOTH_PNG_PATH), HashAlgorithm.XXH128)
 
-    brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}"
-    cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}"
+    brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}.xxh128"
+    cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}.xxh128"
 
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
         Prefix=f"{job_attachment_settings.full_cas_prefix()}/",
@@ -801,11 +804,11 @@ def sync_outputs(
     object_key_set = set(obj.key for obj in object_summary_iterator)
 
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{_hash_file(str(file_to_be_synced_step0_task0))}"
+        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_to_be_synced_step0_task0), HashAlgorithm.XXH128)}.xxh128"
         in object_key_set
     )
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{_hash_file(str(file_not_to_be_synced))}"
+        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_not_to_be_synced), HashAlgorithm.XXH128)}.xxh128"
         not in object_key_set
     )
 
@@ -1111,8 +1114,10 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
         raise TypeError("Asset manifest must be set for this test.")
 
     mock_host_path_format_name = PathFormat.get_host_path_format_string()
-    asset_root_hash = _hash_data(str(job_attachment_test.INPUT_PATH).encode())
-    manifest_hash = _hash_data(bytes(manifests[0].asset_manifest.encode(), "utf-8"))
+    asset_root_hash = hash_data(str(job_attachment_test.INPUT_PATH).encode(), HashAlgorithm.XXH128)
+    manifest_hash = hash_data(
+        bytes(manifests[0].asset_manifest.encode(), "utf-8"), HashAlgorithm.XXH128
+    )
 
     assert len(attachments.manifests) == 1
     assert attachments.manifests[0].fileSystemLocationName is None
@@ -1123,7 +1128,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     assert attachments.manifests[0].inputManifestPath.startswith(
         f"{job_attachment_test.farm_id}/{job_attachment_test.queue_id}/Inputs/"
     )
-    assert attachments.manifests[0].inputManifestPath.endswith(f"/{asset_root_hash}_input.xxh128")
+    assert attachments.manifests[0].inputManifestPath.endswith(f"/{asset_root_hash}_input")
     assert attachments.manifests[0].inputManifestHash == manifest_hash
 
 

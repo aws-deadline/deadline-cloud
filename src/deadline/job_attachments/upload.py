@@ -26,6 +26,9 @@ from deadline.client.config import config_file
 from .asset_manifests import (
     BaseAssetManifest,
     BaseManifestModel,
+    HashAlgorithm,
+    hash_data,
+    hash_file,
     ManifestModelRegistry,
     ManifestVersion,
     base_manifest,
@@ -57,8 +60,6 @@ from .progress_tracker import (
     SummaryStatistics,
 )
 from ._utils import (
-    _hash_data,
-    _hash_file,
     _is_relative_to,
     _join_s3_paths,
 )
@@ -158,12 +159,13 @@ class S3AssetUploader:
             job_attachment_settings.full_cas_prefix(),
             progress_tracker,
         )
+        hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
 
-        manifest_name_prefix = _hash_data(
-            f"{file_system_location_name or ''}{str(source_root)}".encode()
+        manifest_name_prefix = hash_data(
+            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
         )
-        manifest_name = f"{manifest_name_prefix}_input.{manifest.hashAlg}"
+        manifest_name = f"{manifest_name_prefix}_input"
 
         if partial_manifest_prefix:
             partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -180,7 +182,7 @@ class S3AssetUploader:
             key=full_manifest_key,
         )
 
-        return (partial_manifest_key, _hash_data(manifest_bytes))
+        return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
 
     def upload_input_files(
         self,
@@ -210,12 +212,13 @@ class S3AssetUploader:
             # If different files have the same content (and thus the same hash), they are counted as skipped files.
             file_dict: dict[str, base_manifest.BaseManifestPath] = {}
             for file in files_to_upload:
-                if file.hash in file_dict and progress_tracker:
+                file_key = f"{file.hash}.{manifest.hashAlg.value}"
+                if file_key in file_dict and progress_tracker:
                     progress_tracker.increase_skipped(
                         1, (source_root.joinpath(file.path)).stat().st_size
                     )
                 else:
-                    file_dict[file.hash] = file
+                    file_dict[file_key] = file
 
             to_upload_set: set[str] = self.filter_objects_to_upload(
                 s3_bucket, s3_cas_prefix, set(file_dict.keys())
@@ -248,6 +251,7 @@ class S3AssetUploader:
                 executor.submit(
                     self.upload_object_to_cas,
                     file,
+                    manifest.hashAlg,
                     s3_bucket,
                     source_root,
                     s3_cas_prefix,
@@ -266,6 +270,7 @@ class S3AssetUploader:
         for file in large_file_queue:
             (is_uploaded, file_size) = self.upload_object_to_cas(
                 file,
+                manifest.hashAlg,
                 s3_bucket,
                 source_root,
                 s3_cas_prefix,
@@ -304,6 +309,7 @@ class S3AssetUploader:
     def upload_object_to_cas(
         self,
         file: base_manifest.BaseManifestPath,
+        hash_algorithm: HashAlgorithm,
         s3_bucket: str,
         source_root: Path,
         s3_cas_prefix: str,
@@ -316,10 +322,9 @@ class S3AssetUploader:
         Returns a tuple (whether it has been uploaded, the file size).
         """
         local_path = source_root.joinpath(file.path)
+        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
         if s3_cas_prefix:
-            s3_upload_key = _join_s3_paths(s3_cas_prefix, file.hash)
-        else:
-            s3_upload_key = file.hash
+            s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
         is_uploaded = False
         file_size = local_path.stat().st_size
 
@@ -593,8 +598,6 @@ class S3AssetManager:
     Asset handler that creates an asset manifest and uploads assets. Based on an S3 file system.
     """
 
-    _HASH_ALG = "xxh128"
-
     def __init__(
         self,
         farm_id: str,
@@ -641,22 +644,25 @@ class S3AssetManager:
         manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=self.manifest_version
         )
+        hash_alg: HashAlgorithm = manifest_model.AssetManifest.get_default_hash_alg()
 
         full_path = str(path.resolve())
         is_new_or_modified: bool = False
         actual_modified_time = str(datetime.fromtimestamp(path.stat().st_mtime))
 
-        entry: Optional[HashCacheEntry] = hash_cache.get_entry(full_path)
+        entry: Optional[HashCacheEntry] = hash_cache.get_entry(full_path, hash_alg)
         if entry is not None:
             # If the file was modified, we need to rehash it
             if actual_modified_time != entry.last_modified_time:
                 entry.last_modified_time = actual_modified_time
-                entry.file_hash = _hash_file(full_path)
+                entry.file_hash = hash_file(full_path, hash_alg)
+                entry.hash_algorithm = hash_alg
                 is_new_or_modified = True
         else:
             entry = HashCacheEntry(
                 file_path=full_path,
-                file_hash=_hash_file(full_path),
+                hash_algorithm=hash_alg,
+                file_hash=hash_file(full_path, hash_alg),
                 last_modified_time=actual_modified_time,
             )
             is_new_or_modified = True
@@ -712,7 +718,10 @@ class S3AssetManager:
             # Need to sort the list to keep it canonical
             paths.sort(key=lambda x: x.path, reverse=True)
 
-            manifest_args: dict[str, Any] = {"hash_alg": self._HASH_ALG, "paths": paths}
+            manifest_args: dict[str, Any] = {
+                "hash_alg": manifest_model.AssetManifest.get_default_hash_alg(),
+                "paths": paths,
+            }
 
             manifest_args["total_size"] = sum([path.size for path in paths])
 

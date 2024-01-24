@@ -26,6 +26,7 @@ from deadline.client import config
 from deadline.job_attachments.asset_manifests import (
     BaseManifestModel,
     BaseManifestPath,
+    HashAlgorithm,
     ManifestVersion,
 )
 from deadline.job_attachments.exceptions import (
@@ -133,10 +134,10 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["e", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file",
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect={
                 str(scene_file): "a",
                 str(texture_file): "b",
@@ -195,7 +196,7 @@ class TestUpload:
                     ManifestProperties(
                         rootPath=asset_root,
                         rootPathFormat=PathFormat.POSIX,
-                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
+                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/e_input",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=[
                             ".",
@@ -213,7 +214,7 @@ class TestUpload:
                     {
                         "rootPath": f"{asset_root}",
                         "rootPathFormat": PathFormat("posix").value,
-                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
+                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/e_input",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": [
                             ".",
@@ -224,10 +225,7 @@ class TestUpload:
                 ],
             }
 
-            assert (
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128"
-                in caplog.text
-            )
+            assert f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input" in caplog.text
 
             assert_progress_report_last_callback(
                 num_input_files=4,
@@ -260,17 +258,17 @@ class TestUpload:
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={
-                    f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/b",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/c",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/d",
+                    f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/b.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/c.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/d.xxh128",
                 },
             )
 
             assert_canonical_manifest(
                 bucket,
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input.xxh128",
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input",
                 expected_manifest=expected_manifest,
             )
 
@@ -314,10 +312,10 @@ class TestUpload:
         cache_dir = tmpdir.mkdir("cache")
 
         with patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["b", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file",
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect={str(input_c): "a"}.get,
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
@@ -358,7 +356,7 @@ class TestUpload:
                     ManifestProperties(
                         rootPath=root_c,
                         rootPathFormat=PathFormat.WINDOWS,
-                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
+                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/b_input",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=[],
                     ),
@@ -378,7 +376,7 @@ class TestUpload:
                     {
                         "rootPath": f"{root_c}",
                         "rootPathFormat": PathFormat("windows").value,
-                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
+                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/b_input",
                         "inputManifestHash": "manifesthash",
                     },
                     {
@@ -391,10 +389,7 @@ class TestUpload:
                 ],
             }
 
-            assert (
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128"
-                in caplog.text
-            )
+            assert f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input" in caplog.text
 
             assert_progress_report_last_callback(
                 num_input_files=1,
@@ -427,14 +422,14 @@ class TestUpload:
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={
-                    f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
+                    f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
                 },
             )
 
             assert_canonical_manifest(
                 bucket,
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input.xxh128",
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input",
                 expected_manifest=expected_manifest,
             )
 
@@ -486,10 +481,10 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file",
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
@@ -534,7 +529,7 @@ class TestUpload:
                     ManifestProperties(
                         rootPath=asset_root,
                         rootPathFormat=PathFormat.POSIX,
-                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
+                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/c_input",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=["outputs"],
                     )
@@ -548,17 +543,14 @@ class TestUpload:
                     {
                         "rootPath": f"{asset_root}",
                         "rootPathFormat": PathFormat("posix").value,
-                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
+                        "inputManifestPath": f"{farm_id}/{queue_id}/Inputs/0000/c_input",
                         "inputManifestHash": "manifesthash",
                         "outputRelativeDirectories": ["outputs"],
                     }
                 ],
             }
 
-            assert (
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128"
-                in caplog.text
-            )
+            assert f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/c_input" in caplog.text
 
             assert_progress_report_last_callback(
                 num_input_files=num_input_files,
@@ -590,12 +582,12 @@ class TestUpload:
 
             expected_files = set(
                 [
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}"
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128"
                     for i in range(num_input_files)
                 ]
             )
             expected_files.add(
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/c_input.xxh128",
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/c_input",
             )
             assert_expected_files_on_s3(bucket, expected_files=expected_files)
 
@@ -645,10 +637,10 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file",
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect=lambda *args, **kwargs: "samehash",
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -736,7 +728,7 @@ class TestUpload:
         expected_total_uploaded_bytes = not_yet_uploaded_file.size()
         expected_total_input_bytes = expected_total_skipped_bytes + expected_total_uploaded_bytes
 
-        def mock_hash_file(file_path: str):
+        def mock_hash_file(file_path: str, hash_alg: HashAlgorithm):
             if file_path == already_uploaded_file:
                 return "existinghash"
             elif file_path == not_yet_uploaded_file:
@@ -747,13 +739,13 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=mock_hash_file
+            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=mock_hash_file
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
@@ -777,7 +769,7 @@ class TestUpload:
 
             # mock pre-uploading the file
             bucket.put_object(
-                Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash",
+                Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash.xxh128",
                 Body="a",
             )
 
@@ -803,7 +795,7 @@ class TestUpload:
             # Then
             assert "maya_scene.ma because it has already been uploaded to s3" in caplog.text
             assert (
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128"
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input"
                 in caplog.text
             )
 
@@ -833,9 +825,9 @@ class TestUpload:
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={
-                    f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/somethingnew",
+                    f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/somethingnew.xxh128",
                 },
             )
 
@@ -883,13 +875,13 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["manifesto", "manifesthash"],
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file",
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect=[str(i) for i in range(num_input_files)],
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
@@ -915,7 +907,7 @@ class TestUpload:
                 input_files.append(test_file)
                 # mock pre-uploading the file
                 bucket.put_object(
-                    Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}",
+                    Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128",
                     Body=f"test {i}",
                 )
 
@@ -943,7 +935,7 @@ class TestUpload:
 
             # Then
             assert (
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifesto_input.xxh128"
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifesto_input"
                 in caplog.text
             )
 
@@ -972,12 +964,12 @@ class TestUpload:
 
             expected_files = set(
                 [
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}"
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128"
                     for i in range(num_input_files)
                 ]
             )
             expected_files.add(
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifesto_input.xxh128",
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifesto_input",
             )
             assert_expected_files_on_s3(bucket, expected_files=expected_files)
 
@@ -1009,7 +1001,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["a", "manifesthash"],
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
@@ -1485,14 +1477,16 @@ class TestUpload:
         test_file = root_dir.join("test.txt")
         test_file.write("test")
         file_time = os.stat(test_file).st_mtime
-        expected_entry = HashCacheEntry(test_file, "b", str(datetime.fromtimestamp((file_time))))
+        expected_entry = HashCacheEntry(
+            test_file, HashAlgorithm.XXH128, "b", str(datetime.fromtimestamp((file_time)))
+        )
 
         # WHEN
-        test_entry = HashCacheEntry(test_file, "a", "123.45")
+        test_entry = HashCacheEntry(test_file, HashAlgorithm.XXH128, "a", "123.45")
         hash_cache = MagicMock()
         hash_cache.get_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["b"]):
+        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["b"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1522,11 +1516,11 @@ class TestUpload:
         file_bytes = test_file.size()
 
         # WHEN
-        test_entry = HashCacheEntry(test_file, "a", file_time)
+        test_entry = HashCacheEntry(test_file, HashAlgorithm.XXH128, "a", file_time)
         hash_cache = MagicMock()
         hash_cache.get_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]):
+        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1566,10 +1560,10 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]
+            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
         ):
             caplog.set_level(WARNING)
 
@@ -1683,10 +1677,10 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_data",
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload._hash_file", side_effect=["a"]
+            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
@@ -1724,7 +1718,7 @@ class TestUpload:
                     ManifestProperties(
                         rootPath=expected_root,
                         rootPathFormat=PathFormat.POSIX,
-                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
+                        inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/manifest_input",
                         inputManifestHash="manifesthash",
                         outputRelativeDirectories=["sym_op_test_dir"],
                     )
@@ -1764,14 +1758,14 @@ class TestUpload:
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={
-                    f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
+                    f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
                 },
             )
 
             assert_canonical_manifest(
                 bucket,
-                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input.xxh128",
+                f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
                 expected_manifest=expected_manifest,
             )
 

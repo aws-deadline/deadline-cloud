@@ -11,7 +11,11 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Set, Any
 
-from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
+from deadline.job_attachments.asset_manifests import HashAlgorithm
+from deadline.job_attachments.asset_manifests.base_manifest import (
+    BaseAssetManifest,
+    BaseManifestPath,
+)
 
 from deadline.job_attachments.exceptions import MissingS3RootPrefixError
 
@@ -47,16 +51,56 @@ class AssetRootGroup:
 
 
 @dataclass
+class ManifestPathGroup:
+    """
+    Represents paths combined from multiple manifests under the same root path, organized by hash algorithm.
+    """
+
+    total_bytes: int = 0
+    files_by_hash_alg: dict[HashAlgorithm, List[BaseManifestPath]] = field(default_factory=dict)
+
+    def add_manifest_to_group(self, manifest: BaseAssetManifest) -> None:
+        if manifest.hashAlg not in self.files_by_hash_alg:
+            self.files_by_hash_alg[manifest.hashAlg] = manifest.paths
+        else:
+            self.files_by_hash_alg[manifest.hashAlg].extend(manifest.paths)
+        self.total_bytes += manifest.totalSize  # type: ignore[attr-defined]
+
+    def combine_with_group(self, group: ManifestPathGroup) -> None:
+        """Adds the content of the given ManifestPathGroup to this ManifestPathGroup"""
+        for hash_alg, paths in group.files_by_hash_alg.items():
+            if hash_alg not in self.files_by_hash_alg:
+                self.files_by_hash_alg[hash_alg] = paths
+            else:
+                self.files_by_hash_alg[hash_alg].extend(paths)
+            self.total_bytes += group.total_bytes
+
+    def get_all_paths(self) -> list[str]:
+        """
+        Get all paths in this group, regardless of hashing algorithm.
+        Note that this may include duplicates if the same path exists for multiple hashing algorithms.
+
+        Returns a sorted list of paths represented as strings.
+        """
+        path_list: List[str] = []
+        for paths in self.files_by_hash_alg.values():
+            path_list.extend([path.path for path in paths])
+        return sorted(path_list)
+
+
+@dataclass
 class HashCacheEntry:
     """Represents an entry in the local hash-cache database"""
 
     file_path: str
+    hash_algorithm: HashAlgorithm
     file_hash: str
     last_modified_time: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "file_path": self.file_path,
+            "hash_algorithm": self.hash_algorithm.value,
             "file_hash": self.file_hash,
             "last_modified_time": self.last_modified_time,
         }

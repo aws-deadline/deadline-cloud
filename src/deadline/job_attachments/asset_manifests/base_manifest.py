@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
+from .hash_algorithms import HashAlgorithm
 from .versions import ManifestVersion
 
 
@@ -44,7 +45,7 @@ class BaseManifestPath(ABC):
 class BaseAssetManifest(ABC):
     """Base class for the Asset Manifest."""
 
-    hashAlg: str  # pylint: disable=invalid-name
+    hashAlg: HashAlgorithm
     paths: list[BaseManifestPath]
     manifestVersion: ManifestVersion
 
@@ -52,10 +53,18 @@ class BaseAssetManifest(ABC):
         self,
         *,
         paths: list[BaseManifestPath],
-        hash_alg: str,
+        hash_alg: HashAlgorithm,
     ):
         self.paths = paths
         self.hashAlg = hash_alg
+
+    @classmethod
+    @abstractmethod
+    def get_default_hash_alg(cls) -> HashAlgorithm:  # pragma: no cover
+        """Returns the default hashing algorithm for the Asset Manifest"""
+        raise NotImplementedError(
+            "Asset Manifest base class does not implement get_default_hash_alg"
+        )
 
     @classmethod
     @abstractmethod

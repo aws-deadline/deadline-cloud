@@ -482,19 +482,19 @@ class TestAssetSync:
         s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
         bucket = s3.Bucket(s3_settings.s3BucketName)
         bucket.put_object(
-            Key=f"{expected_cas_prefix}hash1",
+            Key=f"{expected_cas_prefix}hash1.xxh128",
             Body="a",
         )
         expected_metadata = s3.meta.client.head_object(
-            Bucket=s3_settings.s3BucketName, Key=f"{expected_cas_prefix}hash1"
+            Bucket=s3_settings.s3BucketName, Key=f"{expected_cas_prefix}hash1.xxh128"
         )
 
         # WHEN
         with patch(
-            f"{deadline.__package__}.job_attachments.asset_sync._hash_file",
+            f"{deadline.__package__}.job_attachments.asset_sync.hash_file",
             side_effect=["hash1", "hash2"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync._hash_data", side_effect=["hash3"]
+            f"{deadline.__package__}.job_attachments.asset_sync.hash_data", side_effect=["hash3"]
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[local_root],
@@ -539,21 +539,21 @@ class TestAssetSync:
 
             # THEN
             actual_metadata = s3.meta.client.head_object(
-                Bucket=s3_settings.s3BucketName, Key=f"{expected_cas_prefix}hash1"
+                Bucket=s3_settings.s3BucketName, Key=f"{expected_cas_prefix}hash1.xxh128"
             )
             assert actual_metadata["LastModified"] == expected_metadata["LastModified"]
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={
-                    f"{expected_cas_prefix}hash1",
-                    f"{expected_cas_prefix}hash2",
-                    f"{expected_output_prefix}hash3_output.xxh128",
+                    f"{expected_cas_prefix}hash1.xxh128",
+                    f"{expected_cas_prefix}hash2.xxh128",
+                    f"{expected_output_prefix}hash3_output",
                 },
             )
 
             assert_canonical_manifest(
                 bucket,
-                f"{expected_output_prefix}hash3_output.xxh128",
+                f"{expected_output_prefix}hash3_output",
                 expected_manifest='{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
                 f'"paths":[{{"hash":"hash2","mtime":{expected_sub_file_mtime},"path":"{expected_sub_file_rel_path}",'
                 f'"size":{expected_processed_bytes}}},'
@@ -665,7 +665,7 @@ class TestAssetSync:
                 ManifestProperties(
                     rootPath="/tmp",
                     rootPathFormat=PathFormat.POSIX,
-                    inputManifestPath="manifest_input.xxh128",
+                    inputManifestPath="manifest_input",
                     inputManifestHash="manifesthash",
                     outputRelativeDirectories=["test/outputs"],
                 ),
@@ -673,7 +673,7 @@ class TestAssetSync:
                     fileSystemLocationName="Movie 1",
                     rootPath="/home/user/movie1",
                     rootPathFormat=PathFormat.POSIX,
-                    inputManifestPath="manifest-movie1_input.xxh128",
+                    inputManifestPath="manifest-movie1_input",
                     inputManifestHash="manifestmovie1hash",
                     outputRelativeDirectories=["test/outputs"],
                 ),
@@ -690,8 +690,8 @@ class TestAssetSync:
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
             side_effect=[
-                f"{local_root}/manifest_input.xxh128",
-                f"{local_root}/manifest-movie1_input.xxh128",
+                f"{local_root}/manifest_input",
+                f"{local_root}/manifest-movie1_input",
             ],
         ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
