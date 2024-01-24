@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 
 import deadline
-from deadline.job_attachments.asset_manifests import decode, versions
+from deadline.job_attachments.asset_manifests import decode, versions, HashAlgorithm
 from deadline.job_attachments.asset_manifests.v2023_03_03 import (
     AssetManifest as AssetManifest_v2023_03_03,
 )
@@ -92,7 +92,7 @@ def test_decode_manifest_v2023_03_03(default_manifest_str_v2023_03_03: str):
     Test that a v2023-03-03 manifest string decodes to an AssetManifest object as expected.
     """
     expected_manifest = AssetManifest_v2023_03_03(
-        hash_alg="xxh128",
+        hash_alg=HashAlgorithm.XXH128,
         total_size=10,
         paths=[
             Path_v2023_03_03(path="\r", hash="Carriage Return", size=1, mtime=1679079744833848),

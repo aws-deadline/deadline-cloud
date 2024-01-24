@@ -9,11 +9,13 @@ import os
 from threading import Lock
 from typing import Optional
 
+from .asset_manifests.hash_algorithms import HashAlgorithm
 from .exceptions import JobAttachmentsError
 from .models import HashCacheEntry
 from ._utils import _get_default_hash_cache_db_file_dir
 
 CACHE_FILE_NAME = "hash_cache.db"
+CACHE_DB_VERSION = 2
 
 logger = logging.getLogger("Deadline")
 
@@ -65,11 +67,14 @@ class HashCache:
                 ) from oe
 
             try:
-                self.db_connection.execute("SELECT * FROM hashesV1")
+                self.db_connection.execute(f"SELECT * FROM hashesV{CACHE_DB_VERSION}")
             except Exception:
                 # DB file doesn't have our table, so we need to create it
+                logger.info(
+                    "No hash cache entries for the current library version were found. Creating a new hash cache."
+                )
                 self.db_connection.execute(
-                    "CREATE TABLE hashesV1(file_path text primary key, file_hash text, last_modified_time timestamp)"
+                    f"CREATE TABLE hashesV{CACHE_DB_VERSION}(file_path text primary key, hash_algorithm text secondary key, file_hash text, last_modified_time timestamp)"
                 )
         return self
 
@@ -78,7 +83,9 @@ class HashCache:
         if self.enabled:
             self.db_connection.close()
 
-    def get_entry(self, file_path_key: str) -> Optional[HashCacheEntry]:
+    def get_entry(
+        self, file_path_key: str, hash_algorithm: HashAlgorithm
+    ) -> Optional[HashCacheEntry]:
         """
         Returns an entry from the hash cache, if it exists.
         """
@@ -87,13 +94,15 @@ class HashCache:
 
         with self.db_lock, self.db_connection:
             entry_vals = self.db_connection.execute(
-                "SELECT * FROM hashesV1 WHERE file_path=?", [file_path_key]
+                f"SELECT * FROM hashesV{CACHE_DB_VERSION} WHERE file_path=? AND hash_algorithm=?",
+                [file_path_key, hash_algorithm.value],
             ).fetchone()
             if entry_vals:
                 return HashCacheEntry(
                     file_path=entry_vals[0],
-                    file_hash=entry_vals[1],
-                    last_modified_time=str(entry_vals[2]),
+                    hash_algorithm=HashAlgorithm(entry_vals[1]),
+                    file_hash=entry_vals[2],
+                    last_modified_time=str(entry_vals[3]),
                 )
             else:
                 return None
@@ -103,6 +112,6 @@ class HashCache:
         if self.enabled:
             with self.db_lock, self.db_connection:
                 self.db_connection.execute(
-                    "INSERT OR REPLACE INTO hashesV1 VALUES(:file_path, :file_hash, :last_modified_time)",
+                    f"INSERT OR REPLACE INTO hashesV{CACHE_DB_VERSION} VALUES(:file_path, :hash_algorithm, :file_hash, :last_modified_time)",
                     entry.to_dict(),
                 )

@@ -23,6 +23,9 @@ from .asset_manifests.decode import decode_manifest
 from .asset_manifests import (
     BaseAssetManifest,
     BaseManifestModel,
+    HashAlgorithm,
+    hash_data,
+    hash_file,
     ManifestModelRegistry,
     ManifestVersion,
 )
@@ -52,8 +55,6 @@ from .os_file_permission import FileSystemPermissionSettings
 from ._utils import (
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
-    _hash_data,
-    _hash_file,
     _human_readable_file_size,
     _join_s3_paths,
 )
@@ -64,7 +65,6 @@ logger = getLogger("deadline.job_attachments")
 class AssetSync:
     """Class for managing Amazon Deadline Cloud job-level attachments."""
 
-    _HASH_ALG: str = "xxh128"
     _ENDING_PROGRESS = 100.0
 
     def __init__(
@@ -92,6 +92,7 @@ class AssetSync:
         self.manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
+        self.hash_alg: HashAlgorithm = self.manifest_model.AssetManifest.get_default_hash_alg()
 
     def _upload_output_files_to_s3(
         self,
@@ -139,11 +140,14 @@ class AssetSync:
         file_system_location_name: Optional[str] = None,
     ) -> None:
         """Uploads the given output manifest to the given S3 bucket."""
+        hash_alg = output_manifest.get_default_hash_alg()
         manifest_bytes = output_manifest.encode().encode("utf-8")
-        manifest_name_prefix = _hash_data(f"{file_system_location_name or ''}{root_path}".encode())
+        manifest_name_prefix = hash_data(
+            f"{file_system_location_name or ''}{root_path}".encode(), hash_alg
+        )
         manifest_path = _join_s3_paths(
             full_output_prefix,
-            f"{manifest_name_prefix}_output.{output_manifest.hashAlg}",
+            f"{manifest_name_prefix}_output",
         )
         metadata = {"Metadata": {"asset-root": root_path}}
         if file_system_location_name:
@@ -173,7 +177,7 @@ class AssetSync:
 
         asset_manifest_args: dict[str, Any] = {
             "paths": paths,
-            "hash_alg": self._HASH_ALG,
+            "hash_alg": self.hash_alg,
         }
         asset_manifest_args["total_size"] = sum([output.file_size for output in outputs])
 
@@ -219,12 +223,11 @@ class AssetSync:
                     and file_path.lstat().st_mtime >= start_time
                 ):
                     file_size = file_path.lstat().st_size
-                    file_hash = _hash_file(str(file_path))
+                    file_hash = hash_file(str(file_path), self.hash_alg)
+                    s3_key = f"{file_hash}.{self.hash_alg.value}"
 
                     if s3_settings.full_cas_prefix():
-                        s3_key = _join_s3_paths(s3_settings.full_cas_prefix(), file_hash)
-                    else:
-                        s3_key = file_hash
+                        s3_key = _join_s3_paths(s3_settings.full_cas_prefix(), s3_key)
                     in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
 
                     total_file_count += 1

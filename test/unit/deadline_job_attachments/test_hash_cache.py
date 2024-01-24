@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 import deadline
+from deadline.job_attachments.asset_manifests import HashAlgorithm
 from deadline.job_attachments.exceptions import JobAttachmentsError
 from deadline.job_attachments.hash_cache import CACHE_FILE_NAME, HashCache
 from deadline.job_attachments.models import HashCacheEntry
@@ -59,12 +60,17 @@ class TestHashCache:
         """
         # GIVEN
         cache_dir = tmpdir.mkdir("cache")
-        expected_entry = HashCacheEntry("file", "hash", "1234.5678")
+        expected_entry = HashCacheEntry(
+            file_path="file",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+        )
 
         # WHEN
         with HashCache(cache_dir) as hc:
             hc.put_entry(expected_entry)
-            actual_entry = hc.get_entry("file")
+            actual_entry = hc.get_entry("file", HashAlgorithm.XXH128)
 
             # THEN
             assert actual_entry == expected_entry
@@ -78,6 +84,13 @@ class TestHashCache:
             hc = HashCache(new_dir)
             assert not os.path.exists(new_dir)
             with hc:
-                assert hc.get_entry("/no/file") is None
-                hc.put_entry(HashCacheEntry("/no/file", "abc", "1234.56"))
-                assert hc.get_entry("/no/file") is None
+                assert hc.get_entry("/no/file", HashAlgorithm.XXH128) is None
+                hc.put_entry(
+                    HashCacheEntry(
+                        file_path="/no/file",
+                        hash_algorithm=HashAlgorithm.XXH128,
+                        file_hash="abc",
+                        last_modified_time="1234.56",
+                    )
+                )
+                assert hc.get_entry("/no/file", HashAlgorithm.XXH128) is None

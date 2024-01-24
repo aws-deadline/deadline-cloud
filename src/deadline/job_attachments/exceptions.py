@@ -129,3 +129,9 @@ class Fus3FailedToMountError(JobAttachmentsError):
     """
     Exception for when trying to mount Fus3 at a given path.
     """
+
+
+class UnsupportedHashingAlgorithmError(JobAttachmentsError):
+    """
+    Exception for when an unsupported hashing algorithm is provided.
+    """

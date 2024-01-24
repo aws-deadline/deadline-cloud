@@ -20,6 +20,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
 from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
+from .asset_manifests.hash_algorithms import HashAlgorithm
 from .asset_manifests.decode import decode_manifest
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
@@ -34,6 +35,7 @@ from .models import (
     Attachments,
     FileConflictResolution,
     JobAttachmentS3Settings,
+    ManifestPathGroup,
 )
 from .progress_tracker import (
     DownloadSummaryStatistics,
@@ -129,7 +131,7 @@ def _get_tasks_manifests_keys_from_s3(
 ) -> List[str]:
     """
     Returns the keys of all output manifests from the given s3 prefix.
-    (Only the manifests that end with the prefix pattern task-*/*_output.*)
+    (Only the manifests that end with the prefix pattern task-*/*_output)
     """
     manifests_keys: List[str] = []
     s3_client = get_s3_client(session=session)
@@ -140,7 +142,7 @@ def _get_tasks_manifests_keys_from_s3(
             Prefix=manifest_prefix,
         )
 
-        # 1. Find all files that match the pattern: task-{any}/{any}/{any}-output.{any}
+        # 1. Find all files that match the pattern: task-{any}/{any}/{any}-output
         task_prefixes = defaultdict(list)
         for page in page_iterator:
             contents = page.get("Contents", None)
@@ -149,7 +151,7 @@ def _get_tasks_manifests_keys_from_s3(
                     f"Unable to find asset manifest in s3://{s3_bucket}/{manifest_prefix}"
                 )
             for content in contents:
-                if re.search(r"task-.*/.*/.*_output\..*", content["Key"]):
+                if re.search(r"task-.*/.*/.*_output", content["Key"]):
                     parts = content["Key"].split("/")
                     for i, part in enumerate(parts):
                         if "task-" in part:
@@ -189,31 +191,31 @@ def get_job_input_paths_by_asset_root(
     s3_settings: JobAttachmentS3Settings,
     attachments: Attachments,
     session: Optional[boto3.Session] = None,
-) -> Tuple[int, dict[str, list[RelativeFilePath]]]:
+) -> dict[str, ManifestPathGroup]:
     """
-    Gets lists of paths of all asset (input) files attached to a given job.
-    The lists are separated by asset root.
-    Returns a tuple of (total size of assets in bytes, lists of assets)
+    Gets dict of grouped paths of all input files of a given job.
+    The grouped paths are separated by asset root.
+    Returns a dict of ManifestPathGroups, with the root path as the key.
     """
-    assets: DefaultDict[str, list[RelativeFilePath]] = DefaultDict(list)
-    total_bytes = 0
+    inputs: dict[str, ManifestPathGroup] = {}
 
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
-            paths_list = assets[manifest_properties.rootPath]
             key = _join_s3_paths(manifest_properties.inputManifestPath)
-
             manifest = get_manifest_from_s3(
                 manifest_key=key,
                 s3_bucket=s3_settings.s3BucketName,
                 session=session,
             )
+
+            root_path = manifest_properties.rootPath
             with open(manifest) as manifest_file:
                 asset_manifest = decode_manifest(manifest_file.read())
-                paths_list.extend(asset_manifest.paths)
-                total_bytes += asset_manifest.totalSize  # type: ignore[attr-defined]
+                if root_path not in inputs:
+                    inputs[root_path] = ManifestPathGroup()
+                inputs[root_path].add_manifest_to_group(asset_manifest)
 
-    return (total_bytes, assets)
+    return inputs
 
 
 def get_job_input_output_paths_by_asset_root(
@@ -226,18 +228,18 @@ def get_job_input_output_paths_by_asset_root(
     task_id: Optional[str] = None,
     session_action_id: Optional[str] = None,
     session: Optional[boto3.Session] = None,
-) -> Tuple[int, dict[str, list[RelativeFilePath]]]:
+) -> dict[str, ManifestPathGroup]:
     """
     With given IDs, gets the paths of all input and output files
-    of this job. The lists are separated by asset root.
-    Returns a tuple of (total size of files in bytes, lists of files)
+    of this job. The grouped paths are separated by asset root.
+    Returns a dict of ManifestPathGroups, with the root path as the key.
     """
-    (total_input_bytes, input_files) = get_job_input_paths_by_asset_root(
+    input_files = get_job_input_paths_by_asset_root(
         s3_settings=s3_settings,
         attachments=attachments,
         session=session,
     )
-    (total_output_bytes, output_files) = get_job_output_paths_by_asset_root(
+    output_files = get_job_output_paths_by_asset_root(
         s3_settings=s3_settings,
         farm_id=farm_id,
         queue_id=queue_id,
@@ -248,10 +250,14 @@ def get_job_input_output_paths_by_asset_root(
         session=session,
     )
 
-    paths_hashes: DefaultDict[str, list[RelativeFilePath]] = defaultdict(list)
-    for asset_root, files in chain(input_files.items(), output_files.items()):
-        paths_hashes[asset_root].extend(files)
-    return (total_input_bytes + total_output_bytes, paths_hashes)
+    combined_path_groups: dict[str, ManifestPathGroup] = {}
+    for asset_root, path_group in chain(input_files.items(), output_files.items()):
+        if asset_root not in combined_path_groups:
+            combined_path_groups[asset_root] = path_group
+        else:
+            combined_path_groups[asset_root].combine_with_group(path_group)
+
+    return combined_path_groups
 
 
 def download_files_in_directory(
@@ -271,7 +277,7 @@ def download_files_in_directory(
     (example of `directory_path`: "inputs/subdirectory1")
     (example of `local_download_dir`: "/home/username")
     """
-    (_, all_paths_hashes) = get_job_input_output_paths_by_asset_root(
+    all_grouped_paths = get_job_input_output_paths_by_asset_root(
         s3_settings=s3_settings,
         attachments=attachments,
         farm_id=farm_id,
@@ -280,31 +286,37 @@ def download_files_in_directory(
         session=session,
     )
 
-    files_to_download: list[RelativeFilePath] = []
+    # Group by hash algorithm all the files that fall under the directory
+    files_to_download: DefaultDict[HashAlgorithm, list[RelativeFilePath]] = DefaultDict(list)
     total_bytes = 0
-    for files in all_paths_hashes.values():
-        files_list = [file for file in files if file.path.startswith(directory_path + "/")]
-        files_size = sum([file.size for file in files_list])
-        total_bytes += files_size
-        files_to_download.extend(files_list)
+    total_files = 0
+    for path_group in all_grouped_paths.values():
+        for hash_alg, path_list in path_group.files_by_hash_alg.items():
+            files_list = [file for file in path_list if file.path.startswith(directory_path + "/")]
+            files_size = sum([file.size for file in files_list])
+            total_bytes += files_size
+            total_files += len(files_list)
+            files_to_download[hash_alg].extend(files_list)
 
     # Sets up progress tracker to report download progress back to the caller.
     progress_tracker = ProgressTracker(
         status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
-        total_files=len(files_to_download),
+        total_files=total_files,
         total_bytes=total_bytes,
         on_progress_callback=on_downloading_files,
     )
 
     start_time = time.perf_counter()
 
-    downloaded_files_paths = _download_files_parallel(
-        files_to_download,
-        local_download_dir,
-        s3_settings.s3BucketName,
-        s3_settings.full_cas_prefix(),
-        progress_tracker=progress_tracker,
-    )
+    for hash_alg, file_paths in files_to_download.items():
+        downloaded_files_paths = _download_files_parallel(
+            file_paths,
+            hash_alg,
+            local_download_dir,
+            s3_settings.s3BucketName,
+            s3_settings.full_cas_prefix(),
+            progress_tracker=progress_tracker,
+        )
 
     progress_tracker.total_time = time.perf_counter() - start_time
 
@@ -315,6 +327,7 @@ def download_files_in_directory(
 
 def download_file(
     file: RelativeFilePath,
+    hash_algorithm: HashAlgorithm,
     local_download_dir: str,
     s3_bucket: str,
     cas_prefix: Optional[str],
@@ -342,7 +355,11 @@ def download_file(
     # Python will handle the path separator '/' correctly on every platform.
     local_file_name = Path(local_download_dir).joinpath(file.path)
 
-    s3_key = f"{cas_prefix}/{file.hash}" if cas_prefix else file.hash
+    s3_key = (
+        f"{cas_prefix}/{file.hash}.{hash_algorithm.value}"
+        if cas_prefix
+        else f"{file.hash}.{hash_algorithm.value}"
+    )
 
     # If the file name already exists, resolve the conflict based on the file_conflict_resolution
     if local_file_name.is_file():
@@ -375,22 +392,44 @@ def download_file(
             ),
         )
     except ClientError as exc:
+
+        def process_client_error(exc: ClientError, status_code: int):
+            status_code_guidance = {
+                **COMMON_ERROR_GUIDANCE_FOR_S3,
+                403: (
+                    "Forbidden or Access denied. Please check your AWS credentials, or ensure that "
+                    "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket."
+                ),
+                404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
+            }
+            raise JobAttachmentsS3ClientError(
+                action="downloading file",
+                status_code=status_code,
+                bucket_name=s3_bucket,
+                key_or_prefix=s3_key,
+                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_name)})",
+            ) from exc
+
+        # TODO: Temporary to prevent breaking backwards-compatibility; if file not found, try again without hash alg postfix
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
-        status_code_guidance = {
-            **COMMON_ERROR_GUIDANCE_FOR_S3,
-            403: (
-                "Forbidden or Access denied. Please check your AWS credentials, or ensure that "
-                "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket."
-            ),
-            404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
-        }
-        raise JobAttachmentsS3ClientError(
-            action="downloading file",
-            status_code=status_code,
-            bucket_name=s3_bucket,
-            key_or_prefix=s3_key,
-            message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_name)})",
-        ) from exc
+        if status_code == 404:
+            s3_key = s3_key.rsplit(".", 1)[0]
+            try:
+                s3_client.download_file(
+                    s3_bucket,
+                    s3_key,
+                    str(local_file_name),
+                    ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
+                    Callback=_progress_logger(
+                        file_bytes,
+                        progress_tracker.track_progress_callback if progress_tracker else None,
+                    ),
+                )
+            except ClientError as secondExc:
+                status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
+                process_client_error(secondExc, status_code)
+        else:
+            process_client_error(exc, status_code)
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
@@ -421,6 +460,7 @@ def _progress_logger(
 
 def _download_files_parallel(
     files: List[RelativeFilePath],
+    hash_algorithm: HashAlgorithm,
     local_download_dir: str,
     s3_bucket: str,
     cas_prefix: Optional[str],
@@ -444,6 +484,7 @@ def _download_files_parallel(
             executor.submit(
                 download_file,
                 file,
+                hash_algorithm,
                 local_download_dir,
                 s3_bucket,
                 cas_prefix,
@@ -478,6 +519,7 @@ def _download_files_parallel(
 
 def download_files(
     files: list[RelativeFilePath],
+    hash_algorithm: HashAlgorithm,
     local_download_dir: str,
     s3_settings: JobAttachmentS3Settings,
     session: Optional[boto3.Session] = None,
@@ -494,6 +536,7 @@ def download_files(
 
     return _download_files_parallel(
         files,
+        hash_algorithm,
         local_download_dir,
         s3_settings.s3BucketName,
         s3_settings.full_cas_prefix(),
@@ -545,25 +588,25 @@ def get_job_output_paths_by_asset_root(
     task_id: Optional[str] = None,
     session_action_id: Optional[str] = None,
     session: Optional[boto3.Session] = None,
-) -> Tuple[int, dict[str, list[RelativeFilePath]]]:
+) -> dict[str, ManifestPathGroup]:
     """
-    Gets a list of paths of all output files of a given job.
-    The lists are separated by asset root.
-    Returns a tuple of (total size of files in bytes, lists of output files)
+    Gets dict of grouped paths of all output files of a given job.
+    The grouped paths are separated by asset root.
+    Returns a dict of ManifestPathGroups, with the root path as the key.
     """
     output_manifests_by_root = get_output_manifests_by_asset_root(
         s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id, session=session
     )
 
-    outputs: DefaultDict[str, list[RelativeFilePath]] = DefaultDict(list)
-    total_bytes = 0
+    outputs: dict[str, ManifestPathGroup] = {}
     for root, manifests in output_manifests_by_root.items():
         # manifest path isn't needed here, so a variable isn't necessary
         for manifest, _ in manifests:
-            outputs[root].extend(manifest.paths)
-            total_bytes += manifest.totalSize  # type: ignore[attr-defined]
+            if root not in outputs:
+                outputs[root] = ManifestPathGroup()
+            outputs[root].add_manifest_to_group(manifest)
 
-    return (total_bytes, outputs)
+    return outputs
 
 
 def get_output_manifests_by_asset_root(
@@ -656,6 +699,7 @@ def download_files_from_manifests(
     for local_download_dir, manifest in manifests_by_root.items():
         downloaded_files_paths = _download_files_parallel(
             manifest.paths,
+            manifest.hashAlg,
             local_download_dir,
             s3_bucket,
             cas_prefix,
@@ -732,7 +776,7 @@ def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManife
 
     first_manifest = manifests[0]
 
-    hash_alg: str = first_manifest.hashAlg
+    hash_alg: HashAlgorithm = first_manifest.hashAlg
     merged_paths: dict[str, RelativeFilePath] = dict()
     total_size: int = 0
 
@@ -740,13 +784,16 @@ def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManife
     for manifest in manifests:
         if manifest.hashAlg != hash_alg:
             raise NotImplementedError(
-                f"Merging manifests with different hash algorithms is not supported.  {manifest.hashAlg} does not match {hash_alg}"
+                f"Merging manifests with different hash algorithms is not supported.  {manifest.hashAlg.value} does not match {hash_alg.value}"
             )
 
         for path in manifest.paths:
             merged_paths[path.path] = path
 
-    manifest_args: dict[str, Any] = {"hash_alg": hash_alg, "paths": list(merged_paths.values())}
+    manifest_args: dict[str, Any] = {
+        "hash_alg": hash_alg,
+        "paths": list(merged_paths.values()),
+    }
 
     total_size = sum([path.size for path in merged_paths.values()])  # type: ignore
     manifest_args["total_size"] = total_size
@@ -895,7 +942,7 @@ class OutputDownloader:
     ) -> None:
         self.s3_settings = s3_settings
         self.session = session
-        (self.total_bytes_to_download, self.outputs_by_root) = get_job_output_paths_by_asset_root(
+        self.outputs_by_root = get_job_output_paths_by_asset_root(
             s3_settings=s3_settings,
             farm_id=farm_id,
             queue_id=queue_id,
@@ -911,8 +958,8 @@ class OutputDownloader:
         Returns a dict of asset root paths to lists of output paths.
         """
         output_paths_by_root: dict[str, list[str]] = {}
-        for root, output_files in self.outputs_by_root.items():
-            output_paths_by_root[root] = [output_file.path for output_file in output_files]
+        for root, path_group in self.outputs_by_root.items():
+            output_paths_by_root[root] = path_group.get_all_paths()
         return output_paths_by_root
 
     def set_root_path(self, original_root: str, new_root: str) -> None:
@@ -934,14 +981,19 @@ class OutputDownloader:
             # If the new_root already exists, and the file path in the original_root already exists
             # among the file paths of the new_root, then prefix the file path with the original_root path.
             # This is to avoid duplicate file paths in the new_root.
-            paths_in_new_root = {item.path for item in self.outputs_by_root[new_root]}
-            for item in self.outputs_by_root[original_root]:
-                if item.path in paths_in_new_root:
-                    new_name_prefix = (
-                        original_root.replace("/", "_").replace("\\", "_").replace(":", "_")
-                    )
-                    item.path = str(Path(item.path).with_name(f"{new_name_prefix}_{item.path}"))
-                self.outputs_by_root[new_root].append(item)
+            paths_in_new_root = self.outputs_by_root[new_root].get_all_paths()
+            for manifest_paths in self.outputs_by_root[original_root].files_by_hash_alg.values():
+                for manifest_path in manifest_paths:
+                    if manifest_path.path in paths_in_new_root:
+                        new_name_prefix = (
+                            original_root.replace("/", "_").replace("\\", "_").replace(":", "_")
+                        )
+                        manifest_path.path = str(
+                            Path(manifest_path.path).with_name(
+                                f"{new_name_prefix}_{manifest_path.path}"
+                            )
+                        )
+            self.outputs_by_root[new_root].combine_with_group(self.outputs_by_root[original_root])
             del self.outputs_by_root[original_root]
         else:
             self.outputs_by_root = {
@@ -968,10 +1020,16 @@ class OutputDownloader:
             The download summary statistics
         """
         # Sets up progress tracker to report download progress back to the caller.
+        total_bytes: int = 0
+        total_files: int = 0
+        for path_group in self.outputs_by_root.values():
+            total_bytes += path_group.total_bytes
+            total_files += len(path_group.get_all_paths())
+
         progress_tracker = ProgressTracker(
             status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
-            total_files=sum([len(files) for files in self.outputs_by_root.values()]),
-            total_bytes=self.total_bytes_to_download,
+            total_files=total_files,
+            total_bytes=total_bytes,
             on_progress_callback=on_downloading_files,
         )
 
@@ -979,19 +1037,21 @@ class OutputDownloader:
         downloaded_files_paths_by_root: DefaultDict[str, list[str]] = DefaultDict(list)
 
         try:
-            for root, output_files in self.outputs_by_root.items():
-                # Validate the file paths to see if they are under the given download directory.
-                _ensure_paths_within_directory(root, [file.path for file in output_files])
+            for root, output_path_group in self.outputs_by_root.items():
+                for hash_alg, path_list in output_path_group.files_by_hash_alg.items():
+                    # Validate the file paths to see if they are under the given download directory.
+                    _ensure_paths_within_directory(root, [file.path for file in path_list])
 
-                downloaded_files_paths = download_files(
-                    files=output_files,
-                    local_download_dir=root,
-                    s3_settings=self.s3_settings,
-                    session=self.session,
-                    progress_tracker=progress_tracker,
-                    file_conflict_resolution=file_conflict_resolution,
-                )
-                downloaded_files_paths_by_root[root].extend(downloaded_files_paths)
+                    downloaded_files_paths = download_files(
+                        files=path_list,
+                        hash_algorithm=hash_alg,
+                        local_download_dir=root,
+                        s3_settings=self.s3_settings,
+                        session=self.session,
+                        progress_tracker=progress_tracker,
+                        file_conflict_resolution=file_conflict_resolution,
+                    )
+                    downloaded_files_paths_by_root[root].extend(downloaded_files_paths)
         except AssetSyncCancelledError:
             downloaded_files = progress_tracker.processed_files
             raise AssetSyncCancelledError(
