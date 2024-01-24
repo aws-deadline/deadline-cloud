@@ -787,7 +787,7 @@ def test_cli_job_trace_schedule(fresh_deadline_config):
         deadline_mock.get_job.return_value = MOCK_JOBS_LIST[0]
         deadline_mock.list_sessions.return_value = {"sessions": MOCK_SESSIONS_LIST}
         deadline_mock.list_session_actions.return_value = {
-            "sessionactions": MOCK_SESSION_ACTIONS_LIST
+            "sessionActions": MOCK_SESSION_ACTIONS_LIST
         }
         deadline_mock.get_step.return_value = MOCK_STEP
         deadline_mock.get_task.return_value = MOCK_TASK
