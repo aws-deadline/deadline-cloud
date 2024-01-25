@@ -683,7 +683,7 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
             farmId=farm_id, queueId=queue_id, jobId=job_id, sessionId=session["sessionId"]
         )
         while "nextToken" in response:
-            old_list = response["sessionactions"]
+            old_list = response["sessionActions"]
             response = deadline.list_session_actions(
                 farmId=farm_id,
                 queueId=queue_id,
@@ -691,10 +691,10 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                 sessionId=session["sessionId"],
                 nextToken=response["nextToken"],
             )
-            response["sessionactions"] = old_list + response["sessionactions"]
+            response["sessionActions"] = old_list + response["sessionActions"]
         response.pop("ResponseMetadata", None)
 
-        session["actions"] = response["sessionactions"]
+        session["actions"] = response["sessionActions"]
 
     # Cache steps and tasks by their id, to only get each once
     steps: dict[str, Any] = {}
