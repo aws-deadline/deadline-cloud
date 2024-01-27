@@ -192,7 +192,7 @@ class Fus3ProcessManager(object):
         log.warning(f"No manifest found for mount {mount_point}")
         return None
 
-    def wait_for_mount(self, mount_wait_seconds=5) -> bool:
+    def wait_for_mount(self, mount_wait_seconds=60) -> bool:
         """
         After we've launched the fus3 subprocess we need to wait
         for the OS to validate that the mount is in place before use
