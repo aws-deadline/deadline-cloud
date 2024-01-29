@@ -145,9 +145,10 @@ class AssetSync:
         manifest_name_prefix = hash_data(
             f"{file_system_location_name or ''}{root_path}".encode(), hash_alg
         )
+        # TODO: Remove hash algorithm file extension after sufficient time after the next release
         manifest_path = _join_s3_paths(
             full_output_prefix,
-            f"{manifest_name_prefix}_output",
+            f"{manifest_name_prefix}_output.{output_manifest.hashAlg.value}",
         )
         metadata = {"Metadata": {"asset-root": root_path}}
         if file_system_location_name:
@@ -224,7 +225,8 @@ class AssetSync:
                 ):
                     file_size = file_path.lstat().st_size
                     file_hash = hash_file(str(file_path), self.hash_alg)
-                    s3_key = f"{file_hash}.{self.hash_alg.value}"
+                    # TODO: replace with uncommented line below after sufficient time after the next release
+                    s3_key = file_hash  # f"{file_hash}.{self.hash_alg.value}"
 
                     if s3_settings.full_cas_prefix():
                         s3_key = _join_s3_paths(s3_settings.full_cas_prefix(), s3_key)
