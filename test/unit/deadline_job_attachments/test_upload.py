@@ -259,10 +259,10 @@ class TestUpload:
                 bucket,
                 expected_files={
                     f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/b.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/c.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/d.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/b",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/c",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/d",
                 },
             )
 
@@ -423,7 +423,7 @@ class TestUpload:
                 bucket,
                 expected_files={
                     f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/b_input",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
                 },
             )
 
@@ -582,7 +582,7 @@ class TestUpload:
 
             expected_files = set(
                 [
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128"
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}"
                     for i in range(num_input_files)
                 ]
             )
@@ -769,7 +769,7 @@ class TestUpload:
 
             # mock pre-uploading the file
             bucket.put_object(
-                Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash.xxh128",
+                Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash",
                 Body="a",
             )
 
@@ -826,8 +826,8 @@ class TestUpload:
                 bucket,
                 expected_files={
                     f"{self.job_attachment_s3_settings.rootPrefix}/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash.xxh128",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/somethingnew.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/existinghash",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/somethingnew",
                 },
             )
 
@@ -907,7 +907,7 @@ class TestUpload:
                 input_files.append(test_file)
                 # mock pre-uploading the file
                 bucket.put_object(
-                    Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128",
+                    Key=f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}",
                     Body=f"test {i}",
                 )
 
@@ -964,7 +964,7 @@ class TestUpload:
 
             expected_files = set(
                 [
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}.xxh128"
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/{i}"
                     for i in range(num_input_files)
                 ]
             )
@@ -1759,7 +1759,7 @@ class TestUpload:
                 bucket,
                 expected_files={
                     f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
-                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a.xxh128",
+                    f"{self.job_attachment_s3_settings.full_cas_prefix()}/a",
                 },
             )
 
