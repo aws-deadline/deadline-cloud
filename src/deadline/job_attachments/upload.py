@@ -212,7 +212,8 @@ class S3AssetUploader:
             # If different files have the same content (and thus the same hash), they are counted as skipped files.
             file_dict: dict[str, base_manifest.BaseManifestPath] = {}
             for file in files_to_upload:
-                file_key = f"{file.hash}.{manifest.hashAlg.value}"
+                # TODO: replace with uncommented line below after sufficient time after the next release
+                file_key = f"{file.hash}"  # .{manifest.hashAlg.value}"
                 if file_key in file_dict and progress_tracker:
                     progress_tracker.increase_skipped(
                         1, (source_root.joinpath(file.path)).stat().st_size
@@ -322,7 +323,8 @@ class S3AssetUploader:
         Returns a tuple (whether it has been uploaded, the file size).
         """
         local_path = source_root.joinpath(file.path)
-        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
+        # TODO: replace with uncommented line below after sufficient time after the next release
+        s3_upload_key = f"{file.hash}"  # .{hash_algorithm.value}"
         if s3_cas_prefix:
             s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
         is_uploaded = False
