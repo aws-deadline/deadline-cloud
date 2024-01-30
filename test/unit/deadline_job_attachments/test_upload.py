@@ -1460,6 +1460,34 @@ class TestUpload:
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
 
+    @mock_sts
+    def test_upload_file_to_s3_empty_file(self, tmp_path: Path):
+        """
+        Ensures that if an empty file is submitted, the multi-part upload request doesn't have an empty parts list
+        """
+        s3 = boto3.client("s3")
+        stubber = Stubber(s3)
+
+        test_key = "test_key"
+
+        stubber.add_response(
+            method="create_multipart_upload", service_response={"UploadId": "test-id"}
+        )
+
+        stubber.add_response(method="upload_part", service_response={"ETag": "test-tag"})
+        stubber.add_response(method="complete_multipart_upload", service_response={})
+
+        uploader = S3AssetUploader()
+
+        uploader._s3 = s3
+
+        file = tmp_path / "test_file"
+        file.write_text("")
+
+        with stubber:
+            uploader.upload_file_to_s3(file, self.job_attachment_s3_settings.s3BucketName, test_key)
+            stubber.assert_no_pending_responses()
+
     @pytest.mark.parametrize(
         "manifest_version",
         [

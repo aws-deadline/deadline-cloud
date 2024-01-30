@@ -377,7 +377,9 @@ class S3AssetUploader:
                 current_chunksize=self.multipart_upload_chunk_size,
                 file_size=file_size,
             )
-            num_parts = int(math.ceil(file_size / float(chunk_size)))
+            # num_parts must have minimum value of 1, otherwise an empty file will generate no parts,
+            # and complete_multipart_upload throws an error if parts is empty.
+            num_parts = max(1, int(math.ceil(file_size / float(chunk_size))))
 
             # Start uploading parts
             with concurrent.futures.ThreadPoolExecutor(
