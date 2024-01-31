@@ -612,6 +612,70 @@ Outputs will be downloaded to the following root paths:
         assert result.exit_code == 0
 
 
+def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path):
+    """
+    Tests whether the output messages printed to stdout match expected messages
+    when executing download-output command for a job that don't have any output yet.
+    """
+    with patch.object(api._session, "get_deadline_endpoint_url") as session_endpoint:
+        session_endpoint.return_value = "fake-endpoint-url"
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(
+        job_group, "round", return_value=0
+    ), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {}
+
+        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": "/root/path",
+                        "rootPathFormat": PathFormat(mock_host_path_format_name),
+                        "outputRelativeDirectories": ["."],
+                    }
+                ],
+            },
+        }
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+            input="",
+        )
+
+        MockOutputDownloader.assert_called_once_with(
+            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            step_id=None,
+            task_id=None,
+            session=ANY,
+        )
+
+        assert (
+            """Downloading output from Job 'Mock Job'
+There are no output files available for download at this moment. Please verify that the Job/Step/Task you are trying to download output from has completed successfully.
+"""
+            in result.output
+        )
+        assert result.exit_code == 0
+
+
 def test_cli_job_download_output_stdout_with_json_format(
     fresh_deadline_config,
     tmp_path: Path,
