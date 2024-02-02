@@ -45,7 +45,7 @@ def validate_parameters(ctx, param, value):
     """
     parameters_split = []
     for parameter in value:
-        regex_match = re.match("(.+)=(.+)", parameter)
+        regex_match = re.match("(.+)=(.*)", parameter)
         if not regex_match:
             raise click.BadParameter(
                 f'Parameters must be provided in the format "Key=Value". Invalid Parameter: {parameter}'
