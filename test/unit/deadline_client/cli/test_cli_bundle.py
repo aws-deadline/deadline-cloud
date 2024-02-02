@@ -461,6 +461,56 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
             assert result.exit_code == 0
 
 
+def test_cli_bundle_empty_job_parameter_from_cli(fresh_deadline_config):
+    """
+    Verify that an empty job parameter specified at the CLI are passed to the CreateJob call
+    """
+    # Use a temporary directory for the job bundle
+    with patch(
+        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
+    ) as input_shape_mock:
+        input_shape_mock.return_value = {}
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            boto3, "Session"
+        ) as session_mock:
+            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+            session_mock.reset_mock()
+
+            # Write a JSON template
+            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                [
+                    "bundle",
+                    "submit",
+                    tmpdir,
+                    "--farm-id",
+                    MOCK_FARM_ID,
+                    "--queue-id",
+                    MOCK_QUEUE_ID,
+                    "--parameter",
+                    "sceneFile=",
+                ],
+            )
+
+            session_mock().client().create_job.assert_called_once_with(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                template=ANY,
+                templateType="JSON",
+                parameters={
+                    "sceneFile": {"string": ""},
+                },
+                priority=50,
+            )
+
+            assert result.exit_code == 0
+
+
 def test_cli_bundle_invalid_job_paramter(fresh_deadline_config):
     """
     Verify that a badly formatted parameter value (without "Key=Value") throws an error
