@@ -2,6 +2,7 @@
 
 __all__ = [
     "get_config_file_path",
+    "get_cache_directory",
     "read_config",
     "write_config",
     "get_setting_default",
@@ -38,6 +39,7 @@ DEFAULT_DEADLINE_ENDPOINT_URL = os.getenv(
 
 # The default directory within which to save the history of created jobs.
 DEFAULT_JOB_HISTORY_DIR = os.path.join("~", ".deadline", "job_history", "{aws_profile_name}")
+DEFAULT_CACHE_DIR = os.path.join("~", ".deadline", "cache")
 
 _TRUE_VALUES = {"yes", "on", "true", "1"}
 _FALSE_VALUES = {"no", "off", "false", "0"}
@@ -107,10 +109,6 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     "telemetry.opt_out": {"default": "false"},
     "telemetry.identifier": {"default": ""},
     "defaults.job_attachments_file_system": {"default": "COPIED", "depend": "defaults.farm_id"},
-    "settings.list_object_threshold": {
-        "default": "100",
-        "description": "If the number of files to be uploaded are bigger than this threshold, it switches to call list-objects S3 API from head-object call to check if files have already been uploaded.",
-    },
     "settings.multipart_upload_chunk_size": {
         "default": "8388608",  # 8 MB (Default chunk size for multipart upload)
         "description": "The chunk size to use when uploading files in multi-parts.",
@@ -135,6 +133,13 @@ def get_config_file_path() -> Path:
     to our default if it is not set.
     """
     return Path(os.environ.get(CONFIG_FILE_PATH_ENV_VAR) or CONFIG_FILE_PATH).expanduser()
+
+
+def get_cache_directory() -> str:
+    """
+    Get the cache directory.
+    """
+    return os.path.expanduser(DEFAULT_CACHE_DIR)
 
 
 def _should_read_config(config_file_path: Path) -> bool:

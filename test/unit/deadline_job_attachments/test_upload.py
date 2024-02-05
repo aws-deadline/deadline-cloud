@@ -29,6 +29,7 @@ from deadline.job_attachments.asset_manifests import (
     HashAlgorithm,
     ManifestVersion,
 )
+from deadline.job_attachments.caches import HashCacheEntry, S3CheckCacheEntry
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
     JobAttachmentsS3ClientError,
@@ -41,7 +42,6 @@ from deadline.job_attachments.models import (
     FileSystemLocation,
     FileSystemLocationType,
     ManifestProperties,
-    HashCacheEntry,
     JobAttachmentS3Settings,
     OperatingSystemFamily,
     PathFormat,
@@ -194,6 +194,7 @@ class TestUpload:
             (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=str(cache_dir),
             )
 
             # Then
@@ -361,6 +362,7 @@ class TestUpload:
             (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -448,7 +450,7 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_additional_input_files",
+        "num_input_files",
         [
             1,
             100,
@@ -470,7 +472,7 @@ class TestUpload:
         assert_expected_files_on_s3,
         caplog,
         manifest_version: ManifestVersion,
-        num_additional_input_files: int,
+        num_input_files: int,
     ):
         """
         Test that the correct files get uploaded to S3 and the asset manifest
@@ -484,10 +486,6 @@ class TestUpload:
             queue_id=queue_id,
             job_attachment_settings=self.job_attachment_s3_settings,
             asset_manifest_version=manifest_version,
-        )
-
-        num_input_files = (
-            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
         )
 
         with patch(
@@ -540,6 +538,7 @@ class TestUpload:
             (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -612,7 +611,7 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_additional_input_files",
+        "num_input_files",
         [
             1,
             100,
@@ -631,7 +630,7 @@ class TestUpload:
         farm_id,
         queue_id,
         manifest_version: ManifestVersion,
-        num_additional_input_files: int,
+        num_input_files: int,
     ):
         """
         Test that the asset management can handle many input files with the same hash.
@@ -647,10 +646,6 @@ class TestUpload:
             asset_manifest_version=manifest_version,
         )
 
-        num_input_files = (
-            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
-        )
-
         # Given
         with patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
@@ -661,6 +656,9 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect=lambda *args, **kwargs: "samehash",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.NUM_UPLOAD_WORKERS",
+            1,  # Change the number of thread workers to 1 to get consistent tests
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
@@ -698,6 +696,7 @@ class TestUpload:
             (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -821,6 +820,7 @@ class TestUpload:
             (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -864,7 +864,7 @@ class TestUpload:
 
     @mock_sts
     @pytest.mark.parametrize(
-        "num_additional_input_files",
+        "num_input_files",
         [
             1,
             100,
@@ -885,7 +885,7 @@ class TestUpload:
         assert_expected_files_on_s3,
         caplog,
         manifest_version: ManifestVersion,
-        num_additional_input_files: int,
+        num_input_files: int,
     ):
         """
         Test the input files that have already been uploaded to S3 are skipped.
@@ -896,10 +896,6 @@ class TestUpload:
             queue_id=queue_id,
             job_attachment_settings=self.job_attachment_s3_settings,
             asset_manifest_version=manifest_version,
-        )
-
-        num_input_files = (
-            asset_manager.asset_uploader.list_object_threshold + num_additional_input_files
         )
 
         with patch(
@@ -968,6 +964,7 @@ class TestUpload:
             (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -1077,6 +1074,7 @@ class TestUpload:
             (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -1265,7 +1263,6 @@ class TestUpload:
         Test that when the asset uploader is created, the instance variables are correctly set.
         """
         uploader = S3AssetUploader()
-        assert uploader.list_object_threshold == 100
         assert uploader.multipart_upload_chunk_size == 8 * (1024**2)
         assert uploader.multipart_upload_max_workers == 10
         assert uploader.small_file_threshold == 20 * 8 * (1024**2)
@@ -1276,7 +1273,7 @@ class TestUpload:
         """
         Tests that when the asset uploader is created with non-integer config settings, an AssetSyncError is raised.
         """
-        config.set_setting("settings.list_object_threshold", "!@#$")
+        config.set_setting("settings.multipart_upload_chunk_size", "!@#$")
         with pytest.raises(AssetSyncError) as err:
             _ = S3AssetUploader()
         assert isinstance(err.value.__cause__, ValueError)
@@ -1285,11 +1282,6 @@ class TestUpload:
     @pytest.mark.parametrize(
         "setting_name, invalid_value",
         [
-            pytest.param(
-                "list_object_threshold",
-                "0",
-                id="Invalid list_object_threshold value: 0",
-            ),
             pytest.param(
                 "multipart_upload_chunk_size",
                 "-100",
@@ -1352,39 +1344,6 @@ class TestUpload:
                 "Error checking if object exists in bucket 'test-bucket', Target key or prefix: 'test_key', "
                 "HTTP Status Code: 403, Access denied. Ensure that the bucket is in the account 123456789012, "
                 "and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket."
-            ) in str(err.value)
-
-    @mock_sts
-    def test_filter_objects_to_upload_bucket_in_different_account(self):
-        """
-        Test that the appropriate error is raised when checking if a file has already been uploaded, but the bucket
-        is in an account that is different from the uploader's account.
-        """
-        s3 = boto3.client("s3")
-        stubber = Stubber(s3)
-        stubber.add_client_error(
-            "list_objects_v2",
-            service_error_code="AccessDenied",
-            service_message="Access Denied",
-            http_status_code=403,
-        )
-
-        uploader = S3AssetUploader()
-
-        uploader._s3 = s3
-
-        with stubber:
-            with pytest.raises(JobAttachmentsS3ClientError) as err:
-                uploader.filter_objects_to_upload(
-                    self.job_attachment_s3_settings.s3BucketName, "test_prefix", {"test_key"}
-                )
-            assert isinstance(err.value.__cause__, ClientError)
-            assert (
-                err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
-            )
-            assert (
-                "Error listing bucket contents in bucket 'test-bucket', Target key or prefix: 'test_prefix', "
-                "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
 
     @mock_sts
@@ -1509,6 +1468,45 @@ class TestUpload:
             assert (
                 "Error uploading file in bucket 'test-bucket', Target key or prefix: 'test_key', "
                 "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(err.value)
+            assert (f"(Failed to upload {str(file)})") in str(err.value)
+
+    @mock_sts
+    def test_upload_file_to_s3_bucket_has_kms_permissions_error(self, tmp_path: Path):
+        """
+        Test that the appropriate error is raised when uploading files, but the bucket
+        is encrypted with a KMS key and the user doesn't have access to the key.
+        """
+        s3 = boto3.client("s3")
+        stubber = Stubber(s3)
+
+        # This is the error that's surfaced when a bucket is in a different account than expected.
+        stubber.add_client_error(
+            "create_multipart_upload",
+            service_error_code="AccessDenied",
+            service_message="An error occurred (AccessDenied) when calling the PutObject operation: User: arn:aws:sts::<account>:assumed-role/<role> is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:us-west-2:<account>:key/<key-id> because no identity-based policy allows the kms:GenerateDataKey action",
+            http_status_code=403,
+        )
+
+        uploader = S3AssetUploader()
+
+        uploader._s3 = s3
+
+        file = tmp_path / "test_file"
+        file.write_text("")
+
+        with stubber:
+            with pytest.raises(JobAttachmentsS3ClientError) as err:
+                uploader.upload_file_to_s3(
+                    file, self.job_attachment_s3_settings.s3BucketName, "test_key"
+                )
+            assert isinstance(err.value.__cause__, ClientError)
+            assert (
+                err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 403  # type: ignore[attr-defined]
+            )
+            assert (
+                "If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
 
@@ -1678,6 +1676,7 @@ class TestUpload:
             (upload_summary_statistics, _) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=cache_dir,
             )
 
             # Then
@@ -1801,6 +1800,7 @@ class TestUpload:
             (upload_summary_statistics, attachments) = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
+                s3_check_cache_dir=str(cache_dir),
             )
 
             # THEN
@@ -2332,6 +2332,116 @@ class TestUpload:
             size_threshold=size_threshold,
         )
         assert actual_queues == expected_queues
+
+    @pytest.mark.parametrize(
+        "manifest_version",
+        [
+            ManifestVersion.v2023_03_03,
+        ],
+    )
+    def test_upload_object_to_cas_skips_upload_with_cache(
+        self, tmpdir, farm_id, queue_id, manifest_version, default_job_attachment_s3_settings
+    ):
+        """
+        Tests that objects are not uploaded to S3 if there is a corresponding entry in the S3CheckCache
+        """
+        # Given
+        asset_root = tmpdir.mkdir("test-root")
+        test_file = asset_root.join("test-file.txt")
+        test_file.write("stuff")
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+        s3_key = f"{default_job_attachment_s3_settings.s3BucketName}/prefix/test-hash"
+        test_entry = S3CheckCacheEntry(s3_key, "123.45")
+        s3_cache = MagicMock()
+        s3_cache.get_entry.return_value = test_entry
+
+        # When
+        with patch.object(
+            asset_manager.asset_uploader,
+            "_get_current_timestamp",
+            side_effect=["345.67"],
+        ):
+            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+                file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
+                hash_algorithm=HashAlgorithm.XXH128,
+                s3_bucket=default_job_attachment_s3_settings.s3BucketName,
+                source_root=Path(asset_root),
+                s3_cas_prefix="prefix",
+                s3_check_cache=s3_cache,
+            )
+
+            # Then
+            assert not is_uploaded
+            assert file_size == 5
+            s3_cache.put_entry.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "manifest_version",
+        [
+            ManifestVersion.v2023_03_03,
+        ],
+    )
+    def test_upload_object_to_cas_adds_cache_entry(
+        self,
+        tmpdir,
+        farm_id,
+        queue_id,
+        manifest_version,
+        default_job_attachment_s3_settings,
+        assert_expected_files_on_s3,
+    ):
+        """
+        Tests that when an object is added to the CAS, an S3 cache entry is added.
+        """
+        # Given
+        asset_root = tmpdir.mkdir("test-root")
+        test_file = asset_root.join("test-file.txt")
+        test_file.write("stuff")
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+        s3_key = f"{default_job_attachment_s3_settings.s3BucketName}/prefix/test-hash"
+        s3_cache = MagicMock()
+        s3_cache.get_entry.return_value = None
+        expected_new_entry = S3CheckCacheEntry(s3_key, "345.67")
+
+        # When
+        with patch.object(
+            asset_manager.asset_uploader,
+            "_get_current_timestamp",
+            side_effect=["345.67"],
+        ):
+            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+                file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
+                hash_algorithm=HashAlgorithm.XXH128,
+                s3_bucket=default_job_attachment_s3_settings.s3BucketName,
+                source_root=Path(asset_root),
+                s3_cas_prefix="prefix",
+                s3_check_cache=s3_cache,
+            )
+
+            # Then
+            assert is_uploaded
+            assert file_size == 5
+            s3_cache.put_entry.assert_called_once_with(expected_new_entry)
+
+            s3 = boto3.Session(region_name="us-west-2").resource(
+                "s3"
+            )  # pylint: disable=invalid-name
+            bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
+
+            assert_expected_files_on_s3(
+                bucket,
+                expected_files={"prefix/test-hash"},
+            )
 
 
 def assert_progress_report_last_callback(
