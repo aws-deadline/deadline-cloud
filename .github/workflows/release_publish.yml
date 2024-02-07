@@ -1,0 +1,186 @@
+name: "Release: Publish"
+run-name: "Release: ${{ github.event.head_commit.message }}"
+
+on:
+  push:
+    branches:
+      - release
+    paths:
+      - CHANGELOG.md
+
+jobs:
+  VerifyCommit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: VerifyAuthor
+        run: |
+          EXPECTED_AUTHOR="client-software-ci@amazon.com"
+          AUTHOR=$(git show -s --format='%ae' HEAD)
+          if [[ $AUTHOR != $EXPECTED_AUTHOR ]]; then
+            echo "ERROR: Expected author email to be '$EXPECTED_AUTHOR', but got '$AUTHOR'. Aborting release."
+            exit 1
+          else
+            echo "Verified author email ($AUTHOR) is as expected ($EXPECTED_AUTHOR)"
+          fi
+
+  Release:
+    needs: VerifyCommit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: release
+          fetch-depth: 0
+
+      - name: VerifyReleaseBranch
+        run: |
+          RELEASE_HEAD=$(git show -s --format='%H')
+          if [[ $RELEASE_HEAD != ${{ github.sha }} ]]; then
+            echo "ERROR: tip of release branch ($RELEASE_HEAD) does not match the commit that started this release (${{ github.sha }}). Aborting release."
+            exit 1
+          else
+            echo "Verified tip of release branch ($RELEASE_HEAD) matches the commit that started this release (${{ github.sha }})"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: PrepRelease
+        id: prep-release
+        run: |
+          COMMIT_TITLE=$(git show -s --format='%s' HEAD)
+          NEXT_SEMVER=$(python -c 'import sys, re; print(re.match(r"chore\(release\): ([0-9]+\.[0-9]+\.[0-9]+).*", sys.argv[1]).group(1))' "$COMMIT_TITLE")
+
+          # The format of the tag must match the pattern in pyproject.toml -> tool.semantic_release.tag_format
+          TAG="v$NEXT_SEMVER"
+
+          git config --local user.email "client-software-ci@amazon.com"
+          git config --local user.name "client-software-ci"
+
+          git tag -a $TAG -m "Release $TAG"
+
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            python .github/scripts/get_latest_changelog.py
+            echo EOF
+          } >> $GITHUB_ENV
+
+      # Tag must be made before building so the generated _version.py files have the correct version
+      - name: Build
+        run: |
+          pip install --upgrade hatch
+          hatch build
+
+      - name: PushRelease
+        env:
+          GH_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          git push origin $TAG
+          gh release create $TAG dist/* --notes "$RELEASE_NOTES"
+
+  MergeBack:
+    needs: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: mainline
+          fetch-depth: 0
+
+      - name: MergeBackMainline
+        run: |
+          git merge --ff-only origin/release
+          git push origin mainline
+
+  PublishToRepository:
+    needs: Release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      CODEARTIFACT_REGION: "us-west-2"
+      CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
+      CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
+      CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
+      CUSTOMER_DOMAIN: ${{ secrets.CUSTOMER_DOMAIN }}
+      CUSTOMER_REPOSITORY: ${{ secrets.CUSTOMER_REPOSITORY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.Release.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade hatch
+          pip install --upgrade twine
+
+      - name: Build
+        run: hatch build
+
+      - name: Publish to Repository
+        run: |
+          export TWINE_USERNAME=aws
+          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
+          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CODEARTIFACT_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
+          twine upload dist/*
+
+      - name: Publish to Customer Repository
+        run: |
+          export TWINE_USERNAME=aws
+          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
+          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
+          twine upload dist/*
+
+  PublishToInternal:
+    needs: Release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ${{ github.event.repository.name }}-Publish
+          hide-cloudwatch-logs: true
