@@ -1,0 +1,25 @@
+{% for version, release in context.history.released.items() %}
+## {{ version.as_tag() }} ({{ release.tagged_date.strftime("%Y-%m-%d") }})
+
+    {% if "breaking" in release["elements"] %}
+### BREAKING CHANGES
+        {% for commit in release["elements"]["breaking"] %}
+* {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(": ")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
+        {% endfor %}
+    {% endif %}
+
+    {% if "feature" in release["elements"] %}
+### Features
+        {% for commit in release["elements"]["feature"] %}
+* {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(": ")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
+        {% endfor %}
+    {% endif %}
+
+    {% if "fix" in release["elements"] %}
+### Bug Fixes
+        {% for commit in release["elements"]["fix"] %}
+* {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(":")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
+        {% endfor %}
+    {% endif %}
+
+{% endfor %}
