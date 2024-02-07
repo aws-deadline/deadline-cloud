@@ -469,71 +469,62 @@ class AssetSync:
 
         storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
 
-        try:
-            for manifest_properties in attachments.manifests:
-                local_root: Path = Path()
-                if (
-                    len(storage_profiles_path_mapping_rules) > 0
-                    and manifest_properties.fileSystemLocationName
-                ):
-                    if manifest_properties.rootPath in storage_profiles_source_paths:
-                        local_root = Path(
-                            storage_profiles_path_mapping_rules[manifest_properties.rootPath]
-                        )
-                    else:
-                        raise AssetSyncError(
-                            "Error occurred while attempting to sync output files: "
-                            f"No path mapping rule found for the source path {manifest_properties.rootPath}"
-                        )
+        for manifest_properties in attachments.manifests:
+            local_root: Path = Path()
+            if (
+                len(storage_profiles_path_mapping_rules) > 0
+                and manifest_properties.fileSystemLocationName
+            ):
+                if manifest_properties.rootPath in storage_profiles_source_paths:
+                    local_root = Path(
+                        storage_profiles_path_mapping_rules[manifest_properties.rootPath]
+                    )
                 else:
-                    dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
-                    local_root = session_dir.joinpath(dir_name)
-
-                output_files: List[OutputFile] = self._get_output_files(
-                    manifest_properties,
-                    s3_settings,
-                    local_root,
-                    start_time,
-                )
-                if output_files:
-                    output_manifest = self._generate_output_manifest(output_files)
-                    session_action_id_with_time_stamp = (
-                        f"{_float_to_iso_datetime_string(start_time)}_{session_action_id}"
+                    raise AssetSyncError(
+                        "Error occurred while attempting to sync output files: "
+                        f"No path mapping rule found for the source path {manifest_properties.rootPath}"
                     )
-                    full_output_prefix = s3_settings.full_output_prefix(
-                        farm_id=self.farm_id,
-                        queue_id=queue_id,
-                        job_id=job_id,
-                        step_id=step_id,
-                        task_id=task_id,
-                        session_action_id=session_action_id_with_time_stamp,
-                    )
-                    self._upload_output_manifest_to_s3(
-                        s3_settings=s3_settings,
-                        output_manifest=output_manifest,
-                        full_output_prefix=full_output_prefix,
-                        root_path=manifest_properties.rootPath,
-                        file_system_location_name=manifest_properties.fileSystemLocationName,
-                    )
-                    all_output_files.extend(output_files)
-
-            if all_output_files:
-                num_output_files = len(all_output_files)
-                self.logger.info(
-                    f"Uploading {num_output_files} output file{'' if num_output_files == 1 else 's'}"
-                    f" to S3: {s3_settings.s3BucketName}/{s3_settings.full_cas_prefix()}"
-                )
-                summary_stats: SummaryStatistics = self._upload_output_files_to_s3(
-                    s3_settings, all_output_files, on_uploading_files
-                )
             else:
-                summary_stats = SummaryStatistics()
-        finally:
-            if attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value:
-                try:
-                    Fus3ProcessManager.find_fus3()
-                    # Shutdown all running Fus3 processes since task is completed
-                    Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
-                except Fus3ExecutableMissingError:
-                    logger.error("Virtual File System not found, no processes to kill.")
+                dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
+                local_root = session_dir.joinpath(dir_name)
+
+            output_files: List[OutputFile] = self._get_output_files(
+                manifest_properties,
+                s3_settings,
+                local_root,
+                start_time,
+            )
+            if output_files:
+                output_manifest = self._generate_output_manifest(output_files)
+                session_action_id_with_time_stamp = (
+                    f"{_float_to_iso_datetime_string(start_time)}_{session_action_id}"
+                )
+                full_output_prefix = s3_settings.full_output_prefix(
+                    farm_id=self.farm_id,
+                    queue_id=queue_id,
+                    job_id=job_id,
+                    step_id=step_id,
+                    task_id=task_id,
+                    session_action_id=session_action_id_with_time_stamp,
+                )
+                self._upload_output_manifest_to_s3(
+                    s3_settings=s3_settings,
+                    output_manifest=output_manifest,
+                    full_output_prefix=full_output_prefix,
+                    root_path=manifest_properties.rootPath,
+                    file_system_location_name=manifest_properties.fileSystemLocationName,
+                )
+                all_output_files.extend(output_files)
+
+        if all_output_files:
+            num_output_files = len(all_output_files)
+            self.logger.info(
+                f"Uploading {num_output_files} output file{'' if num_output_files == 1 else 's'}"
+                f" to S3: {s3_settings.s3BucketName}/{s3_settings.full_cas_prefix()}"
+            )
+            summary_stats: SummaryStatistics = self._upload_output_files_to_s3(
+                s3_settings, all_output_files, on_uploading_files
+            )
+        else:
+            summary_stats = SummaryStatistics()
         return summary_stats
