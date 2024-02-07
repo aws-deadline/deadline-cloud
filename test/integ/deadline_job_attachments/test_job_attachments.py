@@ -143,10 +143,16 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
     mock_on_uploading_files = MagicMock(return_value=True)
 
     # WHEN
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+    upload_group = asset_manager.prepare_paths_for_upload(
+        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
+    )
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -210,10 +216,16 @@ def upload_input_files_one_asset_in_cas(
     mock_on_uploading_files = MagicMock(return_value=True)
 
     # WHEN
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+    upload_group = asset_manager.prepare_paths_for_upload(
+        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
+    )
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -290,10 +302,16 @@ def test_upload_input_files_all_assets_in_cas(
     mock_on_uploading_files = MagicMock(return_value=True)
 
     # WHEN
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+    upload_group = asset_manager.prepare_paths_for_upload(
+        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
+    )
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1038,10 +1056,16 @@ def upload_input_files_no_input_paths(
     mock_on_uploading_files = MagicMock(return_value=True)
 
     # WHEN
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+    upload_group = asset_manager.prepare_paths_for_upload(
+        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
+    )
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1098,10 +1122,16 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     mock_on_uploading_files = MagicMock(return_value=True)
 
     # WHEN
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+    upload_group = asset_manager.prepare_paths_for_upload(
+        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[],
         referenced_paths=[],
+    )
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
@@ -1205,10 +1235,16 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
     with pytest.raises(
         AssetSyncError, match=f"Error checking if object exists in bucket '{external_bucket}'"
     ):
-        (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        upload_group = asset_manager.prepare_paths_for_upload(
+            job_bundle_path=str(job_attachment_test.ASSET_ROOT),
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
             output_paths=[str(job_attachment_test.OUTPUT_PATH)],
             referenced_paths=[],
+        )
+        (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
             hash_cache_dir=str(job_attachment_test.hash_cache_dir),
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )

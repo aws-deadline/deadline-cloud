@@ -581,7 +581,7 @@ def apply_job_parameters(
         # Apply the job_parameters value if available
         parameter_value = param_dict.pop(parameter_name, None)
         if parameter_value is not None:
-            # Make PATH parameter values that  are not constrained by allowedValues
+            # Make PATH parameter values that are not constrained by allowedValues
             # absolute by joining with the current working directory
             if parameter_type == "PATH" and "allowedValues" not in parameter:
                 if parameter_value == "":
@@ -608,7 +608,8 @@ def apply_job_parameters(
                 # This path is referenced, but its contents are not necessarily
                 # input or output.
                 asset_references.referenced_paths.add(parameter_value)
-            else:
+            elif parameter_value != "":
+                # While empty parameters are allowed, we don't want to add them to asset references
                 object_type = parameter.get("objectType")
 
                 if "IN" in data_flow:
@@ -685,9 +686,9 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
                 # values such as "deadline:*"
                 template_parameters[name] = parameter_value
 
-    # Make valueless PATH parameters with default but not constrained
-    # by allowedValues, absolute by joining with the job bundle directory
-    for parameter in template_parameters.values():
+    # Make valueless PATH parameters with 'default' (but not constrained
+    # by allowedValues) absolute by joining with the job bundle directory
+    for name, parameter in template_parameters.items():
         if (
             "value" not in parameter
             and parameter["type"] == "PATH"
@@ -695,12 +696,22 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
         ):
             default = parameter.get("default")
             if default:
+                if os.path.isabs(default):
+                    raise DeadlineOperationError(
+                        f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
+                    )
+                bundle_real_path = os.path.realpath(bundle_dir)
+                default_real_path = os.path.realpath(os.path.join(bundle_real_path, default))
+                common_path = os.path.commonpath([bundle_real_path, default_real_path])
+                if common_path != bundle_real_path:
+                    raise DeadlineOperationError(
+                        f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default_real_path}' for parameter '{name}' specifies files outside of Job Bundle directory '{bundle_real_path}'.\nPATH values must be relative, and must resolve within the Job Bundle directory."
+                    )
+
                 default_absolute = os.path.normpath(
                     os.path.abspath(os.path.join(bundle_dir, default))
                 )
-
-                if default_absolute != default:
-                    parameter["value"] = default_absolute
+                parameter["value"] = default_absolute
 
     # Rearrange the dict from the template into a list
     return [

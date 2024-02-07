@@ -112,8 +112,11 @@ if __name__ == "__main__":
     print("\nStarting upload test...")
     start = time.perf_counter()
 
+    upload_group = asset_manager.prepare_paths_for_upload(".", files, [root_path / "outputs"], [])
     (summary_statistics_hashing, manifests) = asset_manager.hash_assets_and_create_manifest(
-        files, [root_path / "outputs"], []
+        asset_groups=upload_group.asset_groups,
+        total_input_files=upload_group.total_input_files,
+        total_input_bytes=upload_group.total_input_bytes,
     )
     print(f"Summary Statistics for file hashing:\n{summary_statistics_hashing}")
 

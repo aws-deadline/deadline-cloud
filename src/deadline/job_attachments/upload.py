@@ -47,6 +47,7 @@ from .hash_cache import HashCache
 from .models import (
     AssetRootGroup,
     AssetRootManifest,
+    AssetUploadGroup,
     Attachments,
     FileSystemLocationType,
     HashCacheEntry,
@@ -926,32 +927,34 @@ class S3AssetManager:
                 shared_type_locations[fs_loc.path] = fs_loc.name
         return local_type_locations, shared_type_locations
 
-    def hash_assets_and_create_manifest(
+    def _get_deviated_file_count_by_root(
+        self, groups: list[AssetRootGroup], root_path: str
+    ) -> dict[str, int]:
+        """
+        Given a list of AssetRootGroups and a root directory, return a dict of root paths and file counts that
+        are outside of that root path, and aren't in any storage profile locations.
+        """
+        real_root_path = os.path.realpath(root_path)
+        deviated_file_count_by_root: dict[str, int] = {}
+        for group in groups:
+            if (
+                not os.path.realpath(group.root_path).startswith(real_root_path)
+                and not group.file_system_location_name
+                and group.inputs
+            ):
+                deviated_file_count_by_root[group.root_path] = len(group.inputs)
+        return deviated_file_count_by_root
+
+    def _group_asset_paths(
         self,
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
         storage_profile_id: Optional[str] = None,
-        hash_cache_dir: Optional[str] = None,
-        on_preparing_to_submit: Optional[Callable[[Any], bool]] = None,
-    ) -> tuple[SummaryStatistics, list[AssetRootManifest]]:
+    ) -> list[AssetRootGroup]:
         """
-        Groups the input/output paths by asset root, computes the hashes for input files,
-        and creates manifests using local hash cache.
-
-        Args:
-            input_paths: a list of input paths.
-            output_paths: a list of output paths.
-            hash_cache_dir: a path to local hash cache directory. If it's None, use default path.
-            on_preparing_to_submit: a callback to be called to periodically report progress to the caller.
-            The callback returns True if the operation should continue as normal, or False to cancel.
-
-        Returns:
-            a tuple with (1) the summary statistics of the hash operation, and
-            (2) a list of AssetRootManifest (a manifest and output paths for each asset root).
+        Resolves all of the paths that will be uploaded, sorting by storage profile location.
         """
-        start_time = time.perf_counter()
-
         local_type_locations: dict[str, str] = {}
         shared_type_locations: dict[str, str] = {}
         if storage_profile_id:
@@ -969,12 +972,64 @@ class S3AssetManager:
             shared_type_locations,
         )
 
+        return asset_groups
+
+    def prepare_paths_for_upload(
+        self,
+        job_bundle_path: str,
+        input_paths: list[str],
+        output_paths: list[str],
+        referenced_paths: list[str],
+        storage_profile_id: Optional[str] = None,
+    ) -> AssetUploadGroup:
+        """
+        Processes all of the paths required for upload, grouping them by asset root and local storage profile locations.
+        Returns an object containing the grouped paths, which also includes a dictionary of input directories and file counts
+        for files that were not under the root path or any local storage profile locations.
+        """
+        asset_groups = self._group_asset_paths(
+            input_paths, output_paths, referenced_paths, storage_profile_id
+        )
+        (input_file_count, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
+        num_outside_files_by_bundle_path = self._get_deviated_file_count_by_root(
+            asset_groups, job_bundle_path
+        )
+        return AssetUploadGroup(
+            asset_groups=asset_groups,
+            num_outside_files_by_root=num_outside_files_by_bundle_path,
+            total_input_files=input_file_count,
+            total_input_bytes=input_bytes,
+        )
+
+    def hash_assets_and_create_manifest(
+        self,
+        asset_groups: list[AssetRootGroup],
+        total_input_files: int,
+        total_input_bytes: int,
+        hash_cache_dir: Optional[str] = None,
+        on_preparing_to_submit: Optional[Callable[[Any], bool]] = None,
+    ) -> tuple[SummaryStatistics, list[AssetRootManifest]]:
+        """
+        Computes the hashes for input files, and creates manifests using the local hash cache.
+
+        Args:
+            input_paths: a list of input paths.
+            output_paths: a list of output paths.
+            hash_cache_dir: a path to local hash cache directory. If it's None, use default path.
+            on_preparing_to_submit: a callback to be called to periodically report progress to the caller.
+            The callback returns True if the operation should continue as normal, or False to cancel.
+
+        Returns:
+            a tuple with (1) the summary statistics of the hash operation, and
+            (2) a list of AssetRootManifest (a manifest and output paths for each asset root).
+        """
+        start_time = time.perf_counter()
+
         # Sets up progress tracker to report upload progress back to the caller.
-        (input_files, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
         progress_tracker = ProgressTracker(
             status=ProgressStatus.PREPARING_IN_PROGRESS,
-            total_files=input_files,
-            total_bytes=input_bytes,
+            total_files=total_input_files,
+            total_bytes=total_input_bytes,
             on_progress_callback=on_preparing_to_submit,
         )
 

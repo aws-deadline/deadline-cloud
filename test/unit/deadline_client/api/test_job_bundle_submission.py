@@ -15,10 +15,10 @@ import time
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
-from deadline.client.job_bundle.submission import AssetReferences
 from deadline.job_attachments.models import (
-    JobAttachmentsFileSystem,
+    AssetUploadGroup,
     Attachments,
+    JobAttachmentsFileSystem,
     ManifestProperties,
     PathFormat,
 )
@@ -442,6 +442,9 @@ def test_create_job_from_job_bundle_job_attachments(
     ), patch.object(
         api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
+        S3AssetManager,
+        "prepare_paths_for_upload",
+    ) as mock_prepare_paths, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
@@ -449,6 +452,8 @@ def test_create_job_from_job_bundle_job_attachments(
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        expected_upload_group = AssetUploadGroup(total_input_files=3, total_input_bytes=256)
+        mock_prepare_paths.return_value = expected_upload_group
         mock_upload_assets.return_value = [
             SummaryStatistics(),
             Attachments([]),
@@ -501,20 +506,24 @@ def test_create_job_from_job_bundle_job_attachments(
             queue_parameter_definitions=[],
         )
 
+        mock_prepare_paths.assert_called_once_with(
+            job_bundle_path=temp_job_bundle_dir,
+            input_paths=sorted(
+                [
+                    os.path.join(temp_assets_dir, "asset-1.txt"),
+                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
+                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
+                ]
+            ),
+            output_paths=[os.path.join(temp_assets_dir, "somedir")],
+            referenced_paths=[],
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+        )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,
-            asset_references=AssetReferences(
-                input_filenames=set(
-                    [
-                        os.path.join(temp_assets_dir, "asset-1.txt"),
-                        os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
-                        os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
-                    ]
-                ),
-                output_directories=set([os.path.join(temp_assets_dir, "somedir")]),
-                referenced_paths=set(),
-            ),
-            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            asset_groups=[],
+            total_input_files=3,
+            total_input_bytes=256,
             print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
         )
@@ -602,6 +611,9 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     ), patch.object(
         api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
+        S3AssetManager,
+        "prepare_paths_for_upload",
+    ) as mock_prepare_paths, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
@@ -609,6 +621,8 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        expected_upload_group = AssetUploadGroup(total_input_files=1, total_input_bytes=1)
+        mock_prepare_paths.return_value = expected_upload_group
         mock_upload_assets.return_value = [
             SummaryStatistics(),
             Attachments(
@@ -667,15 +681,22 @@ def test_create_job_from_job_bundle_with_single_asset_file(
             queue_parameter_definitions=[],
         )
 
+        mock_prepare_paths.assert_called_once_with(
+            job_bundle_path=temp_job_bundle_dir,
+            input_paths=[os.path.join(temp_assets_dir, "asset-1.txt")],
+            output_paths=[],
+            referenced_paths=[],
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+        )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,
-            asset_references=AssetReferences(
-                input_filenames=set([os.path.join(temp_assets_dir, "asset-1.txt")])
-            ),
-            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            asset_groups=[],
+            total_input_files=1,
+            total_input_bytes=1,
             print_function_callback=fake_print_callback,
             hashing_progress_callback=fake_hashing_callback,
         )
+
         client_mock().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,

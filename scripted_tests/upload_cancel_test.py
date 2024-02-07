@@ -99,10 +99,13 @@ def run():
 
     try:
         print("\nStart hashing...")
+        upload_group = asset_manager.prepare_paths_for_upload(
+            ".", files, [root_path / "outputs"], []
+        )
         (summary_statistics_hashing, manifests) = asset_manager.hash_assets_and_create_manifest(
-            input_paths=files,
-            output_paths=[root_path / "outputs"],
-            referenced_paths=[],
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )
         print(f"Hashing Summary Statistics:\n{summary_statistics_hashing}")

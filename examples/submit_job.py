@@ -42,7 +42,10 @@ def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_clien
         queue_id=queue_id,
         job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
     )
-    (_, manifests) = asset_manager.hash_assets_and_create_manifest(inputs, [outputDir], [])
+    upload_group = asset_manager.prepare_paths_for_upload(".", inputs, [outputDir], [])
+    (_, manifests) = asset_manager.hash_assets_and_create_manifest(
+        upload_group.asset_groups, upload_group.total_input_files, upload_group.total_input_bytes
+    )
     (_, attachments) = asset_manager.upload_assets(manifests)
     attachments = attachments.to_dict()
     total = time.perf_counter() - start
@@ -167,7 +170,7 @@ if __name__ == "__main__":
     deadline_client = boto3.client(
         "deadline",
         region_name="us-west-2",
-        endpoint_url="https://management.gamma.bealine-dev.us-west-2.amazonaws.com",
+        endpoint_url="https://management.deadline.us-west-2.amazonaws.com",
     )
 
     attachments = process_job_attachments(

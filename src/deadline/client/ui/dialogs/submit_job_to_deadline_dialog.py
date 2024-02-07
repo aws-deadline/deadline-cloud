@@ -32,6 +32,7 @@ from ..deadline_credentials_status import DeadlineCredentialsStatus
 from .. import block_signals
 from ...config import get_setting
 from ...config.config_file import str2bool
+from ...exceptions import UserInitiatedCancel
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.submission import AssetReferences
 from ..widgets.deadline_credentials_status_widget import DeadlineCredentialsStatusWidget
@@ -468,6 +469,10 @@ class SubmitJobToDeadlineDialog(QDialog):
                 deadline,
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
             )
+        except UserInitiatedCancel as uic:
+            logger.info("Canceling submission.")
+            QMessageBox.information(self, f"{settings.submitter_name} Job Submission", str(uic))
+            job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
             api.get_deadline_cloud_library_telemetry_client().record_error(

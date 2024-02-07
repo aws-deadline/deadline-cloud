@@ -11,3 +11,7 @@ class DeadlineOperationError(Exception):
 
 class CreateJobWaiterCanceled(Exception):
     """Error for when the waiter on CreateJob is interrupted"""
+
+
+class UserInitiatedCancel(Exception):
+    """Error for when the user requests cancelation"""

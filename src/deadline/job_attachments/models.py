@@ -51,6 +51,16 @@ class AssetRootGroup:
 
 
 @dataclass
+class AssetUploadGroup:
+    """Represents all of the information needed to prepare to upload assets"""
+
+    asset_groups: List[AssetRootGroup] = field(default_factory=list)
+    num_outside_files_by_root: dict[str, int] = field(default_factory=dict)
+    total_input_files: int = 0
+    total_input_bytes: int = 0
+
+
+@dataclass
 class ManifestPathGroup:
     """
     Represents paths combined from multiple manifests under the same root path, organized by hash algorithm.

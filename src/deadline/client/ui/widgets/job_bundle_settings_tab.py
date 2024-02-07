@@ -24,7 +24,7 @@ from PySide2.QtWidgets import (  # type: ignore
 from ..dataclasses import JobBundleSettings
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...job_bundle.submission import AssetReferences
-from ...job_bundle.loader import read_yaml_or_json_object
+from ...job_bundle.loader import read_yaml_or_json_object, validate_directory_symlink_containment
 from ...job_bundle.parameters import read_job_bundle_parameters
 from ...config import config_file
 
@@ -99,6 +99,8 @@ class JobBundleSettingsWidget(QWidget):
 
         # Warn the user if the Job Bundle could not be loaded
         try:
+            validate_directory_symlink_containment(input_job_bundle_dir)
+
             asset_references_obj = (
                 read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
             )
