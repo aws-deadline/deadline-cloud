@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 import textwrap
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Any, Dict, List, Optional, cast
 
 from botocore.client import BaseClient  # type: ignore[import]
 from PySide2.QtCore import Qt, Signal
@@ -19,6 +19,8 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QFormLayout,
+    QGroupBox,
     QLabel,
     QMessageBox,
     QProgressBar,
@@ -29,9 +31,17 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from deadline.client import api
-from deadline.client.exceptions import CreateJobWaiterCanceled, DeadlineOperationError
+from deadline.client.exceptions import (
+    CreateJobWaiterCanceled,
+    DeadlineOperationError,
+    UserInitiatedCancel,
+)
 from deadline.client.config import set_setting, config_file
-from deadline.client.job_bundle.loader import read_yaml_or_json, read_yaml_or_json_object
+from deadline.client.job_bundle.loader import (
+    read_yaml_or_json,
+    read_yaml_or_json_object,
+    validate_directory_symlink_containment,
+)
 from deadline.client.job_bundle.parameters import (
     JobParameter,
     apply_job_parameters,
@@ -43,7 +53,7 @@ from deadline.client.job_bundle.submission import (
     split_parameter_args,
 )
 from deadline.job_attachments.exceptions import AssetSyncCancelledError
-from deadline.job_attachments.models import AssetRootManifest
+from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
@@ -131,14 +141,17 @@ class SubmitJobProgressDialog(QDialog):
         # Remove help button from title bar
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.lyt = QVBoxLayout(self)
-        self.lyt.setContentsMargins(5, 5, 5, 5)
-        self.setMinimumWidth(400)
+        self.lyt.setContentsMargins(5, 10, 5, 5)
+        self.setMinimumWidth(450)
 
-        self.status_label = QLabel()
-        self.hashing_progress_bar = QProgressBar()
-        self.upload_progress_bar = QProgressBar()
-        self.hashing_progress_message = QLabel("Preparing for hashing...")
-        self.upload_progress_message = QLabel("Preparing for upload...")
+        self.status_label = QLabel("Preparing files...")
+        self.status_label.setMargin(5)
+        self.hashing_progress = JobAttachmentsProgressWidget(
+            initial_message="Preparing for hashing...", title="Hashing Progress", parent=self
+        )
+        self.upload_progress = JobAttachmentsProgressWidget(
+            initial_message="Preparing for upload...", title="Upload Progress", parent=self
+        )
         self.summary_edit = QTextEdit()
         self.summary_edit.setVisible(False)
         self.summary_edit.setReadOnly(True)
@@ -147,10 +160,8 @@ class SubmitJobProgressDialog(QDialog):
 
         self.lyt.setAlignment(Qt.AlignTop)
         self.lyt.addWidget(self.status_label)
-        self.lyt.addWidget(self.hashing_progress_bar)
-        self.lyt.addWidget(self.hashing_progress_message)
-        self.lyt.addWidget(self.upload_progress_bar)
-        self.lyt.addWidget(self.upload_progress_message)
+        self.lyt.addWidget(self.hashing_progress)
+        self.lyt.addWidget(self.upload_progress)
         self.lyt.addWidget(self.summary_edit)
         self.lyt.addWidget(self.button_box)
 
@@ -176,6 +187,10 @@ class SubmitJobProgressDialog(QDialog):
         job attachments the hashing process will be started. If there are no job
         attachments then create job will be called without calling job attachments.
         """
+
+        # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
+        validate_directory_symlink_containment(self._job_bundle_dir)
+
         # Read in the job template
         file_contents, file_type = read_yaml_or_json(
             self._job_bundle_dir, "template", required=True
@@ -232,20 +247,39 @@ class SubmitJobProgressDialog(QDialog):
                     )
             self.asset_references.input_directories.clear()
 
-            self._start_hashing(
-                self.asset_references.input_filenames,
-                self.asset_references.output_directories,
-                self.asset_references.referenced_paths,
+            upload_group = self._asset_manager.prepare_paths_for_upload(
+                job_bundle_path=self._job_bundle_dir,
+                input_paths=sorted(self.asset_references.input_filenames),
+                output_paths=sorted(self.asset_references.output_directories),
+                referenced_paths=sorted(self.asset_references.referenced_paths),
+                storage_profile_id=self._storage_profile_id,
             )
+            if (
+                not self._auto_accept
+                and not self._confirm_asset_references_outside_storage_profile(
+                    upload_group.num_outside_files_by_root,
+                    upload_group.total_input_files,
+                    upload_group.total_input_bytes,
+                )
+            ):
+                raise UserInitiatedCancel("Submission canceled.")
+
+            self._start_hashing(
+                upload_group.asset_groups,
+                upload_group.total_input_files,
+                upload_group.total_input_bytes,
+            )
+
         else:
-            self.hashing_progress_bar.setVisible(False)
-            self.hashing_progress_message.setVisible(False)
-            self.upload_progress_bar.setVisible(False)
-            self.upload_progress_message.setVisible(False)
+            self.hashing_progress.setVisible(False)
+            self.upload_progress.setVisible(False)
             self._start_create_job()
 
     def _hashing_background_thread(
-        self, input_paths: Set[str], output_paths: Set[str], referenced_paths: Set[str]
+        self,
+        asset_groups: list[AssetRootGroup],
+        total_input_files: int,
+        total_input_bytes: int,
     ) -> None:
         """
         This function gets started in a background thread to start the hashing
@@ -263,10 +297,9 @@ class SubmitJobProgressDialog(QDialog):
             hashing_summary, manifests = cast(
                 S3AssetManager, self._asset_manager
             ).hash_assets_and_create_manifest(
-                input_paths=sorted(input_paths),
-                output_paths=sorted(output_paths),
-                referenced_paths=sorted(referenced_paths),
-                storage_profile_id=self._storage_profile_id,
+                asset_groups=asset_groups,
+                total_input_files=total_input_files,
+                total_input_bytes=total_input_bytes,
                 hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
                 on_preparing_to_submit=_update_hash_progress,
             )
@@ -366,7 +399,10 @@ class SubmitJobProgressDialog(QDialog):
             self.create_job_thread_exception.emit(e)
 
     def _start_hashing(
-        self, input_paths: Set[str], output_paths: Set[str], referenced_paths: Set[str]
+        self,
+        asset_groups: list[AssetRootGroup],
+        total_input_files: int,
+        total_input_bytes: int,
     ) -> None:
         """
         Starts the background hashing thread.
@@ -375,7 +411,7 @@ class SubmitJobProgressDialog(QDialog):
         self.__hashing_thread = threading.Thread(
             target=self._hashing_background_thread,
             name="Amazon Deadline Cloud Hashing Background Thread",
-            args=(input_paths, output_paths, referenced_paths),
+            args=(asset_groups, total_input_files, total_input_bytes),
         )
         self.__hashing_thread.start()
 
@@ -410,8 +446,8 @@ class SubmitJobProgressDialog(QDialog):
         hashing progress. Sets the progress bar in the dialog based on
         the callback progress data from job attachments.
         """
-        self.hashing_progress_bar.setValue(int(progress_metadata.progress))
-        self.hashing_progress_message.setText(progress_metadata.progressMessage)
+        self.hashing_progress.progress_bar.setValue(int(progress_metadata.progress))
+        self.hashing_progress.progress_message.setText(progress_metadata.progressMessage)
 
     def handle_upload_thread_progress_report(
         self, progress_metadata: ProgressReportMetadata
@@ -421,8 +457,8 @@ class SubmitJobProgressDialog(QDialog):
         upload progress. Sets the progress bar in the dialog based on
         the callback progress data from job attachments.
         """
-        self.upload_progress_bar.setValue(int(progress_metadata.progress))
-        self.upload_progress_message.setText(progress_metadata.progressMessage)
+        self.upload_progress.progress_bar.setValue(int(progress_metadata.progress))
+        self.upload_progress.progress_message.setText(progress_metadata.progressMessage)
 
     def handle_hashing_thread_succeeded(
         self,
@@ -439,17 +475,7 @@ class SubmitJobProgressDialog(QDialog):
         self.summary_edit.setText(
             f"\nHashing Summary:\n{textwrap.indent(str(hashing_summary), '    ')}"
         )
-
-        if (
-            not self._auto_accept
-            and hashing_summary.total_files > 0
-            and not self._confirm_job_attachments_upload(
-                hashing_summary.total_files, hashing_summary.total_bytes
-            )
-        ):
-            self.close()
-        else:
-            self._start_upload(asset_manifests)
+        self._start_upload(asset_manifests)
 
     def handle_upload_thread_succeeded(
         self, upload_summary: SummaryStatistics, attachment_settings: Any
@@ -495,32 +521,51 @@ class SubmitJobProgressDialog(QDialog):
 
         self.summary_edit.setText(f"{status_message} {self.summary_edit.toPlainText()}")
         self.summary_edit.setVisible(True)
+        self.adjustSize()
 
     def handle_thread_exception(self, e: BaseException) -> None:
         """
         Handles the signal sent from the background threads when an exception is
         thrown.
         """
-        self.hashing_progress_bar.setVisible(False)
-        self.hashing_progress_message.setVisible(False)
-        self.upload_progress_bar.setVisible(False)
-        self.upload_progress_message.setVisible(False)
+        self.hashing_progress.setVisible(False)
+        self.upload_progress.setVisible(False)
         self.status_label.setVisible(False)
         self.button_box.setStandardButtons(QDialogButtonBox.Close)
         self.summary_edit.setText(f"Error Occurred: {str(e)}")
         self.summary_edit.setVisible(True)
+        self.adjustSize()
         logger.error(str(e))
 
-    def _confirm_job_attachments_upload(self, num_files: int, upload_size: int) -> bool:
+    def _confirm_asset_references_outside_storage_profile(
+        self,
+        deviated_file_count_by_root: dict[str, int],
+        num_files: int,
+        upload_size: int,
+    ) -> bool:
         """
         Creates a dialog to prompt the user to confirm that they want to proceed
-        with uploading the specified number of files totaling a certain size.
+        with uploading when files were found outside of the configured storage profile locations.
         """
         message_box = QMessageBox(self)
-        message_box.setText(
+        message_text = (
             f"Job submission contains {num_files} files totaling {_human_readable_file_size(upload_size)}. "
-            "All files will be uploaded to S3 if they are not already present in the job attachments bucket."
+            " All files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
+        if deviated_file_count_by_root:
+            root_by_count_message = "\n\n".join(
+                [
+                    f"{file_count} files from : '{directory}'"
+                    for directory, file_count in deviated_file_count_by_root.items()
+                ]
+            )
+            message_text += (
+                f"\n\nFiles were found outside of the configured storage profile location(s). "
+                " Please confirm that you intend to upload files from the following directories:\n\n"
+                f"{root_by_count_message}"
+            )
+            message_box.setIcon(QMessageBox.Warning)
+        message_box.setText(message_text)
         message_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         message_box.setDefaultButton(QMessageBox.Ok)
 
@@ -530,7 +575,7 @@ class SubmitJobProgressDialog(QDialog):
         dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
         message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
 
-        message_box.setWindowTitle("Job Attachments Upload Confirmation")
+        message_box.setWindowTitle("Job Attachments Valid Files Confirmation")
         selection = message_box.exec_()
 
         return selection != QMessageBox.Cancel
@@ -546,10 +591,8 @@ class SubmitJobProgressDialog(QDialog):
         else:
             logger.info("Canceling submission...")
             self.status_label.setText("Canceling submission...")
-            self.hashing_progress_bar.setVisible(False)
-            self.hashing_progress_message.setVisible(False)
-            self.upload_progress_bar.setVisible(False)
-            self.upload_progress_message.setVisible(False)
+            self.hashing_progress.setVisible(False)
+            self.upload_progress.setVisible(False)
             self.adjustSize()
             self._continue_submission = False
             self._shutdown_threads()
@@ -576,3 +619,25 @@ class SubmitJobProgressDialog(QDialog):
 
     def exec_(self) -> Optional[Dict[str, Any]]:
         return self.exec()
+
+
+class JobAttachmentsProgressWidget(QGroupBox):
+    """
+    UI element to group job attachments progress bar with a status message.
+    """
+
+    def __init__(self, *, initial_message: str, title: str, parent: Optional[QWidget] = None):
+        super().__init__(parent=parent, title=title)
+        self.initial_message = initial_message
+
+        self._build_ui()
+
+    def _build_ui(self):
+        self.layout = QFormLayout(self)
+        self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+
+        self.progress_bar = QProgressBar()
+        self.progress_message = QLabel(self.initial_message)
+
+        self.layout.addWidget(self.progress_bar)
+        self.layout.addWidget(self.progress_message)

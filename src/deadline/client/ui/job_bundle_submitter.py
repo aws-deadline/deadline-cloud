@@ -19,6 +19,7 @@ from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
     read_yaml_or_json_object,
+    validate_directory_symlink_containment,
 )
 from ..job_bundle.parameters import (
     JobParameter,
@@ -131,6 +132,9 @@ def show_job_bundle_submitter(
 
         with open(os.path.join(job_bundle_dir, "parameter_values.yaml"), "w", encoding="utf8") as f:
             deadline_yaml_dump({"parameterValues": parameters_values}, f)
+
+    # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
+    validate_directory_symlink_containment(input_job_bundle_dir)
 
     # Load the template to get the starting name
     template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)

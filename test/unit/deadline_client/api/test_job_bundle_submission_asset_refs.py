@@ -6,12 +6,15 @@ where there are PATH parameters that carry assetReference IN/OUT metadata.
 """
 
 import os
+import pytest
 from unittest.mock import ANY, patch
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
+from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import (
     Attachments,
+    AssetUploadGroup,
     JobAttachmentsFileSystem,
     AssetRootManifest,
     ManifestProperties,
@@ -50,12 +53,6 @@ parameterDefinitions:
   dataFlow: IN
   description: FILE * IN
   default: {JOB_BUNDLE_RELATIVE_FILE_PATH}
-- name: FileInAbsolute
-  type: PATH
-  objectType: FILE
-  dataFlow: IN
-  description: FILE * IN
-  default: JOB_BUNDLE_ABSOLUTE_FILE_PATH
 - name: FileOut
   type: PATH
   objectType: FILE
@@ -81,12 +78,6 @@ parameterDefinitions:
   dataFlow: IN
   description: DIR * IN
   default: {JOB_BUNDLE_RELATIVE_DIR_PATH}
-- name: DirInAbsolute
-  type: PATH
-  objectType: DIRECTORY
-  dataFlow: IN
-  description: DIR * IN
-  default: JOB_BUNDLE_ABSOLUTE_DIR_PATH
 - name: DirOut
   type: PATH
   objectType: DIRECTORY
@@ -97,6 +88,18 @@ parameterDefinitions:
   objectType: DIRECTORY
   dataFlow: INOUT
   description: DIR * INOUT
+- name: FileInEmpty
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  description: Empty file
+  default: ''
+- name: DirInEmpty
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+  description: Empty dir
+  default: ''
 steps:
 - name: CliScript
   script:
@@ -110,20 +113,130 @@ steps:
           {{Param.FileNoneDefault}}
           {{Param.FileNone}}
           {{Param.FileIn}}
-          {{Param.FileInAbsolute}}
           {{Param.FileOut}}
           {{Param.FileInout}}
           {{Param.DirNoneDefault}}
           {{Param.DirNone}}
           {{Param.DirIn}}
-          {{Param.DirInAbsolute}}
           {{Param.DirOut}}
           {{Param.DirInout}}
+          {{Param.FileInEmpty}}
+          {{Param.DirInEmpty}}
         '
     actions:
       onRun:
         command: '{{Task.Attachment.runScript.Path}}'
 """
+
+JOB_TEMPLATE_NOT_VALID_FILE_PATH = """
+specificationVersion: 'jobtemplate-2023-09'
+name: Job Template to test a not valid file path.
+parameterDefinitions:
+- name: FileIn
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  description: FILE * IN
+  default: JOB_BUNDLE_NOT_VALID_FILE_PATH
+steps:
+- name: CliScript
+  script:
+    embeddedFiles:
+    - name: runScript
+      type: TEXT
+      runnable: true
+      data: |
+        #!/usr/bin/env bash
+        echo '
+          {{Param.FileIn}}
+        '
+    actions:
+      onRun:
+        command: '{{Task.Attachment.runScript.Path}}'
+"""
+
+JOB_TEMPLATE_NOT_VALID_DIR_PATH = """
+specificationVersion: 'jobtemplate-2023-09'
+name: Job Template to test a not valid directory path.
+parameterDefinitions:
+- name: DirIn
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+  description: DIR * IN
+  default: JOB_BUNDLE_NOT_VALID_DIR_PATH
+steps:
+- name: CliScript
+  script:
+    embeddedFiles:
+    - name: runScript
+      type: TEXT
+      runnable: true
+      data: |
+        #!/usr/bin/env bash
+        echo '
+          {{Param.DirIn}}
+        '
+    actions:
+      onRun:
+        command: '{{Task.Attachment.runScript.Path}}'
+"""
+
+
+@pytest.mark.parametrize(
+    "template, parameter_key, file_path",
+    [
+        pytest.param(
+            JOB_TEMPLATE_NOT_VALID_FILE_PATH,
+            "JOB_BUNDLE_NOT_VALID_FILE_PATH",
+            "/absolute/absolute.txt",
+        ),
+        pytest.param(
+            JOB_TEMPLATE_NOT_VALID_FILE_PATH,
+            "JOB_BUNDLE_NOT_VALID_FILE_PATH",
+            "../relative_outside_bundle_dir.txt",
+        ),
+        pytest.param(
+            JOB_TEMPLATE_NOT_VALID_DIR_PATH, "JOB_BUNDLE_NOT_VALID_DIR_PATH", "/absolutedir"
+        ),
+        pytest.param(
+            JOB_TEMPLATE_NOT_VALID_DIR_PATH,
+            "JOB_BUNDLE_NOT_VALID_DIR_PATH",
+            "../relative_outside_bundle_dir",
+        ),
+    ],
+)
+def test_create_job_from_job_bundle_with_not_valid_directory_path(
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir, template, parameter_key, file_path
+):
+    """
+    Tests that a job bundle with template that contains either absolute paths or relative paths that resolve
+    outside of the Job Bundle directory throws a DeadlineOperationError.
+    """
+    # Use a temporary directory for the job bundle
+    # Define absolute paths for testing within temp_assets_dir
+    job_bundle_absolute_dir_path = os.path.normpath(temp_assets_dir + file_path)
+
+    # Insert absolute paths with temp dir into job template
+    job_template_replaced = template.replace(parameter_key, job_bundle_absolute_dir_path)
+
+    # Write the YAML template
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(job_template_replaced)
+
+    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        with pytest.raises(
+            DeadlineOperationError,
+        ):
+            # This is the function we're testing
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir, job_parameters=[], queue_parameter_definitions=[]
+            )
 
 
 def test_create_job_from_job_bundle_with_all_asset_ref_variants(
@@ -138,6 +251,8 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
+        S3AssetManager, "prepare_paths_for_upload"
+    ) as mock_prepare_paths, patch.object(
         S3AssetManager, "hash_assets_and_create_manifest"
     ) as mock_hash_assets, patch.object(
         S3AssetManager, "upload_assets"
@@ -147,6 +262,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        mock_prepare_paths.return_value = AssetUploadGroup()
         mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
         mock_upload_assets.return_value = [
             SummaryStatistics(),
@@ -166,21 +282,9 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        # Define absolute paths for testing within temp_assets_dir
-        job_bundle_absolute_file_path = os.path.normpath(temp_assets_dir + "/absolute/absolute.txt")
-        job_bundle_absolute_dir_path = os.path.normpath(temp_assets_dir + "/absolutedir")
-
-        # Insert absolute paths with temp dir into job template
-        job_template_replaced = JOB_TEMPLATE_ALL_ASSET_REF_VARIANTS.replace(
-            "JOB_BUNDLE_ABSOLUTE_FILE_PATH", job_bundle_absolute_file_path
-        )
-        job_template_replaced = job_template_replaced.replace(
-            "JOB_BUNDLE_ABSOLUTE_DIR_PATH", job_bundle_absolute_dir_path
-        )
-
         # Write the YAML template
         with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
-            f.write(job_template_replaced)
+            f.write(JOB_TEMPLATE_ALL_ASSET_REF_VARIANTS)
 
         job_parameters = [
             {
@@ -232,15 +336,6 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             },
         )
 
-        # Write file contents to absolute asset directories
-        _write_asset_files(
-            "/",
-            {
-                job_bundle_absolute_file_path: "absolute file in",
-                job_bundle_absolute_dir_path + "/absolute.txt": "absolute dir in",
-            },
-        )
-
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir, job_parameters=job_parameters, queue_parameter_definitions=[]
@@ -259,8 +354,6 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                 temp_job_bundle_dir + "/dir/inside/job_bundle/file1.txt",
                 temp_job_bundle_dir + "/dir/inside/job_bundle/subdir/file1.txt",
                 temp_job_bundle_dir + "/file/inside/job_bundle.txt",
-                job_bundle_absolute_file_path,
-                job_bundle_absolute_dir_path + "/absolute.txt",
             ]
         )
         output_paths = sorted(
@@ -281,11 +374,17 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                 os.path.join(temp_assets_dir, "file/inside/asset-dir-filenone.txt"),
             ]
         )
-        mock_hash_assets.assert_called_once_with(
+        mock_prepare_paths.assert_called_once_with(
+            job_bundle_path=temp_job_bundle_dir,
             input_paths=input_paths,
             output_paths=output_paths,
             referenced_paths=referenced_paths,
             storage_profile_id="",
+        )
+        mock_hash_assets.assert_called_once_with(
+            asset_groups=[],
+            total_input_files=0,
+            total_input_bytes=0,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=ANY,
         )
