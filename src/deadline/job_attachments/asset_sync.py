@@ -528,3 +528,13 @@ class AssetSync:
         else:
             summary_stats = SummaryStatistics()
         return summary_stats
+
+    def cleanup_session(self, session_dir: Path, file_system: JobAttachmentsFileSystem):
+        if file_system == JobAttachmentsFileSystem.COPIED.value:
+            return
+        try:
+            Fus3ProcessManager.find_fus3()
+            # Shutdown all running Deadline VFS processes since session is complete
+            Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
+        except Fus3ExecutableMissingError:
+            logger.error("Virtual File System not found, no processes to kill.")
