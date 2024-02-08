@@ -161,10 +161,8 @@ class TestUpload:
             )
 
             # When
-            (
-                hash_summary_statistics,
-                asset_root_manifests,
-            ) = asset_manager.hash_assets_and_create_manifest(
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(asset_root),
                 input_paths=[
                     str(scene_file),
                     str(texture_file),
@@ -181,6 +179,14 @@ class TestUpload:
                     "",
                 ],
                 referenced_paths=[],
+            )
+            (
+                hash_summary_statistics,
+                asset_root_manifests,
+            ) = asset_manager.hash_assets_and_create_manifest(
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=str(cache_dir),
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -191,6 +197,7 @@ class TestUpload:
             )
 
             # Then
+            assert not upload_group.num_outside_files_by_root  # Shouldn't be any outside files
             expected_attachments = Attachments(
                 manifests=[
                     ManifestProperties(
@@ -334,13 +341,19 @@ class TestUpload:
             )
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(root_c),
+                input_paths=[input_c, input_d],
+                output_paths=[output_d],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=[input_c, input_d],
-                output_paths=[output_d],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -507,13 +520,19 @@ class TestUpload:
             cache_dir = tmpdir.mkdir("cache")
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(asset_root),
+                input_paths=input_files,
+                output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=input_files,
-                output_paths=[str(Path(asset_root).joinpath("outputs"))],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -659,13 +678,19 @@ class TestUpload:
             cache_dir = tmpdir.mkdir("cache")
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(asset_root),
+                input_paths=input_files,
+                output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=input_files,
-                output_paths=[str(Path(asset_root).joinpath("outputs"))],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -776,13 +801,19 @@ class TestUpload:
             cache_dir = tmpdir.mkdir("cache")
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(tmpdir),
+                input_paths=[already_uploaded_file, not_yet_uploaded_file],
+                output_paths=[],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=[already_uploaded_file, not_yet_uploaded_file],
-                output_paths=[],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -917,13 +948,19 @@ class TestUpload:
             cache_dir = tmpdir.mkdir("cache")
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(tmpdir),
+                input_paths=input_files,
+                output_paths=[],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=input_files,
-                output_paths=[],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1020,13 +1057,19 @@ class TestUpload:
             cache_dir = tmpdir.mkdir("cache")
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(tmpdir),
+                input_paths=[],
+                output_paths=[output_dir],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=[],
-                output_paths=[output_dir],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1204,8 +1247,17 @@ class TestUpload:
                 cache_dir = tmpdir.mkdir("cache")
                 test_file = tmpdir.join("test.txt")
                 test_file.write("test")
+                upload_group = asset_manager.prepare_paths_for_upload(
+                    job_bundle_path=str(tmpdir),
+                    input_paths=[test_file],
+                    output_paths=[],
+                    referenced_paths=[],
+                )
                 asset_manager.hash_assets_and_create_manifest(
-                    [test_file], [], [], hash_cache_dir=cache_dir
+                    upload_group.asset_groups,
+                    upload_group.total_input_files,
+                    upload_group.total_input_bytes,
+                    hash_cache_dir=cache_dir,
                 )
 
     def test_asset_uploader_constructor(self, fresh_deadline_config):
@@ -1606,13 +1658,19 @@ class TestUpload:
             )
 
             # When
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(asset_root),
+                input_paths=[input_not_exist, scene_file],
+                output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=[input_not_exist, scene_file],
-                output_paths=[str(Path(asset_root).joinpath("outputs"))],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=cache_dir,
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
@@ -1723,13 +1781,19 @@ class TestUpload:
                 asset_manifest_version=manifest_version,
             )
 
+            upload_group = asset_manager.prepare_paths_for_upload(
+                job_bundle_path=str(tmpdir),
+                input_paths=[str(symlink_input_path)],
+                output_paths=[str(symlink_output_path)],
+                referenced_paths=[],
+            )
             (
                 hash_summary_statistics,
                 asset_root_manifests,
             ) = asset_manager.hash_assets_and_create_manifest(
-                input_paths=[str(symlink_input_path)],
-                output_paths=[str(symlink_output_path)],
-                referenced_paths=[],
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
                 hash_cache_dir=str(cache_dir),
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )

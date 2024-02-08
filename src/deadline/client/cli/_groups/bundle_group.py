@@ -112,16 +112,34 @@ def bundle_submit(
     def _check_create_job_wait_canceled() -> bool:
         return sigint_handler.continue_operation
 
-    def _decide_cancel_submission(asset_references, hash_summary):
+    def _decide_cancel_submission(
+        deviated_file_count_by_root: dict[str, int],
+        num_files: int,
+        upload_size: int,
+    ):
+        message_text = (
+            f"Job submission contains {num_files} files totaling {_human_readable_file_size(upload_size)}. "
+            " All files will be uploaded to S3 if they are not already present in the job attachments bucket."
+        )
+        if deviated_file_count_by_root:
+            root_by_count_message = "\n\n".join(
+                [
+                    f"{file_count} files from : '{directory}'"
+                    for directory, file_count in deviated_file_count_by_root.items()
+                ]
+            )
+            message_text += (
+                f"\n\nFiles were found outside of the configured storage profile location(s). "
+                " Please confirm that you intend to upload files from the following directories:\n\n"
+                f"{root_by_count_message}"
+            )
+        message_text += "\n\nDo you wish to proceed?"
         return (
             not (yes or config_file.str2bool(get_setting("settings.auto_accept", config=config)))
-            and len(asset_references.input_filenames) > 0
+            and num_files > 0
             and not click.confirm(
-                f"Job submission contains {hash_summary.total_files} files "
-                f"totaling {_human_readable_file_size(hash_summary.total_bytes)}. "
-                "All files will be uploaded to S3 if they are not already present in the job attachments bucket. "
-                "Do you wish to proceed?",
-                default=True,
+                message_text,
+                default=not deviated_file_count_by_root,
             )
         )
 

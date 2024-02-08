@@ -6,12 +6,14 @@ the current status of Amazon Deadline Cloud credentials and API.
 The current stauts is handled by DeadlineCredentialstatus.
 """
 from logging import getLogger
+from typing import Optional
 
+from PySide2.QtCore import Qt
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
-    QFrame,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QSizePolicy,
     QWidget,
 )
 
@@ -32,23 +34,14 @@ class DeadlineCredentialsStatusWidget(QWidget):
 
         layout = QHBoxLayout(self)
 
-        self.creds_type_label = QLabel("")
-        layout.addWidget(self.creds_type_label)
-        self.creds_status_label = QLabel("")
-        layout.addWidget(self.creds_status_label)
-        self.deadline_authorized_label = QLabel("")
-        layout.addWidget(self.deadline_authorized_label)
-
-        # Make each label a sunken panel
-        for label in (
-            self.creds_status_label,
-            self.deadline_authorized_label,
-            self.creds_type_label,
-        ):
-            label.setFrameStyle(QFrame.Panel | QFrame.Sunken)
-            label.setLineWidth(1)
-            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-            label.setMinimumSize(60, 22)
+        self.creds_type_group = CredentialsStatusGroup(title="Credentials Type", parent=self)
+        layout.addWidget(self.creds_type_group)
+        self.creds_status_group = CredentialsStatusGroup(title="Credentials Status", parent=self)
+        layout.addWidget(self.creds_status_group)
+        self.deadline_authorized_group = CredentialsStatusGroup(
+            title="Amazon Deadline Cloud API", parent=self
+        )
+        layout.addWidget(self.deadline_authorized_group)
 
         self._status = DeadlineCredentialsStatus.getInstance()
         self._status.creds_type_changed.connect(self._creds_type_changed)
@@ -63,37 +56,55 @@ class DeadlineCredentialsStatusWidget(QWidget):
     def _creds_type_changed(self) -> None:
         if self._status.creds_type is None:
             color = "white"
-            text = "<refreshing>"
+            text = "&lt;Refreshing&gt;"
         elif self._status.creds_type == api.AwsCredentialsType.NOT_VALID:
             color = "red"
             text = self._status.creds_type.name
         else:
             color = "green"
             text = self._status.creds_type.name
-        self.creds_type_label.setText(f"Creds: <b style='color:{color};'>{text}</b>")
+        self.creds_type_group.label.setText(f"<b style='color:{color};'>{text}</b>")
 
     def _creds_status_changed(self) -> None:
         if self._status.creds_status is None:
             color = "white"
-            text = "<refreshing>"
+            text = "&lt;Refreshing&gt;"
         elif self._status.creds_status == api.AwsCredentialsStatus.AUTHENTICATED:
             color = "green"
             text = self._status.creds_status.name
         else:
             color = "red"
             text = self._status.creds_status.name
-        self.creds_status_label.setText(f"Status: <b style='color:{color};'>{text}</b>")
+        self.creds_status_group.label.setText(f"<b style='color:{color};'>{text}</b>")
 
     def _api_availability_changed(self) -> None:
         if self._status.api_availability is None:
             color = "white"
-            text = "<refreshing>"
+            text = "&lt;Refreshing&gt;"
         elif self._status.api_availability:
             color = "green"
             text = "AUTHORIZED"
         else:
             color = "red"
             text = "UNAVAILABLE"
-        self.deadline_authorized_label.setText(
-            f"Amazon Deadline Cloud API: <b style='color:{color};'>{text}</b>"
-        )
+        self.deadline_authorized_group.label.setText(f"<b style='color:{color};'>{text}</b>")
+
+
+class CredentialsStatusGroup(QGroupBox):
+    """
+    UI element to group the status of credentials.
+    """
+
+    def __init__(self, *, title: str, parent: Optional[QWidget] = None):
+        super().__init__(parent=parent, title=title)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        self.layout = QFormLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        self.label = QLabel("")
+
+        self.label.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label)
