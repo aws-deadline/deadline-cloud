@@ -601,11 +601,11 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     def _set_remove_button_for_first_item(self):
         if self.value_list_widget.count() == 1:
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
-            first_item.remove_button.setVisible(False)
+            first_item.remove_button.setEnabled(False)
 
-        if self.value_list_widget.count() == 2:
+        if self.value_list_widget.count() >= 2:
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
-            first_item.remove_button.setVisible(True)
+            first_item.remove_button.setEnabled(True)
 
     def get_requirement(self) -> Dict[str, Any]:
         """
