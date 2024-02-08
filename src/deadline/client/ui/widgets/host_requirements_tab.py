@@ -643,7 +643,10 @@ class CustomAttributeValueWidget(QWidget):
         self.line_edit = QLineEdit()
 
         self.remove_button = QPushButton()
-        self.remove_button.setIcon(RemoveIcon())
+
+        remove_icon_pixmap: QStyle.StandardPixmap = QStyle.SP_TitleBarCloseButton
+        remove_icon: QIcon = self.style().standardIcon(remove_icon_pixmap)
+        self.remove_button.setIcon(remove_icon)
         self.remove_button.clicked.connect(self._remove)
 
         self.layout = QHBoxLayout(self)
