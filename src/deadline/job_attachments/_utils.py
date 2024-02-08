@@ -1,10 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import datetime
-import os
 from hashlib import shake_256
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Tuple, Union
 import uuid
 
 
@@ -15,12 +14,8 @@ __all__ = [
     "_human_readable_file_size",
     "_get_unique_dest_dir_name",
     "_get_bucket_and_object_key",
-    "_get_default_hash_cache_db_file_dir",
     "_is_relative_to",
 ]
-
-CONFIG_ROOT = ".deadline"
-COMPONENT_NAME = "job_attachments"
 
 
 def _join_s3_paths(root: str, *args: str):
@@ -79,17 +74,6 @@ def _get_bucket_and_object_key(s3_path: str) -> Tuple[str, str]:
     """Returns the bucket name and object key from the S3 URI"""
     bucket, key = s3_path.replace("s3://", "").split("/", maxsplit=1)
     return bucket, key
-
-
-def _get_default_hash_cache_db_file_dir() -> Optional[str]:
-    """
-    Gets the expected directory for the hash cache database file based on OS environment variables.
-    If a directory cannot be found, defaults to the working directory.
-    """
-    default_path = os.environ.get("HOME")
-    if default_path:
-        default_path = os.path.join(default_path, CONFIG_ROOT, COMPONENT_NAME)
-    return default_path
 
 
 def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:

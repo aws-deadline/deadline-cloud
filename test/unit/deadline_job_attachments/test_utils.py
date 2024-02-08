@@ -2,25 +2,15 @@
 
 from pathlib import Path
 import sys
-from unittest.mock import patch
 
 import pytest
 
 from deadline.job_attachments._utils import (
-    _get_default_hash_cache_db_file_dir,
     _is_relative_to,
 )
 
 
 class TestUtils:
-    def test_get_default_hash_cache_db_file_dir_env_var_path_exists(self, tmpdir):
-        """
-        Tests that when an environment variable exists, it uses that path for the hash cache
-        """
-        expected_path = tmpdir.join(".deadline").join("job_attachments")
-        with patch("os.environ.get", side_effect=[tmpdir]):
-            assert _get_default_hash_cache_db_file_dir() == expected_path
-
     @pytest.mark.skipif(
         sys.platform == "win32",
         reason="This test is for paths in POSIX path format and will be skipped on Windows.",
