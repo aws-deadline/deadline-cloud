@@ -84,6 +84,7 @@ class JobAttachmentTest:
         self.deadline_client = self.job_attachment_resources.deadline_client
 
         self.hash_cache_dir = tmp_path_factory.mktemp("hash_cache")
+        self.s3_cache_dir = tmp_path_factory.mktemp("s3_check_cache")
         self.session = boto3.Session()
         self.deadline_endpoint = os.getenv(
             "AWS_ENDPOINT_URL_DEADLINE",
@@ -156,7 +157,11 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
         hash_cache_dir=str(job_attachment_test.hash_cache_dir),
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
-    asset_manager.upload_assets(manifests, on_uploading_assets=mock_on_uploading_files)
+    asset_manager.upload_assets(
+        manifests,
+        on_uploading_assets=mock_on_uploading_files,
+        s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
+    )
 
     # THEN
     scene_ma_s3_path = (
@@ -231,7 +236,9 @@ def upload_input_files_one_asset_in_cas(
     )
 
     (_, attachments) = asset_manager.upload_assets(
-        manifests, on_uploading_assets=mock_on_uploading_files
+        manifests,
+        on_uploading_assets=mock_on_uploading_files,
+        s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
     )
 
     # THEN
@@ -316,7 +323,9 @@ def test_upload_input_files_all_assets_in_cas(
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
     (_, attachments) = asset_manager.upload_assets(
-        manifests, on_uploading_assets=mock_on_uploading_files
+        manifests,
+        on_uploading_assets=mock_on_uploading_files,
+        s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
     )
 
     # THEN
@@ -1070,7 +1079,9 @@ def upload_input_files_no_input_paths(
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
     (_, attachments) = asset_manager.upload_assets(
-        manifests, on_uploading_assets=mock_on_uploading_files
+        manifests,
+        on_uploading_assets=mock_on_uploading_files,
+        s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
     )
 
     # THEN
@@ -1136,7 +1147,9 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
         on_preparing_to_submit=mock_on_preparing_to_submit,
     )
     (_, attachments) = asset_manager.upload_assets(
-        manifests, on_uploading_assets=mock_on_uploading_files
+        manifests,
+        on_uploading_assets=mock_on_uploading_files,
+        s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
     )
 
     # THEN
@@ -1248,7 +1261,11 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
             hash_cache_dir=str(job_attachment_test.hash_cache_dir),
             on_preparing_to_submit=mock_on_preparing_to_submit,
         )
-        asset_manager.upload_assets(manifests, on_uploading_assets=mock_on_uploading_files)
+        asset_manager.upload_assets(
+            manifests,
+            on_uploading_assets=mock_on_uploading_files,
+            s3_check_cache_dir=str(job_attachment_test.s3_cache_dir),
+        )
 
 
 @pytest.mark.integ

@@ -300,7 +300,7 @@ class SubmitJobProgressDialog(QDialog):
                 asset_groups=asset_groups,
                 total_input_files=total_input_files,
                 total_input_bytes=total_input_bytes,
-                hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
+                hash_cache_dir=config_file.get_cache_directory(),
                 on_preparing_to_submit=_update_hash_progress,
             )
 
@@ -334,8 +334,9 @@ class SubmitJobProgressDialog(QDialog):
             upload_summary, attachment_settings = cast(
                 S3AssetManager, self._asset_manager
             ).upload_assets(
-                manifests,
-                _update_upload_progress,
+                manifests=manifests,
+                on_uploading_assets=_update_upload_progress,
+                s3_check_cache_dir=config_file.get_cache_directory(),
             )
 
             logger.info("Finished uploading job attachments files.")

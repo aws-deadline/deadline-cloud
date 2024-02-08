@@ -41,7 +41,7 @@ from .download import (
 )
 
 from .fus3 import Fus3ProcessManager
-from .exceptions import AssetSyncError, Fus3ExecutableMissingError
+from .exceptions import AssetSyncError, Fus3ExecutableMissingError, JobAttachmentsS3ClientError
 from .models import (
     Attachments,
     JobAttachmentsFileSystem,
@@ -426,15 +426,31 @@ class AssetSync:
                     f"Virtual File System not found, falling back to {JobAttachmentsFileSystem.COPIED} for JobAttachmentsFileSystem."
                 )
 
-        download_summary_statistics = download_files_from_manifests(
-            s3_bucket=s3_settings.s3BucketName,
-            manifests_by_root=merged_manifests_by_root,
-            cas_prefix=s3_settings.full_cas_prefix(),
-            fs_permission_settings=fs_permission_settings,
-            session=self.session,
-            on_downloading_files=on_downloading_files,
-            logger=self.logger,
-        )
+        try:
+            download_summary_statistics = download_files_from_manifests(
+                s3_bucket=s3_settings.s3BucketName,
+                manifests_by_root=merged_manifests_by_root,
+                cas_prefix=s3_settings.full_cas_prefix(),
+                fs_permission_settings=fs_permission_settings,
+                session=self.session,
+                on_downloading_files=on_downloading_files,
+                logger=self.logger,
+            )
+        except JobAttachmentsS3ClientError as exc:
+            if exc.status_code == 404:
+                raise JobAttachmentsS3ClientError(
+                    action=exc.action,
+                    status_code=exc.status_code,
+                    bucket_name=exc.bucket_name,
+                    key_or_prefix=exc.key_or_prefix,
+                    message=(
+                        "This can happen if the S3 check cache on the submitting machine is out of date. "
+                        "Please delete the cache file from the submitting machine, usually located in the "
+                        "home directory (~/.deadline/cache/s3_check_cache.db) and try submitting again."
+                    ),
+                ) from exc
+            else:
+                raise
 
         return (
             download_summary_statistics.convert_to_summary_statistics(),

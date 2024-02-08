@@ -43,14 +43,13 @@ from .exceptions import (
     MissingS3BucketError,
     MissingS3RootPrefixError,
 )
-from .hash_cache import HashCache
+from .caches import HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry
 from .models import (
     AssetRootGroup,
     AssetRootManifest,
     AssetUploadGroup,
     Attachments,
     FileSystemLocationType,
-    HashCacheEntry,
     JobAttachmentS3Settings,
     ManifestProperties,
     PathFormat,
@@ -66,6 +65,11 @@ from ._utils import (
 )
 
 logger = logging.getLogger("deadline.job_attachments.upload")
+
+# TODO: tune this. max_worker defaults to 5 * number of processors. We can run into issues here
+# if we thread too aggressively on slower internet connections. So for now let's set it to 5,
+# which would the number of threads with one processor.
+NUM_UPLOAD_WORKERS: int = 5
 
 
 class S3AssetUploader:
@@ -88,9 +92,6 @@ class S3AssetUploader:
 
         # TODO: full performance analysis to determine the ideal thresholds
         try:
-            self.list_object_threshold = int(
-                config_file.get_setting("settings.list_object_threshold")
-            )
             self.multipart_upload_chunk_size = int(
                 config_file.get_setting("settings.multipart_upload_chunk_size")
             )
@@ -107,17 +108,12 @@ class S3AssetUploader:
         except ValueError as ve:
             raise AssetSyncError(
                 "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
-                "list_object_threshold, multipart_upload_chunk_size, multipart_upload_max_workers, small_file_threshold_multiplier"
+                "multipart_upload_chunk_size, multipart_upload_max_workers, small_file_threshold_multiplier"
             ) from ve
 
         # Confirm that the settings values are all positive.
         error_msg = ""
-        if self.list_object_threshold <= 0:
-            error_msg = (
-                f"list_object_threshold ({self.list_object_threshold}) must be positive integer."
-            )
-
-        elif self.multipart_upload_chunk_size <= 0:
+        if self.multipart_upload_chunk_size <= 0:
             error_msg = f"multipart_upload_chunk_size ({self.multipart_upload_chunk_size}) must be positive integer."
 
         elif self.multipart_upload_max_workers <= 0:
@@ -137,6 +133,7 @@ class S3AssetUploader:
         source_root: Path,
         file_system_location_name: Optional[str] = None,
         progress_tracker: Optional[ProgressTracker] = None,
+        s3_check_cache_dir: Optional[str] = None,
     ) -> tuple[str, str]:
         """
         Uploads assets based off of an asset manifest, uploads the asset manifest.
@@ -159,6 +156,7 @@ class S3AssetUploader:
             source_root,
             job_attachment_settings.full_cas_prefix(),
             progress_tracker,
+            s3_check_cache_dir,
         )
         hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
@@ -192,95 +190,59 @@ class S3AssetUploader:
         source_root: Path,
         s3_cas_prefix: str,
         progress_tracker: Optional[ProgressTracker] = None,
+        s3_check_cache_dir: Optional[str] = None,
     ) -> None:
         """
         Uploads all of the files listed in the given manifest to S3 if they don't exist in the
         given S3 prefix already.
 
-        Depending on the number of files to be uploaded, will either make a head-object or list-objects
-        S3 API call to check if files have already been uploaded. Note that head-object is cheaper
-        to call, but slows down significantly if needing to call many times, so the list-objects API
-        is called for larger file lists.
-
-        TODO: There is a known performance bottleneck if the bucket has a large number of files, but
-        there isn't currently any way of knowing the size of the bucket without iterating through the
-        contents of a prefix. For now, we'll just head-object when we have a small number of files.
+        The local 'S3 check cache' is used to note if we've seen an object in S3 before so we
+        can save the S3 API calls.
         """
-        files_to_upload: list[base_manifest.BaseManifestPath] = manifest.paths
-        check_if_in_s3 = True
-
-        if len(files_to_upload) >= self.list_object_threshold:
-            # If different files have the same content (and thus the same hash), they are counted as skipped files.
-            file_dict: dict[str, base_manifest.BaseManifestPath] = {}
-            for file in files_to_upload:
-                # TODO: replace with uncommented line below after sufficient time after the next release
-                file_key = f"{file.hash}"  # .{manifest.hashAlg.value}"
-                if file_key in file_dict and progress_tracker:
-                    progress_tracker.increase_skipped(
-                        1, (source_root.joinpath(file.path)).stat().st_size
-                    )
-                else:
-                    file_dict[file_key] = file
-
-            to_upload_set: set[str] = self.filter_objects_to_upload(
-                s3_bucket, s3_cas_prefix, set(file_dict.keys())
-            )
-            files_to_upload = [file_dict[k] for k in to_upload_set]
-            check_if_in_s3 = False  # Can skip the check since we just did it above
-            # The input files that are already in s3 are counted as skipped files.
-            if progress_tracker:
-                skipped_set = set(file_dict.keys()) - to_upload_set
-                files_to_skip = [file_dict[k] for k in skipped_set]
-                progress_tracker.increase_skipped(
-                    len(files_to_skip),
-                    sum((source_root.joinpath(file.path)).stat().st_size for file in files_to_skip),
-                )
 
         # Split into a separate 'large file' and 'small file' queues.
         # Separate 'large' files from 'small' files so that we can process 'large' files serially.
         # This wastes less bandwidth if uploads are cancelled, as it's better to use the multi-threaded
         # multi-part upload for a single large file than multiple large files at the same time.
         (small_file_queue, large_file_queue) = self._separate_files_by_size(
-            files_to_upload, self.small_file_threshold
+            manifest.paths, self.small_file_threshold
         )
 
-        # First, process the whole 'small file' queue with parallel object uploads.
-        # TODO: tune this. max_worker defaults to 5 * number of processors. We can run into issues here
-        # if we thread too aggressively on slower internet connections. So for now let's set it to 5,
-        # which would the number of threads with one processor.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {
-                executor.submit(
-                    self.upload_object_to_cas,
+        with S3CheckCache(s3_check_cache_dir) as s3_cache:
+            # First, process the whole 'small file' queue with parallel object uploads.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_UPLOAD_WORKERS) as executor:
+                futures = {
+                    executor.submit(
+                        self.upload_object_to_cas,
+                        file,
+                        manifest.hashAlg,
+                        s3_bucket,
+                        source_root,
+                        s3_cas_prefix,
+                        s3_cache,
+                        progress_tracker,
+                    ): file
+                    for file in small_file_queue
+                }
+                # surfaces any exceptions in the thread
+                for future in concurrent.futures.as_completed(futures):
+                    (is_uploaded, file_size) = future.result()
+                    if progress_tracker and not is_uploaded:
+                        progress_tracker.increase_skipped(1, file_size)
+
+            # Now process the whole 'large file' queue with serial object uploads (but still parallel multi-part upload.)
+            for file in large_file_queue:
+                (is_uploaded, file_size) = self.upload_object_to_cas(
                     file,
                     manifest.hashAlg,
                     s3_bucket,
                     source_root,
                     s3_cas_prefix,
-                    check_if_in_s3,
+                    s3_cache,
                     progress_tracker,
-                ): file
-                for file in small_file_queue
-            }
-            # surfaces any exceptions in the thread
-            for future in concurrent.futures.as_completed(futures):
-                (is_uploaded, file_size) = future.result()
+                )
                 if progress_tracker and not is_uploaded:
                     progress_tracker.increase_skipped(1, file_size)
-
-        # Now process the whole 'large file' queue with serial object uploads (but still parallel multi-part upload.)
-        for file in large_file_queue:
-            (is_uploaded, file_size) = self.upload_object_to_cas(
-                file,
-                manifest.hashAlg,
-                s3_bucket,
-                source_root,
-                s3_cas_prefix,
-                check_if_in_s3,
-                progress_tracker,
-            )
-            if progress_tracker and not is_uploaded:
-                progress_tracker.increase_skipped(1, file_size)
 
         # to report progress 100% at the end, and
         # to check if the job submission was canceled in the middle of processing the last batch of files.
@@ -308,6 +270,9 @@ class S3AssetUploader:
                 large_file_queue.append(file)
         return (small_file_queue, large_file_queue)
 
+    def _get_current_timestamp(self) -> str:
+        return str(datetime.now().timestamp())
+
     def upload_object_to_cas(
         self,
         file: base_manifest.BaseManifestPath,
@@ -315,7 +280,7 @@ class S3AssetUploader:
         s3_bucket: str,
         source_root: Path,
         s3_cas_prefix: str,
-        check_if_in_s3: bool = True,
+        s3_check_cache: S3CheckCache,
         progress_tracker: Optional[ProgressTracker] = None,
     ) -> Tuple[bool, int]:
         """
@@ -331,19 +296,32 @@ class S3AssetUploader:
         is_uploaded = False
         file_size = local_path.stat().st_size
 
-        if check_if_in_s3 and self.file_already_uploaded(s3_bucket, s3_upload_key):
+        if s3_check_cache.get_entry(s3_key=f"{s3_bucket}/{s3_upload_key}"):
             logger.debug(
-                f"skipping {local_path} because it has already been uploaded to s3://{s3_bucket}/{s3_upload_key}"
+                f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
             )
             return (is_uploaded, file_size)
 
-        self.upload_file_to_s3(
-            local_path=local_path,
-            s3_bucket=s3_bucket,
-            s3_upload_key=s3_upload_key,
-            progress_tracker=progress_tracker,
+        if self.file_already_uploaded(s3_bucket, s3_upload_key):
+            logger.debug(
+                f"skipping {local_path} because it has already been uploaded to s3://{s3_bucket}/{s3_upload_key}"
+            )
+        else:
+            self.upload_file_to_s3(
+                local_path=local_path,
+                s3_bucket=s3_bucket,
+                s3_upload_key=s3_upload_key,
+                progress_tracker=progress_tracker,
+            )
+            is_uploaded = True
+
+        s3_check_cache.put_entry(
+            S3CheckCacheEntry(
+                s3_key=f"{s3_bucket}/{s3_upload_key}",
+                last_seen_time=self._get_current_timestamp(),
+            )
         )
-        is_uploaded = True
+
         return (is_uploaded, file_size)
 
     def upload_file_to_s3(
@@ -436,7 +414,13 @@ class S3AssetUploader:
                 **COMMON_ERROR_GUIDANCE_FOR_S3,
                 403: (
                     "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                    "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket."
+                    "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
+                )
+                if "kms:" not in str(exc)
+                else (
+                    "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
+                    "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                    "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
                 ),
                 404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
             }
@@ -496,46 +480,6 @@ class S3AssetUploader:
             etag = response["ETag"]
             return {"ETag": etag, "PartNumber": part_number}
 
-    def filter_objects_to_upload(self, bucket: str, prefix: str, upload_set: set[str]) -> set[str]:
-        """
-        Makes a paginated list-objects request to S3 to get all objects in the given prefix.
-        Given the set of files to be uploaded, returns which objects do not exist in S3.
-        """
-        try:
-            paginator = self._s3.get_paginator("list_objects_v2")
-            page_iterator = paginator.paginate(
-                Bucket=bucket,
-                Prefix=prefix,
-            )
-
-            for page in page_iterator:
-                contents = page.get("Contents", None)
-                if contents is None:
-                    break
-                for content in contents:
-                    upload_set.discard(content["Key"].split("/")[-1])
-                if len(upload_set) == 0:
-                    break
-        except ClientError as exc:
-            status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
-            status_code_guidance = {
-                **COMMON_ERROR_GUIDANCE_FOR_S3,
-                403: (
-                    "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                    "your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket."
-                ),
-                404: "Not found. Please ensure that the bucket and key/prefix exists.",
-            }
-            raise JobAttachmentsS3ClientError(
-                action="listing bucket contents",
-                status_code=status_code,
-                bucket_name=bucket,
-                key_or_prefix=prefix,
-                message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
-            ) from exc
-
-        return upload_set
-
     def file_already_uploaded(self, bucket: str, key: str) -> bool:
         """
         Check whether the file has already been uploaded by doing a head-object call.
@@ -585,7 +529,13 @@ class S3AssetUploader:
                 **COMMON_ERROR_GUIDANCE_FOR_S3,
                 403: (
                     "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                    "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket."
+                    "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
+                )
+                if "kms:" not in str(exc)
+                else (
+                    "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
+                    "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                    "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
                 ),
                 404: "Not found. Please check your bucket name, and ensure that it exists in the AWS account.",
             }
@@ -1061,6 +1011,7 @@ class S3AssetManager:
         self,
         manifests: list[AssetRootManifest],
         on_uploading_assets: Optional[Callable[[Any], bool]] = None,
+        s3_check_cache_dir: Optional[str] = None,
     ) -> tuple[SummaryStatistics, Attachments]:
         """
         Uploads all the files for provided manifests and manifests themselves to S3.
@@ -1110,6 +1061,7 @@ class S3AssetManager:
                     source_root=Path(asset_root_manifest.root_path),
                     file_system_location_name=asset_root_manifest.file_system_location_name,
                     progress_tracker=progress_tracker,
+                    s3_check_cache_dir=s3_check_cache_dir,
                 )
                 manifest_properties.inputManifestPath = partial_manifest_key
                 manifest_properties.inputManifestHash = asset_manifest_hash

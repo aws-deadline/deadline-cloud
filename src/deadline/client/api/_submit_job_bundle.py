@@ -17,7 +17,7 @@ from botocore.client import BaseClient  # type: ignore[import]
 
 from .. import api
 from ..exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from ..config import get_setting, set_setting
+from ..config import get_setting, set_setting, config_file
 from ..job_bundle import deadline_yaml_dump
 from ..job_bundle.loader import (
     read_yaml_or_json,
@@ -378,7 +378,7 @@ def _hash_attachments(
         asset_groups=asset_groups,
         total_input_files=total_input_files,
         total_input_bytes=total_input_bytes,
-        hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
+        hash_cache_dir=config_file.get_cache_directory(),
         on_preparing_to_submit=hashing_progress_callback,
     )
     api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
@@ -409,7 +409,9 @@ def _upload_attachments(
         upload_progress_callback = _default_update_upload_progress
 
     upload_summary, attachment_settings = asset_manager.upload_assets(
-        manifests, upload_progress_callback
+        manifests=manifests,
+        on_uploading_assets=upload_progress_callback,
+        s3_check_cache_dir=config_file.get_cache_directory(),
     )
     api.get_deadline_cloud_library_telemetry_client(config=config).record_upload_summary(
         upload_summary
