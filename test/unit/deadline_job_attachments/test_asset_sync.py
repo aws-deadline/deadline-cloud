@@ -26,6 +26,7 @@ from deadline.job_attachments.exceptions import (
 from deadline.job_attachments.models import (
     Attachments,
     Job,
+    JobAttachmentsFileSystem,
     JobAttachmentS3Settings,
     ManifestProperties,
     PathFormat,
@@ -882,3 +883,23 @@ class TestAssetSync:
                 }
             ]
             mock_mount_vfs.assert_not_called()
+
+    def test_cleanup_session_fus3_terminate_called(self, tmp_path):
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3",
+        ) as mock_find_fus3, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.kill_all_processes",
+        ):
+            self.default_asset_sync.cleanup_session(
+                session_dir=tmp_path,
+                file_system=JobAttachmentsFileSystem.COPIED,
+            )
+
+            mock_find_fus3.assert_not_called()
+
+            self.default_asset_sync.cleanup_session(
+                session_dir=tmp_path,
+                file_system=JobAttachmentsFileSystem.VIRTUAL,
+            )
+
+            mock_find_fus3.assert_called_once()
