@@ -813,3 +813,16 @@ class OptionalSpinBox(QSpinBox):
         Custom function to indicate whether the SpinBox has received input.
         """
         return self.no_input_value != self.value()
+
+    def stepBy(self, steps: int) -> None:
+        current_value: int = self.value()
+        result_value = self.value() + steps
+        if (
+            current_value == self.no_input_value
+            or result_value == self.no_input_value
+            or result_value > self.maximum()
+            or result_value < self.minimum()
+        ):
+            return
+        else:
+            super().stepBy(steps)
