@@ -99,24 +99,6 @@ class ManifestPathGroup:
 
 
 @dataclass
-class HashCacheEntry:
-    """Represents an entry in the local hash-cache database"""
-
-    file_path: str
-    hash_algorithm: HashAlgorithm
-    file_hash: str
-    last_modified_time: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "file_path": self.file_path,
-            "hash_algorithm": self.hash_algorithm.value,
-            "file_hash": self.file_hash,
-            "last_modified_time": self.last_modified_time,
-        }
-
-
-@dataclass
 class OutputFile:
     """Files for output"""
 
