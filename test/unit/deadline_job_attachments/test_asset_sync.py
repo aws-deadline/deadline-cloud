@@ -815,7 +815,6 @@ class TestAssetSync:
                 }
             ]
             mock_mount_vfs.assert_not_called()
-    
 
     def test_cleanup_session_fus3_terminate_called(self, tmp_path):
         with patch(
@@ -825,15 +824,14 @@ class TestAssetSync:
         ):
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
-                file_system=JobAttachmentsFileSystem.COPIED.value,
+                file_system=JobAttachmentsFileSystem.COPIED,
             )
 
             mock_find_fus3.assert_not_called()
 
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
-                file_system=JobAttachmentsFileSystem.VIRTUAL.value,
+                file_system=JobAttachmentsFileSystem.VIRTUAL,
             )
 
             mock_find_fus3.assert_called_once()
-
