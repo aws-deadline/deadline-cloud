@@ -372,15 +372,14 @@ class CustomRequirementsWidget(QGroupBox):
     def resize_list_to_fit(self):
         # Resize the list widget to based on the size of the contents
         if self.list_widget.count() == 0:
-            self.list_widget.setFixedSize(0, 0)
+            self.list_widget.setFixedHeight(0)
         else:
             current_height = 0
             for i in range(self.list_widget.count()):
                 widget = self.list_widget.itemWidget(self.list_widget.item(i))
                 current_height += widget.height()
 
-            self.list_widget.setFixedSize(
-                self.list_widget.sizeHintForColumn(0) + self.list_widget.frameWidth() * 2,
+            self.list_widget.setFixedHeight(
                 current_height + 2 * self.list_widget.frameWidth(),
             )
 
@@ -593,8 +592,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             widget = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
             current_height += widget.height()
 
-        self.value_list_widget.setFixedSize(
-            self.value_list_widget.sizeHintForColumn(0) + self.value_list_widget.frameWidth() * 2,
+        self.value_list_widget.setFixedHeight(
             current_height + 2 * self.value_list_widget.frameWidth(),
         )
 
