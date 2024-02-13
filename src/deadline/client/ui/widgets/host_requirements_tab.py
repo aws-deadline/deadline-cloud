@@ -25,6 +25,7 @@ from PySide2.QtWidgets import (  # type: ignore
     QFrame,
     QLineEdit,
     QListView,
+    QStyle,
 )
 
 MAX_INT_VALUE = (2**31) - 1
@@ -321,8 +322,6 @@ class CustomRequirementsWidget(QGroupBox):
         self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list_widget.setSizeAdjustPolicy(QListWidget.AdjustToContents)
 
-        # TODO: ideally when we enlarge/shrink the window, the width of the list should adjust accordingly
-        #  right now it only adjusts when list actions were taken
         self.resize_list_to_fit()
 
         # Add a row with Add Amount and Add Attribute buttons
@@ -563,7 +562,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.column_2.setSpacing(2)
 
         self.columns = QHBoxLayout()
-        self.columns.setContentsMargins(15, 0, 0, 0)
+        self.columns.setContentsMargins(15, 15, 0, 0)
         self.columns.addLayout(self.column_1)
         self.columns.addLayout(self.column_2)
 
