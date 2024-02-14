@@ -40,8 +40,8 @@ from .download import (
     mount_vfs_from_manifests,
 )
 
-from .fus3 import Fus3ProcessManager
-from .exceptions import AssetSyncError, Fus3ExecutableMissingError, JobAttachmentsS3ClientError
+from .exceptions import AssetSyncError, VFSExecutableMissingError, JobAttachmentsS3ClientError
+from .vfs import VFSProcessManager
 from .models import (
     Attachments,
     JobAttachmentsFileSystem,
@@ -409,7 +409,7 @@ class AssetSync:
             and "AWS_PROFILE" in os_env_vars
         ):
             try:
-                Fus3ProcessManager.find_fus3()
+                VFSProcessManager.find_vfs()
                 mount_vfs_from_manifests(
                     s3_bucket=s3_settings.s3BucketName,
                     manifests_by_root=merged_manifests_by_root,
@@ -421,7 +421,7 @@ class AssetSync:
                 )
                 summary_statistics = SummaryStatistics()
                 return (summary_statistics, list(pathmapping_rules.values()))
-            except Fus3ExecutableMissingError:
+            except VFSExecutableMissingError:
                 logger.error(
                     f"Virtual File System not found, falling back to {JobAttachmentsFileSystem.COPIED} for JobAttachmentsFileSystem."
                 )
@@ -549,8 +549,8 @@ class AssetSync:
         if file_system == JobAttachmentsFileSystem.COPIED.value:
             return
         try:
-            Fus3ProcessManager.find_fus3()
+            VFSProcessManager.find_vfs()
             # Shutdown all running Deadline VFS processes since session is complete
-            Fus3ProcessManager.kill_all_processes(session_dir=session_dir)
-        except Fus3ExecutableMissingError:
+            VFSProcessManager.kill_all_processes(session_dir=session_dir)
+        except VFSExecutableMissingError:
             logger.error("Virtual File System not found, no processes to kill.")

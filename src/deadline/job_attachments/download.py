@@ -30,7 +30,7 @@ from .exceptions import (
     JobAttachmentsError,
     MissingAssetRootError,
 )
-from .fus3 import Fus3ProcessManager
+from .vfs import VFSProcessManager
 from .models import (
     Attachments,
     FileConflictResolution,
@@ -843,7 +843,7 @@ def handle_existing_vfs(
     if not os.path.ismount(mount_point):
         return manifest
 
-    input_manifest_path: Optional[Path] = Fus3ProcessManager.get_manifest_path_for_mount(
+    input_manifest_path: Optional[Path] = VFSProcessManager.get_manifest_path_for_mount(
         session_dir=session_dir, mount_point=mount_point
     )
     if input_manifest_path is not None:
@@ -858,7 +858,7 @@ def handle_existing_vfs(
         download_logger.error(f"input manifest not found for mount at {mount_point}")
         return manifest
 
-    Fus3ProcessManager.kill_process_at_mount(session_dir=session_dir, mount_point=mount_point)
+    VFSProcessManager.kill_process_at_mount(session_dir=session_dir, mount_point=mount_point)
 
     return manifest
 
@@ -901,7 +901,7 @@ def mount_vfs_from_manifests(
         # Write out a temporary file with the contents of the newly merged manifest
         manifest_path: str = write_manifest_to_temp_file(final_manifest)
 
-        vfs_manager: Fus3ProcessManager = Fus3ProcessManager(
+        vfs_manager: VFSProcessManager = VFSProcessManager(
             s3_bucket,
             boto3_session.region_name,
             manifest_path,
