@@ -113,21 +113,21 @@ class PathOutsideDirectoryError(JobAttachmentsError):
     """
 
 
-class Fus3ExecutableMissingError(JobAttachmentsError):
+class VFSExecutableMissingError(JobAttachmentsError):
     """
-    Exception for when trying to retrieve Fus3 executable path doesn't exist.
-    """
-
-
-class Fus3LaunchScriptMissingError(JobAttachmentsError):
-    """
-    Exception for when trying to retrieve Fus3 launch script path doesn't exist.
+    Exception for when trying to retrieve VFS executable path doesn't exist.
     """
 
 
-class Fus3FailedToMountError(JobAttachmentsError):
+class VFSLaunchScriptMissingError(JobAttachmentsError):
     """
-    Exception for when trying to mount Fus3 at a given path.
+    Exception for when trying to retrieve VFS launch script path doesn't exist.
+    """
+
+
+class VFSFailedToMountError(JobAttachmentsError):
+    """
+    Exception for when trying to mount VFS at a given path.
     """
 
 
