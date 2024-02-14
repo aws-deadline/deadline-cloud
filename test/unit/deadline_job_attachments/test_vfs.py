@@ -17,26 +17,23 @@ import pytest
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.exceptions import (
-    Fus3ExecutableMissingError,
-    Fus3LaunchScriptMissingError,
+    VFSExecutableMissingError,
+    VFSLaunchScriptMissingError,
 )
 from deadline.job_attachments.models import JobAttachmentS3Settings
-from deadline.job_attachments.fus3 import (
-    Fus3ProcessManager,
-    FUS3_EXECUTABLE,
-    FUS3_EXECUTABLE_SCRIPT,
-    FUS3_PATH_ENV_VAR,
+from deadline.job_attachments.vfs import (
+    VFSProcessManager,
     DEADLINE_VFS_ENV_VAR,
-    FUS3_PID_FILE_NAME,
     DEADLINE_VFS_EXECUTABLE,
     DEADLINE_VFS_EXECUTABLE_SCRIPT,
     DEADLINE_VFS_INSTALL_PATH,
+    DEADLINE_VFS_PID_FILE_NAME,
 )
 
 
 # TODO: Remove the skip once we support Windows for AssetSync
-@pytest.mark.skipif(sys.platform == "win32", reason="Fus3 doesn't currently support Windows")
-class TestFus3Processmanager:
+@pytest.mark.skipif(sys.platform == "win32", reason="VFS doesn't currently support Windows")
+class TestVFSProcessmanager:
     @pytest.fixture(autouse=True)
     def setup_and_teardown(
         self,
@@ -48,7 +45,7 @@ class TestFus3Processmanager:
         """
         Setup the default queue and s3 bucket for all asset tests.
         Mark test with `no_setup` if you don't want this setup to run.
-        After test completes, reset all static Fus3ProcessManager fields
+        After test completes, reset all static VFSProcessManager fields
         """
         if "no_setup" in request.keywords:
             return
@@ -59,19 +56,19 @@ class TestFus3Processmanager:
 
         yield
 
-        # reset Fus3ProcessManager fields
-        Fus3ProcessManager.exe_path = None
-        Fus3ProcessManager.launch_script_path = None
-        Fus3ProcessManager.library_path = None
-        Fus3ProcessManager.cwd_path = None
+        # reset VFSProcessManager fields
+        VFSProcessManager.exe_path = None
+        VFSProcessManager.launch_script_path = None
+        VFSProcessManager.library_path = None
+        VFSProcessManager.cwd_path = None
 
-    # TODO: Remove this test once we support Windows for Fus3
+    # TODO: Remove this test once we support Windows for VFS
     @patch("sys.platform", "win32")
     def test_init_fails_on_windows(self) -> None:
-        """Asserts an error is raised when trying to create a Fus3ProcessManager
+        """Asserts an error is raised when trying to create a VFSProcessManager
         instance on a Windows OS"""
         with pytest.raises(NotImplementedError):
-            Fus3ProcessManager(
+            VFSProcessManager(
                 asset_bucket=self.s3_settings.s3BucketName,
                 region=os.environ["AWS_DEFAULT_REGION"],
                 manifest_path="/test/manifest/path",
@@ -84,14 +81,14 @@ class TestFus3Processmanager:
         self,
         tmp_path: Path,
     ):
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         session_dir: str = str(tmp_path)
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -100,7 +97,7 @@ class TestFus3Processmanager:
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
-        test_executable = os.environ[FUS3_PATH_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
+        test_executable = os.environ[DEADLINE_VFS_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
 
         expected_launch_command: List = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
@@ -113,7 +110,7 @@ class TestFus3Processmanager:
             )
         ]
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ):
             assert (
@@ -123,7 +120,7 @@ class TestFus3Processmanager:
 
         # Create process manager with CAS prefix
         test_CAS_prefix: str = "test_prefix"
-        process_manager = Fus3ProcessManager(
+        process_manager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -134,7 +131,7 @@ class TestFus3Processmanager:
         )
 
         # intermediate cleanup
-        Fus3ProcessManager.launch_script_path = None
+        VFSProcessManager.launch_script_path = None
 
         expected_launch_command = [
             "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
@@ -148,7 +145,7 @@ class TestFus3Processmanager:
             )
         ]
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ):
             assert (
@@ -156,83 +153,7 @@ class TestFus3Processmanager:
                 == expected_launch_command
             )
 
-    def test_build_launch_command_fallback(
-        self,
-        tmp_path: Path,
-    ):
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
-        session_dir: str = str(tmp_path)
-        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
-        local_root: str = f"{session_dir}/{dest_dir}"
-        manifest_path: str = f"{local_root}/manifest.json"
-
-        # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
-            asset_bucket=self.s3_settings.s3BucketName,
-            region=os.environ["AWS_DEFAULT_REGION"],
-            manifest_path=manifest_path,
-            mount_point=local_root,
-            os_user="test-user",
-            os_env_vars={"AWS_PROFILE": "test-profile"},
-        )
-
-        test_executable = os.environ[FUS3_PATH_ENV_VAR] + FUS3_EXECUTABLE_SCRIPT
-
-        expected_launch_command: List = [
-            "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
-            % (
-                test_executable,
-                local_root,
-                self.s3_settings.s3BucketName,
-                manifest_path,
-                os.environ["AWS_DEFAULT_REGION"],
-            )
-        ]
-        with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
-            side_effect=lambda x: True if FUS3_EXECUTABLE_SCRIPT in x else False,
-        ):
-            assert (
-                process_manager.build_launch_command(mount_point=local_root)
-                == expected_launch_command
-            )
-
-        # Create process manager with CAS prefix
-        test_CAS_prefix: str = "test_prefix"
-        process_manager = Fus3ProcessManager(
-            asset_bucket=self.s3_settings.s3BucketName,
-            region=os.environ["AWS_DEFAULT_REGION"],
-            manifest_path=manifest_path,
-            mount_point=local_root,
-            os_user="test-user",
-            os_env_vars={"AWS_PROFILE": "test-profile"},
-            cas_prefix=test_CAS_prefix,
-        )
-
-        # intermediate cleanup
-        Fus3ProcessManager.launch_script_path = None
-
-        expected_launch_command = [
-            "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
-            % (
-                test_executable,
-                local_root,
-                self.s3_settings.s3BucketName,
-                manifest_path,
-                os.environ["AWS_DEFAULT_REGION"],
-                test_CAS_prefix,
-            )
-        ]
-        with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
-            side_effect=lambda x: True if FUS3_EXECUTABLE_SCRIPT in x else False,
-        ):
-            assert (
-                process_manager.build_launch_command(mount_point=local_root)
-                == expected_launch_command
-            )
-
-    def test_find_fus3_with_env_set(
+    def test_find_vfs_with_env_set(
         self,
         tmp_path: Path,
     ):
@@ -240,10 +161,10 @@ class TestFus3Processmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -253,78 +174,25 @@ class TestFus3Processmanager:
         )
 
         # verify which is only called when class path is not set
-        with patch(f"{deadline.__package__}.job_attachments.fus3.shutil.which") as mock_which:
+        with patch(f"{deadline.__package__}.job_attachments.vfs.shutil.which") as mock_which:
             mock_which.return_value = "/test/path"
-            test_path: Union[os.PathLike, str] = process_manager.find_fus3()
+            test_path: Union[os.PathLike, str] = process_manager.find_vfs()
 
             assert str(test_path) == "/test/path"
-            test_path = process_manager.find_fus3()
+            test_path = process_manager.find_vfs()
             mock_which.assert_called_once()
 
-            # Reset fus3 path and remove from PATH so other methods are checked
+            # Reset VFS path and remove from PATH so other methods are checked
             mock_which.return_value = None
-            Fus3ProcessManager.exe_path = None
+            VFSProcessManager.exe_path = None
 
             with patch(
-                f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
+                f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
             ) as mock_path_exists:
                 mock_path_exists.return_value = False
 
-                with pytest.raises(Fus3ExecutableMissingError):
-                    process_manager.find_fus3()
-
-                # Verify FUS3_PATH_ENV_VAR location is checked
-                # Verify bin folder is checked as a last resort
-                mock_path_exists.assert_has_calls(
-                    [
-                        call(os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{DEADLINE_VFS_EXECUTABLE}"),
-                        call(os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")),
-                        call(os.environ[FUS3_PATH_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"),
-                        call(os.path.join(os.getcwd(), f"bin/{FUS3_EXECUTABLE}")),
-                    ]
-                )
-
-    def test_find_fus3_with_deadline_env_set(
-        self,
-        tmp_path: Path,
-    ):
-        session_dir: str = str(tmp_path)
-        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
-        local_root: str = f"{session_dir}/{dest_dir}"
-        manifest_path: str = f"{local_root}/manifest.json"
-        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline").resolve())
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
-
-        # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
-            asset_bucket=self.s3_settings.s3BucketName,
-            region=os.environ["AWS_DEFAULT_REGION"],
-            manifest_path=manifest_path,
-            mount_point=local_root,
-            os_user="test-user",
-            os_env_vars={"AWS_PROFILE": "test-profile"},
-        )
-
-        # verify which is only called when class path is not set
-        with patch(f"{deadline.__package__}.job_attachments.fus3.shutil.which") as mock_which:
-            mock_which.return_value = "/test/path"
-            test_path: Union[os.PathLike, str] = process_manager.find_fus3()
-
-            assert str(test_path) == "/test/path"
-            test_path = process_manager.find_fus3()
-            mock_which.assert_called_once()
-
-            # Reset fus3 path and remove from PATH so other methods are checked
-            mock_which.return_value = None
-            Fus3ProcessManager.exe_path = None
-
-            with patch(
-                f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
-            ) as mock_path_exists:
-                mock_path_exists.return_value = False
-
-                with pytest.raises(Fus3ExecutableMissingError):
-                    process_manager.find_fus3()
+                with pytest.raises(VFSExecutableMissingError):
+                    process_manager.find_vfs()
 
                 # Verify DEADLINE_VFS_ENV_VAR location is checked
                 # Verify bin folder is checked as a last resort
@@ -332,12 +200,10 @@ class TestFus3Processmanager:
                     [
                         call(os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{DEADLINE_VFS_EXECUTABLE}"),
                         call(os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")),
-                        call(os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{FUS3_EXECUTABLE}"),
-                        call(os.path.join(os.getcwd(), f"bin/{FUS3_EXECUTABLE}")),
                     ]
                 )
 
-    def test_find_fus3_fallback(
+    def test_find_vfs_with_deadline_env_set(
         self,
         tmp_path: Path,
     ):
@@ -345,10 +211,10 @@ class TestFus3Processmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -357,17 +223,37 @@ class TestFus3Processmanager:
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
-        # Verify that fus3 can be picked up if deadline_vfs is not found
-        with patch(
-            f"{deadline.__package__}.job_attachments.fus3.shutil.which",
-            side_effect=lambda x: "/test/path" if x == FUS3_EXECUTABLE else None,
-        ) as mock_which:
-            test_path: Union[os.PathLike, str] = process_manager.find_fus3()
-            assert str(test_path) == "/test/path"
-            test_path = process_manager.find_fus3()
-            assert mock_which.call_count == 2
+        # verify which is only called when class path is not set
+        with patch(f"{deadline.__package__}.job_attachments.vfs.shutil.which") as mock_which:
+            mock_which.return_value = "/test/path"
+            test_path: Union[os.PathLike, str] = process_manager.find_vfs()
 
-    def find_fus3_with_env_not_set(
+            assert str(test_path) == "/test/path"
+            test_path = process_manager.find_vfs()
+            mock_which.assert_called_once()
+
+            # Reset VFS path and remove from PATH so other methods are checked
+            mock_which.return_value = None
+            VFSProcessManager.exe_path = None
+
+            with patch(
+                f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
+            ) as mock_path_exists:
+                mock_path_exists.return_value = False
+
+                with pytest.raises(VFSExecutableMissingError):
+                    process_manager.find_vfs()
+
+                # Verify DEADLINE_VFS_ENV_VAR location is checked
+                # Verify bin folder is checked as a last resort
+                mock_path_exists.assert_has_calls(
+                    [
+                        call(os.environ[DEADLINE_VFS_ENV_VAR] + f"/bin/{DEADLINE_VFS_EXECUTABLE}"),
+                        call(os.path.join(os.getcwd(), f"bin/{DEADLINE_VFS_EXECUTABLE}")),
+                    ]
+                )
+
+    def find_vfs_with_env_not_set(
         self,
         tmp_path: Path,
     ):
@@ -377,7 +263,7 @@ class TestFus3Processmanager:
         manifest_path: str = f"{local_root}/manifest.json"
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -390,16 +276,16 @@ class TestFus3Processmanager:
 
         # verify which is only called when class path is not set
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.shutil.which",
+            f"{deadline.__package__}.job_attachments.vfs.shutil.which",
             return_value=None,
         ) as mock_which, patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             side_effect=lambda x: True if x == bin_check else False,
         ) as mock_path_exists:
-            test_path: Union[os.PathLike, str] = process_manager.find_fus3()
+            test_path: Union[os.PathLike, str] = process_manager.find_vfs()
             assert str(test_path) == bin_check
 
-            test_path = process_manager.find_fus3()
+            test_path = process_manager.find_vfs()
             mock_which.assert_called_once()
             assert mock_path_exists.call_count == 2
 
@@ -411,10 +297,10 @@ class TestFus3Processmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -424,18 +310,18 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3"
-        ) as mock_find_fus3:
-            mock_find_fus3.return_value = "/test/directory/path"
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs"
+        ) as mock_find_vfs:
+            mock_find_vfs.return_value = "/test/directory/path"
             library_path: Union[os.PathLike, str] = process_manager.get_library_path()
 
             assert str(library_path) == "/test/lib"
 
             process_manager.get_library_path()
 
-            mock_find_fus3.assert_called_once()
+            mock_find_vfs.assert_called_once()
 
-    def test_find_fus3_launch_script_with_env_set(
+    def test_find_vfs_launch_script_with_env_set(
         self,
         tmp_path: Path,
     ):
@@ -443,11 +329,11 @@ class TestFus3Processmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-        fus3_test_path = str((Path(__file__) / "fus3").resolve())
-        os.environ[FUS3_PATH_ENV_VAR] = fus3_test_path
+        vfs_test_path = str((Path(__file__) / "deadline_vfs").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = vfs_test_path
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -457,61 +343,28 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
         ) as mock_os_path_exists:
             mock_os_path_exists.return_value = True
             deadline_vfs_launch_script_path: Union[
                 os.PathLike, str
-            ] = process_manager.find_fus3_launch_script()
+            ] = process_manager.find_vfs_launch_script()
             assert (
                 str(deadline_vfs_launch_script_path)
-                == fus3_test_path + DEADLINE_VFS_EXECUTABLE_SCRIPT
+                == vfs_test_path + DEADLINE_VFS_EXECUTABLE_SCRIPT
             )
 
-            process_manager.find_fus3_launch_script()
+            process_manager.find_vfs_launch_script()
 
             mock_os_path_exists.assert_called_once()
 
-            Fus3ProcessManager.launch_script_path = None
+            VFSProcessManager.launch_script_path = None
             mock_os_path_exists.return_value = False
 
-            with pytest.raises(Fus3LaunchScriptMissingError):
-                process_manager.find_fus3_launch_script()
+            with pytest.raises(VFSLaunchScriptMissingError):
+                process_manager.find_vfs_launch_script()
 
-    def test_find_fus3_launch_script_fallback(
-        self,
-        tmp_path: Path,
-    ):
-        session_dir: str = str(tmp_path)
-        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
-        local_root: str = f"{session_dir}/{dest_dir}"
-        manifest_path: str = f"{local_root}/manifest.json"
-        fus3_test_path = str((Path(__file__) / "fus3").resolve())
-        os.environ[FUS3_PATH_ENV_VAR] = fus3_test_path
-
-        # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
-            asset_bucket=self.s3_settings.s3BucketName,
-            region=os.environ["AWS_DEFAULT_REGION"],
-            manifest_path=manifest_path,
-            mount_point=local_root,
-            os_user="test-user",
-            os_env_vars={"AWS_PROFILE": "test-profile"},
-        )
-
-        with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
-            side_effect=lambda x: True if FUS3_EXECUTABLE_SCRIPT in x else False,
-        ) as mock_os_path_exists:
-            fus3_launch_script_path: Union[
-                os.PathLike, str
-            ] = process_manager.find_fus3_launch_script()
-            assert str(fus3_launch_script_path) == fus3_test_path + FUS3_EXECUTABLE_SCRIPT
-            # checking to ensure the quick script fetch works
-            process_manager.find_fus3_launch_script()
-            assert mock_os_path_exists.call_count == 2
-
-    def test_find_fus3_launch_script_with_env_not_set(
+    def test_find_vfs_launch_script_with_env_not_set(
         self,
         tmp_path: Path,
     ):
@@ -522,7 +375,7 @@ class TestFus3Processmanager:
         # Note that env variable not set
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -532,12 +385,12 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists"
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
         ) as mock_os_path_exists:
             mock_os_path_exists.return_value = True
             deadline_vfs_launch_script_path: Union[
                 os.PathLike, str
-            ] = process_manager.find_fus3_launch_script()
+            ] = process_manager.find_vfs_launch_script()
 
             # Will return preset vfs install path with exe script path appended since env is not set
             assert (
@@ -545,14 +398,14 @@ class TestFus3Processmanager:
                 == DEADLINE_VFS_INSTALL_PATH + DEADLINE_VFS_EXECUTABLE_SCRIPT
             )
 
-            process_manager.find_fus3_launch_script()
+            process_manager.find_vfs_launch_script()
             mock_os_path_exists.assert_called_once()
 
-            Fus3ProcessManager.launch_script_path = None
+            VFSProcessManager.launch_script_path = None
             mock_os_path_exists.return_value = False
 
-            with pytest.raises(Fus3LaunchScriptMissingError):
-                process_manager.find_fus3_launch_script()
+            with pytest.raises(VFSLaunchScriptMissingError):
+                process_manager.find_vfs_launch_script()
 
     def test_create_mount_point(
         self,
@@ -562,10 +415,10 @@ class TestFus3Processmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
 
         # Create process manager without CAS prefix
-        process_manager: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
@@ -592,12 +445,12 @@ class TestFus3Processmanager:
         dest_dir2: str = "assetroot-27bggh78dd23131d221"
         local_root2: str = f"{session_dir}/{dest_dir2}"
         manifest_path2: str = f"{local_root2}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         test_pid1 = 12345
         test_pid2 = 67890
 
         # Create process managers
-        process_manager1: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager1: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
@@ -605,7 +458,7 @@ class TestFus3Processmanager:
             os_user="test-user",
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
-        process_manager2: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager2: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
@@ -615,36 +468,36 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
             return_value="/test/directory/path",
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.subprocess.Popen",
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
         ) as mock_popen, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.wait_for_mount",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.kill",
+            f"{deadline.__package__}.job_attachments.vfs.os.kill",
         ) as mock_os_kill, patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.subprocess.run"
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.run"
         ) as mock_subprocess_run, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ):
-            # start first mock fus3 process
+            # start first mock VFS process
             mock_subprocess = MagicMock()
             mock_subprocess.pid = test_pid1
             mock_popen.return_value = mock_subprocess
             process_manager1.start(tmp_path)
 
-            # start second mock fus3 process
+            # start second mock VFS process
             mock_subprocess.pid = test_pid2
             process_manager2.start(tmp_path)
 
             # verify the pids were written to the correct location
-            pid_file_path = (tmp_path / FUS3_PID_FILE_NAME).resolve()
+            pid_file_path = (tmp_path / DEADLINE_VFS_PID_FILE_NAME).resolve()
             with open(pid_file_path, "r") as pid_file:
                 pid_file_contents = pid_file.readlines()
                 assert f"{local_root1}:{test_pid1}:{manifest_path1}\n" in pid_file_contents
@@ -653,7 +506,7 @@ class TestFus3Processmanager:
             assert os.path.exists(local_root1)
             assert os.path.exists(local_root2)
 
-            Fus3ProcessManager.kill_all_processes(tmp_path)
+            VFSProcessManager.kill_all_processes(tmp_path)
             # Verify all processes in pid file were killed
             mock_os_kill.assert_has_calls(
                 [
@@ -682,11 +535,11 @@ class TestFus3Processmanager:
         dest_dir1: str = "assetroot-27bggh78dd2b568ab123"
         local_root1: str = f"{session_dir}/{dest_dir1}"
         manifest_path1: str = f"{local_root1}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         test_pid1 = 12345
 
         # Create process managers
-        process_manager1: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager1: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
@@ -696,20 +549,20 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
             return_value="/test/directory/path",
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.subprocess.Popen",
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
         ) as mock_popen, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.wait_for_mount",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.log"
+            f"{deadline.__package__}.job_attachments.vfs.log"
         ) as mock_logger, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ):
             call_count = 0
@@ -767,12 +620,12 @@ class TestFus3Processmanager:
         dest_dir2: str = "assetroot-27bggh78dd23131d221"
         local_root2: str = f"{session_dir}/{dest_dir2}"
         manifest_path2: str = f"{local_root2}/manifest.json"
-        os.environ[FUS3_PATH_ENV_VAR] = str((Path(__file__) / "fus3").resolve())
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         test_pid1 = 12345
         test_pid2 = 67890
 
         # Create process managers
-        process_manager1: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager1: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
@@ -780,7 +633,7 @@ class TestFus3Processmanager:
             os_user="test-user",
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
-        process_manager2: Fus3ProcessManager = Fus3ProcessManager(
+        process_manager2: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
@@ -790,66 +643,66 @@ class TestFus3Processmanager:
         )
 
         with patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.find_fus3",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
             return_value="/test/directory/path",
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.subprocess.Popen",
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
         ) as mock_popen, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.wait_for_mount",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.kill",
+            f"{deadline.__package__}.job_attachments.vfs.os.kill",
         ) as mock_os_kill, patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.exists",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.subprocess.run"
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.run"
         ) as mock_subprocess_run, patch(
-            f"{deadline.__package__}.job_attachments.fus3.Fus3ProcessManager.get_launch_environ",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ), patch(
-            f"{deadline.__package__}.job_attachments.fus3.os.path.ismount",
+            f"{deadline.__package__}.job_attachments.vfs.os.path.ismount",
             return_value=True,
         ):
-            # start first mock fus3 process
+            # start first mock VFS process
             mock_subprocess = MagicMock()
             mock_subprocess.pid = test_pid1
             mock_popen.return_value = mock_subprocess
             process_manager1.start(tmp_path)
 
             # Verify only the first processes' pid is written
-            assert Fus3ProcessManager.get_manifest_path_for_mount(
+            assert VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root1
             ) == Path(manifest_path1)
-            assert not Fus3ProcessManager.get_manifest_path_for_mount(
+            assert not VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root2
             )
 
-            # start second mock fus3 process
+            # start second mock VFS process
             mock_subprocess.pid = test_pid2
             process_manager2.start(tmp_path)
 
             # Verify both pids are written
-            assert Fus3ProcessManager.get_manifest_path_for_mount(
+            assert VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root1
             ) == Path(manifest_path1)
-            assert Fus3ProcessManager.get_manifest_path_for_mount(
+            assert VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root2
             ) == Path(manifest_path2)
 
             # Verify killing process 1 removes pid entry
-            assert Fus3ProcessManager.kill_process_at_mount(
+            assert VFSProcessManager.kill_process_at_mount(
                 session_dir=tmp_path, mount_point=local_root1
             )
             mock_os_kill.assert_called_once_with(test_pid1, SIGTERM)
-            assert not Fus3ProcessManager.get_manifest_path_for_mount(
+            assert not VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root1
             )
-            assert Fus3ProcessManager.get_manifest_path_for_mount(
+            assert VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root2
             ) == Path(manifest_path2)
 
-            Fus3ProcessManager.kill_all_processes(tmp_path)
+            VFSProcessManager.kill_all_processes(tmp_path)
 
             mock_os_kill.assert_has_calls(
                 [

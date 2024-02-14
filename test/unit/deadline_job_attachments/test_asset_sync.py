@@ -20,7 +20,7 @@ from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.os_file_permission import PosixFileSystemPermissionSettings
 from deadline.job_attachments.download import _progress_logger
 from deadline.job_attachments.exceptions import (
-    Fus3ExecutableMissingError,
+    VFSExecutableMissingError,
     JobAttachmentsS3ClientError,
 )
 from deadline.job_attachments.models import (
@@ -249,7 +249,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3"
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
@@ -851,8 +851,8 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
         ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3",
-            side_effect=Fus3ExecutableMissingError,
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs",
+            side_effect=VFSExecutableMissingError,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ) as mock_mount_vfs, patch(
@@ -884,22 +884,22 @@ class TestAssetSync:
             ]
             mock_mount_vfs.assert_not_called()
 
-    def test_cleanup_session_fus3_terminate_called(self, tmp_path):
+    def test_cleanup_session_vfs_terminate_called(self, tmp_path):
         with patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.find_fus3",
-        ) as mock_find_fus3, patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.Fus3ProcessManager.kill_all_processes",
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs",
+        ) as mock_find_vfs, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.kill_all_processes",
         ):
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.COPIED,
             )
 
-            mock_find_fus3.assert_not_called()
+            mock_find_vfs.assert_not_called()
 
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.VIRTUAL,
             )
 
-            mock_find_fus3.assert_called_once()
+            mock_find_vfs.assert_called_once()
