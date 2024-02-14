@@ -25,7 +25,6 @@ from PySide2.QtWidgets import (  # type: ignore
     QFrame,
     QLineEdit,
     QListView,
-    QStyle,
 )
 
 
@@ -40,7 +39,7 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
     "<html>"
     "<p>"
     "<b>Custom worker requirements</b><br>"
-    "What are custom worker requirements? With this feature, you can define your own custom worker "
+    "With this feature, you can define your own custom worker "
     "capabilities. There are two kinds of worker capabilities you can add."
     "</p>"
     "<ul>"
@@ -396,26 +395,22 @@ class CustomRequirementsWidget(QGroupBox):
         return requirements
 
 
-class CustomCapabilityWidget(QWidget):
+class CustomCapabilityWidget(QGroupBox):
     """
     UI element to hold a single custom requirement, either Attribute or Amount.
     """
 
     def __init__(self, capability_type: str, list_item: QListWidgetItem, parent=None):
         super().__init__(parent)
-        # TODO: Add a StylePanel frame around the whole capability item
         self._parent = parent
         self.list_item = list_item
 
-        self.setStyleSheet("QPushButton {border-style: outset; border-width: 0px}")
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-
         self.title_label = QLabel(capability_type)
 
         # TODO: Add a curved border for the delete button
-        self.delete_button = QPushButton()
-        self.delete_button.setIcon(self.style().standardIcon(QStyle.SP_DialogDiscardButton))
+        self.delete_button = QPushButton("Delete")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setCursor(QCursor(Qt.PointingHandCursor))
 
@@ -518,16 +513,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_line_edit = QLineEdit()
-
-        # Add value button
-        self.add_value_button = QPushButton()
-        self.add_value_button.setIcon(AddIcon())
-        self.add_value_button.setStyleSheet("border-width: 0px")
-        self.add_value_button.setToolTip("Add a new value to evaluate against for this attribute")
-
-        self.add_value_button.setFlat(False)
-        self.add_value_button.clicked.connect(self._add_value)
-        self.add_value_button.setCursor(QCursor(Qt.PointingHandCursor))
+        self.add_value_button = None
 
         self.top_row = QHBoxLayout()
         self.top_row.addWidget(self.value_label)
@@ -578,6 +564,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
 
         # LineEdit  / LineEdit / Optional [X]
         self.layout.addLayout(self.columns)
+        self._add_value()
 
     def _add_value(self):
         value_list_item = QListWidgetItem(self.value_list_widget)
@@ -586,12 +573,14 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.value_list_widget.addItem(value_list_item)
         self.value_list_widget.setItemWidget(value_list_item, value)
         self._resize_value_list_to_fit()
+        self._move_add_button_to_last_item()
         self._set_remove_button_for_first_item()
 
     def remove_value_item(self, value):
         # remove the ListWidgetItem from value_list_item
         self.value_list_widget.takeItem(self.value_list_widget.indexFromItem(value).row())
         self._resize_value_list_to_fit()
+        self._move_add_button_to_last_item()
         self._set_remove_button_for_first_item()
 
     def _resize_value_list_to_fit(self):
@@ -605,14 +594,37 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             current_height + 2 * self.value_list_widget.frameWidth(),
         )
 
+    def _move_add_button_to_last_item(self):
+        # Add value button
+        if self.add_value_button is not None:
+            self.add_value_button.setParent(None)
+
+        else:
+            self.add_value_button = QPushButton("+")
+            self.add_value_button.setStyleSheet("border-width: 0px")
+            self.add_value_button.setToolTip(
+                "Add a new value to evaluate against for this attribute"
+            )
+            self.add_value_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+            self.add_value_button.clicked.connect(self._add_value)
+            self.add_value_button.setCursor(QCursor(Qt.PointingHandCursor))
+
+        last_item = self.value_list_widget.itemWidget(
+            self.value_list_widget.item(self.value_list_widget.count() - 1)
+        )
+        last_item.layout.addWidget(self.add_value_button)
+
     def _set_remove_button_for_first_item(self):
         if self.value_list_widget.count() == 1:
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
             first_item.remove_button.setEnabled(False)
+            first_item.remove_button.unsetCursor()
 
         if self.value_list_widget.count() >= 2:
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
             first_item.remove_button.setEnabled(True)
+            first_item.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
 
     def get_requirement(self) -> Dict[str, Any]:
         """
@@ -648,10 +660,10 @@ class CustomAttributeValueWidget(QWidget):
         self.value_list_item = value_list_item
 
         self.line_edit = QLineEdit()
+        self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 10)
 
-        self.remove_button = QPushButton()
-
-        self.remove_button.setIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton))
+        self.remove_button = QPushButton("-")
+        self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.remove_button.clicked.connect(self._remove)
         self.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
 
@@ -659,6 +671,7 @@ class CustomAttributeValueWidget(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.line_edit)
         self.layout.addWidget(self.remove_button)
+        self.layout.setAlignment(Qt.AlignLeft)
 
     def _remove(self):
         self._parent.remove_value_item(self.value_list_item)
