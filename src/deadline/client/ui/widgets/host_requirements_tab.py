@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from PySide2.QtCore import Qt  # type: ignore
-from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon
+from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QCursor
 from PySide2.QtWidgets import (  # type: ignore
     QComboBox,
     QGroupBox,
@@ -28,10 +28,12 @@ from PySide2.QtWidgets import (  # type: ignore
     QStyle,
 )
 
+
 MAX_INT_VALUE = (2**31) - 1
 MIN_INT_VALUE = -(2**31) + 1
 LABEL_FIXED_WIDTH: int = 150
 BUTTON_FIXED_WIDTH: int = 150
+
 PLACEHOLDER_TEXT = "-"
 INFO_ICON_PATH = str(Path(__file__).parent.parent / "resources" / "info.svg")
 CUSTOM_REQUIREMENT_TOOL_TIP = (
@@ -52,15 +54,9 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
 )
 
 
-class DeleteIcon(QIcon):
+class AddIcon(QIcon):
     def __init__(self):
-        file_path = str(Path(__file__).parent.parent / "resources" / "delete.svg")
-        super().__init__(file_path)
-
-
-class RemoveIcon(QIcon):
-    def __init__(self):
-        file_path = str(Path(__file__).parent.parent / "resources" / "remove.svg")
+        file_path = str(Path(__file__).parent.parent / "resources" / "add.svg")
         super().__init__(file_path)
 
 
@@ -321,15 +317,16 @@ class CustomRequirementsWidget(QGroupBox):
         self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list_widget.setSizeAdjustPolicy(QListWidget.AdjustToContents)
-
         self.resize_list_to_fit()
 
         # Add a row with Add Amount and Add Attribute buttons
         self.add_amount_button = QPushButton("+ Add amount")
         self.add_amount_button.setFixedWidth(BUTTON_FIXED_WIDTH)
+        self.add_amount_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.add_attr_button = QPushButton("+ Add attribute")
         self.add_attr_button.setFixedWidth(BUTTON_FIXED_WIDTH)
+        self.add_attr_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.buttons_row = QHBoxLayout()
         self.buttons_row.setAlignment(Qt.AlignLeft)
@@ -418,8 +415,9 @@ class CustomCapabilityWidget(QWidget):
 
         # TODO: Add a curved border for the delete button
         self.delete_button = QPushButton()
-        self.delete_button.setIcon(DeleteIcon())
+        self.delete_button.setIcon(self.style().standardIcon(QStyle.SP_DialogDiscardButton))
         self.delete_button.clicked.connect(self._delete)
+        self.delete_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.title_row = QHBoxLayout()
         self.title_row.addWidget(self.title_label)
@@ -514,15 +512,27 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         # Name / Value / All / Any
         self.name_label = QLabel("Name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.value_label = QLabel("Value")
+        self.value_label = QLabel("Value(s)")
         self.all_of_button = QRadioButton("All")
         self.any_of_button = QRadioButton("Any")
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_line_edit = QLineEdit()
 
+        # Add value button
+        self.add_value_button = QPushButton()
+        self.add_value_button.setIcon(AddIcon())
+        self.add_value_button.setStyleSheet("border-width: 0px")
+        self.add_value_button.setToolTip("Add a new value to evaluate against for this attribute")
+
+        self.add_value_button.setFlat(False)
+        self.add_value_button.clicked.connect(self._add_value)
+        self.add_value_button.setCursor(QCursor(Qt.PointingHandCursor))
+
         self.top_row = QHBoxLayout()
         self.top_row.addWidget(self.value_label)
+
+        self.top_row.addWidget(self.add_value_button)
         self.top_row.addStretch()
         self.top_row.addWidget(self.all_of_button)
         self.top_row.addWidget(self.any_of_button)
@@ -641,10 +651,9 @@ class CustomAttributeValueWidget(QWidget):
 
         self.remove_button = QPushButton()
 
-        remove_icon_pixmap: QStyle.StandardPixmap = QStyle.SP_TitleBarCloseButton
-        remove_icon: QIcon = self.style().standardIcon(remove_icon_pixmap)
-        self.remove_button.setIcon(remove_icon)
+        self.remove_button.setIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton))
         self.remove_button.clicked.connect(self._remove)
+        self.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
