@@ -408,6 +408,7 @@ class CustomCapabilityWidget(QGroupBox):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.title_label = QLabel(capability_type)
+        self.title_label.setStyleSheet("font-weight: bold")
 
         # TODO: Add a curved border for the delete button
         self.delete_button = QPushButton("Delete")
@@ -438,7 +439,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value
-        self.name_label = QLabel("Name")
+        self.name_label = QLabel("Amount Name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_label = QLabel("Value")
         self.name_line_edit = QLineEdit()
@@ -450,13 +451,16 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.max_label = QLabel("Max")
         self.max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.min_spin_box = OptionalSpinBox(min=MIN_INT_VALUE, max=MAX_INT_VALUE, parent=self)
+        self.min_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.max_spin_box = OptionalSpinBox(min=MIN_INT_VALUE, max=MAX_INT_VALUE, parent=self)
+        self.max_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.min_max_row = QHBoxLayout()
         self.min_max_row.addWidget(self.min_label)
         self.min_max_row.addWidget(self.min_spin_box)
         self.min_max_row.addWidget(self.max_label)
         self.min_max_row.addWidget(self.max_spin_box)
+        self.min_max_row.addStretch()
 
         self.column_1 = QVBoxLayout()
         self.column_1.setContentsMargins(0, 0, 0, 0)
@@ -505,7 +509,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value / All / Any
-        self.name_label = QLabel("Name")
+        self.name_label = QLabel("Attribute Name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_label = QLabel("Value(s)")
         self.all_of_button = QRadioButton("All")
