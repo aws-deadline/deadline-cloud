@@ -321,11 +321,9 @@ class CustomRequirementsWidget(QGroupBox):
         # Add a row with Add Amount and Add Attribute buttons
         self.add_amount_button = QPushButton("+ Add amount")
         self.add_amount_button.setFixedWidth(BUTTON_FIXED_WIDTH)
-        self.add_amount_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.add_attr_button = QPushButton("+ Add attribute")
         self.add_attr_button.setFixedWidth(BUTTON_FIXED_WIDTH)
-        self.add_attr_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.buttons_row = QHBoxLayout()
         self.buttons_row.setAlignment(Qt.AlignLeft)
@@ -413,7 +411,6 @@ class CustomCapabilityWidget(QGroupBox):
         # TODO: Add a curved border for the delete button
         self.delete_button = QPushButton("Delete")
         self.delete_button.clicked.connect(self._delete)
-        self.delete_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.title_row = QHBoxLayout()
         self.title_row.addWidget(self.title_label)
@@ -606,7 +603,6 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             self.add_value_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
             self.add_value_button.clicked.connect(self._add_value)
-            self.add_value_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         last_item = self.value_list_widget.itemWidget(
             self.value_list_widget.item(self.value_list_widget.count() - 1)
@@ -622,7 +618,6 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         if self.value_list_widget.count() >= 2:
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
             first_item.remove_button.setEnabled(True)
-            first_item.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
 
     def get_requirement(self) -> Dict[str, Any]:
         """
@@ -663,7 +658,6 @@ class CustomAttributeValueWidget(QWidget):
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.remove_button.clicked.connect(self._remove)
-        self.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
