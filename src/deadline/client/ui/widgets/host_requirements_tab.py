@@ -6,7 +6,7 @@ UI widgets for the Host Requirements tab.
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from PySide2.QtCore import Qt  # type: ignore
-from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QCursor
+from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon
 from PySide2.QtWidgets import (  # type: ignore
     QComboBox,
     QGroupBox,
@@ -438,7 +438,6 @@ class CustomAmountWidget(CustomCapabilityWidget):
         # Name / Value
         self.name_label = QLabel("Amount Name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.value_label = QLabel("Value")
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
 
@@ -457,7 +456,6 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.min_max_row.addWidget(self.min_spin_box)
         self.min_max_row.addWidget(self.max_label)
         self.min_max_row.addWidget(self.max_spin_box)
-        self.min_max_row.addStretch()
 
         self.column_1 = QVBoxLayout()
         self.column_1.setContentsMargins(0, 0, 0, 0)
@@ -466,11 +464,12 @@ class CustomAmountWidget(CustomCapabilityWidget):
 
         self.column_2 = QVBoxLayout()
         self.column_2.setContentsMargins(0, 0, 0, 0)
-        self.column_2.addWidget(self.value_label)
+        self.column_2.addStretch()
         self.column_2.addLayout(self.min_max_row)
 
-        self.columns = QVBoxLayout()
-        self.columns.setContentsMargins(15, 0, 0, 0)
+        self.columns = QHBoxLayout()
+        self.columns.setContentsMargins(0, 0, 0, 15)
+
         self.columns.addLayout(self.column_1)
         self.columns.addLayout(self.column_2)
 
@@ -551,7 +550,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.column_2_widget = QWidget(self.columns_widget)
         self.column_2_widget.setLayout(self.column_2)
         self.columns = QVBoxLayout()
-        self.columns.setContentsMargins(15, 15, 0, 0)
+        self.columns.setContentsMargins(0, 15, 0, 0)
         self.columns.addLayout(self.column_1)
         self.columns.addWidget(self.column_2_widget)
 
@@ -653,7 +652,7 @@ class CustomAttributeValueWidget(QWidget):
         self.value_list_item = value_list_item
 
         self.line_edit = QLineEdit()
-        self.line_edit.setMinimumWidth(123)
+        self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 20)
 
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
