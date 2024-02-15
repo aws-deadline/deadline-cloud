@@ -7,6 +7,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock
 
 from deadline.job_attachments.models import JobAttachmentS3Settings
@@ -177,7 +178,7 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
 
 @dataclass
 class UploadInputFilesOneAssetInCasOutputs:
-    attachments: Attachments
+    attachments: Optional[Attachments]
 
 
 @pytest.fixture(scope="session")
@@ -329,7 +330,7 @@ def test_upload_input_files_all_assets_in_cas(
     )
 
     # THEN
-
+    assert attachments is not None
     assert attachments.manifests[0].inputManifestPath is not None
 
     # Confirm nothing was uploaded
@@ -401,6 +402,7 @@ def sync_inputs(
     dest_dir = _get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
 
     # THEN
+    assert upload_input_files_one_asset_in_cas.attachments is not None
     assert Path(session_dir / dest_dir / job_attachment_test.SCENE_MA_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.BRICK_PNG_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.CLOTH_PNG_PATH).exists()
@@ -1086,6 +1088,7 @@ def upload_input_files_no_input_paths(
 
     # THEN
     mock_host_path_format_name = PathFormat.get_host_path_format_string()
+    assert attachments is not None
     assert attachments.manifests == [
         ManifestProperties(
             rootPath=str(job_attachment_test.OUTPUT_PATH),
@@ -1162,6 +1165,7 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
         bytes(manifests[0].asset_manifest.encode(), "utf-8"), HashAlgorithm.XXH128
     )
 
+    assert attachments is not None
     assert len(attachments.manifests) == 1
     assert attachments.manifests[0].fileSystemLocationName is None
     assert attachments.manifests[0].rootPath == str(job_attachment_test.INPUT_PATH)

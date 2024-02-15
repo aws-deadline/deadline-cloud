@@ -1862,6 +1862,28 @@ class TestUpload:
             )
 
     @pytest.mark.parametrize(
+        "manifest_version",
+        [ManifestVersion.v2023_03_03],
+    )
+    def test_upload_assets_no_manifests(
+        self,
+        farm_id,
+        queue_id,
+        manifest_version: ManifestVersion,
+    ):
+        """Confirms no Attachments are returned if no manifests are provided"""
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+        (upload_summary_statistics, attachments) = asset_manager.upload_assets(manifests=[])
+        assert upload_summary_statistics.total_files == 0
+        assert upload_summary_statistics.total_bytes == 0
+        assert attachments is None
+
+    @pytest.mark.parametrize(
         "mock_file_system_locations, expected_result",
         [
             (

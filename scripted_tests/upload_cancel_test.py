@@ -117,8 +117,9 @@ def run():
         print(f"Upload Summary Statistics:\n{summary_statistics_upload}")
 
         total = time.perf_counter() - start
+        attachments = attachment_settings.to_dict() if attachment_settings else {}
         print(
-            f"Finished uploading after {total} seconds, created these attachment settings:\n{attachment_settings.to_dict()}"
+            f"Finished uploading after {total} seconds, created these attachment settings:\n{attachments}"
         )
     except AssetSyncCancelledError as asce:
         print(f"AssetSyncCancelledError: {asce}")

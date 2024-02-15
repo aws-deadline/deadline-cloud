@@ -124,11 +124,13 @@ if __name__ == "__main__":
     print(f"Summary Statistics for file uploads:\n{summary_statistics_upload}")
 
     total = time.perf_counter() - start
+
+    attachments = attachment_settings.to_dict() if attachment_settings else {}
     print(
-        f"Finished uploading after {total} seconds, created these attachment settings:\n{attachment_settings.to_dict()}"
+        f"Finished uploading after {total} seconds, created these attachment settings:\n{attachments}"
     )
 
-    if not args.skip_download:
+    if attachments and not args.skip_download:
         print("\nStarting download test...")
         start = time.perf_counter()
         manifest_key = f"{queue.jobAttachmentSettings.rootPrefix}/{S3_MANIFEST_FOLDER_NAME}/{attachment_settings.manifests[0].inputManifestPath}"

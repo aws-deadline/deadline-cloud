@@ -1012,7 +1012,7 @@ class S3AssetManager:
         manifests: list[AssetRootManifest],
         on_uploading_assets: Optional[Callable[[Any], bool]] = None,
         s3_check_cache_dir: Optional[str] = None,
-    ) -> tuple[SummaryStatistics, Attachments]:
+    ) -> tuple[SummaryStatistics, Optional[Attachments]]:
         """
         Uploads all the files for provided manifests and manifests themselves to S3.
 
@@ -1085,5 +1085,5 @@ class S3AssetManager:
 
         return (
             progress_tracker.get_summary_statistics(),
-            Attachments(manifests=manifest_properties_list),
+            Attachments(manifests=manifest_properties_list) if manifest_properties_list else None,
         )

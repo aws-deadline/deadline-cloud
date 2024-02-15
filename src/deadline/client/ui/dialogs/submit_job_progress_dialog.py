@@ -341,7 +341,9 @@ class SubmitJobProgressDialog(QDialog):
 
             logger.info("Finished uploading job attachments files.")
 
-            self.upload_thread_succeeded.emit(upload_summary, attachment_settings.to_dict())
+            self.upload_thread_succeeded.emit(
+                upload_summary, attachment_settings.to_dict() if attachment_settings else {}
+            )
         except AssetSyncCancelledError as e:
             # If it wasn't canceled, send the exception to the dialog
             if self._continue_submission:

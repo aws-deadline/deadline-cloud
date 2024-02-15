@@ -47,7 +47,7 @@ def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_clien
         upload_group.asset_groups, upload_group.total_input_files, upload_group.total_input_bytes
     )
     (_, attachments) = asset_manager.upload_assets(manifests)
-    attachments = attachments.to_dict()
+    attachments = attachments.to_dict() if attachments else {}
     total = time.perf_counter() - start
     print(f"Finished processing job attachments after {total} seconds.\n")
     print(f"Created these attachment settings: {attachments}\n")
@@ -177,7 +177,7 @@ if __name__ == "__main__":
         args.farm_id, args.queue_id, inputs, args.output_dir, deadline_client
     )
 
-    if not args.assets_only:
+    if attachments and not args.assets_only:
         root_dir = attachments["manifests"][0]["rootPath"]
         rel_output = str(Path(args.output_dir).relative_to(root_dir))
         submit_custom_job(

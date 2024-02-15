@@ -257,8 +257,11 @@ def create_job_from_job_bundle(
             asset_manager, asset_manifests, print_function_callback, upload_progress_callback
         )
 
-        attachment_settings["fileSystem"] = JobAttachmentsFileSystem(job_attachments_file_system)
-        create_job_args["attachments"] = attachment_settings
+        if attachment_settings:
+            attachment_settings["fileSystem"] = JobAttachmentsFileSystem(
+                job_attachments_file_system
+            )
+            create_job_args["attachments"] = attachment_settings
 
     create_job_args.update(app_parameters_formatted)
 
@@ -420,4 +423,4 @@ def _upload_attachments(
     print_function_callback("Upload Summary:")
     print_function_callback(textwrap.indent(str(upload_summary), "    "))
 
-    return attachment_settings.to_dict()
+    return attachment_settings.to_dict() if attachment_settings else {}

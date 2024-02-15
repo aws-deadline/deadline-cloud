@@ -355,7 +355,9 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     ) as qp_boto3_client_mock, patch.object(
         _submit_job_bundle, "_hash_attachments", return_value=(attachment_mock, {})
     ), patch.object(
-        _submit_job_bundle, "_upload_attachments", return_value={}
+        _submit_job_bundle,
+        "_upload_attachments",
+        return_value={"manifests": [{"rootPath": "/root"}]},
     ), patch.object(
         _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
@@ -398,7 +400,101 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
             parameters=MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][2]["parameters"],  # type: ignore
             template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
             templateType="JSON",
-            attachments={"fileSystem": expected_loading_method},
+            attachments={
+                "fileSystem": expected_loading_method,
+                "manifests": [{"rootPath": "/root"}],
+            },
+            priority=50,
+        )
+        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_bundle_no_attachments(fresh_deadline_config, temp_job_bundle_dir):
+    """
+    Verify that a submission that ends up not creating any Job Attachments submits successfully.
+    """
+
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    # Write a JSON template
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+    # Write out some parameters
+    with open(
+        os.path.join(temp_job_bundle_dir, "parameter_values.yaml"),
+        "w",
+        encoding="utf8",
+    ) as f:
+        f.write(MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][1])
+
+    # Write out the temp directory as an attachment
+    with open(
+        os.path.join(temp_job_bundle_dir, "asset_references.json"),
+        "w",
+        encoding="utf8",
+    ) as f:
+        data = {
+            "assetReferences": {
+                "inputs": {
+                    "directories": [temp_job_bundle_dir],
+                    "filenames": [],
+                },
+                "outputs": {"directories": [temp_job_bundle_dir]},
+            }
+        }
+        json.dump(data, f)
+
+    attachment_mock = Mock()
+    attachment_mock.total_bytes = 0
+    attachment_mock.total_files.return_value = 0
+
+    with patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as bundle_boto3_client_mock, patch.object(
+        _queue_parameters, "get_boto3_client"
+    ) as qp_boto3_client_mock, patch.object(
+        _submit_job_bundle, "_hash_attachments", return_value=(attachment_mock, {})
+    ), patch.object(
+        _submit_job_bundle,
+        "_upload_attachments",
+        return_value={},
+    ), patch.object(
+        _submit_job_bundle.api, "get_boto3_session"
+    ), patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ), patch.object(
+        bundle_group.api, "get_telemetry_client"
+    ):
+        bundle_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        bundle_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
+        bundle_boto3_client_mock().get_queue.return_value = {
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {"s3BucketName": "mock", "rootPrefix": "root"},
+        }
+        qp_boto3_client_mock().list_queue_environments.return_value = (
+            MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE
+        )
+        qp_boto3_client_mock().get_queue_environment.side_effect = (
+            MOCK_GET_QUEUE_ENVIRONMENTS_RESPONSES
+        )
+
+        params = ["bundle", "submit", temp_job_bundle_dir]
+
+        runner = CliRunner()
+        result = runner.invoke(main, params)
+
+        assert temp_job_bundle_dir in result.output
+        # Ensure no attachments were in the create job call
+        bundle_boto3_client_mock().create_job.assert_called_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            parameters=MOCK_PARAMETERS_CASES["TEMPLATE_ONLY_JSON"][2]["parameters"],  # type: ignore
+            template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
+            templateType="JSON",
             priority=50,
         )
         assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
