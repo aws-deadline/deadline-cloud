@@ -633,7 +633,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         """
         requirement: Dict[str, Any] = {}
         if self.name_line_edit.text():
-            option = "anyOf" if self.all_of_button.isChecked() else "allOf"
+            option = "anyOf" if self.any_of_button.isChecked() else "allOf"
             values = []
             for i in range(self.value_list_widget.count()):
                 value = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
