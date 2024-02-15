@@ -468,7 +468,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.column_2.addWidget(self.value_label)
         self.column_2.addLayout(self.min_max_row)
 
-        self.columns = QHBoxLayout()
+        self.columns = QVBoxLayout()
         self.columns.setContentsMargins(15, 0, 0, 0)
         self.columns.addLayout(self.column_1)
         self.columns.addLayout(self.column_2)
@@ -518,7 +518,6 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.top_row = QHBoxLayout()
         self.top_row.addWidget(self.value_label)
 
-        self.top_row.addWidget(self.add_value_button)
         self.top_row.addStretch()
         self.top_row.addWidget(self.all_of_button)
         self.top_row.addWidget(self.any_of_button)
@@ -532,32 +531,23 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.value_list_widget.setFrameStyle(QFrame.NoFrame)
         self.value_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.value_list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # Include one initial value
-        self._add_value()
-
-        # Add value button
-        self.add_value_button = QPushButton("+ Add a value")
-        self.add_value_button.setFixedWidth(BUTTON_FIXED_WIDTH)
-        self.add_value_button.clicked.connect(self._add_value)
 
         self.column_1 = QVBoxLayout()
         self.column_1.setContentsMargins(0, 0, 0, 0)
         self.column_1.setAlignment(Qt.AlignTop)
         self.column_1.addWidget(self.name_label)
         self.column_1.addWidget(self.name_line_edit)
-
         self.column_2 = QVBoxLayout()
         self.column_2.setContentsMargins(0, 0, 0, 0)
         self.column_2.addLayout(self.top_row)
         self.column_2.addWidget(self.value_list_widget)
-        self.column_2.addWidget(self.add_value_button)
 
         # reduce the spacing between top row and value list
         # TODO: 2px seems to work best on Dev Submitter UI but 1px seems to work best for Nuke Submitter,
         #  so there are likely still better ways to adjust this layout.
         self.column_2.setSpacing(2)
 
-        self.columns = QHBoxLayout()
+        self.columns = QVBoxLayout()
         self.columns.setContentsMargins(15, 15, 0, 0)
         self.columns.addLayout(self.column_1)
         self.columns.addLayout(self.column_2)
@@ -613,7 +603,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         last_item = self.value_list_widget.itemWidget(
             self.value_list_widget.item(self.value_list_widget.count() - 1)
         )
-        last_item.layout.addWidget(self.add_value_button)
+        last_item.layout.insertWidget(last_item.layout.count() - 1, self.add_value_button)
 
     def _set_remove_button_for_first_item(self):
         if self.value_list_widget.count() == 1:
@@ -660,7 +650,6 @@ class CustomAttributeValueWidget(QWidget):
         self.value_list_item = value_list_item
 
         self.line_edit = QLineEdit()
-        self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 10)
 
         self.remove_button = QPushButton("-")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -671,6 +660,7 @@ class CustomAttributeValueWidget(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.line_edit)
         self.layout.addWidget(self.remove_button)
+        self.layout.addStretch()
         self.layout.setAlignment(Qt.AlignLeft)
 
     def _remove(self):
