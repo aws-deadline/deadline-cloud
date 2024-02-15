@@ -60,7 +60,7 @@ def test_list_jobs_principal_id(fresh_deadline_config, pass_principal_id_filter,
         ]
         if user_identities:
             session_mock()._session.get_scoped_config.return_value = {
-                "studio_id": "studioid",
+                "monitor_id": "monitor-amonitorid",
                 "user_id": "userid",
                 "identity_store_id": "idstoreid",
             }

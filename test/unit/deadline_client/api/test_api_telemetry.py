@@ -17,8 +17,8 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 def fixture_telemetry_client(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-        api._telemetry, "get_studio_id", side_effect=["studio-id"]
-    ), patch.object(
+        api._telemetry, "get_monitor_id", side_effect=["monitor-id"]
+    ), patch.object(api._telemetry, "get_studio_id", side_effect=[None]), patch.object(
         api._telemetry,
         "get_user_and_identity_store_id",
         side_effect=[("user-id", "identity-store-id")],
