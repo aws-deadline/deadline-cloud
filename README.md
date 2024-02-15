@@ -11,7 +11,7 @@ It is divided into the following submodules:
 
 This submodule contains utilities to call boto3 in a standardized way
 using an aws profile configured for Amazon Deadline Cloud, helpers for working with
-Nimble Studio login/logout, and objects representing Amazon Deadline Cloud
+Deadline Cloud Monitor Desktop login/logout, and objects representing Amazon Deadline Cloud
 resources.
 
 ### cli

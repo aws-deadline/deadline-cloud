@@ -83,6 +83,7 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
             if user_id:
                 list_farm_params["principalId"] = str(user_id)
 
+            # We don't do this filtering for Monitors, so specifically check StudioId
             studio_id = get_studio_id(config=config)
             if studio_id:
                 list_farm_params["studioId"] = str(studio_id)
