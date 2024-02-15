@@ -658,6 +658,7 @@ class CustomAttributeValueWidget(QWidget):
         self.value_list_item = value_list_item
 
         self.line_edit = QLineEdit()
+        self.line_edit.setMinimumWidth(123)
 
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -838,11 +839,16 @@ class OptionalSpinBox(QSpinBox):
         current_value: int = self.value()
         result_value = self.value() + steps
         if (
-            current_value == self.no_input_value
-            or result_value == self.no_input_value
+            result_value == self.no_input_value
             or result_value > self.maximum()
             or result_value < self.minimum()
         ):
+            # If result value is not a valid value, do not go to that value
             return
+
+        if (
+            current_value == self.no_input_value and steps == 1
+        ):  # We should allow the user to increment from null value to a valid value
+            super().setValue(max(self.min, 0))
         else:
             super().stepBy(steps)
