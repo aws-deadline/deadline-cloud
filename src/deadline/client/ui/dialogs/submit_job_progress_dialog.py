@@ -254,26 +254,28 @@ class SubmitJobProgressDialog(QDialog):
                 referenced_paths=sorted(self.asset_references.referenced_paths),
                 storage_profile_id=self._storage_profile_id,
             )
-            if (
-                not self._auto_accept
-                and not self._confirm_asset_references_outside_storage_profile(
-                    upload_group.num_outside_files_by_root,
+            # If we find any Job Attachments, start a background thread
+            if upload_group.asset_groups:
+                if (
+                    not self._auto_accept
+                    and not self._confirm_asset_references_outside_storage_profile(
+                        upload_group.num_outside_files_by_root,
+                        upload_group.total_input_files,
+                        upload_group.total_input_bytes,
+                    )
+                ):
+                    raise UserInitiatedCancel("Submission canceled.")
+
+                self._start_hashing(
+                    upload_group.asset_groups,
                     upload_group.total_input_files,
                     upload_group.total_input_bytes,
                 )
-            ):
-                raise UserInitiatedCancel("Submission canceled.")
+                return
 
-            self._start_hashing(
-                upload_group.asset_groups,
-                upload_group.total_input_files,
-                upload_group.total_input_bytes,
-            )
-
-        else:
-            self.hashing_progress.setVisible(False)
-            self.upload_progress.setVisible(False)
-            self._start_create_job()
+        self.hashing_progress.setVisible(False)
+        self.upload_progress.setVisible(False)
+        self._start_create_job()
 
     def _hashing_background_thread(
         self,
