@@ -235,30 +235,31 @@ def create_job_from_job_bundle(
             referenced_paths=sorted(asset_references.referenced_paths),
             storage_profile_id=storage_profile_id,
         )
+        if upload_group.asset_groups:
+            if decide_cancel_submission_callback(
+                upload_group.num_outside_files_by_root,
+                upload_group.total_input_files,
+                upload_group.total_input_bytes,
+            ):
+                print_function_callback("Job submission canceled.")
+                return None
 
-        if decide_cancel_submission_callback(
-            upload_group.num_outside_files_by_root,
-            upload_group.total_input_files,
-            upload_group.total_input_bytes,
-        ):
-            print_function_callback("Job submission canceled.")
-            return None
+            _, asset_manifests = _hash_attachments(
+                asset_manager=asset_manager,
+                asset_groups=upload_group.asset_groups,
+                total_input_files=upload_group.total_input_files,
+                total_input_bytes=upload_group.total_input_bytes,
+                print_function_callback=print_function_callback,
+                hashing_progress_callback=hashing_progress_callback,
+            )
 
-        _, asset_manifests = _hash_attachments(
-            asset_manager=asset_manager,
-            asset_groups=upload_group.asset_groups,
-            total_input_files=upload_group.total_input_files,
-            total_input_bytes=upload_group.total_input_bytes,
-            print_function_callback=print_function_callback,
-            hashing_progress_callback=hashing_progress_callback,
-        )
-
-        attachment_settings = _upload_attachments(
-            asset_manager, asset_manifests, print_function_callback, upload_progress_callback
-        )
-
-        attachment_settings["fileSystem"] = JobAttachmentsFileSystem(job_attachments_file_system)
-        create_job_args["attachments"] = attachment_settings
+            attachment_settings = _upload_attachments(
+                asset_manager, asset_manifests, print_function_callback, upload_progress_callback
+            )
+            attachment_settings["fileSystem"] = JobAttachmentsFileSystem(
+                job_attachments_file_system
+            )
+            create_job_args["attachments"] = attachment_settings
 
     create_job_args.update(app_parameters_formatted)
 
