@@ -42,6 +42,7 @@ def list_farms(config=None, **kwargs):
             kwargs["principalId"] = user_id
 
     if "studioId" not in kwargs:
+        # We don't do this filtering for Monitors, so specifically check StudioId
         studio_id = get_studio_id(config=config)
         if studio_id:
             kwargs["studioId"] = studio_id

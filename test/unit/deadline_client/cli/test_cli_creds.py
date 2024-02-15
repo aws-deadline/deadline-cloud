@@ -20,7 +20,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
     """
     scoped_config = {
         "credential_process": "/bin/DeadlineCloudMonitor get-credentials --profile sandbox-us-west-2",
-        "studio_id": "us-west-2:stid-1g9neezauta8ease",
+        "monitor_id": "monitor-1g9neezauta8ease",
         "region": "us-west-2",
     }
 
@@ -114,7 +114,7 @@ def test_cli_creds_status_json(fresh_deadline_config):
     }
     scoped_config = {
         "credential_process": "/bin/DeadlineCloudMonitor get-credentials --profile sandbox-us-west-2",
-        "studio_id": "us-west-2:stid-1g9neezauta8ease",
+        "monitor_id": "monitor-1g9neezauta8ease",
         "region": "us-west-2",
     }
     config.set_setting("defaults.aws_profile_name", profile_name)

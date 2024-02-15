@@ -144,8 +144,8 @@ def get_credentials_type(config: Optional[ConfigParser] = None) -> AwsCredential
         profile_config = session._session.get_scoped_config()
     except ProfileNotFound:
         return AwsCredentialsType.NOT_VALID
-    if "studio_id" in profile_config:
-        # CTDX adds some Nimble-specific keys here which we can use to know that this came from CTDX
+    if "studio_id" in profile_config or "monitor_id" in profile_config:
+        # Deadline Cloud Monitor Desktop adds some Deadline Cloud-specific keys here which we can use to know that this came from the app
         return AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
     else:
         return AwsCredentialsType.HOST_PROVIDED
@@ -155,13 +155,13 @@ def get_user_and_identity_store_id(
     config: Optional[ConfigParser] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
-    If logged in with Nimble Studio Deadline Cloud Monitor, returns a tuple
+    If logged in with Deadline Cloud Monitor Desktop, returns a tuple
     (user_id, identity_store_id), otherwise returns None.
     """
     session = get_boto3_session(config=config)
     profile_config = session._session.get_scoped_config()
 
-    if "studio_id" in profile_config:
+    if "studio_id" in profile_config or "monitor_id" in profile_config:
         return (profile_config["user_id"], profile_config["identity_store_id"])
     else:
         return None, None
@@ -171,12 +171,24 @@ def get_studio_id(
     config: Optional[ConfigParser] = None,
 ) -> Optional[str]:
     """
-    If logged in with Nimble Studio Deadline Cloud Monitor, returns Studio Id, otherwise returns None.
+    If logged in with Deadline Cloud Monitor to a Nimble Studio, returns Studio Id, otherwise returns None.
     """
     session = get_boto3_session(config=config)
     profile_config = session._session.get_scoped_config()
 
     return profile_config.get("studio_id", None)
+
+
+def get_monitor_id(
+    config: Optional[ConfigParser] = None,
+) -> Optional[str]:
+    """
+    If logged in with Deadline Cloud Monitor to a Deadline Monitor, returns Monitor Id, otherwise returns None.
+    """
+    session = get_boto3_session(config=config)
+    profile_config = session._session.get_scoped_config()
+
+    return profile_config.get("monitor_id", None)
 
 
 def get_queue_user_boto3_session(
