@@ -5,7 +5,6 @@ UI widgets for the Host Requirements tab.
 """
 from typing import Any, Dict, List, Optional
 from pathlib import Path
-
 from PySide2.QtCore import Qt  # type: ignore
 from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QCursor
 from PySide2.QtWidgets import (  # type: ignore
@@ -310,6 +309,7 @@ class CustomRequirementsWidget(QGroupBox):
         # - disable directly selecting list items
         # - no scroll bars
         self.list_widget = QListWidget(self)
+        self.list_widget.setSpacing(2)
         self.list_widget.setSelectionMode(QListView.NoSelection)
         self.list_widget.viewport().setAutoFillBackground(False)
         self.list_widget.setFrameStyle(QFrame.NoFrame)
@@ -355,6 +355,7 @@ class CustomRequirementsWidget(QGroupBox):
             item = CustomAmountWidget(list_item, self)
 
         list_item.setSizeHint(item.sizeHint())
+
         self.list_widget.addItem(list_item)
         self.list_widget.setItemWidget(list_item, item)
         self.resize_list_to_fit()
@@ -372,11 +373,10 @@ class CustomRequirementsWidget(QGroupBox):
             current_height = 0
             for i in range(self.list_widget.count()):
                 widget = self.list_widget.itemWidget(self.list_widget.item(i))
-                current_height += widget.height()
+                if widget is not None:
+                    current_height += widget.height() + 2 * self.list_widget.spacing()
 
-            self.list_widget.setFixedHeight(
-                current_height + 2 * self.list_widget.frameWidth(),
-            )
+            self.list_widget.setFixedHeight(current_height + 2 * self.list_widget.frameWidth())
 
     def get_requirements(self) -> Dict[str, List]:
         """
@@ -516,7 +516,6 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.any_of_button = QRadioButton("Any")
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.value_line_edit = QLineEdit()
         self.add_value_button = None
 
         self.top_row = QHBoxLayout()
@@ -527,20 +526,20 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.top_row.addWidget(self.any_of_button)
 
         # Create a list widget for placing custom attribute values
-        # TODO: The QVBoxLayout containing this listWidget does not resize when adding new items.
-        #   The second item added is underneath the "add value" button so cannot interact with it.
         self.value_list_widget = QListWidget(self)
         self.value_list_widget.setSelectionMode(QListView.NoSelection)
         self.value_list_widget.viewport().setAutoFillBackground(False)
         self.value_list_widget.setFrameStyle(QFrame.NoFrame)
         self.value_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.value_list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.value_list_widget.setSizeAdjustPolicy(QListWidget.AdjustToContents)
 
         self.column_1 = QVBoxLayout()
         self.column_1.setContentsMargins(0, 0, 0, 0)
         self.column_1.setAlignment(Qt.AlignTop)
         self.column_1.addWidget(self.name_label)
         self.column_1.addWidget(self.name_line_edit)
+
         self.column_2 = QVBoxLayout()
         self.column_2.setContentsMargins(0, 0, 0, 0)
         self.column_2.addLayout(self.top_row)
@@ -551,13 +550,17 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         #  so there are likely still better ways to adjust this layout.
         self.column_2.setSpacing(2)
 
+        self.columns_widget = QWidget(self)
+        self.column_2_widget = QWidget(self.columns_widget)
+        self.column_2_widget.setLayout(self.column_2)
         self.columns = QVBoxLayout()
         self.columns.setContentsMargins(15, 15, 0, 0)
         self.columns.addLayout(self.column_1)
-        self.columns.addLayout(self.column_2)
+        self.columns.addWidget(self.column_2_widget)
 
         # LineEdit  / LineEdit / Optional [X]
-        self.layout.addLayout(self.columns)
+        self.columns_widget.setLayout(self.columns)
+        self.layout.addWidget(self.columns_widget)
         self._add_value()
 
     def _add_value(self):
@@ -566,27 +569,28 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         value_list_item.setSizeHint(value.sizeHint())
         self.value_list_widget.addItem(value_list_item)
         self.value_list_widget.setItemWidget(value_list_item, value)
-        self._resize_value_list_to_fit()
+        self._resize_value_list_to_fit(1)
         self._move_add_button_to_last_item()
         self._set_remove_button_for_first_item()
 
     def remove_value_item(self, value):
         # remove the ListWidgetItem from value_list_item
         self.value_list_widget.takeItem(self.value_list_widget.indexFromItem(value).row())
-        self._resize_value_list_to_fit()
+        self._resize_value_list_to_fit(-1)
         self._move_add_button_to_last_item()
         self._set_remove_button_for_first_item()
 
-    def _resize_value_list_to_fit(self):
-        # Resize the list widget to based on the size of the contents
-        current_height = 0
-        for i in range(self.value_list_widget.count()):
-            widget = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
-            current_height += widget.height()
-
-        self.value_list_widget.setFixedHeight(
-            current_height + 2 * self.value_list_widget.frameWidth(),
+    def _resize_value_list_to_fit(self, item_count_change: int):
+        # Resize the list widget as well as parents to based on the size of the contents
+        self.column_2_widget.setFixedHeight(
+            self.column_2_widget.height()
+            + item_count_change
+            * self.value_list_widget.itemWidget(self.value_list_widget.item(0)).height()
         )
+        self.columns_widget.adjustSize()
+        self.adjustSize()
+        self.list_item.setSizeHint(self.sizeHint())
+        self._parent.resize_list_to_fit()
 
     def _move_add_button_to_last_item(self):
         # Add value button
@@ -594,7 +598,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             self.add_value_button.setParent(None)
 
         else:
-            self.add_value_button = QPushButton("+")
+            self.add_value_button = QPushButton("Add")
             self.add_value_button.setStyleSheet("border-width: 0px")
             self.add_value_button.setToolTip(
                 "Add a new value to evaluate against for this attribute"
@@ -607,7 +611,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         last_item = self.value_list_widget.itemWidget(
             self.value_list_widget.item(self.value_list_widget.count() - 1)
         )
-        last_item.layout.insertWidget(last_item.layout.count() - 1, self.add_value_button)
+        last_item.layout.insertWidget(last_item.layout.count() - 2, self.add_value_button)
 
     def _set_remove_button_for_first_item(self):
         if self.value_list_widget.count() == 1:
@@ -655,7 +659,7 @@ class CustomAttributeValueWidget(QWidget):
 
         self.line_edit = QLineEdit()
 
-        self.remove_button = QPushButton("-")
+        self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.remove_button.clicked.connect(self._remove)
         self.remove_button.setCursor(QCursor(Qt.PointingHandCursor))
