@@ -14,6 +14,7 @@ from deadline.client.api import _submit_job_bundle
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import (
     Attachments,
+    AssetRootGroup,
     AssetUploadGroup,
     JobAttachmentsFileSystem,
     AssetRootManifest,
@@ -262,7 +263,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        mock_prepare_paths.return_value = AssetUploadGroup()
+        mock_prepare_paths.return_value = AssetUploadGroup(asset_groups=[AssetRootGroup()])
         mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
         mock_upload_assets.return_value = [
             SummaryStatistics(),
@@ -382,7 +383,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             storage_profile_id="",
         )
         mock_hash_assets.assert_called_once_with(
-            asset_groups=[],
+            asset_groups=[AssetRootGroup()],
             total_input_files=0,
             total_input_bytes=0,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
