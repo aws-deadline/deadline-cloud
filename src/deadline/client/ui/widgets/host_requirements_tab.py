@@ -458,7 +458,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.min_max_row.addWidget(self.max_spin_box)
 
         self.column_1 = QVBoxLayout()
-        self.column_1.setContentsMargins(0, 0, 0, 0)
+        self.column_1.setContentsMargins(2, 0, 0, 0)
         self.column_1.addWidget(self.name_label)
         self.column_1.addWidget(self.name_line_edit)
 
@@ -532,7 +532,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.value_list_widget.setSizeAdjustPolicy(QListWidget.AdjustToContents)
 
         self.column_1 = QVBoxLayout()
-        self.column_1.setContentsMargins(0, 0, 0, 0)
+        self.column_1.setContentsMargins(2, 0, 0, 0)
         self.column_1.setAlignment(Qt.AlignTop)
         self.column_1.addWidget(self.name_label)
         self.column_1.addWidget(self.name_line_edit)
@@ -660,7 +660,7 @@ class CustomAttributeValueWidget(QWidget):
         self.remove_button.clicked.connect(self._remove)
 
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setContentsMargins(2, 0, 0, 0)
         self.layout.addWidget(self.line_edit)
         self.layout.addWidget(self.remove_button)
         self.layout.addStretch()
