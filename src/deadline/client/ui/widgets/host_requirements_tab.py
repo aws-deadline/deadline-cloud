@@ -509,6 +509,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_label = QLabel("Value(s)")
         self.all_of_button = QRadioButton("All")
+        self.all_of_button.setChecked(True)
         self.any_of_button = QRadioButton("Any")
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
