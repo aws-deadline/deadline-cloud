@@ -154,7 +154,7 @@ fail_under = 80
 [tool.semantic_release]
 # Can be removed or set to true once we are v1
 major_on_zero = false
-tag_format = "v{version}"
+tag_format = "{version}"
 
 [tool.semantic_release.publish]
 upload_to_vcs_release = false

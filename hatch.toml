@@ -66,8 +66,9 @@ build = "hatch build"
 make_exe = "python scripts/pyinstaller/make_exe.py --output {env:OUT_FILE}"
 
 [envs.release]
-pre-install-commands = [
-  "pip install -r requirements-release.txt"
+detached = true
+dependencies = [
+  "python-semantic-release == 8.7.*"
 ]
 
 [envs.release.scripts]
