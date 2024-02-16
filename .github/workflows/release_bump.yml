@@ -13,6 +13,9 @@ on:
         - minor
         - major
 
+concurrency:
+  group: release
+
 jobs:
   TestMainline:
     name: Test Mainline
@@ -24,6 +27,7 @@ jobs:
   Bump:
     needs: TestMainline
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       pull-requests: write
@@ -42,7 +46,7 @@ jobs:
 
       - name: ConfigureGit
         run: |
-          git config --local user.email "client-software-ci@amazon.com"
+          git config --local user.email "129794699+client-software-ci@users.noreply.github.com"
           git config --local user.name "client-software-ci"
 
       - name: MergePushRelease
@@ -58,6 +62,7 @@ jobs:
           fi
 
           # Backup actual changelog to preserve its contents
+          touch CHANGELOG.md
           cp CHANGELOG.md CHANGELOG.bak.md
 
           # Run semantic-release to generate new changelog
