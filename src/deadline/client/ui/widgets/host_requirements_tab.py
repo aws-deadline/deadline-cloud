@@ -500,6 +500,10 @@ class CustomAmountWidget(CustomCapabilityWidget):
                     requirement["min"] = self.min_spin_box.value()
                 if self.max_spin_box.has_input():
                     requirement["max"] = self.max_spin_box.value()
+        else:
+            raise Exception(
+                "Please fill out all custom amount names in the custom host requirements options!"
+            )
         return requirement
 
 
@@ -638,6 +642,8 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         An attribute capability is prefixed with "attr.worker".
         """
         requirement: Dict[str, Any] = {}
+        requirements_are_valid = True
+
         if self.name_line_edit.text():
             option = "anyOf" if self.any_of_button.isChecked() else "allOf"
             values = []
@@ -645,11 +651,20 @@ class CustomAttributeWidget(CustomCapabilityWidget):
                 value = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
                 if value.line_edit.text():
                     values.append(value.line_edit.text())
+                else:
+                    requirements_are_valid &= False
             if values:
                 requirement = {
                     "name": ATTRIBUTE_CAPABILITY_PREFIX + self.name_line_edit.text(),
                     f"{option}": values,
                 }
+        else:
+            requirements_are_valid &= False
+
+        if not requirements_are_valid:
+            raise Exception(
+                "Please fill out all custom attribute names and values in the custom host requirements options!"
+            )
         return requirement
 
 
