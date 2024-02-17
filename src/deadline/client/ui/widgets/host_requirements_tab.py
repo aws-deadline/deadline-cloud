@@ -32,6 +32,8 @@ MIN_INT_VALUE = -(2**31) + 1
 LABEL_FIXED_WIDTH: int = 150
 BUTTON_FIXED_WIDTH: int = 150
 
+ATTRIBUTE = "Attribute"
+AMOUNT = "Amount"
 PLACEHOLDER_TEXT = "-"
 INFO_ICON_PATH = str(Path(__file__).parent.parent / "resources" / "info.svg")
 CUSTOM_REQUIREMENT_TOOL_TIP = (
@@ -295,6 +297,8 @@ class CustomRequirementsWidget(QGroupBox):
     def __init__(self, parent=None):
         super().__init__("Custom host requirements", parent)
         self.layout = QVBoxLayout(self)
+        self.attribute_index_numbers = set()
+        self.amount_index_numbers = set()
         self._build_ui()
 
     def _build_ui(self):
@@ -326,10 +330,10 @@ class CustomRequirementsWidget(QGroupBox):
         self.resize_list_to_fit()
 
         # Add a row with Add Amount and Add Attribute buttons
-        self.add_amount_button = QPushButton("+ Add amount")
+        self.add_amount_button = QPushButton("Add amount")
         self.add_amount_button.setFixedWidth(BUTTON_FIXED_WIDTH)
 
-        self.add_attr_button = QPushButton("+ Add attribute")
+        self.add_attr_button = QPushButton("Add attribute")
         self.add_attr_button.setFixedWidth(BUTTON_FIXED_WIDTH)
 
         self.buttons_row = QHBoxLayout()
@@ -346,18 +350,24 @@ class CustomRequirementsWidget(QGroupBox):
         self.layout.addLayout(self.buttons_row)
 
     def _add_new_custom_amount(self):
-        self._add_new_item("amount")
+        self._add_new_item(AMOUNT)
 
     def _add_new_custom_attr(self):
-        self._add_new_item("attribute")
+        self._add_new_item(ATTRIBUTE)
 
     def _add_new_item(self, type):
         list_item = QListWidgetItem(self.list_widget)
 
-        if type == "attribute":
-            item = CustomAttributeWidget(list_item, self)
+        if type == ATTRIBUTE:
+            new_attribute_number = max(self.attribute_index_numbers, default=0) + 1
+            item = CustomAttributeWidget(list_item, new_attribute_number, self)
+            self.attribute_index_numbers.add(new_attribute_number)
+        elif type == AMOUNT:
+            new_amount_number = max(self.amount_index_numbers, default=0) + 1
+            item = CustomAmountWidget(list_item, new_amount_number, self)
+            self.amount_index_numbers.add(new_amount_number)
         else:
-            item = CustomAmountWidget(list_item, self)
+            raise Exception(f"Unexpected item type when adding new item: {type}")
 
         list_item.setSizeHint(item.sizeHint())
 
@@ -365,8 +375,18 @@ class CustomRequirementsWidget(QGroupBox):
         self.list_widget.setItemWidget(list_item, item)
         self.resize_list_to_fit()
 
-    def remove_widget_item(self, item):
+    def remove_widget_item(self, custom_capability_widget):
         # remove the ListWidgetItem from list
+        if custom_capability_widget.capability_type == ATTRIBUTE:
+            self.attribute_index_numbers.remove(custom_capability_widget.item_number)
+        elif custom_capability_widget.capability_type == AMOUNT:
+            self.amount_index_numbers.remove(custom_capability_widget.item_number)
+        else:
+            raise Exception(
+                f"Unexpected item type when removing item: {custom_capability_widget.capability_type}"
+            )
+
+        item = custom_capability_widget.list_item
         self.list_widget.takeItem(self.list_widget.indexFromItem(item).row())
         self.resize_list_to_fit()
 
@@ -405,14 +425,18 @@ class CustomCapabilityWidget(QGroupBox):
     UI element to hold a single custom requirement, either Attribute or Amount.
     """
 
-    def __init__(self, capability_type: str, list_item: QListWidgetItem, parent=None):
+    def __init__(
+        self, capability_type: str, list_item: QListWidgetItem, item_number: int, parent=None
+    ):
         super().__init__(parent)
         self._parent = parent
+        self.capability_type = capability_type
         self.list_item = list_item
+        self.item_number = item_number
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.title_label = QLabel(capability_type)
+        self.title_label = QLabel(f"{capability_type} {item_number}")
         self.title_label.setStyleSheet("font-weight: bold")
 
         # TODO: Add a curved border for the delete button
@@ -427,7 +451,7 @@ class CustomCapabilityWidget(QGroupBox):
         self.layout.addLayout(self.title_row)
 
     def _delete(self):
-        self._parent.remove_widget_item(self.list_item)
+        self._parent.remove_widget_item(self)
         self.setParent(None)
         self.deleteLater()
 
@@ -437,8 +461,8 @@ class CustomAmountWidget(CustomCapabilityWidget):
     UI element to hold a single custom attribute.
     """
 
-    def __init__(self, list_item: QListWidgetItem, parent=None):
-        super().__init__("Amount", list_item, parent)
+    def __init__(self, list_item: QListWidgetItem, item_number: int, parent=None):
+        super().__init__(AMOUNT, list_item, item_number, parent)
         self._build_ui()
 
     def _build_ui(self):
@@ -512,8 +536,8 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     UI element to hold a single custom attribute.
     """
 
-    def __init__(self, list_item: QListWidgetItem, parent=None):
-        super().__init__("Attribute", list_item, parent)
+    def __init__(self, list_item: QListWidgetItem, item_number: int, parent=None):
+        super().__init__(ATTRIBUTE, list_item, item_number, parent)
         self._build_ui()
 
     def _build_ui(self):
