@@ -6,7 +6,7 @@ UI widgets for the Host Requirements tab.
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from PySide2.QtCore import Qt  # type: ignore
-from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon
+from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QRegExpValidator
 from PySide2.QtWidgets import (  # type: ignore
     QComboBox,
     QGroupBox,
@@ -50,6 +50,10 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
     "</ul>"
     "</html>"
 )
+
+CUSTOM_CAPABILITY_NAME_REGEX = "^(\\.[a-zA-Z][a-zA-Z0-9]{0,63})+$"
+
+ATTRIBUTE_CAPABILITY_VALUE_REGEX = "^[a-zA-Z_]([a-zA-Z0-9_\\-]{0,99})$"
 
 ATTRIBUTE_CAPABILITY_PREFIX = "attr.worker."
 AMOUNT_CAPABILITY_PREFIX = "amount.worker."
@@ -443,7 +447,8 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_NAME_REGEX))
+        self.name_line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
+        self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_PREFIX))
 
         # Create layout with min/max spinbox
         self.min_label = QLabel("Min")
@@ -518,6 +523,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
+        self.name_line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
         self.add_value_button = None
 
         self.top_row = QHBoxLayout()
@@ -660,6 +666,7 @@ class CustomAttributeValueWidget(QWidget):
         self.line_edit = QLineEdit()
         self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 20)
         self.line_edit.setMaxLength(100)
+        self.line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
 
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
