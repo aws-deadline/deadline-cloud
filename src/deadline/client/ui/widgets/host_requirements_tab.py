@@ -51,6 +51,9 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
     "</html>"
 )
 
+ATTRIBUTE_CAPABILITY_PREFIX = "attr.worker."
+AMOUNT_CAPABILITY_PREFIX = "amount.worker."
+
 
 class AddIcon(QIcon):
     def __init__(self):
@@ -440,6 +443,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
+        self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_NAME_REGEX))
 
         # Create layout with min/max spinbox
         self.min_label = QLabel("Min")
@@ -485,7 +489,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         """
         requirement: Dict[str, Any] = {}
         if self.name_line_edit.text():
-            requirement = {"name": "amount.worker." + self.name_line_edit.text()}
+            requirement = {"name": AMOUNT_CAPABILITY_PREFIX + self.name_line_edit.text()}
             if self.min_spin_box.has_input() or self.max_spin_box.has_input():
                 if self.min_spin_box.has_input():
                     requirement["min"] = self.min_spin_box.value()
@@ -513,6 +517,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.any_of_button = QRadioButton("Any")
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
+        self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
         self.add_value_button = None
 
         self.top_row = QHBoxLayout()
@@ -636,7 +641,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
                     values.append(value.line_edit.text())
             if values:
                 requirement = {
-                    "name": "attr.worker." + self.name_line_edit.text(),
+                    "name": ATTRIBUTE_CAPABILITY_PREFIX + self.name_line_edit.text(),
                     f"{option}": values,
                 }
         return requirement
@@ -654,6 +659,7 @@ class CustomAttributeValueWidget(QWidget):
 
         self.line_edit = QLineEdit()
         self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 20)
+        self.line_edit.setMaxLength(100)
 
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
