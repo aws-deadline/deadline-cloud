@@ -5,7 +5,8 @@ import json
 import os
 from importlib import reload
 from logging import getLogger
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+import copy
 
 from PySide2.QtCore import Qt  # pylint: disable=import-error
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -50,6 +51,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         settings: CliJobSettings,
         queue_parameters: list[dict[str, Any]],
         asset_references: AssetReferences,
+        host_requirements: Optional[Dict[str, Any]],
         purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
     ) -> None:
         """
@@ -121,6 +123,13 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
                 ]
             }
 
+        # If "HostRequirements" is provided, inject it into each of the "Step"
+        if host_requirements:
+            print(f"{host_requirements}")
+            # for each step in the template, append the same host requirements.
+            for step in job_template["steps"]:
+                step["hostRequirements"] = copy.deepcopy(host_requirements)
+
         with open(
             os.path.join(job_bundle_dir, f"template.{settings.file_format.lower()}"),
             "w",
@@ -163,6 +172,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         initial_shared_parameter_values={},
         auto_detected_attachments=AssetReferences(),
         attachments=AssetReferences(),
+        show_host_requirements_tab=True,
         on_create_job_bundle_callback=on_create_job_bundle_callback,
         parent=parent,
         f=f,
