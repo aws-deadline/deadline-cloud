@@ -519,14 +519,28 @@ class CustomAmountWidget(CustomCapabilityWidget):
         requirement: Dict[str, Any] = {}
         if self.name_line_edit.text():
             requirement = {"name": AMOUNT_CAPABILITY_PREFIX + self.name_line_edit.text()}
-            if self.min_spin_box.has_input() or self.max_spin_box.has_input():
-                if self.min_spin_box.has_input():
-                    requirement["min"] = self.min_spin_box.value()
-                if self.max_spin_box.has_input():
-                    requirement["max"] = self.max_spin_box.value()
+
+            if self.min_spin_box.has_input() and self.max_spin_box.has_input():
+                minimum = self.min_spin_box.value()
+                requirement["min"] = minimum
+
+                maximum = self.max_spin_box.value()
+                requirement["max"] = maximum
+
+                if minimum > maximum:
+                    raise Exception(
+                        "Please make sure that the custom amounts in the custom host requirement options have valid min/max ranges!"
+                    )
+            elif self.min_spin_box.has_input():
+                minimum = self.min_spin_box.value()
+                requirement["min"] = minimum
+            elif self.max_spin_box.has_input():
+                maximum = self.max_spin_box.value()
+                requirement["max"] = maximum
+
         else:
             raise Exception(
-                "Please fill out all custom amount names in the custom host requirements options!"
+                "Please fill out all custom amount names in the custom host requirement options!"
             )
         return requirement
 
