@@ -52,21 +52,23 @@ jobs:
         with:
           ref: release
           fetch-depth: 0
-
-      - name: VerifyReleaseBranch
-        run: |
-          RELEASE_HEAD=$(git show -s --format='%H')
-          if [[ $RELEASE_HEAD != ${{ github.sha }} ]]; then
-            echo "ERROR: tip of release branch ($RELEASE_HEAD) does not match the commit that started this release (${{ github.sha }}). Aborting release."
-            exit 1
-          else
-            echo "Verified tip of release branch ($RELEASE_HEAD) matches the commit that started this release (${{ github.sha }})"
-          fi
-
+          token: ${{ secrets.CI_TOKEN }}
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
+
+      - name: ConfigureGit
+        run: |
+          git config --local user.email "129794699+client-software-ci@users.noreply.github.com"
+          git config --local user.name "client-software-ci"
+
+      
+      - name: MergePushRelease
+        run: |
+          git merge --ff-only origin/mainline -v
+          git push origin release 
 
       - name: PrepRelease
         id: prep-release
@@ -76,9 +78,6 @@ jobs:
 
           # The format of the tag must match the pattern in pyproject.toml -> tool.semantic_release.tag_format
           TAG="$NEXT_SEMVER"
-
-          git config --local user.email "129794699+client-software-ci@users.noreply.github.com"
-          git config --local user.name "client-software-ci"
 
           git tag -a $TAG -m "Release $TAG"
 
@@ -134,25 +133,6 @@ jobs:
         run: |
           git push origin $TAG
           gh release create $TAG dist/* --notes "$RELEASE_NOTES"
-
-  MergeBack:
-    needs: Release
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: mainline
-          fetch-depth: 0
-          token: ${{ secrets.CI_TOKEN }}
-
-      - name: MergeBackMainline
-        run: |
-          git merge --ff-only origin/release
-          git push origin mainline
 
   PublishToRepository:
     needs: Release
