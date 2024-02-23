@@ -17,15 +17,15 @@ concurrency:
   group: release
 
 jobs:
-  TestMainline:
-    name: Test Mainline
+  UnitTests:
+    name: Unit Tests
     uses: ./.github/workflows/code_quality.yml
     with:
       branch: mainline
     secrets: inherit
 
   Bump:
-    needs: TestMainline
+    needs: UnitTests
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -35,7 +35,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: release
+          ref: mainline
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
 
@@ -48,11 +48,6 @@ jobs:
         run: |
           git config --local user.email "129794699+client-software-ci@users.noreply.github.com"
           git config --local user.name "client-software-ci"
-
-      - name: MergePushRelease
-        run: |
-          git merge --ff-only origin/mainline -v
-          git push origin release
 
       - name: Bump
         run: |
@@ -93,4 +88,4 @@ jobs:
           git push -u origin bump/$NEXT_SEMVER
 
           # Needs "Allow GitHub Actions to create and approve pull requests" under Settings > Actions
-          gh pr create --base release --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
+          gh pr create --base mainline --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
