@@ -115,7 +115,7 @@ class ProgressStatus(Enum):
     """The asset manager is hashing files."""
 
     UPLOAD_IN_PROGRESS = ("UPLOAD_IN_PROGRESS", "Uploaded")
-    """The asset manager is uploadng files."""
+    """The asset manager is uploading files."""
 
     DOWNLOAD_IN_PROGRESS = ("DOWNLOAD_IN_PROGRESS", "Downloaded")
     """Downloading files"""

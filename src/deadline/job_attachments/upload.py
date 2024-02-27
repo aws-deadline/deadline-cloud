@@ -6,9 +6,7 @@ Classes for handling uploading of assets.
 from __future__ import annotations
 
 import concurrent.futures
-import functools
 import logging
-import math
 import os
 import time
 from datetime import datetime
@@ -18,9 +16,9 @@ from pathlib import Path, PurePath
 from typing import Any, Callable, Optional, Tuple, Type, Union
 
 import boto3
+from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.exceptions import ClientError
-from s3transfer import ReadFileChunk
-from s3transfer.utils import ChunksizeAdjuster
+
 from deadline.client.config import config_file
 
 from .asset_manifests import (
@@ -33,7 +31,12 @@ from .asset_manifests import (
     ManifestVersion,
     base_manifest,
 )
-from ._aws.aws_clients import get_account_id, get_boto3_session, get_s3_client
+from ._aws.aws_clients import (
+    get_account_id,
+    get_boto3_session,
+    get_s3_client,
+    get_s3_transfer_manager,
+)
 from ._aws.deadline import get_storage_profile_for_queue
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
@@ -66,10 +69,12 @@ from ._utils import (
 
 logger = logging.getLogger("deadline.job_attachments.upload")
 
-# TODO: tune this. max_worker defaults to 5 * number of processors. We can run into issues here
-# if we thread too aggressively on slower internet connections. So for now let's set it to 5,
-# which would the number of threads with one processor.
-NUM_UPLOAD_WORKERS: int = 5
+# The default multipart upload chunk size is 8 MB. We used this to determine the small file threshold,
+# which is the chunk size multiplied by the small file threshold multiplier.
+S3_MULTIPART_UPLOAD_CHUNK_SIZE: int = 8388608  # 8 MB
+# The maximum number of concurrency for multipart uploads. This is used to determine the max number
+# of thread workers for uploading multiple small files in parallel.
+S3_UPLOAD_MAX_CONCURRENCY: int = 10
 
 
 class S3AssetUploader:
@@ -88,40 +93,41 @@ class S3AssetUploader:
         else:
             self._session = session
 
-        self._s3 = get_s3_client(self._session)  # pylint: disable=invalid-name
-
-        # TODO: full performance analysis to determine the ideal thresholds
         try:
-            self.multipart_upload_chunk_size = int(
-                config_file.get_setting("settings.multipart_upload_chunk_size")
-            )
-            self.multipart_upload_max_workers = int(
-                config_file.get_setting("settings.multipart_upload_max_workers")
-            )
             # The small file threshold is the chunk size multiplied by the small file threshold multiplier.
             small_file_threshold_multiplier = int(
                 config_file.get_setting("settings.small_file_threshold_multiplier")
             )
             self.small_file_threshold = (
-                self.multipart_upload_chunk_size * small_file_threshold_multiplier
+                S3_MULTIPART_UPLOAD_CHUNK_SIZE * small_file_threshold_multiplier
             )
+
+            s3_max_pool_connections = int(
+                config_file.get_setting("settings.s3_max_pool_connections")
+            )
+            self.num_upload_workers = int(
+                s3_max_pool_connections
+                / min(small_file_threshold_multiplier, S3_UPLOAD_MAX_CONCURRENCY)
+            )
+            if self.num_upload_workers <= 0:
+                # This can result in triggering "Connection pool is full" warning messages during uploads.
+                self.num_upload_workers = 1
         except ValueError as ve:
             raise AssetSyncError(
                 "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
-                "multipart_upload_chunk_size, multipart_upload_max_workers, small_file_threshold_multiplier"
+                "'s3_max_pool_connections', 'small_file_threshold_multiplier'"
             ) from ve
+
+        self._s3 = get_s3_client(self._session)  # pylint: disable=invalid-name
 
         # Confirm that the settings values are all positive.
         error_msg = ""
-        if self.multipart_upload_chunk_size <= 0:
-            error_msg = f"multipart_upload_chunk_size ({self.multipart_upload_chunk_size}) must be positive integer."
-
-        elif self.multipart_upload_max_workers <= 0:
-            error_msg = f"multipart_upload_max_workers ({self.multipart_upload_max_workers}) must be positive integer."
-
-        elif small_file_threshold_multiplier <= 0:
+        if small_file_threshold_multiplier <= 0:
             error_msg = f"small_file_threshold_multiplier ({small_file_threshold_multiplier}) must be positive integer."
-
+        elif s3_max_pool_connections <= 0:
+            error_msg = (
+                f"s3_max_pool_connections ({s3_max_pool_connections}) must be positive integer."
+            )
         if error_msg:
             raise AssetSyncError("Invalid value for configuration setting: " + error_msg)
 
@@ -210,7 +216,9 @@ class S3AssetUploader:
 
         with S3CheckCache(s3_check_cache_dir) as s3_cache:
             # First, process the whole 'small file' queue with parallel object uploads.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_UPLOAD_WORKERS) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.num_upload_workers
+            ) as executor:
                 futures = {
                     executor.submit(
                         self.upload_object_to_cas,
@@ -332,83 +340,46 @@ class S3AssetUploader:
         progress_tracker: Optional[ProgressTracker] = None,
     ) -> None:
         """
-        Uploads a single file to an S3 bucket using multipart upload, meaning that it
-        splits the file into multiple parts and uploads them in parallel. It checks for
-        cancellation at each part upload. If the callback in `progress_tracker` returns
-        a cancel signal (False) from the caller, the upload is aborted immediately.
-
-        Note: It uses boto3's low-level APIs for multipart upload to allow for granular
-        control, specifically to enable cancellation of the upload mid-way.
+        Uploads a single file to an S3 bucket using TransferManager, allowing mid-way
+        cancellation. It monitors for upload progress through a callback, `handler`,
+        which also checks if the upload should continue or not. If the `progress_tracker`
+        signals to stop, the ongoing upload is cancelled.
         """
-        file_size = local_path.stat().st_size
-        upload_id = None
-        expected_bucket_owner = get_account_id(session=self._session)
+        transfer_manager = get_s3_transfer_manager(s3_client=self._s3)
+
+        future: concurrent.futures.Future
+
+        def handler(bytes_uploaded):
+            nonlocal progress_tracker
+            nonlocal future
+
+            if progress_tracker:
+                should_continue = progress_tracker.track_progress_callback(bytes_uploaded)
+                if not should_continue and future is not None:
+                    future.cancel()
+
+        subscribers = [ProgressCallbackInvoker(handler)]
+
+        future = transfer_manager.upload(
+            fileobj=str(local_path),
+            bucket=s3_bucket,
+            key=s3_upload_key,
+            subscribers=subscribers,
+        )
+
         try:
-            # Initiate a multipart upload
-            upload_id = self._s3.create_multipart_upload(
-                Bucket=s3_bucket,
-                Key=s3_upload_key,
-                ExpectedBucketOwner=expected_bucket_owner,
-            )["UploadId"]
-            parts = []
-            chunk_size_adjuster = ChunksizeAdjuster()
-            chunk_size = chunk_size_adjuster.adjust_chunksize(
-                current_chunksize=self.multipart_upload_chunk_size,
-                file_size=file_size,
-            )
-            # num_parts must have minimum value of 1, otherwise an empty file will generate no parts,
-            # and complete_multipart_upload throws an error if parts is empty.
-            num_parts = max(1, int(math.ceil(file_size / float(chunk_size))))
-
-            # Start uploading parts
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.multipart_upload_max_workers
-            ) as executor:
-                upload_partial = functools.partial(
-                    self._upload_part,
-                    s3_bucket,
-                    s3_upload_key,
-                    str(local_path),
-                    upload_id,
-                    chunk_size,
-                    progress_tracker,
-                )
-                for result in executor.map(upload_partial, range(1, num_parts + 1)):
-                    if result is False:
-                        # If canceled, the upload is aborted immediately.
-                        self._s3.abort_multipart_upload(
-                            Bucket=s3_bucket,
-                            Key=s3_upload_key,
-                            UploadId=upload_id,
-                            ExpectedBucketOwner=expected_bucket_owner,
-                        )
-                        if progress_tracker:
-                            raise AssetSyncCancelledError(
-                                "File upload cancelled.", progress_tracker.get_summary_statistics()
-                            )
-                    parts.append(result)
-
-            # Complete the multipart upload
-            self._s3.complete_multipart_upload(
-                Bucket=s3_bucket,
-                Key=s3_upload_key,
-                UploadId=upload_id,
-                MultipartUpload={"Parts": parts},
-                ExpectedBucketOwner=expected_bucket_owner,
-            )
+            future.result()
             is_uploaded = True
             if progress_tracker and is_uploaded:
                 progress_tracker.increase_processed(1, 0)
-
-        except ClientError as exc:
-            if upload_id:
-                # If any error occurs, the multipart upload must be aborted.
-                self._s3.abort_multipart_upload(
-                    Bucket=s3_bucket,
-                    Key=s3_upload_key,
-                    UploadId=upload_id,
-                    ExpectedBucketOwner=expected_bucket_owner,
+        except concurrent.futures.CancelledError as ce:
+            if progress_tracker and progress_tracker.continue_reporting is False:
+                raise AssetSyncCancelledError(
+                    "File upload cancelled.", progress_tracker.get_summary_statistics()
                 )
+            else:
+                raise AssetSyncError("File upload failed.", ce) from ce
+        except ClientError as exc:
             status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
             status_code_guidance = {
                 **COMMON_ERROR_GUIDANCE_FOR_S3,
@@ -431,54 +402,8 @@ class S3AssetUploader:
                 key_or_prefix=s3_upload_key,
                 message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to upload {str(local_path)})",
             ) from exc
-        except Exception as exc:
-            if upload_id:
-                # If any error occurs, the multipart upload must be aborted.
-                self._s3.abort_multipart_upload(
-                    Bucket=s3_bucket,
-                    Key=s3_upload_key,
-                    UploadId=upload_id,
-                    ExpectedBucketOwner=expected_bucket_owner,
-                )
-            raise exc
-
-    def _upload_part(
-        self,
-        bucket: str,
-        key: str,
-        file_name: str,
-        upload_id: str,
-        part_size: int,
-        progress_tracker: Optional[ProgressTracker],
-        part_number: int,
-    ):
-        """
-        As a helper function to be used within `upload_file_to_s3`, it uploads a single part
-        of a file. Reads a chunk of the file, and uploads it using boto3's `upload_part` API.
-        Returns a dictionary with the part number and ETag.
-        """
-        open_chunk_reader = ReadFileChunk.from_filename
-        with open_chunk_reader(
-            file_name,
-            part_size * (part_number - 1),
-            part_size,
-            progress_tracker.track_progress_callback if progress_tracker else None,
-        ) as body:
-            response = self._s3.upload_part(
-                Bucket=bucket,
-                Key=key,
-                UploadId=upload_id,
-                PartNumber=part_number,
-                Body=body,
-                ExpectedBucketOwner=get_account_id(session=self._session),
-            )
-            # Update the upload progress
-            if progress_tracker:
-                is_continue = progress_tracker.continue_reporting
-                if not is_continue:
-                    return False  # return false it if gets a signal to cancel
-            etag = response["ETag"]
-            return {"ETag": etag, "PartNumber": part_number}
+        except Exception as e:
+            raise AssetSyncError from e
 
     def file_already_uploaded(self, bucket: str, key: str) -> bool:
         """

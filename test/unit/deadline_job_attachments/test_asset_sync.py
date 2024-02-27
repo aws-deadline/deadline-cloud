@@ -8,7 +8,7 @@ import shutil
 from math import trunc
 from pathlib import Path
 from typing import Optional, Dict
-from unittest.mock import ANY, MagicMock, call, mock_open, patch
+from unittest.mock import ANY, MagicMock, mock_open, patch
 
 import boto3
 from deadline.job_attachments.progress_tracker import ProgressStatus
@@ -18,7 +18,7 @@ from moto import mock_sts
 import deadline
 from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.os_file_permission import PosixFileSystemPermissionSettings
-from deadline.job_attachments.download import _progress_logger
+
 from deadline.job_attachments.exceptions import (
     VFSExecutableMissingError,
     JobAttachmentsS3ClientError,
@@ -69,29 +69,6 @@ class TestAssetSync:
         asset_sync = AssetSync(farm_id)
         asset_sync.s3_uploader._s3 = client
         return asset_sync
-
-    def test_progress_logger_one_file(self) -> None:
-        """
-        Asserts that task runs are getting updated with the appropriate progress
-        when only one file is being uploaded.
-        """
-        # GIVEN
-        mock_progress_tracker_callback = MagicMock()
-        mock_progress_tracker_callback.return_value = True
-        callback = _progress_logger(
-            file_size_in_bytes=10,
-            progress_tracker_callback=mock_progress_tracker_callback,
-        )
-
-        # WHEN
-        for _ in range(1, 11):
-            callback(1)
-
-        # THEN
-        assert mock_progress_tracker_callback.call_count == 10
-        calls = [call(1, False) for _ in range(1, 10)]
-        calls.append(call(1, True))
-        mock_progress_tracker_callback.assert_has_calls(calls)
 
     @pytest.mark.parametrize(
         ("file_size", "expected_output"),
