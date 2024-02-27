@@ -6,6 +6,7 @@ Tests for the CLI job commands.
 import datetime
 import json
 import os
+from typing import Dict, List
 import pytest
 from pathlib import Path
 import sys
@@ -19,6 +20,7 @@ from dateutil.tz import tzutc  # type: ignore[import]
 from deadline.client import api, config
 from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
+from deadline.client.cli._groups.job_group import _get_summary_of_files_to_download_message
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
@@ -413,17 +415,29 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             session=ANY,
         )
 
+        path_separator = "/" if sys.platform != "win32" else "\\"
+
         assert (
             f"""Downloading output from Job 'Mock Job'
-Outputs will be downloaded to the following root paths:
+
+Summary of files to download:
+    {mock_root_path}{path_separator}outputs (3 files)
+    {mock_root_path}2{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
 [1] {mock_root_path}2
-> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, 1, y, n) [y]: 1
-> Please enter a new path for the root directory [{mock_root_path}2]: {str(tmp_path)}
-Outputs will be downloaded to the following root paths:
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: 1
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}2]: {str(tmp_path)}
+
+Summary of files to download:
+    {mock_root_path}{path_separator}outputs (3 files)
+    {str(tmp_path)}{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
 [1] {str(tmp_path)}
-> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, 1, y, n) [y]: y
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: y
 """
             in result.output
         )
@@ -508,14 +522,20 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             session=ANY,
         )
 
+        path_separator = "/" if sys.platform != "win32" else "\\"
+
         assert (
             f"""Downloading output from Job 'Mock Job'
 This root path format does not match the operating system you're using. Where would you like to save the files?
 The location was {mock_root_path}, on {other_format[0].upper() + other_format[1:]}.
 > Please enter a new root path: {str(tmp_path)}
-Outputs will be downloaded to the following root paths:
+
+Summary of files to download:
+    {str(tmp_path)}{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {str(tmp_path)}
-> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: y
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
         )
@@ -596,15 +616,25 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
             session=ANY,
         )
 
+        path_separator = "/" if sys.platform != "win32" else "\\"
+
         assert (
             f"""Downloading output from Job 'Mock Job'
-Outputs will be downloaded to the following root paths:
+
+Summary of files to download:
+    {mock_root_path}{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
-> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: 0
-> Please enter a new path for the root directory [{mock_root_path}]: {str(tmp_path)}
-Outputs will be downloaded to the following root paths:
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: 0
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}]: {str(tmp_path)}
+
+Summary of files to download:
+    {str(tmp_path)}{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {str(tmp_path)}
-> Please enter a number of root path to edit, y to proceed, or n to cancel the download: (0, y, n) [y]: y
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
         )
@@ -758,6 +788,23 @@ def test_cli_job_download_output_stdout_with_json_format(
             )
 
             expected_json_title = json.dumps({"messageType": "title", "value": "Mock Job"})
+            expected_json_presummary = json.dumps(
+                {
+                    "messageType": "presummary",
+                    "value": {
+                        mock_root_path: [
+                            "outputs/file1.txt",
+                            "outputs/file2.txt",
+                            "outputs/file3.txt",
+                        ],
+                        f"{mock_root_path}2": [
+                            "outputs/file1.txt",
+                            "outputs/file2.txt",
+                            "outputs/file3.txt",
+                        ],
+                    },
+                }
+            )
             expected_json_path = json.dumps(
                 {"messageType": "path", "value": [mock_root_path, f"{mock_root_path}2"]}
             )
@@ -766,10 +813,89 @@ def test_cli_job_download_output_stdout_with_json_format(
             )
 
             assert (
-                f"{expected_json_title}\n{expected_json_path}\n {expected_json_pathconfirm}\n"
+                f"{expected_json_title}\n{expected_json_presummary}\n{expected_json_path}\n {expected_json_pathconfirm}\n"
                 in result.output
             )
             assert result.exit_code == 0
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="This is for testing with POSIX paths.",
+)
+@pytest.mark.parametrize(
+    "output_paths_by_root, expected_result",
+    [
+        (
+            {"/home/username/project01": ["renders/image1.png", "renders/image2.png"]},
+            "\nSummary of files to download:\n    /home/username/project01/renders (2 files)\n",
+        ),
+        (
+            {
+                "/home/username/project01": ["renders/image1.png", "renders/image2.png"],
+                "/home/username/project02": [
+                    "renders/image1.png",
+                    "renders/image2.png",
+                    "renders/image3.png",
+                ],
+            },
+            (
+                "\nSummary of files to download:\n"
+                "    /home/username/project01/renders (2 files)\n"
+                "    /home/username/project02/renders (3 files)\n"
+            ),
+        ),
+        (
+            {
+                "/home/username/project01": [
+                    "renders/image1.png",
+                    "renders/image2.png",
+                    "videos/video.mov",
+                ]
+            },
+            "\nSummary of files to download:\n    /home/username/project01 (3 files)\n",
+        ),
+        (
+            {"C:/Users/username": ["renders/image1.png", "renders/image2.png"]},
+            "\nSummary of files to download:\n    C:/Users/username/renders (2 files)\n",
+        ),
+    ],
+)
+def test_get_summary_of_files_to_download_message_posix(
+    output_paths_by_root: Dict[str, List[str]],
+    expected_result: str,
+):
+    """Tests if the _get_summary_of_files_to_download_message() returns expected string"""
+    is_json_format = False
+    assert (
+        _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
+        == expected_result
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="This is for testing with Windows paths.",
+)
+@pytest.mark.parametrize(
+    "output_paths_by_root, expected_result",
+    [
+        (
+            {"C:/Users/username": ["renders/image1.png", "renders/image2.png"]},
+            "\nSummary of files to download:\n    C:\\Users\\username\\renders (2 files)\n",
+        )
+    ],
+)
+def test_get_summary_of_files_to_download_message_windows(
+    output_paths_by_root: Dict[str, List[str]],
+    expected_result: str,
+):
+    """Tests if the _get_summary_of_files_to_download_message() returns expected string"""
+    is_json_format = False
+    assert (
+        _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
+        == expected_result
+    )
 
 
 def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadline_config):
