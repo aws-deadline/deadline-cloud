@@ -38,6 +38,7 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 from ._sigint_handler import SigIntHandler
 
 JSON_MSG_TYPE_TITLE = "title"
+JSON_MSG_TYPE_PRESUMMARY = "presummary"
 JSON_MSG_TYPE_PATH = "path"
 JSON_MSG_TYPE_PATHCONFIRM = "pathconfirm"
 JSON_MSG_TYPE_PROGRESS = "progress"
@@ -305,7 +306,7 @@ def _download_job_output(
             if not is_json_format:
                 new_root = click.prompt(
                     "> Please enter a new root path",
-                    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+                    type=click.Path(exists=False),
                 )
             else:
                 json_string = click.prompt("", prompt_suffix="", type=str)
@@ -322,15 +323,17 @@ def _download_job_output(
     # and allow users to select different location to download files to if they want.
     # (If auto-accept is enabled, automatically download to the default root paths.)
     if not auto_accept:
-        asset_roots = list(output_paths_by_root.keys())
-        asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
-        click.echo(_get_roots_confirmation_message(asset_roots_resolved, is_json_format))
-
         if not is_json_format:
             user_choice = ""
             while user_choice != ("y" or "n"):
+                click.echo(
+                    _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
+                )
+                asset_roots = list(output_paths_by_root.keys())
+                asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
+                click.echo(_get_roots_list_message(asset_roots_resolved, is_json_format))
                 user_choice = click.prompt(
-                    "> Please enter a number of root path to edit, y to proceed, or n to cancel the download:",
+                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
                     type=click.Choice(
                         [*[str(num) for num in list(range(0, len(asset_roots)))], "y", "n"]
                     ),
@@ -339,22 +342,25 @@ def _download_job_output(
                 if user_choice == "n":
                     click.echo("Output download canceled.")
                     return
-                elif user_choice != "y":  # The user entered a number.
+                elif user_choice != "y":
+                    # User selected an index to modify the root directory.
                     index_to_change = int(user_choice)
                     new_root = click.prompt(
-                        "> Please enter a new path for the root directory",
-                        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
+                        type=click.Path(exists=False),
                         default=asset_roots_resolved[index_to_change],
                     )
                     job_output_downloader.set_root_path(
                         asset_roots[index_to_change], str(Path(new_root).resolve())
                     )
                     output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-
-                asset_roots = list(output_paths_by_root.keys())
-                asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
-                click.echo(_get_roots_confirmation_message(asset_roots_resolved, is_json_format))
         else:
+            click.echo(
+                _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
+            )
+            asset_roots = list(output_paths_by_root.keys())
+            asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
+            click.echo(_get_roots_list_message(asset_roots_resolved, is_json_format))
             json_string = click.prompt("", prompt_suffix="", type=str)
             confirmed_asset_roots = _get_value_from_json_line(
                 json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
@@ -395,18 +401,9 @@ def _download_job_output(
     # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
         if not is_json_format:
-            # Print some information about what we will download before we start the progress bar
-            paths_message_joined = "    " + "\n    ".join(
-                f"{os.path.commonpath([os.path.join(directory, p) for p in output_paths])} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
-                for directory, output_paths in output_paths_by_root.items()
-            )
-            click.echo()
-            click.echo("Summary of files to download:")
-            click.echo(paths_message_joined)
-            click.echo()
-
             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
             # not annotating the type of download_progress.
+            click.echo()
             with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
 
                 def _update_download_progress(download_metadata: ProgressReportMetadata) -> bool:
@@ -436,6 +433,7 @@ def _download_job_output(
             )
 
     click.echo(_get_download_summary_message(download_summary, is_json_format))
+    click.echo()
 
 
 def _get_start_message(
@@ -484,12 +482,29 @@ def _get_mismatch_os_root_warning(root: str, root_path_format: str, is_json_form
         )
 
 
-def _get_roots_confirmation_message(asset_roots: list[str], is_json_format: bool) -> str:
+def _get_summary_of_files_to_download_message(
+    output_paths_by_root: dict[str, list[str]], is_json_format: bool
+) -> str:
+    # Print some information about what we will download
+    if is_json_format:
+        return _get_json_line(JSON_MSG_TYPE_PRESUMMARY, output_paths_by_root)
+    else:
+        paths_message_joined = "    " + "\n    ".join(
+            f"{os.path.commonpath([os.path.join(directory, p) for p in output_paths])} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
+            for directory, output_paths in output_paths_by_root.items()
+        )
+        return "\n" "Summary of files to download:\n" f"{paths_message_joined}" "\n"
+
+
+def _get_roots_list_message(asset_roots: list[str], is_json_format: bool) -> str:
     if is_json_format:
         return _get_json_line(JSON_MSG_TYPE_PATH, asset_roots)
     else:
         asset_roots_str = "\n".join([f"[{index}] {root}" for index, root in enumerate(asset_roots)])
-        return f"Outputs will be downloaded to the following root paths:\n{asset_roots_str}"
+        return (
+            f"You are about to download files which may come from multiple root directories. Here are a list of the current root directories:\n"
+            f"{asset_roots_str}"
+        )
 
 
 def _get_conflict_resolution_selection_message(conflicting_filenames: list[str]) -> str:
@@ -521,7 +536,7 @@ def _get_download_summary_message(
             f" {_human_readable_file_size(download_summary.processed_bytes)}.\n"
             f"    Total download time of {round(download_summary.total_time, ndigits=5)} seconds"
             f" at {_human_readable_file_size(int(download_summary.transfer_rate))}/s.\n"
-            f"    Download locations (file counts):\n        {paths_joined}"
+            f"    Download locations (total file counts):\n        {paths_joined}"
         )
 
 
@@ -537,7 +552,7 @@ def _get_conflicting_filenames(filenames_by_root: dict[str, list[str]]) -> list[
     return conflicting_filenames
 
 
-def _get_json_line(messageType: str, value: Union[str, list[str]]) -> str:
+def _get_json_line(messageType: str, value: Union[str, list[str], dict[str, Any]]) -> str:
     return json.dumps({"messageType": messageType, "value": value}, ensure_ascii=True)
 
 
@@ -562,11 +577,9 @@ def _get_value_from_json_line(
 
 def _assert_valid_path(path: str) -> None:
     """
-    Validates that the path exists and has the format of the OS currently running.
+    Validates that the path has the format of the OS currently running.
     """
     path_obj = Path(path)
-    if not path_obj.is_dir():
-        raise ValueError(f"Path {path} does not exist.")
     if not path_obj.is_absolute():
         raise ValueError(f"Path {path} is not an absolute path.")
 
