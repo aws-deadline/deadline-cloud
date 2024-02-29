@@ -645,6 +645,8 @@ class TestUpload:
             job_attachment_settings=self.job_attachment_s3_settings,
             asset_manifest_version=manifest_version,
         )
+        # Change the number of thread workers to 1 to get consistent tests
+        asset_manager.asset_uploader.num_upload_workers = 1
 
         # Given
         with patch(
@@ -656,9 +658,6 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_file",
             side_effect=lambda *args, **kwargs: "samehash",
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.NUM_UPLOAD_WORKERS",
-            1,  # Change the number of thread workers to 1 to get consistent tests
         ):
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
@@ -1263,8 +1262,7 @@ class TestUpload:
         Test that when the asset uploader is created, the instance variables are correctly set.
         """
         uploader = S3AssetUploader()
-        assert uploader.multipart_upload_chunk_size == 8 * (1024**2)
-        assert uploader.multipart_upload_max_workers == 10
+        assert uploader.num_upload_workers == 5
         assert uploader.small_file_threshold == 20 * 8 * (1024**2)
 
     def test_asset_uploader_constructor_with_non_integer_config_settings(
@@ -1273,7 +1271,7 @@ class TestUpload:
         """
         Tests that when the asset uploader is created with non-integer config settings, an AssetSyncError is raised.
         """
-        config.set_setting("settings.multipart_upload_chunk_size", "!@#$")
+        config.set_setting("settings.s3_max_pool_connections", "!@#$")
         with pytest.raises(AssetSyncError) as err:
             _ = S3AssetUploader()
         assert isinstance(err.value.__cause__, ValueError)
@@ -1283,14 +1281,14 @@ class TestUpload:
         "setting_name, invalid_value",
         [
             pytest.param(
-                "multipart_upload_chunk_size",
+                "s3_max_pool_connections",
                 "-100",
-                id="Invalid multipart_upload_chunk_size value: negative",
+                id="Invalid s3_max_pool_connections value: negative",
             ),
             pytest.param(
-                "multipart_upload_max_workers",
+                "s3_max_pool_connections",
                 "0",
-                id="Invalid multipart_upload_max_workers value: 0",
+                id="Invalid s3_max_pool_connections value: 0",
             ),
             pytest.param(
                 "small_file_threshold_multiplier",
@@ -1382,57 +1380,6 @@ class TestUpload:
             ) in str(err.value)
 
     @mock_sts
-    def test_upload_file_to_s3_upload_part_failure(self, tmp_path: Path):
-        """
-        Test that the error message correctly includes the failed file path when a multipart upload
-        (upload_part method) fails with a 400 error code.
-        """
-        bucket_name = self.job_attachment_s3_settings.s3BucketName
-        s3 = boto3.client("s3")
-        stubber = Stubber(s3)
-        stubber.add_response(
-            "create_multipart_upload",
-            service_response={"UploadId": "test_upload_id"},
-            expected_params={
-                "Bucket": bucket_name,
-                "Key": "test_key",
-                "ExpectedBucketOwner": "123456789012",
-            },
-        )
-        stubber.add_client_error(
-            "upload_part",
-            service_error_code="InvalidPart",
-            service_message="Invalid Part",
-            http_status_code=400,
-        )
-        stubber.add_response(
-            "abort_multipart_upload",
-            service_response={},
-            expected_params={
-                "Bucket": bucket_name,
-                "Key": "test_key",
-                "UploadId": "test_upload_id",
-                "ExpectedBucketOwner": "123456789012",
-            },
-        )
-
-        uploader = S3AssetUploader()
-        uploader._s3 = s3
-
-        file = tmp_path / "test_file.txt"
-        file.write_text("test file")
-
-        with stubber:
-            with pytest.raises(JobAttachmentsS3ClientError) as err:
-                uploader.upload_file_to_s3(file, bucket_name, "test_key")
-            assert isinstance(err.value.__cause__, ClientError)
-            assert err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 400
-            assert (
-                "Error uploading file in bucket 'test-bucket', Target key or prefix: 'test_key', HTTP Status Code: 400"
-            ) in str(err.value)
-            assert (f"(Failed to upload {str(file)})") in str(err.value)
-
-    @mock_sts
     def test_upload_file_to_s3_bucket_in_different_account(self, tmp_path: Path):
         """
         Test that the appropriate error is raised when uploading files, but the bucket
@@ -1443,7 +1390,7 @@ class TestUpload:
 
         # This is the error that's surfaced when a bucket is in a different account than expected.
         stubber.add_client_error(
-            "create_multipart_upload",
+            "put_object",
             service_error_code="AccessDenied",
             service_message="Access Denied",
             http_status_code=403,
@@ -1482,7 +1429,7 @@ class TestUpload:
 
         # This is the error that's surfaced when a bucket is in a different account than expected.
         stubber.add_client_error(
-            "create_multipart_upload",
+            "put_object",
             service_error_code="AccessDenied",
             service_message="An error occurred (AccessDenied) when calling the PutObject operation: User: arn:aws:sts::<account>:assumed-role/<role> is not authorized to perform: kms:GenerateDataKey on resource: arn:aws:kms:us-west-2:<account>:key/<key-id> because no identity-based policy allows the kms:GenerateDataKey action",
             http_status_code=403,
@@ -1509,34 +1456,6 @@ class TestUpload:
                 "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
-
-    @mock_sts
-    def test_upload_file_to_s3_empty_file(self, tmp_path: Path):
-        """
-        Ensures that if an empty file is submitted, the multi-part upload request doesn't have an empty parts list
-        """
-        s3 = boto3.client("s3")
-        stubber = Stubber(s3)
-
-        test_key = "test_key"
-
-        stubber.add_response(
-            method="create_multipart_upload", service_response={"UploadId": "test-id"}
-        )
-
-        stubber.add_response(method="upload_part", service_response={"ETag": "test-tag"})
-        stubber.add_response(method="complete_multipart_upload", service_response={})
-
-        uploader = S3AssetUploader()
-
-        uploader._s3 = s3
-
-        file = tmp_path / "test_file"
-        file.write_text("")
-
-        with stubber:
-            uploader.upload_file_to_s3(file, self.job_attachment_s3_settings.s3BucketName, test_key)
-            stubber.assert_no_pending_responses()
 
     @pytest.mark.parametrize(
         "manifest_version",
