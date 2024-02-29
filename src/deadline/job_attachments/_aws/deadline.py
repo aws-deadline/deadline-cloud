@@ -15,7 +15,7 @@ from ..models import (
     Job,
     JobAttachmentS3Settings,
     ManifestProperties,
-    OperatingSystemFamily,
+    StorageProfileOperatingSystemFamily,
     PathFormat,
     Queue,
     StorageProfile,
@@ -131,7 +131,7 @@ def get_storage_profile_for_queue(
     return StorageProfile(
         storageProfileId=response["storageProfileId"],
         displayName=response["displayName"],
-        osFamily=OperatingSystemFamily(response["osFamily"]),
+        osFamily=StorageProfileOperatingSystemFamily(response["osFamily"]),
         fileSystemLocations=[
             FileSystemLocation(
                 name=file_system_location["name"],

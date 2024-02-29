@@ -110,7 +110,7 @@ class OutputFile:
     in_s3: bool  # If the file already exists in the CAS
 
 
-class OperatingSystemFamily(str, Enum):
+class StorageProfileOperatingSystemFamily(str, Enum):
     WINDOWS = "windows"
     LINUX = "linux"
     MACOS = "macos"
@@ -294,7 +294,7 @@ class StorageProfile:
 
     storageProfileId: str
     displayName: str
-    osFamily: OperatingSystemFamily
+    osFamily: StorageProfileOperatingSystemFamily
     fileSystemLocations: List[FileSystemLocation] = field(default_factory=list)  # type: ignore
 
 

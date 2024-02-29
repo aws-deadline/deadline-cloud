@@ -43,7 +43,7 @@ from deadline.job_attachments.models import (
     FileSystemLocationType,
     ManifestProperties,
     JobAttachmentS3Settings,
-    OperatingSystemFamily,
+    StorageProfileOperatingSystemFamily,
     PathFormat,
     StorageProfile,
 )
@@ -1928,7 +1928,7 @@ class TestUpload:
         mock_storage_profile_for_queue = StorageProfile(
             storageProfileId="sp-0123456789",
             displayName="Storage profile 1",
-            osFamily=OperatingSystemFamily.WINDOWS,
+            osFamily=StorageProfileOperatingSystemFamily.WINDOWS,
             fileSystemLocations=mock_file_system_locations,
         )
 
