@@ -165,7 +165,7 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
 
     # THEN
     scene_ma_s3_path = (
-        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}"
+        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}.xxh128"
     )
 
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
@@ -211,7 +211,7 @@ def upload_input_files_one_asset_in_cas(
     ]
 
     scene_ma_s3_path = (
-        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}"
+        f"{job_attachment_settings.full_cas_prefix()}/{job_attachment_test.SCENE_MA_HASH}.xxh128"
     )
 
     # This file has already been uploaded
@@ -245,8 +245,8 @@ def upload_input_files_one_asset_in_cas(
     brick_png_hash = hash_file(str(job_attachment_test.BRICK_PNG_PATH), HashAlgorithm.XXH128)
     cloth_png_hash = hash_file(str(job_attachment_test.CLOTH_PNG_PATH), HashAlgorithm.XXH128)
 
-    brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}"
-    cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}"
+    brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}.xxh128"
+    cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}.xxh128"
 
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
         Prefix=f"{job_attachment_settings.full_cas_prefix()}/",
@@ -831,11 +831,11 @@ def sync_outputs(
     object_key_set = set(obj.key for obj in object_summary_iterator)
 
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_to_be_synced_step0_task0), HashAlgorithm.XXH128)}"
+        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_to_be_synced_step0_task0), HashAlgorithm.XXH128)}.xxh128"
         in object_key_set
     )
     assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_not_to_be_synced), HashAlgorithm.XXH128)}"
+        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_not_to_be_synced), HashAlgorithm.XXH128)}.xxh128"
         not in object_key_set
     )
 

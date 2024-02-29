@@ -297,8 +297,7 @@ class S3AssetUploader:
         Returns a tuple (whether it has been uploaded, the file size).
         """
         local_path = source_root.joinpath(file.path)
-        # TODO: replace with uncommented line below after sufficient time after the next release
-        s3_upload_key = f"{file.hash}"  # .{hash_algorithm.value}"
+        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
         if s3_cas_prefix:
             s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
         is_uploaded = False
