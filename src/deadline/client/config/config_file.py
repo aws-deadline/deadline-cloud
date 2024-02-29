@@ -109,13 +109,13 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     "telemetry.opt_out": {"default": "false"},
     "telemetry.identifier": {"default": ""},
     "defaults.job_attachments_file_system": {"default": "COPIED", "depend": "defaults.farm_id"},
-    "settings.multipart_upload_chunk_size": {
-        "default": "8388608",  # 8 MB (Default chunk size for multipart upload)
-        "description": "The chunk size to use when uploading files in multi-parts.",
-    },
-    "settings.multipart_upload_max_workers": {
-        "default": "10",
-        "description": "The maximum number of workers (processes) to use when uploading files in multi-parts.",
+    "settings.s3_max_pool_connections": {
+        "default": "50",
+        "description": (
+            "The maximum number of connections to keep in the connection pool used by the S3's upload/download operations. "
+            "If this value is not set, the default value of 50 is used. "
+            "(Note: It's recommended setting this value above 10 to avoid 'Connection pool is full' warnings during the uploads/downloads.)"
+        ),
     },
     "settings.small_file_threshold_multiplier": {
         "default": "20",  # By default, the small file threshold is 160 MB (since the default S3 multipart-upload chunk size is 8 MB.)

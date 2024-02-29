@@ -8,10 +8,18 @@ from typing import Optional
 
 import boto3
 import botocore
+from boto3.s3.transfer import create_transfer_manager
 from botocore.client import BaseClient, Config
 
+from deadline.client.config import config_file
+
 from .. import version
-from .aws_config import S3_CONNECT_TIMEOUT_IN_SECS, S3_READ_TIMEOUT_IN_SECS, VENDOR_CODE
+from ..exceptions import AssetSyncError
+from .aws_config import (
+    S3_CONNECT_TIMEOUT_IN_SECS,
+    S3_READ_TIMEOUT_IN_SECS,
+    VENDOR_CODE,
+)
 
 MAX_SIZE_CACHE = 128
 
@@ -50,10 +58,7 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
     if session is None:
         session = get_boto3_session()
 
-    # TODO: For max_pool_connections, the default max connections is 10. Since we're multithreading the client,
-    # we'll use the number of threads multiplied by the default.
-    # https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor
-    # Or, use the default number for now, and revisit later.
+    s3_max_pool_connections = get_s3_max_pool_connections()
 
     client = session.client(
         "s3",
@@ -62,6 +67,7 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
             connect_timeout=S3_CONNECT_TIMEOUT_IN_SECS,
             read_timeout=S3_READ_TIMEOUT_IN_SECS,
             user_agent_extra=f"S3A/Deadline/NA/JobAttachments/{version}",
+            max_pool_connections=s3_max_pool_connections,
         ),
         endpoint_url=f"https://s3.{session.region_name}.amazonaws.com",
     )
@@ -76,6 +82,27 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
     client.meta.events.register("provide-client-params.s3.*", add_expected_bucket_owner)
 
     return client
+
+
+def get_s3_max_pool_connections() -> int:
+    try:
+        s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+    except ValueError as ve:
+        raise AssetSyncError(
+            "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
+            "'s3_max_pool_connections'"
+        ) from ve
+    if s3_max_pool_connections <= 0:
+        raise AssetSyncError(
+            f"s3_max_pool_connections ({s3_max_pool_connections}) must be positive integer."
+        )
+    return s3_max_pool_connections
+
+
+@lru_cache(maxsize=MAX_SIZE_CACHE)
+def get_s3_transfer_manager(s3_client: BaseClient):
+    transfer_config = boto3.s3.transfer.TransferConfig()
+    return create_transfer_manager(client=s3_client, config=transfer_config)
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)

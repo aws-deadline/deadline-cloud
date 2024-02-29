@@ -16,6 +16,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Callable, DefaultDict, List, Optional, Tuple, Union
 
 import boto3
+from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
@@ -24,6 +25,7 @@ from .asset_manifests.hash_algorithms import HashAlgorithm
 from .asset_manifests.decode import decode_manifest
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
+    AssetSyncError,
     AssetSyncCancelledError,
     JobAttachmentsS3ClientError,
     PathOutsideDirectoryError,
@@ -43,7 +45,12 @@ from .progress_tracker import (
     ProgressStatus,
     ProgressTracker,
 )
-from ._aws.aws_clients import get_account_id, get_s3_client
+from ._aws.aws_clients import (
+    get_account_id,
+    get_s3_client,
+    get_s3_max_pool_connections,
+    get_s3_transfer_manager,
+)
 from .os_file_permission import (
     FileSystemPermissionSettings,
     PosixFileSystemPermissionSettings,
@@ -54,6 +61,8 @@ from .os_file_permission import (
 from ._utils import _is_relative_to, _join_s3_paths
 
 download_logger = getLogger("deadline.job_attachments.download")
+
+S3_DOWNLOAD_MAX_CONCURRENCY = 10
 
 
 def get_manifest_from_s3(
@@ -312,12 +321,15 @@ def download_files_in_directory(
         on_progress_callback=on_downloading_files,
     )
 
+    num_download_workers = _get_num_download_workers()
+
     start_time = time.perf_counter()
 
     for hash_alg, file_paths in files_to_download.items():
         downloaded_files_paths = _download_files_parallel(
             file_paths,
             hash_alg,
+            num_download_workers,
             local_download_dir,
             s3_settings.s3BucketName,
             s3_settings.full_cas_prefix(),
@@ -353,6 +365,8 @@ def download_file(
     if not s3_client:
         s3_client = get_s3_client(session=session)
 
+    transfer_manager = get_s3_transfer_manager(s3_client=s3_client)
+
     # The modified time in the manifest is in microseconds, but utime requires the time be expressed in seconds.
     modified_time_override = file.mtime / 1000000  # type: ignore[attr-defined]
 
@@ -386,17 +400,35 @@ def download_file(
             )
 
     local_file_name.parent.mkdir(parents=True, exist_ok=True)
+
+    future: concurrent.futures.Future
+
+    def handler(bytes_downloaded):
+        nonlocal progress_tracker
+        nonlocal future
+
+        if progress_tracker:
+            should_continue = progress_tracker.track_progress_callback(bytes_downloaded)
+            if not should_continue:
+                future.cancel()
+
+    subscribers = [ProgressCallbackInvoker(handler)]
+
+    future = transfer_manager.download(
+        bucket=s3_bucket,
+        key=s3_key,
+        fileobj=str(local_file_name),
+        extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
+        subscribers=subscribers,
+    )
+
     try:
-        s3_client.download_file(
-            s3_bucket,
-            s3_key,
-            str(local_file_name),
-            ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
-            Callback=_progress_logger(
-                file_bytes,
-                progress_tracker.track_progress_callback if progress_tracker else None,
-            ),
-        )
+        future.result()
+    except concurrent.futures.CancelledError as ce:
+        if progress_tracker and progress_tracker.continue_reporting is False:
+            raise AssetSyncCancelledError("File download cancelled.")
+        else:
+            raise AssetSyncError("File download failed.", ce) from ce
     except ClientError as exc:
 
         def process_client_error(exc: ClientError, status_code: int):
@@ -428,22 +460,27 @@ def download_file(
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
         if status_code == 404:
             s3_key = s3_key.rsplit(".", 1)[0]
+            future = transfer_manager.download(
+                bucket=s3_bucket,
+                key=s3_key,
+                fileobj=str(local_file_name),
+                extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
+                subscribers=subscribers,
+            )
             try:
-                s3_client.download_file(
-                    s3_bucket,
-                    s3_key,
-                    str(local_file_name),
-                    ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
-                    Callback=_progress_logger(
-                        file_bytes,
-                        progress_tracker.track_progress_callback if progress_tracker else None,
-                    ),
-                )
+                future.result()
+            except concurrent.futures.CancelledError as ce:
+                if progress_tracker and progress_tracker.continue_reporting is False:
+                    raise AssetSyncCancelledError("File download cancelled.")
+                else:
+                    raise AssetSyncError("File upload failed.", ce) from ce
             except ClientError as secondExc:
                 status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
                 process_client_error(secondExc, status_code)
         else:
             process_client_error(exc, status_code)
+    except Exception as e:
+        raise AssetSyncError from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
@@ -451,30 +488,10 @@ def download_file(
     return (file_bytes, local_file_name)
 
 
-def _progress_logger(
-    file_size_in_bytes: int, progress_tracker_callback: Optional[Callable] = None
-) -> Callable[[int], None]:
-    total_downloaded = 0
-
-    def handler(bytes_downloaded):
-        if progress_tracker_callback is None or file_size_in_bytes == 0:
-            return
-
-        nonlocal total_downloaded
-        total_downloaded += bytes_downloaded
-        should_continue = progress_tracker_callback(
-            bytes_downloaded, total_downloaded == file_size_in_bytes
-        )
-        # If it's cancelled, raise an AssetSyncCancelledError.
-        if not should_continue:
-            raise AssetSyncCancelledError("File download cancelled.")
-
-    return handler
-
-
 def _download_files_parallel(
     files: List[RelativeFilePath],
     hash_algorithm: HashAlgorithm,
+    num_download_workers: int,
     local_download_dir: str,
     s3_bucket: str,
     cas_prefix: Optional[str],
@@ -490,10 +507,7 @@ def _download_files_parallel(
     """
     downloaded_file_names: list[str] = []
 
-    # TODO: tune this. max_worker defaults to 5 * number of processors. We can run into issues here
-    # if we thread too aggressively on slower internet connections. So for now let's set it to 5,
-    # which would the number of threads with one processor.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_download_workers) as executor:
         futures = {
             executor.submit(
                 download_file,
@@ -515,8 +529,7 @@ def _download_files_parallel(
             (file_bytes, local_file_name) = future.result()
             if local_file_name:
                 downloaded_file_names.append(str(local_file_name.resolve()))
-                if file_bytes == 0 and progress_tracker:
-                    # If the file size is 0, the download progress should be tracked by the number of files.
+                if progress_tracker:
                     progress_tracker.increase_processed(1, 0)
                     progress_tracker.report_progress()
             else:
@@ -545,12 +558,14 @@ def download_files(
     Returns a list of local paths of downloaded files.
     """
     s3_client = get_s3_client(session=session)
+    num_download_workers = _get_num_download_workers()
 
     file_mod_time: float = datetime.now().timestamp()
 
     return _download_files_parallel(
         files,
         hash_algorithm,
+        num_download_workers,
         local_download_dir,
         s3_settings.s3BucketName,
         s3_settings.full_cas_prefix(),
@@ -690,7 +705,7 @@ def download_files_from_manifests(
         The download summary statistics.
     """
     s3_client = get_s3_client(session=session)
-
+    num_download_workers = _get_num_download_workers()
     file_mod_time = datetime.now().timestamp()
 
     # Sets up progress tracker to report download progress back to the caller.
@@ -714,6 +729,7 @@ def download_files_from_manifests(
         downloaded_files_paths = _download_files_parallel(
             manifest.paths,
             manifest.hashAlg,
+            num_download_workers,
             local_download_dir,
             s3_bucket,
             cas_prefix,
@@ -734,6 +750,19 @@ def download_files_from_manifests(
 
     progress_tracker.total_time = time.perf_counter() - start_time
     return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
+
+
+def _get_num_download_workers() -> int:
+    """
+    Determines the max number of thread workers for downloading multiple files in parallel,
+    based on the allowed S3 max pool connections size. If the max worker count is calculated
+    to be 0 due to a small pool connections size limit, it returns 1.
+    """
+    num_download_workers = int(get_s3_max_pool_connections() / S3_DOWNLOAD_MAX_CONCURRENCY)
+    if num_download_workers <= 0:
+        # This can result in triggering "Connection pool is full" warning messages during downloads.
+        num_download_workers = 1
+    return num_download_workers
 
 
 def _set_fs_group(
