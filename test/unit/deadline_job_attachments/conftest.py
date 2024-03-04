@@ -8,7 +8,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-import pathlib
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Generator
@@ -23,11 +22,8 @@ from moto import mock_iotdata, mock_s3
 # or otherwise use moto with it in our tests, so let's just start it here so the rest of our mocking works as expected
 mock_iotdata().start()
 
-import boto3  # noqa: E402 isort:skip
 from botocore.client import BaseClient  # noqa: E402 isort:skip
-from botocore.stub import Stubber  # noqa: E402 isort:skip
 
-import deadline  # noqa: E402 isort:skip
 from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
 from deadline.job_attachments.asset_sync import AssetSync  # noqa: E402 isort:skip
 from deadline.job_attachments.models import (  # noqa: E402 isort:skip
@@ -47,8 +43,6 @@ def boto_config() -> Generator[None, None, None]:
         "AWS_ACCESS_KEY_ID": "ACCESSKEY",
         "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "AWS_DEFAULT_REGION": "us-west-2",
-        # Coverlay doesn't have access to the deadline models, patch it in here.
-        "AWS_DATA_PATH": str((pathlib.Path(__file__) / ".." / "data" / "boto_module").resolve()),
     }
     with patch.dict("os.environ", updated_environment):
         yield
@@ -76,21 +70,6 @@ def create_s3_bucket(s3) -> Callable[[str], None]:  # pylint: disable=invalid-na
         )
 
     return create_bucket
-
-
-@pytest.fixture(scope="function")
-def deadline_stub(boto_config) -> Generator[Stubber, None, None]:
-    """
-    Fixture that yields a stubber for a Deadline client.
-    """
-    deadline_client = boto3.client("deadline")
-    stubber = Stubber(deadline_client)
-
-    with patch(
-        f"{deadline.__package__}.job_attachments._aws.deadline.get_deadline_client",
-        return_value=deadline_client,
-    ):
-        yield stubber
 
 
 @pytest.fixture(name="default_job_attachment_s3_settings")
@@ -202,7 +181,7 @@ def assert_manifest():
 @pytest.fixture
 def assert_canonical_manifest():
     """
-    Assert that a canconical manifest file in a mock s3 bucket matches what's expected.
+    Assert that a canonical manifest file in a mock s3 bucket matches what's expected.
     """
 
     def __inner_func__(bucket, manifest_location: str, expected_manifest: str):

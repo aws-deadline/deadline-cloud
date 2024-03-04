@@ -1,11 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Tests for aws clients"""
+from unittest.mock import Mock, patch
 from deadline.job_attachments._aws.aws_clients import (
     get_deadline_client,
     get_s3_client,
     get_sts_client,
 )
+import deadline
 from deadline.job_attachments._aws.aws_config import (
     S3_CONNECT_TIMEOUT_IN_SECS,
     S3_READ_TIMEOUT_IN_SECS,
@@ -16,9 +18,15 @@ def test_get_deadline_client(boto_config):
     """
     Test that get_deadline_client returns the correct deadline client
     """
-    deadline_client = get_deadline_client()
+    session_mock = Mock()
+    with patch(
+        f"{deadline.__package__}.job_attachments._aws.aws_clients.get_boto3_session"
+    ) as get_session:
+        get_session.return_value = session_mock
+        session_mock.client.return_value = Mock()
+        get_deadline_client()
 
-    assert deadline_client.meta.service_model.service_name == "deadline"
+    session_mock.client.assert_called_with("deadline", endpoint_url=None)
 
 
 def test_get_deadline_client_non_default_endpoint(boto_config):
@@ -27,10 +35,15 @@ def test_get_deadline_client_non_default_endpoint(boto_config):
     and that the endpoint url is the given one when provided.
     """
     test_endpoint = "https://test.com"
-    deadline_client = get_deadline_client(endpoint_url=test_endpoint)
+    session_mock = Mock()
+    with patch(
+        f"{deadline.__package__}.job_attachments._aws.aws_clients.get_boto3_session"
+    ) as get_session:
+        get_session.return_value = session_mock
+        session_mock.client.return_value = Mock()
+        get_deadline_client(endpoint_url=test_endpoint)
 
-    assert deadline_client.meta.service_model.service_name == "deadline"
-    assert deadline_client.meta.endpoint_url == test_endpoint
+    session_mock.client.assert_called_with("deadline", endpoint_url=test_endpoint)
 
 
 def test_get_s3_client(boto_config):
