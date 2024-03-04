@@ -1,3 +1,1 @@
-# HACK: This file solely exists for dependabot checks. The actual dependencies are in `hatch.toml` in the `release` environment.
-# If dependabot opens a PR that modifies this file, please make sure to update the coresponding dependency in `hatch.toml` as well.
 python-semantic-release == 8.7.*
