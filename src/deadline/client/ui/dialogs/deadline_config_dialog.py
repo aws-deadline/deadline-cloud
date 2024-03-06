@@ -737,7 +737,10 @@ class DeadlineFarmListComboBox(_DeadlineResourceListComboBox):
 
     def list_resources(self, config: Optional[ConfigParser]):
         response = api.list_farms(config=config)
-        return sorted([(item["displayName"], item["farmId"]) for item in response["farms"]])
+        return sorted(
+            [(item["displayName"], item["farmId"]) for item in response["farms"]],
+            key=lambda item: (item[0].casefold(), item[1]),
+        )
 
 
 class DeadlineQueueListComboBox(_DeadlineResourceListComboBox):
@@ -748,7 +751,10 @@ class DeadlineQueueListComboBox(_DeadlineResourceListComboBox):
         default_farm_id = config_file.get_setting("defaults.farm_id", config=config)
         if default_farm_id:
             response = api.list_queues(config=config, farmId=default_farm_id)
-            return sorted([(item["displayName"], item["queueId"]) for item in response["queues"]])
+            return sorted(
+                [(item["displayName"], item["queueId"]) for item in response["queues"]],
+                key=lambda item: (item[0].casefold(), item[1]),
+            )
         else:
             return []
 
@@ -783,9 +789,12 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
                 }
             )
             return sorted(
-                (item["displayName"], item["storageProfileId"])
-                for item in storage_profiles
-                if self._get_current_os() == item["osFamily"]
+                [
+                    (item["displayName"], item["storageProfileId"])
+                    for item in storage_profiles
+                    if self._get_current_os() == item["osFamily"]
+                ],
+                key=lambda item: (item[0].casefold(), item[1]),
             )
         else:
             return []
