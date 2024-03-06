@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests for the CLI creds commands.
+Tests for the CLI auth commands.
 """
 import json
 import subprocess
@@ -41,7 +41,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         check_output_mock.return_value = bytes("Successfully logged out", "utf8")
 
         runner = CliRunner()
-        result = runner.invoke(main, ["creds", "login"])
+        result = runner.invoke(main, ["auth", "login"])
 
         assert result.exit_code == 0, result.output
 
@@ -62,7 +62,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
 
         # Now lets logout
         runner = CliRunner()
-        result = runner.invoke(main, ["creds", "logout"])
+        result = runner.invoke(main, ["auth", "logout"])
 
         check_output_mock.assert_called_once_with(
             ["/bin/DeadlineCloudMonitor", "logout", "--profile", "sandbox-us-west-2"]
@@ -74,7 +74,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         assert api._session.__cached_boto3_session is None
 
 
-def test_cli_creds_status(fresh_deadline_config):
+def test_cli_auth_status(fresh_deadline_config):
     """
     Confirm that the CLI status command prints out as expected
     """
@@ -90,17 +90,17 @@ def test_cli_creds_status(fresh_deadline_config):
 
         # WHEN
         runner = CliRunner()
-        result = runner.invoke(main, ["creds", "status"])
+        result = runner.invoke(main, ["auth", "status"])
 
     # THEN
     assert result.exit_code == 0
     assert "Profile Name: " in result.output
-    assert "Type: " in result.output
+    assert "Source: " in result.output
     assert "Status: " in result.output
     assert "API Availability: " in result.output
 
 
-def test_cli_creds_status_json(fresh_deadline_config):
+def test_cli_auth_status_json(fresh_deadline_config):
     """
     Confirm that the CLI status command gives valid json back
     """
@@ -108,7 +108,7 @@ def test_cli_creds_status_json(fresh_deadline_config):
     profile_name = "sandbox-us-west-2"
     expected = {
         "profile_name": profile_name,
-        "type": "DEADLINE_CLOUD_MONITOR_LOGIN",
+        "source": "DEADLINE_CLOUD_MONITOR_LOGIN",
         "status": "AUTHENTICATED",
         "api_availability": False,
     }
@@ -130,7 +130,7 @@ def test_cli_creds_status_json(fresh_deadline_config):
 
         # WHEN
         runner = CliRunner()
-        result = runner.invoke(main, ["creds", "status", "--output", "json"])
+        result = runner.invoke(main, ["auth", "status", "--output", "json"])
         actual = json.loads(result.output)
 
     # THEN
