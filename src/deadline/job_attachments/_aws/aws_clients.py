@@ -94,7 +94,7 @@ def get_s3_max_pool_connections() -> int:
         ) from ve
     if s3_max_pool_connections <= 0:
         raise AssetSyncError(
-            f"s3_max_pool_connections ({s3_max_pool_connections}) must be positive integer."
+            f"Nonvalid value for configuration setting: 's3_max_pool_connections' ({s3_max_pool_connections}) must be positive integer."
         )
     return s3_max_pool_connections
 

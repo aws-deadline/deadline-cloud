@@ -1278,37 +1278,50 @@ class TestUpload:
         assert "Failed to parse configuration settings." in str(err.value)
 
     @pytest.mark.parametrize(
-        "setting_name, invalid_value",
+        "setting_name, nonvalid_value, expected_error_msg",
         [
             pytest.param(
                 "s3_max_pool_connections",
                 "-100",
-                id="Invalid s3_max_pool_connections value: negative",
+                "'s3_max_pool_connections' (-100) must be positive integer.",
+                id="s3_max_pool_connections value is negative.",
             ),
             pytest.param(
                 "s3_max_pool_connections",
                 "0",
-                id="Invalid s3_max_pool_connections value: 0",
+                "'s3_max_pool_connections' (0) must be positive integer.",
+                id="s3_max_pool_connections value is 0.",
+            ),
+            pytest.param(
+                "s3_max_pool_connections",
+                "some string",
+                "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers",
+                id="s3_max_pool_connections value is not a number.",
             ),
             pytest.param(
                 "small_file_threshold_multiplier",
                 "-12",
-                id="Invalid small_file_threshold_multiplier value: negative",
+                "'small_file_threshold_multiplier' (-12) must be positive integer.",
+                id="small_file_threshold_multiplier value is negative.",
+            ),
+            pytest.param(
+                "small_file_threshold_multiplier",
+                "some string",
+                "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers",
+                id="small_file_threshold_multiplier value is not a number.",
             ),
         ],
     )
-    def test_asset_uploader_constructor_with_invalid_config_settings(
-        self, setting_name, invalid_value, fresh_deadline_config
+    def test_asset_uploader_constructor_with_nonvalid_config_settings(
+        self, setting_name, nonvalid_value, expected_error_msg, fresh_deadline_config
     ):
         """
-        Tests that when the asset uploader is created with invalid config settings, an AssetSyncError is raised.
+        Tests that when the asset uploader is created with nonvalid config settings, an AssetSyncError is raised.
         """
-        config.set_setting(f"settings.{setting_name}", invalid_value)
+        config.set_setting(f"settings.{setting_name}", nonvalid_value)
         with pytest.raises(AssetSyncError) as err:
             _ = S3AssetUploader()
-        assert (
-            f"Invalid value for configuration setting: {setting_name} ({invalid_value}) must be positive integer."
-        ) in str(err.value)
+        assert expected_error_msg in str(err.value)
 
     @mock_sts
     def test_file_already_uploaded_bucket_in_different_account(self):
