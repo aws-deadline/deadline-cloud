@@ -14,10 +14,10 @@ import sys
 
 from ._session import (
     invalidate_boto3_session_cache,
-    get_credentials_type,
-    check_credentials_status,
-    AwsCredentialsType,
-    AwsCredentialsStatus,
+    get_credentials_source,
+    check_authentication_status,
+    AwsCredentialsSource,
+    AwsAuthenticationStatus,
 )
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
@@ -57,12 +57,14 @@ def _login_deadline_cloud_monitor(
             f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
         )
     if on_pending_authorization:
-        on_pending_authorization(credential_type=AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN)
+        on_pending_authorization(
+            credentials_source=AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+        )
     # And wait for the user to complete login
     while True:
         # Deadline Cloud Monitor is a GUI app that will keep on running
         # So we sit here and test that profile for validity until it works
-        if check_credentials_status(config) == AwsCredentialsStatus.AUTHENTICATED:
+        if check_authentication_status(config) == AwsAuthenticationStatus.AUTHENTICATED:
             return f"Deadline Cloud Monitor Profile: {profile_name}"
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
@@ -92,14 +94,14 @@ def login(
 
     Args:
         on_pending_authorization (Callable): A callback that receives method-specific information to continue login.
-            All methods: 'credential_type' parameter of type AwsCredentialsType
+            All methods: 'credentials_source' parameter of type AwsCredentialsSource
             For Deadline Cloud Monitor: No additional parameters
         on_cancellation_check (Callable): A callback that allows the operation to cancel before login completes
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
     """
-    credentials_type = get_credentials_type(config)
-    if credentials_type == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+    credentials_source = get_credentials_source(config)
+    if credentials_source == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
         return _login_deadline_cloud_monitor(
             on_pending_authorization, on_cancellation_check, config
         )
@@ -116,8 +118,8 @@ def logout(config: Optional[ConfigParser] = None) -> str:
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
     """
-    credentials_type = get_credentials_type(config)
-    if credentials_type == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+    credentials_source = get_credentials_source(config)
+    if credentials_source == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
         # Deadline Cloud Monitor writes the absolute path to itself to the config file
         deadline_cloud_monitor_path = get_setting("deadline-cloud-monitor.path", config=config)
         profile_name = get_setting("defaults.aws_profile_name", config=config)
