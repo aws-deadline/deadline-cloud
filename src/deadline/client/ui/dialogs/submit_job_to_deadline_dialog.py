@@ -483,5 +483,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             job_progress_dialog.close()
 
         if self.create_job_response:
-            # Close the submitter window to signal the submission is done
-            self.close()
+            # Close the submitter window to signal the submission is done but
+            # keep the standalone gui submitter open
+            if settings.submitter_name != "JobBundle":
+                self.close()
