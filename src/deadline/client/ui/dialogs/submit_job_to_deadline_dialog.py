@@ -28,14 +28,14 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.upload import S3AssetManager
 
 from ... import api
-from ..deadline_credentials_status import DeadlineCredentialsStatus
+from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .. import block_signals
 from ...config import get_setting
 from ...config.config_file import str2bool
 from ...exceptions import UserInitiatedCancel
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.submission import AssetReferences
-from ..widgets.deadline_credentials_status_widget import DeadlineCredentialsStatusWidget
+from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
@@ -45,7 +45,7 @@ from ._types import JobBundlePurpose
 logger = logging.getLogger(__name__)
 
 # initialize early so once the UI opens, things are already initialized
-DeadlineCredentialsStatus.getInstance()
+DeadlineAuthenticationStatus.getInstance()
 
 
 class SubmitJobToDeadlineDialog(QDialog):
@@ -94,7 +94,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
-        self.deadline_credentials_status = DeadlineCredentialsStatus.getInstance()
+        self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
 
         self._build_ui(
@@ -155,9 +155,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         if self.show_host_requirements_tab:
             self._build_host_requirements_tab()
 
-        self.creds_status_box = DeadlineCredentialsStatusWidget(self)
-        self.lyt.addWidget(self.creds_status_box)
-        self.deadline_credentials_status.api_availability_changed.connect(
+        self.auth_status_box = DeadlineAuthenticationStatusWidget(self)
+        self.lyt.addWidget(self.auth_status_box)
+        self.deadline_authentication_status.api_availability_changed.connect(
             self.refresh_deadline_settings
         )
 
@@ -187,7 +187,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Submit button based on whether the
         # Amazon Deadline Cloud API is accessible and the farm+queue are configured.
         enable = (
-            self.deadline_credentials_status.api_availability is True
+            self.deadline_authentication_status.api_availability is True
             and get_setting("defaults.farm_id") != ""
             and get_setting("defaults.queue_id") != ""
             and self.shared_job_settings.is_queue_valid()
@@ -197,7 +197,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         if not enable:
             self.submit_button.setToolTip(
-                "Cannot submit job to deadline cloud. Invalid credentials or queue parameters."
+                "Cannot submit job to deadline cloud. Nonvalid credentials or queue parameters."
             )
         else:
             self.submit_button.setToolTip("")
@@ -206,18 +206,18 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Login and Logout buttons based on whether
         # the configured profile is for Deadline Cloud Monitor
         self.login_button.setEnabled(
-            self.deadline_credentials_status.creds_type
-            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+            self.deadline_authentication_status.creds_source
+            == api.AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
         )
         self.logout_button.setEnabled(
-            self.deadline_credentials_status.creds_type
-            == api.AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+            self.deadline_authentication_status.creds_source
+            == api.AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
         )
 
         self._set_submit_button_state()
 
         self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
-            self.deadline_credentials_status.api_availability is True
+            self.deadline_authentication_status.api_availability is True
         )
         # If necessary, this reloads the queue parameters
         self.shared_job_settings.refresh_queue_parameters()
@@ -309,16 +309,16 @@ class SubmitJobToDeadlineDialog(QDialog):
     def on_login(self):
         DeadlineLoginDialog.login(parent=self)
         self.refresh_deadline_settings()
-        # This widget watches the creds files, but that does
+        # This widget watches the auth files, but that does
         # not always catch a change so force a refresh here.
-        self.deadline_credentials_status.refresh_status()
+        self.deadline_authentication_status.refresh_status()
 
     def on_logout(self):
         api.logout()
         self.refresh_deadline_settings()
-        # This widget watches the creds files, but that does
+        # This widget watches the auth files, but that does
         # not always catch a change so force a refresh here.
-        self.deadline_credentials_status.refresh_status()
+        self.deadline_authentication_status.refresh_status()
 
     def on_settings_button_clicked(self):
         if DeadlineConfigDialog.configure_settings(parent=self):

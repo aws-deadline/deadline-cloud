@@ -24,7 +24,7 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
-from ...api._session import AwsCredentialsType
+from ...api._session import AwsCredentialsSource
 
 
 class DeadlineLoginDialog(QMessageBox):
@@ -105,7 +105,10 @@ class DeadlineLoginDialog(QMessageBox):
         try:
 
             def on_pending_authorization(**kwargs):
-                if kwargs["credential_type"] == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+                if (
+                    kwargs["credentials_source"]
+                    == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+                ):
                     self.login_thread_message.emit(
                         "Opening Deadline Cloud Monitor. Please login before returning here."
                     )

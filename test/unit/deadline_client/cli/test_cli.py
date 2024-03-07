@@ -40,7 +40,7 @@ def test_cli_unfamiliar_exception(fresh_deadline_config):
         login_mock.side_effect = Exception("An unexpected exception")
 
         runner = CliRunner()
-        result = runner.invoke(main, ["creds", "login"])
+        result = runner.invoke(main, ["auth", "login"])
 
         assert "encountered the following exception" in result.output
         assert "An unexpected exception" in result.output

@@ -2,8 +2,8 @@
 
 """
 Provides a widget to place in Amazon Deadline Cloud submitter dialogs, that shows
-the current status of Amazon Deadline Cloud credentials and API.
-The current stauts is handled by DeadlineCredentialstatus.
+the current status of Amazon Deadline Cloud authentication and API.
+The current status is handled by DeadlineAuthenticationStatus.
 """
 from logging import getLogger
 from typing import Optional
@@ -18,15 +18,15 @@ from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
-from ..deadline_credentials_status import DeadlineCredentialsStatus
+from ..deadline_authentication_status import DeadlineAuthenticationStatus
 
 logger = getLogger(__name__)
 
 
-class DeadlineCredentialsStatusWidget(QWidget):
+class DeadlineAuthenticationStatusWidget(QWidget):
     """
     A Widget that displays status information about Amazon Deadline Cloud
-    credentials from a DeadlineCredentialStatus object.
+    authentication from a DeadlineAuthenticationStatus object.
     """
 
     def __init__(self, parent=None) -> None:
@@ -34,48 +34,50 @@ class DeadlineCredentialsStatusWidget(QWidget):
 
         layout = QHBoxLayout(self)
 
-        self.creds_type_group = CredentialsStatusGroup(title="Credentials Type", parent=self)
-        layout.addWidget(self.creds_type_group)
-        self.creds_status_group = CredentialsStatusGroup(title="Credentials Status", parent=self)
-        layout.addWidget(self.creds_status_group)
-        self.deadline_authorized_group = CredentialsStatusGroup(
+        self.creds_source_group = AuthenticationStatusGroup(title="Credential Source", parent=self)
+        layout.addWidget(self.creds_source_group)
+        self.auth_status_group = AuthenticationStatusGroup(
+            title="Authentication Status", parent=self
+        )
+        layout.addWidget(self.auth_status_group)
+        self.deadline_authorized_group = AuthenticationStatusGroup(
             title="Amazon Deadline Cloud API", parent=self
         )
         layout.addWidget(self.deadline_authorized_group)
 
-        self._status = DeadlineCredentialsStatus.getInstance()
-        self._status.creds_type_changed.connect(self._creds_type_changed)
-        self._status.creds_status_changed.connect(self._creds_status_changed)
+        self._status = DeadlineAuthenticationStatus.getInstance()
+        self._status.creds_source_changed.connect(self._creds_source_changed)
+        self._status.auth_status_changed.connect(self._auth_status_changed)
         self._status.api_availability_changed.connect(self._api_availability_changed)
 
         # Update with current values
-        self._creds_type_changed()
-        self._creds_status_changed()
+        self._creds_source_changed()
+        self._auth_status_changed()
         self._api_availability_changed()
 
-    def _creds_type_changed(self) -> None:
-        if self._status.creds_type is None:
+    def _creds_source_changed(self) -> None:
+        if self._status.creds_source is None:
             color = "white"
             text = "&lt;Refreshing&gt;"
-        elif self._status.creds_type == api.AwsCredentialsType.NOT_VALID:
+        elif self._status.creds_source == api.AwsCredentialsSource.NOT_VALID:
             color = "red"
-            text = self._status.creds_type.name
+            text = self._status.creds_source.name
         else:
             color = "green"
-            text = self._status.creds_type.name
-        self.creds_type_group.label.setText(f"<b style='color:{color};'>{text}</b>")
+            text = self._status.creds_source.name
+        self.creds_source_group.label.setText(f"<b style='color:{color};'>{text}</b>")
 
-    def _creds_status_changed(self) -> None:
-        if self._status.creds_status is None:
+    def _auth_status_changed(self) -> None:
+        if self._status.auth_status is None:
             color = "white"
             text = "&lt;Refreshing&gt;"
-        elif self._status.creds_status == api.AwsCredentialsStatus.AUTHENTICATED:
+        elif self._status.auth_status == api.AwsAuthenticationStatus.AUTHENTICATED:
             color = "green"
-            text = self._status.creds_status.name
+            text = self._status.auth_status.name
         else:
             color = "red"
-            text = self._status.creds_status.name
-        self.creds_status_group.label.setText(f"<b style='color:{color};'>{text}</b>")
+            text = self._status.auth_status.name
+        self.auth_status_group.label.setText(f"<b style='color:{color};'>{text}</b>")
 
     def _api_availability_changed(self) -> None:
         if self._status.api_availability is None:
@@ -90,9 +92,9 @@ class DeadlineCredentialsStatusWidget(QWidget):
         self.deadline_authorized_group.label.setText(f"<b style='color:{color};'>{text}</b>")
 
 
-class CredentialsStatusGroup(QGroupBox):
+class AuthenticationStatusGroup(QGroupBox):
     """
-    UI element to group the status of credentials.
+    UI element to group the status of authentication.
     """
 
     def __init__(self, *, title: str, parent: Optional[QWidget] = None):

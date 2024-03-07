@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-All the `deadline creds` commands:
+All the `deadline auth` commands:
     * login
     * logout
     * status
@@ -11,14 +11,14 @@ import json
 import logging
 
 from ... import api
-from ...api._session import _modified_logging_level, AwsCredentialsType
+from ...api._session import _modified_logging_level, AwsCredentialsSource
 from ...config import config_file, get_setting
 from .._common import _apply_cli_options_to_config, _handle_error
 
 JSON_FIELD_PROFILE_NAME = "profile_name"
-JSON_FIELD_CRED_STATUS = "status"
-JSON_FIELD_CRED_TYPE = "type"
-JSON_FIELD_CRED_API_AVAILABLE = "api_availability"
+JSON_FIELD_AUTH_STATUS = "status"
+JSON_FIELD_CREDS_SOURCE = "source"
+JSON_FIELD_AUTH_API_AVAILABLE = "api_availability"
 
 
 def _cli_on_pending_authorization(**kwargs):
@@ -26,21 +26,21 @@ def _cli_on_pending_authorization(**kwargs):
     Callback for `login`, to tell the user that Deadline Cloud Monitor is opening
     """
 
-    if kwargs["credential_type"] == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
+    if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
         click.echo("Opening Deadline Cloud Monitor. Please login and then return here.")
 
 
-@click.group(name="creds")
+@click.group(name="auth")
 @_handle_error
-def cli_creds():
+def cli_auth():
     """
-    Commands to work with Amazon Deadline Cloud credentials.
+    Commands to handle Amazon Deadline Cloud authentication.
     """
 
 
-@cli_creds.command(name="login")
+@cli_auth.command(name="login")
 @_handle_error
-def creds_login():
+def auth_login():
     """
     Logs in to the Amazon Deadline Cloud configured AWS profile.
 
@@ -58,9 +58,9 @@ def creds_login():
     click.echo(f"\nSuccessfully logged in: {message}\n")
 
 
-@cli_creds.command(name="logout")
+@cli_auth.command(name="logout")
 @_handle_error
-def creds_logout():
+def auth_logout():
     """
     Logs out of the Deadline Cloud Monitor configured AWS profile.
     """
@@ -69,7 +69,7 @@ def creds_logout():
     click.echo("Successfully logged out of all Deadline Cloud Monitor AWS profiles")
 
 
-@cli_creds.command(name="status")
+@cli_auth.command(name="status")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option(
     "--output",
@@ -84,21 +84,21 @@ def creds_logout():
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def creds_status(output, **args):
-    """EXPERIMENTAL - Gets the status of the credentials for the given AWS profile"""
+def auth_status(output, **args):
+    """EXPERIMENTAL - Gets the authentication status for the given AWS profile"""
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
     profile_name = get_setting("defaults.aws_profile_name", config=config)
     is_json_format = True if output == "json" else False
 
     with _modified_logging_level(logging.getLogger("deadline.client.api"), logging.CRITICAL):
-        # always returns enum in AwsCredentialsType
-        creds_type = api.get_credentials_type(config=config)
-        creds_type_result = creds_type.name
+        # always returns enum in AwsCredentialsSource
+        creds_source = api.get_credentials_source(config=config)
+        creds_source_result = creds_source.name
 
-        # always returns enum in AwsCredentialsStatus
-        creds_status = api.check_credentials_status(config=config)
-        creds_status_results = creds_status.name
+        # always returns enum in AwsAuthenticationStatus
+        auth_status = api.check_authentication_status(config=config)
+        auth_status_results = auth_status.name
 
         # always returns True/False
         api_availability_result = api.check_deadline_api_available(config=config)
@@ -106,14 +106,14 @@ def creds_status(output, **args):
     if not is_json_format:
         width = 17
         click.echo(f"{'Profile Name:': >{width}} {profile_name}")
-        click.echo(f"{'Type:': >{width}} {creds_type_result}")
-        click.echo(f"{'Status:': >{width}} {creds_status_results}")
+        click.echo(f"{'Source:': >{width}} {creds_source_result}")
+        click.echo(f"{'Status:': >{width}} {auth_status_results}")
         click.echo(f"{'API Availability:': >{width}} {api_availability_result}")
     else:
         json_output = {
             JSON_FIELD_PROFILE_NAME: profile_name,
-            JSON_FIELD_CRED_TYPE: creds_type_result,
-            JSON_FIELD_CRED_STATUS: creds_status_results,
-            JSON_FIELD_CRED_API_AVAILABLE: api_availability_result,
+            JSON_FIELD_CREDS_SOURCE: creds_source_result,
+            JSON_FIELD_AUTH_STATUS: auth_status_results,
+            JSON_FIELD_AUTH_API_AVAILABLE: api_availability_result,
         }
         click.echo(json.dumps(json_output, ensure_ascii=True))

@@ -33,13 +33,13 @@ __cached_farm_id_for_queue_session = None
 __cached_queue_id_for_queue_session = None
 
 
-class AwsCredentialsType(Enum):
+class AwsCredentialsSource(Enum):
     NOT_VALID = 0
     HOST_PROVIDED = 2
     DEADLINE_CLOUD_MONITOR_LOGIN = 3
 
 
-class AwsCredentialsStatus(Enum):
+class AwsAuthenticationStatus(Enum):
     CONFIGURATION_ERROR = 1
     AUTHENTICATED = 2
     NEEDS_LOGIN = 3
@@ -131,7 +131,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
         return session.client(service_name)
 
 
-def get_credentials_type(config: Optional[ConfigParser] = None) -> AwsCredentialsType:
+def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
     """
     Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud Monitor wrote the credentials, HOST_PROVIDED otherwise.
 
@@ -143,12 +143,12 @@ def get_credentials_type(config: Optional[ConfigParser] = None) -> AwsCredential
         session = get_boto3_session(config=config)
         profile_config = session._session.get_scoped_config()
     except ProfileNotFound:
-        return AwsCredentialsType.NOT_VALID
+        return AwsCredentialsSource.NOT_VALID
     if "studio_id" in profile_config or "monitor_id" in profile_config:
         # Deadline Cloud Monitor Desktop adds some Deadline Cloud-specific keys here which we can use to know that this came from the app
-        return AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN
+        return AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
     else:
-        return AwsCredentialsType.HOST_PROVIDED
+        return AwsCredentialsSource.HOST_PROVIDED
 
 
 def get_user_and_identity_store_id(
@@ -283,7 +283,7 @@ def _modified_logging_level(logger, level):
         logger.setLevel(old_level)
 
 
-def check_credentials_status(config: Optional[ConfigParser] = None) -> AwsCredentialsStatus:
+def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAuthenticationStatus:
     """
     Checks the status of the provided session, by
     calling the sts::GetCallerIdentity API.
@@ -292,7 +292,7 @@ def check_credentials_status(config: Optional[ConfigParser] = None) -> AwsCreden
         config (ConfigParser, optional): The Amazon Deadline Cloud configuration
                 object to use instead of the config file.
 
-    Returns AwsCredentialsStatus enum value:
+    Returns AwsAuthenticationStatus enum value:
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
       - NEEDS_LOGIN if a Deadline Cloud Monitor login is required.
@@ -301,14 +301,14 @@ def check_credentials_status(config: Optional[ConfigParser] = None) -> AwsCreden
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
             get_boto3_session(config=config).client("sts").get_caller_identity()
-            return AwsCredentialsStatus.AUTHENTICATED
+            return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
             # We assume that the presence of a Deadline Cloud Monitor profile
             # means we will know everything necessary to start it and login.
 
-            if get_credentials_type(config) == AwsCredentialsType.DEADLINE_CLOUD_MONITOR_LOGIN:
-                return AwsCredentialsStatus.NEEDS_LOGIN
-            return AwsCredentialsStatus.CONFIGURATION_ERROR
+            if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
+                return AwsAuthenticationStatus.NEEDS_LOGIN
+            return AwsAuthenticationStatus.CONFIGURATION_ERROR
 
 
 class DeadlineClient:

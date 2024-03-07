@@ -71,19 +71,19 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         )
 
 
-def test_get_check_credentials_status_authenticated(fresh_deadline_config):
-    """Confirm that check_credentials_status returns AUTHENTICATED"""
+def test_get_check_authentication_status_authenticated(fresh_deadline_config):
+    """Confirm that check_authentication_status returns AUTHENTICATED"""
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
         api, "get_boto3_session", new=session_mock
     ):
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
         session_mock().client("sts").get_caller_identity.return_value = {}
 
-        assert api.check_credentials_status() == api.AwsCredentialsStatus.AUTHENTICATED
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.AUTHENTICATED
 
 
-def test_get_check_credentials_status_configuration_error(fresh_deadline_config):
-    """Confirm that check_credentials_status returns CONFIGURATION_ERROR"""
+def test_get_check_authentication_status_configuration_error(fresh_deadline_config):
+    """Confirm that check_authentication_status returns CONFIGURATION_ERROR"""
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
         api, "get_boto3_session", new=session_mock
     ):
@@ -92,7 +92,7 @@ def test_get_check_credentials_status_configuration_error(fresh_deadline_config)
             "some uncaught exception"
         )
 
-        assert api.check_credentials_status() == api.AwsCredentialsStatus.CONFIGURATION_ERROR
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
 
 
 def test_get_queue_user_boto3_session_cache(fresh_deadline_config):
