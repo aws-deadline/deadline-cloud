@@ -123,13 +123,13 @@ class S3AssetUploader:
         # Confirm that the settings values are all positive.
         error_msg = ""
         if small_file_threshold_multiplier <= 0:
-            error_msg = f"small_file_threshold_multiplier ({small_file_threshold_multiplier}) must be positive integer."
+            error_msg = f"'small_file_threshold_multiplier' ({small_file_threshold_multiplier}) must be positive integer."
         elif s3_max_pool_connections <= 0:
             error_msg = (
-                f"s3_max_pool_connections ({s3_max_pool_connections}) must be positive integer."
+                f"'s3_max_pool_connections' ({s3_max_pool_connections}) must be positive integer."
             )
         if error_msg:
-            raise AssetSyncError("Invalid value for configuration setting: " + error_msg)
+            raise AssetSyncError("Nonvalid value for configuration setting: " + error_msg)
 
     def upload_assets(
         self,
