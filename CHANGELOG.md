@@ -1,3 +1,16 @@
+## 0.40.0 (2024-03-11)
+
+### BREAKING CHANGES
+* **job_attachment**: use username instead of group for Windows file permissions setting (#196) ([`4c092bb`](https://github.com/casillas2/deadline-cloud/commit/4c092bbe926dbc599f655806bb9f6f5c0aa7ea50))
+* rename creds -&gt; auth, credentials -&gt; authentication (#199) ([`66126a1`](https://github.com/casillas2/deadline-cloud/commit/66126a1864dfed81e7c8b3187c1fe51090d23731))
+
+### Features
+* keep standalone gui open after submission (#198) ([`3b8d907`](https://github.com/casillas2/deadline-cloud/commit/3b8d907b63085f02a85a87c9df0df18d9f7aca3f))
+
+### Bug Fixes
+* **job_attachments**: improvements to nonvalid error messages (#200) ([`148587a`](https://github.com/casillas2/deadline-cloud/commit/148587aa9be55248d5d56e55e4eb44ada912cbc8))
+* **ui**: resource listing ignores case (#194) ([`223026a`](https://github.com/casillas2/deadline-cloud/commit/223026aeae096d9fcb55aaa39470c93df9b51b71))
+
 ## 0.39.0 (2024-03-06)
 
 ### BREAKING CHANGES
