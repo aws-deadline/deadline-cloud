@@ -12,33 +12,33 @@ import win32security
 from deadline.job_attachments.os_file_permission import (
     WindowsFileSystemPermissionSettings,
     WindowsPermissionEnum,
-    _set_fs_group_for_windows,
+    _set_fs_permission_for_windows,
 )
 
 """
-This script is to test a `_set_fs_group_for_windows()` function in Job Attachment module,
-which is for setting file permissions and group ownership on Windows.
+This script is to test a `_set_fs_permission_for_windows()` function in Job Attachment module,
+which is for setting file permissions and ownership on Windows.
 
 Prerequisites
 -------------
-Before running the test, prepare the target group, target user (a user who is a member of
-the target group), and disjoint user (not a member of the target group.)
+Before running the test, prepare a target user and a disjoint user.
 
 How to Run
 ----------
 To execute this script, run the following command from the root location:
 python ./scripted_tests/set_file_permission_for_windows.py \
     -n <the_number_of_files_to_create_for_test> \
-    -g <target_group_name> \
-    -f <file_permission> -d <directory_permission> \
-    -u <target_user_name> -du <disjoint_user_name>
+    -f <file_permission> \
+    -d <directory_permission> \
+    -u <target_user_name> \
+    -du <disjoint_user_name>
 
 Note: The `-f` and `-d` flags are optional.
 
 Then, the command will do the following:
 1. Installs `pywin32`, which is a required package for the testing.
 2. Creates a temporary directory and creates the specified number of files in it.
-2. The script will add the given target group to the owner list for the specified files.
+2. The script will add the given target user to the owner list for the specified files.
 3. It will then verify (1) whether the target user has Read/Write access to these files,
    and (2) that the disjoint user does not have access.
 
@@ -60,7 +60,6 @@ End of test execution.
 def run_test():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num_files", type=int, required=True)
-    parser.add_argument("-g", "--group", required=True, type=str)
     parser.add_argument("-f", "--file_permission", required=False, type=str, default="FULL_CONTROL")
     parser.add_argument("-d", "--dir_permission", required=False, type=str, default="FULL_CONTROL")
     parser.add_argument("-u", "--target_user", required=True, type=str)
@@ -90,21 +89,20 @@ def run_test():
             files.append(str(file_path))
 
         print("Temporary files created.")
-        print("Running test: Setting file permissions and group ownership...")
+        print("Running test: Setting file permissions...")
         start_time = time.perf_counter()
 
         fs_permission_settings = WindowsFileSystemPermissionSettings(
             os_user=args.target_user,
-            os_group=args.group,
             dir_mode=dir_permission,
             file_mode=file_permission,
         )
-        _set_fs_group_for_windows(
+        _set_fs_permission_for_windows(
             file_paths=files,
             local_root=temp_root_dir,
             fs_permission_settings=fs_permission_settings,
         )
-        print("File permissions and group ownership set.")
+        print("File permissions set.")
         print(f"Total running time for {num_files} files: {time.perf_counter() - start_time}")
 
         print("Checking file permissions...")

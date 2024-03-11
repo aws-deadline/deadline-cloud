@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Set, Union
+from typing import List, Optional, Set, Union
 
 from .exceptions import AssetSyncError, PathOutsideDirectoryError
 from ._utils import _is_relative_to
@@ -58,10 +58,12 @@ class WindowsFileSystemPermissionSettings:
         file_mode (WindowsPermissionEnum): The permission mode to be added to files.
     """
 
+    # TODO: Remove the optional `os_group` once the jobRunAsUser - windows - group field
+    # is removed from our APIs
     os_user: str
-    os_group: str
     dir_mode: WindowsPermissionEnum
     file_mode: WindowsPermissionEnum
+    os_group: Optional[str] = field(default=None)
 
 
 # A union of different file system permission settings that are based on the underlying OS.
@@ -104,19 +106,19 @@ def _set_fs_group_for_posix(
         _change_permission_for_posix(str(dir_path), os_group, dir_mode)
 
 
-def _set_fs_group_for_windows(
+def _set_fs_permission_for_windows(
     file_paths: List[str],
     local_root: str,
     fs_permission_settings: WindowsFileSystemPermissionSettings,
 ) -> None:
-    os_group = fs_permission_settings.os_group
+    os_user = fs_permission_settings.os_user
     dir_mode = fs_permission_settings.dir_mode
     file_mode = fs_permission_settings.file_mode
 
     # A set that stores the unique directory paths where permissions need to be changed.
     dir_paths_to_change_fs_group: Set[Path] = set()
 
-    # 1. Set group ownership and permissions for each file.
+    # 1. Set permissions for each file.
     for file_path_str in file_paths:
         # The file path must be relative to the root path (ie. local_root).
         if not _is_relative_to(file_path_str, local_root):
@@ -124,18 +126,18 @@ def _set_fs_group_for_windows(
                 f"The provided path '{file_path_str}' is not under the root directory: {local_root}"
             )
 
-        _change_permission_for_windows(file_path_str, os_group, file_mode)
+        _change_permission_for_windows(file_path_str, os_user, file_mode)
 
         # Add the parent directories of each file to the set of directories whose
-        # group ownership and permissions will be changed.
+        # permissions will be changed.
         path_components = Path(file_path_str).relative_to(local_root).parents
         for path_component in path_components:
             path_to_change = Path(local_root).joinpath(path_component)
             dir_paths_to_change_fs_group.add(path_to_change)
 
-    # 2. Set group ownership and permissions for the directories in the path starting from root.
+    # 2. Set permissions for the directories in the path starting from root.
     for dir_path in dir_paths_to_change_fs_group:
-        _change_permission_for_windows(str(dir_path), os_group, dir_mode)
+        _change_permission_for_windows(str(dir_path), os_user, dir_mode)
 
 
 def _change_permission_for_posix(
@@ -153,7 +155,7 @@ def _change_permission_for_posix(
 
 def _change_permission_for_windows(
     path: str,
-    os_group: str,
+    os_user: str,
     mode: WindowsPermissionEnum,
 ) -> None:
     if sys.platform != "win32":
@@ -163,21 +165,21 @@ def _change_permission_for_windows(
 
     try:
         con_mode = _get_ntsecuritycon_mode(mode)
-        # Lookup the group's SID (Security Identifier)
-        group_sid = win32security.LookupAccountName(None, os_group)[0]
+        # Lookup the user's SID (Security Identifier)
+        user_sid = win32security.LookupAccountName(None, os_user)[0]
         # Get existing DACL (Discretionary Access Control List). If dacl is none, create a new one.
         sd = win32security.GetFileSecurity(path, win32security.DACL_SECURITY_INFORMATION)
         dacl = sd.GetSecurityDescriptorDacl()
         if dacl is None:
             dacl = win32security.ACL()
         # Add new ACE (Access Control Entry)
-        dacl.AddAccessAllowedAce(win32security.ACL_REVISION, con_mode, group_sid)
-        # Set the new DACL
+        dacl.AddAccessAllowedAce(win32security.ACL_REVISION, con_mode, user_sid)
+        # Set the modified DACL to the security descriptor
         sd.SetSecurityDescriptorDacl(1, dacl, 0)
         win32security.SetFileSecurity(path, win32security.DACL_SECURITY_INFORMATION, sd)
     except win32security.error as e:
         raise AssetSyncError(
-            f"Failed to set group ownership and permissions for file or directory ({path}): {e}"
+            f"Failed to set permissions for file or directory ({path}): {e}"
         ) from e
 
 

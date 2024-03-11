@@ -56,7 +56,7 @@ from .os_file_permission import (
     PosixFileSystemPermissionSettings,
     WindowsFileSystemPermissionSettings,
     _set_fs_group_for_posix,
-    _set_fs_group_for_windows,
+    _set_fs_permission_for_windows,
 )
 from ._utils import _is_relative_to, _join_s3_paths
 
@@ -791,7 +791,7 @@ def _set_fs_group(
     else:  # if os.name is not "posix"
         if not isinstance(fs_permission_settings, WindowsFileSystemPermissionSettings):
             raise TypeError("The file system permission settings must be specific to Windows.")
-        _set_fs_group_for_windows(
+        _set_fs_permission_for_windows(
             file_paths=file_paths,
             local_root=local_root,
             fs_permission_settings=fs_permission_settings,

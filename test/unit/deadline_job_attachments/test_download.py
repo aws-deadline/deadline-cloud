@@ -833,7 +833,6 @@ class TestFullDownload:
 
         fs_permission_settings = WindowsFileSystemPermissionSettings(
             os_user="test-user",
-            os_group="test-group",
             dir_mode=WindowsPermissionEnum.FULL_CONTROL,
             file_mode=WindowsPermissionEnum.FULL_CONTROL,
         )
@@ -863,7 +862,7 @@ class TestFullDownload:
             str(
                 call(
                     str(path),
-                    "test-group",
+                    "test-user",
                     WindowsPermissionEnum.FULL_CONTROL,
                 )
             )
@@ -1003,10 +1002,9 @@ class TestFullDownload:
         manifest = decode_manifest(manifest_str)
         manifests_by_root = {str(tmp_path): manifest}
 
-        # Use a builtin group, so we can expect it to exist on any Windows machine
+        # Use a builtin user 'Guest', so we can expect it to exist on any Windows machine
         fs_permission_settings = WindowsFileSystemPermissionSettings(
-            os_user="test-user",
-            os_group="Users",
+            os_user="Guest",
             dir_mode=WindowsPermissionEnum.FULL_CONTROL,
             file_mode=WindowsPermissionEnum.FULL_CONTROL,
         )
@@ -1027,28 +1025,28 @@ class TestFullDownload:
             tmp_path / rel_path for rel_path in self.TARGET_PERMISSION_CHANGE_PATHS_RELATIVE
         ]
 
-        # Verify that the group ownership and permissions of files downloaded through Job Attachment
+        # Verify that the user ownership and permissions of files downloaded through Job Attachment
         # have been appropriately modified.
         for path in expected_changed_paths:
             # Get the file's security information
             sd = win32security.GetFileSecurity(str(path), win32security.DACL_SECURITY_INFORMATION)
             # Get the discretionary access control list (DACL)
             dacl = sd.GetSecurityDescriptorDacl()
-            # Get groups and permissions info from ACE
-            group_permissions: dict[str, int] = {}
+            # Get the permissions info from ACE
+            permission_mapping: dict[str, int] = {}
             for ace_no in range(dacl.GetAceCount()):
                 trustee_sid = dacl.GetAce(ace_no)[2]
                 trustee_name, _, _ = win32security.LookupAccountSid(None, trustee_sid)
                 if trustee_name:
                     trustee = {
                         "TrusteeForm": win32security.TRUSTEE_IS_SID,
-                        "TrusteeType": win32security.TRUSTEE_IS_GROUP,
+                        "TrusteeType": win32security.TRUSTEE_IS_USER,
                         "Identifier": trustee_sid,
                     }
                     result = dacl.GetEffectiveRightsFromAcl(trustee)
-                    group_permissions[trustee_name] = result
-            assert group_permissions["Users"] == ntsecuritycon.FILE_ALL_ACCESS
-            assert "Guests" not in group_permissions
+                    permission_mapping[trustee_name] = result
+            assert "Guest" in permission_mapping
+            assert permission_mapping["Guest"] == ntsecuritycon.FILE_ALL_ACCESS
 
     @mock_sts
     def test_download_task_output(
