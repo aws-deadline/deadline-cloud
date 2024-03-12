@@ -57,6 +57,23 @@ class JobAttachmentsS3ClientError(AssetSyncError):
         super().__init__(", ".join(message_parts))
 
 
+class JobAttachmentS3BotoCoreError(AssetSyncError):
+    """
+    Exception to wrap any botocore.exceptions.BotoCoreError.
+    """
+
+    def __init__(self, action: str, error_details: str) -> None:
+        self.action = action
+        message = (
+            f"An issue occurred with AWS service request while {action}: "
+            f"{error_details}\n"
+            "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+            "Please verify your credentials and network connection. If the problem persists, try again later"
+            " or contact support for further assistance."
+        )
+        super().__init__(message)
+
+
 class MissingS3BucketError(JobAttachmentsError):
     """
     Exception raised when attempting to use Job Attachments but the S3 bucket is not set in Queue.
