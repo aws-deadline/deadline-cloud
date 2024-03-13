@@ -3,7 +3,6 @@
 from ._session import (
     get_boto3_client,
     get_user_and_identity_store_id,
-    get_studio_id,
 )
 
 
@@ -40,12 +39,6 @@ def list_farms(config=None, **kwargs):
         user_id, _ = get_user_and_identity_store_id(config=config)
         if user_id:
             kwargs["principalId"] = user_id
-
-    if "studioId" not in kwargs:
-        # We don't do this filtering for Monitors, so specifically check StudioId
-        studio_id = get_studio_id(config=config)
-        if studio_id:
-            kwargs["studioId"] = studio_id
 
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_farms, "farms", **kwargs)

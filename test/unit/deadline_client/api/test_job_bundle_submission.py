@@ -266,57 +266,51 @@ def test_create_job_from_job_bundle(
     parameters_type, parameters, expected_create_job_parameters = MOCK_PARAMETERS_CASES[
         parameters_case
     ]
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
-        input_shape_mock.return_value = {"template": ""}
-        with patch.object(api._session, "get_boto3_session") as session_mock:
-            session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
 
-            config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-            config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-            config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
-            # Write the template to the job bundle
+        # Write the template to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        # Write the parameter values to the job bundle, if the test case parameter includes them
+        if parameters_type:
             with open(
-                os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+                os.path.join(temp_job_bundle_dir, f"parameter_values.{parameters_type.lower()}"),
                 "w",
                 encoding="utf8",
             ) as f:
-                f.write(job_template)
+                f.write(parameters)
 
-            # Write the parameter values to the job bundle, if the test case parameter includes them
-            if parameters_type:
-                with open(
-                    os.path.join(
-                        temp_job_bundle_dir, f"parameter_values.{parameters_type.lower()}"
-                    ),
-                    "w",
-                    encoding="utf8",
-                ) as f:
-                    f.write(parameters)
-
-            # This is the function under test
-            response = api.create_job_from_job_bundle(
-                job_bundle_dir=temp_job_bundle_dir,
-                queue_parameter_definitions=[],
-            )
-
-        # The response from the API is returned verbatim
-        assert response == MOCK_JOB_ID
-        expected_create_job_parameters_dict: dict = dict(**expected_create_job_parameters)
-        expected_create_job_parameters_dict["priority"] = expected_create_job_parameters_dict.get(
-            "priority", 50
+        # This is the function under test
+        response = api.create_job_from_job_bundle(
+            job_bundle_dir=temp_job_bundle_dir,
+            queue_parameter_definitions=[],
         )
-        session_mock().client("deadline").create_job.assert_called_once_with(
-            farmId=MOCK_FARM_ID,
-            queueId=MOCK_QUEUE_ID,
-            template=job_template,
-            templateType=job_template_type,
-            storageProfileId=MOCK_STORAGE_PROFILE_ID,
-            **expected_create_job_parameters_dict,
-        )
+
+    # The response from the API is returned verbatim
+    assert response == MOCK_JOB_ID
+    expected_create_job_parameters_dict: dict = dict(**expected_create_job_parameters)
+    expected_create_job_parameters_dict["priority"] = expected_create_job_parameters_dict.get(
+        "priority", 50
+    )
+    session_mock().client("deadline").create_job.assert_called_once_with(
+        farmId=MOCK_FARM_ID,
+        queueId=MOCK_QUEUE_ID,
+        template=job_template,
+        templateType=job_template_type,
+        storageProfileId=MOCK_STORAGE_PROFILE_ID,
+        **expected_create_job_parameters_dict,
+    )
 
 
 def test_create_job_from_job_bundle_error_missing_template(
@@ -449,6 +443,8 @@ def test_create_job_from_job_bundle_job_attachments(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
+    ), patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
@@ -566,6 +562,8 @@ def test_create_job_from_job_bundle_empty_job_attachments(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
+    ), patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
@@ -655,52 +653,48 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
     Test a job bundle with an asset_references file but no referenced files.
     """
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
-        input_shape_mock.return_value = {}
-        with patch.object(api._session, "get_boto3_session") as session_mock:
-            session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-            session_mock().client("deadline").get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+    with patch.object(api._session, "get_boto3_session") as session_mock:
+        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        session_mock().client("deadline").get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
 
-            config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-            config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-            config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
-            # Write the template to the job bundle
-            with open(
-                os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
-                "w",
-                encoding="utf8",
-            ) as f:
-                f.write(job_template)
+        # Write the template to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
 
-            # Write an asset_references.json file with empty lists
-            asset_references: dict = {
-                "inputs": {"filenames": [], "directories": []},
-                "outputs": {"directories": []},
-            }
-            with open(
-                os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
-            ) as f:
-                json.dump({"assetReferences": asset_references}, f)
+        # Write an asset_references.json file with empty lists
+        asset_references: dict = {
+            "inputs": {"filenames": [], "directories": []},
+            "outputs": {"directories": []},
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
 
-            # This is the function under test
-            response = api.create_job_from_job_bundle(
-                job_bundle_dir=temp_job_bundle_dir,
-                queue_parameter_definitions=[],
-            )
+        # This is the function under test
+        response = api.create_job_from_job_bundle(
+            job_bundle_dir=temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+        )
 
-            assert response == MOCK_JOB_ID
-            # There should be no job attachments section in the result
-            session_mock().client("deadline").create_job.assert_called_once_with(
-                farmId=MOCK_FARM_ID,
-                queueId=MOCK_QUEUE_ID,
-                template=job_template,
-                templateType=job_template_type,
-                storageProfileId=MOCK_STORAGE_PROFILE_ID,
-                priority=50,
-            )
+        assert response == MOCK_JOB_ID
+        # There should be no job attachments section in the result
+        session_mock().client("deadline").create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=job_template,
+            templateType=job_template_type,
+            storageProfileId=MOCK_STORAGE_PROFILE_ID,
+            priority=50,
+        )
 
 
 def test_create_job_from_job_bundle_with_single_asset_file(
@@ -724,6 +718,8 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_telemetry_client"
+    ), patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
