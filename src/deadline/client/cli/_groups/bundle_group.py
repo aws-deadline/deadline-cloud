@@ -191,6 +191,12 @@ def bundle_submit(
         raise DeadlineOperationError(
             f"Failed to submit the job bundle to Amazon Deadline Cloud:\n{exc}"
         ) from exc
+    except Exception as exc:
+        api.get_deadline_cloud_library_telemetry_client().record_error(
+            event_details={"exception_scope": "on_submit"},
+            exception_type=str(type(exc)),
+        )
+        raise
 
 
 @cli_bundle.command(name="gui-submit")

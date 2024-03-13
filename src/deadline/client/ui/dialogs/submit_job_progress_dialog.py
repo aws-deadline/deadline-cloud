@@ -509,7 +509,9 @@ class SubmitJobProgressDialog(QDialog):
         job creation has finished.
         """
         api.get_deadline_cloud_library_telemetry_client().record_event(
-            event_type="com.amazon.rum.deadline.create_job", event_details={"is_success": success}
+            event_type="com.amazon.rum.deadline.create_job",
+            event_details={"is_success": success},
+            from_gui=True,
         )
 
         if success:

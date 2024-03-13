@@ -70,6 +70,9 @@ class TelemetryClient:
 
     ENDPOINT_PREFIX = "management."
 
+    _common_details: Dict[str, Any] = {}
+    _system_metadata: Dict[str, Any] = {}
+
     def __init__(
         self,
         package_name: str,
@@ -91,8 +94,10 @@ class TelemetryClient:
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())
         self.telemetry_id: str = self._get_telemetry_identifier(config=config)
-        # Get common data we'll include in each request
-        self.system_metadata = self._get_system_metadata(config=config)
+        # If a different base package is provided, include info from this library as supplementary info
+        if package_name != "deadline-cloud-library":
+            self._common_details["deadline-cloud-version"] = version
+        self._system_metadata = self._get_system_metadata(config=config)
 
         self._start_threads()
 
@@ -198,7 +203,7 @@ class TelemetryClient:
                     {
                         "details": str(json.dumps(event_data.event_details)),
                         "id": str(uuid.uuid4()),
-                        "metadata": str(json.dumps(self.system_metadata)),
+                        "metadata": str(json.dumps(self._system_metadata)),
                         "timestamp": int(datetime.now().timestamp()),
                         "type": event_data.event_type,
                     },
@@ -228,8 +233,7 @@ class TelemetryClient:
         self, event_type: str, summary: SummaryStatistics, from_gui: bool
     ):
         details: Dict[str, Any] = asdict(summary)
-        details["usage_mode"] = "GUI" if from_gui else "CLI"
-        self._put_telemetry_record(TelemetryEvent(event_type=event_type, event_details=details))
+        self.record_event(event_type=event_type, event_details=details, from_gui=from_gui)
 
     def record_hashing_summary(self, summary: SummaryStatistics, *, from_gui: bool = False):
         self._record_summary_statistics(
@@ -241,12 +245,18 @@ class TelemetryClient:
             "com.amazon.rum.deadline.job_attachments.upload_summary", summary, from_gui
         )
 
-    def record_error(self, event_details: Dict[str, Any], exception_type: str):
+    def record_error(
+        self, event_details: Dict[str, Any], exception_type: str, from_gui: bool = False
+    ):
         event_details["exception_type"] = exception_type
         # Possibility to add stack trace here
-        self.record_event("com.amazon.rum.deadline.error", event_details)
+        self.record_event("com.amazon.rum.deadline.error", event_details, from_gui=from_gui)
 
-    def record_event(self, event_type: str, event_details: Dict[str, Any]):
+    def record_event(
+        self, event_type: str, event_details: Dict[str, Any], *, from_gui: bool = False
+    ):
+        event_details.update(self._common_details)
+        event_details["usage_mode"] = "GUI" if from_gui else "CLI"
         self._put_telemetry_record(
             TelemetryEvent(
                 event_type=event_type,
@@ -254,15 +264,19 @@ class TelemetryClient:
             )
         )
 
+    def update_common_details(self, details: Dict[str, Any]):
+        """Updates the dict of common data that is included in every telemetry request."""
+        self._common_details.update(details)
+
 
 def get_telemetry_client(
     package_name: str, package_ver: str, config: Optional[ConfigParser] = None
 ) -> TelemetryClient:
     """
     Retrieves the cached telemetry client, lazy-loading the first time this is called.
+    :param package_name: Base package name to associate data by.
+    :param package_ver: Base package version to associate data by.
     :param config: Optional configuration to use for the client. Loads defaults if not given.
-    :param package_name: Optional override package name to include in requests. Defaults to the 'deadline-cloud' package.
-    :param package_ver: Optional override package version to include in requests. Defaults to the 'deadline-cloud' version.
     :return: Telemetry client to make requests with.
     """
     global __cached_telemetry_client

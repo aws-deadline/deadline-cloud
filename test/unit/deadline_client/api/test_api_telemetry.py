@@ -24,7 +24,7 @@ def fixture_telemetry_client(fresh_deadline_config):
         side_effect=[("user-id", "identity-store-id")],
     ):
         return TelemetryClient(
-            "test-library", "0.1.2.1234", config=config.config_file.read_config()
+            "deadline-cloud-library", "0.1.2.1234", config=config.config_file.read_config()
         )
 
 
@@ -170,7 +170,11 @@ def test_record_error(telemetry_client):
     queue_mock = MagicMock()
     test_error_details = {"some_field": "some_value"}
     test_exc = Exception("some exception")
-    expected_event_details = {"some_field": "some_value", "exception_type": str(type(test_exc))}
+    expected_event_details = {
+        "some_field": "some_value",
+        "exception_type": str(type(test_exc)),
+        "usage_mode": "CLI",
+    }
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
     )
