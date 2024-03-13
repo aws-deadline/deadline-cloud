@@ -63,7 +63,7 @@ def test_cli_farm_list_override_profile(fresh_deadline_config):
 
     with patch.object(boto3, "Session") as session_mock:
         session_mock().client("deadline").list_farms.return_value = {"farms": MOCK_FARMS_LIST}
-        session_mock()._session.get_scoped_config().get.return_value = "some-studio-id"
+        session_mock()._session.get_scoped_config().get.return_value = "some-monitor-id"
         session_mock.reset_mock()
 
         runner = CliRunner()
@@ -71,7 +71,7 @@ def test_cli_farm_list_override_profile(fresh_deadline_config):
 
         assert result.exit_code == 0
         session_mock.assert_called_with(profile_name="NonDefaultProfileName")
-        session_mock().client().list_farms.assert_called_once_with(studioId="some-studio-id")
+        session_mock().client().list_farms.assert_called_once_with()
 
 
 def test_cli_farm_list_client_error(fresh_deadline_config):
