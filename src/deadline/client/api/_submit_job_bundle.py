@@ -276,6 +276,11 @@ def create_job_from_job_bundle(
     if logging.DEBUG >= logger.getEffectiveLevel():
         logger.debug(json.dumps(create_job_args, indent=1))
 
+    api.get_deadline_cloud_library_telemetry_client().record_event(
+        event_type="com.amazon.rum.deadline.submission",
+        event_details={},
+    )
+
     create_job_response = deadline.create_job(**create_job_args)
     logger.debug(f"CreateJob Response {create_job_response}")
 
@@ -300,6 +305,10 @@ def create_job_from_job_bundle(
             job_id,
             deadline,
             create_job_result_callback,
+        )
+
+        api.get_deadline_cloud_library_telemetry_client().record_event(
+            event_type="com.amazon.rum.deadline.create_job", event_details={"is_success": success}
         )
 
         if not success:
