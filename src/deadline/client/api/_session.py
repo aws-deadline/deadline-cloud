@@ -6,11 +6,10 @@ of the Deadline-configured IAM credentials.
 """
 from __future__ import annotations
 import logging
-import os
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional
 import boto3  # type: ignore[import]
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
@@ -18,8 +17,6 @@ from botocore.exceptions import (  # type: ignore[import]
     ClientError,
     ProfileNotFound,
 )
-from botocore.loaders import Loader, UnknownServiceError  # type: ignore[import]
-from botocore.model import ServiceModel, OperationModel
 
 from botocore.session import get_session as get_botocore_session
 
@@ -102,15 +99,6 @@ def invalidate_boto3_session_cache() -> None:
     __cached_queue_id_for_queue_session = None
 
 
-def get_deadline_endpoint_url(
-    config: Optional[ConfigParser] = None,
-) -> str:
-    url = os.getenv("AWS_ENDPOINT_URL_DEADLINE")
-    if not url:
-        url = f"https://deadline.{get_boto3_session(config=config).region_name}.amazonaws.com"
-    return url
-
-
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
     """
     Gets a client from the boto3 session returned by `get_boto3_session`.
@@ -122,13 +110,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
         config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
     session = get_boto3_session(config=config)
-
-    if service_name == "deadline":
-        deadline_endpoint_url = get_deadline_endpoint_url(config=config)
-        client = session.client(service_name, endpoint_url=deadline_endpoint_url)
-        return DeadlineClient(client)
-    else:
-        return session.client(service_name)
+    return session.client(service_name)
 
 
 def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
@@ -144,8 +126,8 @@ def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredenti
         profile_config = session._session.get_scoped_config()
     except ProfileNotFound:
         return AwsCredentialsSource.NOT_VALID
-    if "studio_id" in profile_config or "monitor_id" in profile_config:
-        # Deadline Cloud Monitor Desktop adds some Deadline Cloud-specific keys here which we can use to know that this came from the app
+    if "monitor_id" in profile_config:
+        # Deadline Cloud Monitor Desktop adds the "monitor_id" key
         return AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
     else:
         return AwsCredentialsSource.HOST_PROVIDED
@@ -161,22 +143,10 @@ def get_user_and_identity_store_id(
     session = get_boto3_session(config=config)
     profile_config = session._session.get_scoped_config()
 
-    if "studio_id" in profile_config or "monitor_id" in profile_config:
+    if "monitor_id" in profile_config:
         return (profile_config["user_id"], profile_config["identity_store_id"])
     else:
         return None, None
-
-
-def get_studio_id(
-    config: Optional[ConfigParser] = None,
-) -> Optional[str]:
-    """
-    If logged in with Deadline Cloud Monitor to a Nimble Studio, returns Studio Id, otherwise returns None.
-    """
-    session = get_boto3_session(config=config)
-    profile_config = session._session.get_scoped_config()
-
-    return profile_config.get("studio_id", None)
 
 
 def get_monitor_id(
@@ -311,136 +281,6 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
             return AwsAuthenticationStatus.CONFIGURATION_ERROR
 
 
-class DeadlineClient:
-    """
-    A shim layer for boto Deadline client. This class will check if a method exists on the real
-    boto3 Deadline client and call it if it exists. If it doesn't exist, an AttributeError will be raised.
-    """
-
-    _real_client: Any
-
-    def __init__(self, real_client: Any) -> None:
-        self._real_client = real_client
-
-    def get_farm(self, *args, **kwargs) -> Any:
-        response = self._real_client.get_farm(*args, **kwargs)
-        if "name" in response and "displayName" not in response:
-            response["displayName"] = response["name"]
-            del response["name"]
-        return response
-
-    def list_farms(self, *args, **kwargs) -> Any:
-        response = self._real_client.list_farms(*args, **kwargs)
-        if "farms" in response:
-            for farm in response["farms"]:
-                if "name" in farm and "displayName" not in farm:
-                    farm["displayName"] = farm["name"]
-                    del farm["name"]
-        return response
-
-    def get_queue(self, *args, **kwargs) -> Any:
-        response = self._real_client.get_queue(*args, **kwargs)
-        if "name" in response and "displayName" not in response:
-            response["displayName"] = response["name"]
-            del response["name"]
-        if "state" in response and "status" not in response:
-            response["status"] = response["state"]
-            del response["state"]
-        return response
-
-    def list_queues(self, *args, **kwards) -> Any:
-        response = self._real_client.list_queues(*args, **kwards)
-        if "queues" in response:
-            for queue in response["queues"]:
-                if "name" in queue and "displayName" not in queue:
-                    queue["displayName"] = queue["name"]
-                    del queue["name"]
-        return response
-
-    def get_fleet(self, *args, **kwargs) -> Any:
-        response = self._real_client.get_fleet(*args, **kwargs)
-        if "name" in response and "displayName" not in response:
-            response["displayName"] = response["name"]
-            del response["name"]
-        if "state" in response and "status" not in response:
-            response["status"] = response["state"]
-            del response["state"]
-        if "type" in response:
-            del response["type"]
-        return response
-
-    def list_fleets(self, *args, **kwargs) -> Any:
-        response = self._real_client.list_fleets(*args, **kwargs)
-        if "fleets" in response:
-            for fleet in response["fleets"]:
-                if "name" in fleet and "displayName" not in fleet:
-                    fleet["displayName"] = fleet["name"]
-                    del fleet["name"]
-        return response
-
-    def create_job(self, *args, **kwargs) -> Any:
-        create_job_input_members = self._get_deadline_api_input_shape("CreateJob")
-
-        # revert to old parameter names if old service model is used
-        if "maxRetriesPerTask" in kwargs:
-            if "maxErrorsPerTask" in create_job_input_members:
-                kwargs["maxErrorsPerTask"] = kwargs.pop("maxRetriesPerTask")
-        if "template" in kwargs:
-            if "jobTemplate" in create_job_input_members:
-                kwargs["jobTemplate"] = kwargs.pop("template")
-                kwargs["jobTemplateType"] = kwargs.pop("templateType")
-                if "parameters" in kwargs:
-                    kwargs["jobParameters"] = kwargs.pop("parameters")
-        if "targetTaskRunStatus" in kwargs:
-            if "initialState" in create_job_input_members:
-                kwargs["initialState"] = kwargs.pop("targetTaskRunStatus")
-        return self._real_client.create_job(*args, **kwargs)
-
-    def assume_queue_role_for_user(self, *args, **kwargs) -> Any:
-        return self._real_client.assume_queue_role_for_user(*args, **kwargs)
-
-    def _get_deadline_api_input_shape(self, api_name: str) -> dict[str, Any]:
-        """
-        Given a string name of an API e.g. CreateJob, returns the shape of the
-        inputs to that API.
-        """
-        api_model = self._get_deadline_api_model(api_name)
-        if api_model:
-            return api_model.input_shape.members
-        return {}
-
-    def _get_deadline_api_model(self, api_name: str) -> Optional[OperationModel]:
-        """
-        Given a string name of an API e.g. CreateJob, returns the OperationModel
-        for that API from the service model.
-        """
-        loader = Loader()
-        try:
-            deadline_service_description = loader.load_service_model("deadline", "service-2")
-        except UnknownServiceError:
-            return None
-        deadline_service_model = ServiceModel(deadline_service_description, service_name="deadline")
-        return OperationModel(
-            deadline_service_description["operations"][api_name], deadline_service_model
-        )
-
-    def __getattr__(self, __name: str) -> Any:
-        """
-        Respond to unknown method calls by calling the underlying _real_client
-        If the underlying _real_client does not have a given method, an AttributeError
-        will be raised.
-
-        Note that __getattr__ is only called if the attribute cannot otherwise be found,
-        so if this class alread has the called method defined, __getattr__ will not be called.
-        This is in opposition to __getattribute__ which is called by default.
-        """
-
-        def method(*args, **kwargs) -> Any:
-            return getattr(self._real_client, __name)(*args, **kwargs)
-
-        return method
-
-
 class QueueUserCredentialProvider(CredentialProvider):
     """A custom botocore CredentialProvider for handling AssumeQueueRoleForUser API
     credentials. If the credentials expire, the provider will automatically refresh
@@ -455,7 +295,7 @@ class QueueUserCredentialProvider(CredentialProvider):
     # require that providers outside of botocore are prefixed with "custom"
     CANONICAL_NAME = "custom-queue-credential-provider"
 
-    deadline: DeadlineClient
+    deadline: BaseClient
     farm_id: str
     queue_id: str
     queue_display_name_or_id: Optional[str]

@@ -13,27 +13,27 @@ from deadline.client import api
 FARMS_LIST = [
     {
         "farmId": "farm-0123456789abcdef0123456789abcdef",
-        "name": "Testing Farm",
+        "displayName": "Testing Farm",
         "description": "",
     },
     {
         "farmId": "farm-0123456789abcdef0123456789abcdeg",
-        "name": "Another Farm",
+        "displayName": "Another Farm",
         "description": "With a description!",
     },
     {
         "farmId": "farm-0123756789abcdef0123456789abcdeg",
-        "name": "Third Farm",
+        "displayName": "Third Farm",
         "description": "Described",
     },
     {
         "farmId": "farm-0123456789abcdef012a456789abcdeg",
-        "name": "Farm six",
+        "displayName": "Farm six",
         "description": "multiple\nline\ndescription",
     },
     {
         "farmId": "farm-0123456789abcdef0123450789abcaeg",
-        "name": "Farm",
+        "displayName": "Farm",
         "description": "Farm",
     },
 ]
@@ -64,10 +64,10 @@ def test_list_farms_principal_id(fresh_deadline_config, pass_principal_id_filter
             {"farms": FARMS_LIST},
         ]
 
-        session_mock()._session.get_scoped_config().get.return_value = "some-studio-id"
+        session_mock()._session.get_scoped_config().get.return_value = "some-monitor-id"
         if user_identities:
             session_mock()._session.get_scoped_config.return_value = {
-                "studio_id": "some-studio-id",
+                "monitor_id": "some-monitor-id",
                 "user_id": "userid",
                 "identity_store_id": "idstoreid",
             }
@@ -82,13 +82,11 @@ def test_list_farms_principal_id(fresh_deadline_config, pass_principal_id_filter
 
         if pass_principal_id_filter:
             session_mock().client("deadline").list_farms.assert_called_once_with(
-                principalId="otheruserid", studioId="some-studio-id"
+                principalId="otheruserid"
             )
         elif user_identities:
             session_mock().client("deadline").list_farms.assert_called_once_with(
-                principalId="userid", studioId="some-studio-id"
+                principalId="userid"
             )
         else:
-            session_mock().client("deadline").list_farms.assert_called_once_with(
-                studioId="some-studio-id"
-            )
+            session_mock().client("deadline").list_farms.assert_called_once_with()
