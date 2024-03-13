@@ -9,16 +9,16 @@ MOCK_STORAGE_PROFILE_ID = "sp-0123456789abcdefabcdefabcdefabcd"
 MOCK_JOB_ID = "job-0123456789abcdefabcdefabcdefabcd"
 MOCK_STEP_ID = "step-0123456789abcdefabcdefabcdefabcd"
 MOCK_TASK_ID = "task-0123456789abcdefabcdefabcdefabcd-99"
-MOCK_PROFILE_NAME = "my-studio-profile"
+MOCK_PROFILE_NAME = "my-monitor-profile"
 MOCK_QUEUES_LIST = [
     {
         "queueId": "queue-0123456789abcdef0123456789abcdef",
-        "name": "Testing Queue",
+        "displayName": "Testing Queue",
         "description": "",
     },
     {
         "queueId": "queue-0123456789abcdef0123456789abcdeg",
-        "name": "Another Queue",
+        "displayName": "Another Queue",
         "description": "With a description!",
     },
 ]

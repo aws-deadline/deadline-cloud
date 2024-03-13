@@ -18,10 +18,12 @@ def fixture_telemetry_client(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
         api._telemetry, "get_monitor_id", side_effect=["monitor-id"]
-    ), patch.object(api._telemetry, "get_studio_id", side_effect=[None]), patch.object(
+    ), patch.object(api._telemetry, "get_monitor_id", side_effect=[None]), patch.object(
         api._telemetry,
         "get_user_and_identity_store_id",
         side_effect=[("user-id", "identity-store-id")],
+    ), patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
         return TelemetryClient(
             "deadline-cloud-library", "0.1.2.1234", config=config.config_file.read_config()

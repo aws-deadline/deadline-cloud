@@ -156,52 +156,44 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
     Confirm that --profile, --farm-id, and --queue-id get passed in from the CLI.
     """
     # Use a temporary directory for the job bundle
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock, patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        input_shape_mock.return_value = {}
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            boto3, "Session"
-        ) as session_mock:
-            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-            session_mock.reset_mock()
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
 
-            # Write a JSON template
-            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
-                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "bundle",
-                    "submit",
-                    tmpdir,
-                    "--profile",
-                    "NonDefaultProfileName",
-                    "--farm-id",
-                    MOCK_FARM_ID,
-                    "--queue-id",
-                    MOCK_QUEUE_ID,
-                ],
-            )
-
-        session_mock.assert_called_with(profile_name="NonDefaultProfileName")
-        session_mock().client().create_job.assert_called_once_with(
-            farmId=MOCK_FARM_ID,
-            queueId=MOCK_QUEUE_ID,
-            template=ANY,
-            templateType="JSON",
-            priority=50,
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--profile",
+                "NonDefaultProfileName",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+            ],
         )
 
-        assert tmpdir in result.output
-        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
-        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
-        assert result.exit_code == 0
+    session_mock.assert_called_with(profile_name="NonDefaultProfileName")
+    session_mock().client().create_job.assert_called_once_with(
+        farmId=MOCK_FARM_ID,
+        queueId=MOCK_QUEUE_ID,
+        template=ANY,
+        templateType="JSON",
+        priority=50,
+    )
+
+    assert tmpdir in result.output
+    assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+    assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+    assert result.exit_code == 0
 
 
 def test_cli_bundle_priority_retries(fresh_deadline_config):
@@ -209,56 +201,48 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
     Confirm that --priority, --max-failed-tasks-count, and --max-retries-per-task get passed in from the CLI.
     """
     # Use a temporary directory for the job bundle
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock, patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        input_shape_mock.return_value = {}
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            boto3, "Session"
-        ) as session_mock:
-            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-            session_mock.reset_mock()
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
 
-            # Write a JSON template
-            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
-                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "bundle",
-                    "submit",
-                    tmpdir,
-                    "--farm-id",
-                    MOCK_FARM_ID,
-                    "--queue-id",
-                    MOCK_QUEUE_ID,
-                    "--priority",
-                    "25",
-                    "--max-failed-tasks-count",
-                    "12",
-                    "--max-retries-per-task",
-                    "4",
-                ],
-            )
-
-        assert tmpdir in result.output
-        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
-        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
-        session_mock().client().create_job.assert_called_once_with(
-            farmId=MOCK_FARM_ID,
-            queueId=MOCK_QUEUE_ID,
-            template=ANY,
-            templateType="JSON",
-            priority=25,
-            maxFailedTasksCount=12,
-            maxRetriesPerTask=4,
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--priority",
+                "25",
+                "--max-failed-tasks-count",
+                "12",
+                "--max-retries-per-task",
+                "4",
+            ],
         )
-        assert result.exit_code == 0
+
+    assert tmpdir in result.output
+    assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+    assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+    session_mock().client().create_job.assert_called_once_with(
+        farmId=MOCK_FARM_ID,
+        queueId=MOCK_QUEUE_ID,
+        template=ANY,
+        templateType="JSON",
+        priority=25,
+        maxFailedTasksCount=12,
+        maxRetriesPerTask=4,
+    )
+    assert result.exit_code == 0
 
 
 def test_cli_bundle_job_name(fresh_deadline_config):
@@ -266,50 +250,42 @@ def test_cli_bundle_job_name(fresh_deadline_config):
     Confirm that --name sets the job name in the template.
     """
     # Use a temporary directory for the job bundle
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock, patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        input_shape_mock.return_value = {}
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            boto3, "Session"
-        ) as session_mock:
-            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-            session_mock.reset_mock()
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
 
-            # Write a JSON template
-            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
-                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "bundle",
-                    "submit",
-                    tmpdir,
-                    "--farm-id",
-                    MOCK_FARM_ID,
-                    "--queue-id",
-                    MOCK_QUEUE_ID,
-                    "--name",
-                    "Replacement Name For The Job",
-                ],
-            )
-
-        assert tmpdir in result.output
-        assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
-        assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
-        session_mock().client().create_job.assert_called_once_with(
-            farmId=MOCK_FARM_ID,
-            queueId=MOCK_QUEUE_ID,
-            template=get_minimal_json_job_template("Replacement Name For The Job"),
-            templateType="JSON",
-            priority=50,
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--name",
+                "Replacement Name For The Job",
+            ],
         )
-        assert result.exit_code == 0
+
+    assert tmpdir in result.output
+    assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+    assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+    session_mock().client().create_job.assert_called_once_with(
+        farmId=MOCK_FARM_ID,
+        queueId=MOCK_QUEUE_ID,
+        template=get_minimal_json_job_template("Replacement Name For The Job"),
+        templateType="JSON",
+        priority=50,
+    )
+    assert result.exit_code == 0
 
 
 @pytest.mark.parametrize("loading_method", [e.value for e in JobAttachmentsFileSystem] + [None])
@@ -417,56 +393,48 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
     Verify that job parameters specified at the CLI are passed to the CreateJob call
     """
     # Use a temporary directory for the job bundle
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock, patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        input_shape_mock.return_value = {}
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            boto3, "Session"
-        ) as session_mock:
-            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-            session_mock.reset_mock()
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
 
-            # Write a JSON template
-            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
-                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "bundle",
-                    "submit",
-                    tmpdir,
-                    "--farm-id",
-                    MOCK_FARM_ID,
-                    "--queue-id",
-                    MOCK_QUEUE_ID,
-                    "--parameter",
-                    "sceneFile=/path/to/scenefile",
-                    "--parameter",
-                    "priority=90",
-                    "--priority",
-                    "45",
-                ],
-            )
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--parameter",
+                "sceneFile=/path/to/scenefile",
+                "--parameter",
+                "priority=90",
+                "--priority",
+                "45",
+            ],
+        )
 
-            session_mock().client().create_job.assert_called_once_with(
-                farmId=MOCK_FARM_ID,
-                queueId=MOCK_QUEUE_ID,
-                template=ANY,
-                templateType="JSON",
-                parameters={
-                    "sceneFile": {"string": "/path/to/scenefile"},
-                    "priority": {"int": "90"},
-                },
-                priority=45,
-            )
+        session_mock().client().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType="JSON",
+            parameters={
+                "sceneFile": {"string": "/path/to/scenefile"},
+                "priority": {"int": "90"},
+            },
+            priority=45,
+        )
 
-            assert result.exit_code == 0
+        assert result.exit_code == 0
 
 
 def test_cli_bundle_empty_job_parameter_from_cli(fresh_deadline_config):
@@ -474,51 +442,43 @@ def test_cli_bundle_empty_job_parameter_from_cli(fresh_deadline_config):
     Verify that an empty job parameter specified at the CLI are passed to the CreateJob call
     """
     # Use a temporary directory for the job bundle
-    with patch(
-        "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock, patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        input_shape_mock.return_value = {}
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            boto3, "Session"
-        ) as session_mock:
-            session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-            session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-            session_mock.reset_mock()
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
 
-            # Write a JSON template
-            with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
-                f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "bundle",
-                    "submit",
-                    tmpdir,
-                    "--farm-id",
-                    MOCK_FARM_ID,
-                    "--queue-id",
-                    MOCK_QUEUE_ID,
-                    "--parameter",
-                    "sceneFile=",
-                ],
-            )
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--parameter",
+                "sceneFile=",
+            ],
+        )
 
-            session_mock().client().create_job.assert_called_once_with(
-                farmId=MOCK_FARM_ID,
-                queueId=MOCK_QUEUE_ID,
-                template=ANY,
-                templateType="JSON",
-                parameters={
-                    "sceneFile": {"string": ""},
-                },
-                priority=50,
-            )
+        session_mock().client().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType="JSON",
+            parameters={
+                "sceneFile": {"string": ""},
+            },
+            priority=50,
+        )
 
-            assert result.exit_code == 0
+        assert result.exit_code == 0
 
 
 def test_cli_bundle_invalid_job_paramter(fresh_deadline_config):

@@ -41,7 +41,6 @@ from ._session import (
     get_boto3_client,
     get_boto3_session,
     get_credentials_source,
-    get_studio_id,
     get_user_and_identity_store_id,
 )
 from ._list_apis import (
@@ -82,11 +81,6 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
             user_id, _ = get_user_and_identity_store_id(config=config)
             if user_id:
                 list_farm_params["principalId"] = str(user_id)
-
-            # We don't do this filtering for Monitors, so specifically check StudioId
-            studio_id = get_studio_id(config=config)
-            if studio_id:
-                list_farm_params["studioId"] = str(studio_id)
 
             deadline = get_boto3_client("deadline", config=config)
             deadline.list_farms(**list_farm_params)

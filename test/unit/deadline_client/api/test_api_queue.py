@@ -65,7 +65,7 @@ def test_list_queues_principal_id(fresh_deadline_config, pass_principal_id_filte
         ]
         if user_identities:
             session_mock()._session.get_scoped_config.return_value = {
-                "studio_id": "studioid",
+                "monitor_id": "monitorid",
                 "user_id": "userid",
                 "identity_store_id": "idstoreid",
             }

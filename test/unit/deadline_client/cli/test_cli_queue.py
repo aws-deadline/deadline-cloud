@@ -135,8 +135,8 @@ def test_cli_queue_get(fresh_deadline_config):
         assert (
             result.output
             == """queueId: queue-0123456789abcdef0123456789abcdef
-description: ''
 displayName: Testing Queue
+description: ''
 
 """
         )

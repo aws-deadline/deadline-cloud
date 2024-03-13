@@ -64,7 +64,7 @@ def test_list_storage_profiles_for_queue(fresh_deadline_config, user_identities)
         ]
         if user_identities:
             session_mock()._session.get_scoped_config.return_value = {
-                "monitor_id": "studioid",
+                "monitor_id": "monitorid",
                 "user_id": "userid",
                 "identity_store_id": "idstoreid",
             }
