@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import io
 import os
 import re
 import time
@@ -67,17 +68,21 @@ S3_DOWNLOAD_MAX_CONCURRENCY = 10
 
 def get_manifest_from_s3(
     manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
-) -> str:
+) -> BaseAssetManifest:
     s3_client = get_s3_client(session=session)
     try:
-        with NamedTemporaryFile(suffix=".json", prefix="deadline-manifest-", delete=False) as file:
-            s3_client.download_fileobj(
-                s3_bucket,
-                manifest_key,
-                file,
-                ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
-            )
-            return file.name
+        file_buffer = io.BytesIO()
+        s3_client.download_fileobj(
+            s3_bucket,
+            manifest_key,
+            file_buffer,
+            ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
+        )
+        byte_value = file_buffer.getvalue()
+        string_value = byte_value.decode("utf-8")
+        asset_manifest = decode_manifest(string_value)
+        file_buffer.close()
+        return asset_manifest
     except ClientError as exc:
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
         status_code_guidance = {
@@ -217,18 +222,16 @@ def get_job_input_paths_by_asset_root(
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
             key = _join_s3_paths(manifest_properties.inputManifestPath)
-            manifest = get_manifest_from_s3(
+            asset_manifest = get_manifest_from_s3(
                 manifest_key=key,
                 s3_bucket=s3_settings.s3BucketName,
                 session=session,
             )
 
             root_path = manifest_properties.rootPath
-            with open(manifest) as manifest_file:
-                asset_manifest = decode_manifest(manifest_file.read())
-                if root_path not in inputs:
-                    inputs[root_path] = ManifestPathGroup()
-                inputs[root_path].add_manifest_to_group(asset_manifest)
+            if root_path not in inputs:
+                inputs[root_path] = ManifestPathGroup()
+            inputs[root_path].add_manifest_to_group(asset_manifest)
 
     return inputs
 
@@ -629,8 +632,7 @@ def get_job_output_paths_by_asset_root(
 
     outputs: dict[str, ManifestPathGroup] = {}
     for root, manifests in output_manifests_by_root.items():
-        # manifest path isn't needed here, so a variable isn't necessary
-        for manifest, _ in manifests:
+        for manifest in manifests:
             if root not in outputs:
                 outputs[root] = ManifestPathGroup()
             outputs[root].add_manifest_to_group(manifest)
@@ -647,12 +649,12 @@ def get_output_manifests_by_asset_root(
     task_id: Optional[str] = None,
     session_action_id: Optional[str] = None,
     session: Optional[boto3.Session] = None,
-) -> dict[str, list[tuple[BaseAssetManifest, str]]]:
+) -> dict[str, list[BaseAssetManifest]]:
     """
     For a given job/step/task, gets a map from each root path to a corresponding list of
     output manifests.
     """
-    outputs: DefaultDict[str, list[tuple[BaseAssetManifest, str]]] = DefaultDict(list)
+    outputs: DefaultDict[str, list[BaseAssetManifest]] = DefaultDict(list)
     manifest_prefix: str = _get_output_manifest_prefix(
         s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id
     )
@@ -664,7 +666,7 @@ def get_output_manifests_by_asset_root(
         return outputs
 
     for key in manifests_keys:
-        manifest_path = get_manifest_from_s3(
+        asset_manifest = get_manifest_from_s3(
             manifest_key=key,
             s3_bucket=s3_settings.s3BucketName,
             session=session,
@@ -674,9 +676,7 @@ def get_output_manifests_by_asset_root(
             raise MissingAssetRootError(
                 f"Failed to get asset root from metadata of output manifest: {key}"
             )
-        with open(manifest_path) as manifest_file:
-            asset_manifest = decode_manifest(manifest_file.read())
-        outputs[asset_root].append((asset_manifest, manifest_path))
+        outputs[asset_root].append(asset_manifest)
 
     return outputs
 
