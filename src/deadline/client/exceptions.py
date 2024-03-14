@@ -15,3 +15,7 @@ class CreateJobWaiterCanceled(Exception):
 
 class UserInitiatedCancel(Exception):
     """Error for when the user requests cancelation"""
+
+
+class NonValidInputError(Exception):
+    """Error for when the user input is nonvalid"""

@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
-
+import copy
 import json
 import os
 from logging import getLogger
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 from PySide2.QtCore import Qt  # pylint: disable=import-error
 from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -70,6 +70,7 @@ def show_job_bundle_submitter(
         settings: JobBundleSettings,
         queue_parameters: list[JobParameter],
         asset_references: AssetReferences,
+        host_requirements: Optional[Dict[str, Any]] = None,
         purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
     ) -> None:
         """
@@ -91,6 +92,12 @@ def show_job_bundle_submitter(
             file_contents, file_type, settings.input_job_bundle_dir, "template"
         )
         template["name"] = settings.name
+
+        # If "HostRequirements" is provided, inject it into each of the "Step"
+        if host_requirements:
+            # for each step in the template, append the same host requirements.
+            for step in template["steps"]:
+                step["hostRequirements"] = copy.deepcopy(host_requirements)
 
         with open(
             os.path.join(job_bundle_dir, f"template.{file_type.lower()}"), "w", encoding="utf8"
@@ -165,6 +172,7 @@ def show_job_bundle_submitter(
     submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=JobBundleSettingsWidget,
         initial_job_settings=initial_settings,
+        # show_host_requirements_tab=True,  // Enable when we want to show the host requirement tab
         initial_shared_parameter_values=initial_shared_parameter_values,
         auto_detected_attachments=asset_references,
         attachments=AssetReferences(),
