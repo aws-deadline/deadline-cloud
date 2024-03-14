@@ -91,6 +91,11 @@ class AssetSync:
         self.manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
+
+        # A dictionary mapping absolute file paths to their last modification times in microseconds.
+        # This is used to determine if an asset has been modified since it was last synced.
+        self.synced_assets_mtime: dict[str, int] = dict()
+
         self.hash_alg: HashAlgorithm = self.manifest_model.AssetManifest.get_default_hash_alg()
 
     def _upload_output_files_to_s3(
@@ -187,7 +192,6 @@ class AssetSync:
         manifest_properties: ManifestProperties,
         s3_settings: JobAttachmentS3Settings,
         local_root: Path,
-        start_time: float,
     ) -> List[OutputFile]:
         """
         Walks the output directories for this asset root for any output files that have been created or modified
@@ -216,11 +220,20 @@ class AssetSync:
 
             # Get all files in this directory (includes sub-directories)
             for file_path in output_root.glob("**/*"):
-                if (
-                    not file_path.is_dir()
-                    and file_path.exists()
-                    and file_path.lstat().st_mtime >= start_time
-                ):
+                # Files that are new or have been modified since the last sync will be added to the output list.
+                mtime_when_synced = self.synced_assets_mtime.get(str(file_path), None)
+                file_mtime = file_path.stat().st_mtime_ns
+                is_modified = False
+                if mtime_when_synced:
+                    if file_mtime > int(mtime_when_synced):
+                        # This file has been modified during this session action.
+                        is_modified = True
+                else:
+                    # This is a new file created during this session action.
+                    self.synced_assets_mtime[str(file_path)] = int(file_mtime)
+                    is_modified = True
+
+                if not file_path.is_dir() and file_path.exists() and is_modified:
                     file_size = file_path.lstat().st_size
                     file_hash = hash_file(str(file_path), self.hash_alg)
                     s3_key = f"{file_hash}.{self.hash_alg.value}"
@@ -445,6 +458,14 @@ class AssetSync:
             else:
                 raise
 
+        # Record the mapping of downloaded files' absolute paths to their last modification time
+        # (in microseconds). This is used to later determine which files have been modified or
+        # newly created during the session and need to be uploaded as output.
+        for local_root, merged_manifest in merged_manifests_by_root.items():
+            for manifest_path in merged_manifest.paths:
+                abs_path = str(Path(local_root) / manifest_path.path)
+                self.synced_assets_mtime[abs_path] = Path(abs_path).stat().st_mtime_ns
+
         return (
             download_summary_statistics.convert_to_summary_statistics(),
             list(pathmapping_rules.values()),
@@ -501,7 +522,6 @@ class AssetSync:
                 manifest_properties,
                 s3_settings,
                 local_root,
-                start_time,
             )
             if output_files:
                 output_manifest = self._generate_output_manifest(output_files)
