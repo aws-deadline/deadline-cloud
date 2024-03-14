@@ -19,10 +19,9 @@ from urllib import request, error
 from ...job_attachments.progress_tracker import SummaryStatistics
 
 from ._session import (
-    get_studio_id,
     get_monitor_id,
     get_user_and_identity_store_id,
-    get_deadline_endpoint_url,
+    get_boto3_client,
 )
 from ..config import config_file
 from .. import version
@@ -30,6 +29,14 @@ from .. import version
 __cached_telemetry_client = None
 
 logger = logging.getLogger(__name__)
+
+
+def get_deadline_endpoint_url(
+    config: Optional[ConfigParser] = None,
+) -> str:
+    # Use boto3's built-in logic to get the correct endpoint URL
+    client = get_boto3_client("deadline", config=config)
+    return client.meta.endpoint_url
 
 
 @dataclass
@@ -146,9 +153,6 @@ class TelemetryClient:
         user_id, _ = get_user_and_identity_store_id(config=config)
         if user_id:
             metadata["user_id"] = user_id
-        studio_id: Optional[str] = get_studio_id(config=config)
-        if studio_id:
-            metadata["studio_id"] = studio_id
 
         monitor_id: Optional[str] = get_monitor_id(config=config)
         if monitor_id:
