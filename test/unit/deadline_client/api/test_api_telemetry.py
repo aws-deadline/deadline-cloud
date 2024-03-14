@@ -28,11 +28,45 @@ def fixture_telemetry_client(fresh_deadline_config):
         )
 
 
-def test_opt_out(fresh_deadline_config):
+def test_opt_out_config(fresh_deadline_config):
     """Ensures the telemetry client doesn't fully initialize if the opt out config setting is set"""
     # GIVEN
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     config.set_setting("telemetry.opt_out", "true")
+    # WHEN
+    client = TelemetryClient(
+        "test-library", "test-version", config=config.config_file.read_config()
+    )
+    # THEN
+    assert not hasattr(client, "endpoint")
+    assert not hasattr(client, "session_id")
+    assert not hasattr(client, "telemetry_id")
+    assert not hasattr(client, "system_metadata")
+    assert not hasattr(client, "event_queue")
+    assert not hasattr(client, "processing_thread")
+    # Ensure nothing blows up if we try recording telemetry after we've opted out
+    client.record_hashing_summary(SummaryStatistics(), from_gui=True)
+    client.record_upload_summary(SummaryStatistics(), from_gui=False)
+    client.record_error({}, str(type(Exception)))
+
+
+@pytest.mark.parametrize(
+    "env_var_value",
+    [
+        pytest.param("true"),
+        pytest.param("1"),
+        pytest.param("yes"),
+        pytest.param("on"),
+    ],
+)
+def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
+    """Ensures the telemetry client doesn't fully initialize if the opt out env var is set"""
+    # GIVEN
+    config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
+    monkeypatch.setenv("DEADLINE_CLOUD_TELEMETRY_OPT_OUT", env_var_value)
+    config.set_setting(
+        "telemetry.opt_out", "false"
+    )  # Ensure we ignore the config file if env var is set
     # WHEN
     client = TelemetryClient(
         "test-library", "test-version", config=config.config_file.read_config()

@@ -3,6 +3,7 @@
 import atexit
 import json
 import logging
+import os
 import platform
 import uuid
 import random
@@ -58,7 +59,8 @@ class TelemetryClient:
     lifetimes on the same machine.
 
     Telemetry collection can be opted-out of by running:
-    'deadline config set "telemetry.opt_out" true'
+    'deadline config set "telemetry.opt_out" true' or setting the environment variable
+    'DEADLINE_CLOUD_TELEMETRY_OPT_OUT=true'
     """
 
     # Used for backing off requests if we encounter errors from the service.
@@ -79,11 +81,22 @@ class TelemetryClient:
         package_ver: str,
         config: Optional[ConfigParser] = None,
     ):
-        self.telemetry_opted_out = config_file.str2bool(
-            config_file.get_setting("telemetry.opt_out", config=config)
+        # Environment variable supersedes config file setting.
+        env_var_value = os.environ.get("DEADLINE_CLOUD_TELEMETRY_OPT_OUT")
+        if env_var_value:
+            self.telemetry_opted_out = env_var_value in config_file._TRUE_VALUES
+        else:
+            self.telemetry_opted_out = config_file.str2bool(
+                config_file.get_setting("telemetry.opt_out", config=config)
+            )
+        logger.info(
+            "Deadline Cloud telemetry is " + "not enabled."
+            if self.telemetry_opted_out
+            else "enabled."
         )
         if self.telemetry_opted_out:
             return
+
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
         self.endpoint: str = self._get_prefixed_endpoint(
