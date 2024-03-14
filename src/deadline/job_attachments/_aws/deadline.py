@@ -30,7 +30,7 @@ def get_queue(
     deadline_endpoint_url: Optional[str] = None,
 ) -> Queue:
     """
-    Retrieves a specific queue from Amazon Deadline Cloud.
+    Retrieves a specific queue from AWS Deadline Cloud.
     """
     try:
         response = get_deadline_client(
@@ -76,7 +76,7 @@ def get_job(
     deadline_endpoint_url: Optional[str] = None,
 ) -> Job:
     """
-    Retrieves a specific job from Amazon Deadline Cloud.
+    Retrieves a specific job from AWS Deadline Cloud.
     """
     try:
         response = get_deadline_client(session=session, endpoint_url=deadline_endpoint_url).get_job(
@@ -116,7 +116,7 @@ def get_storage_profile_for_queue(
     deadline_endpoint_url: Optional[str] = None,
 ) -> StorageProfile:
     """
-    Retrieves a specific storage profile for queue from Amazon Deadline Cloud.
+    Retrieves a specific storage profile for queue from AWS Deadline Cloud.
     """
     try:
         response = get_deadline_client(

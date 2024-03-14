@@ -17,7 +17,7 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 @_handle_error
 def cli_farm():
     """
-    Commands to work with Amazon Deadline Cloud Farm resources.
+    Commands to work with AWS Deadline Cloud Farm resources.
     """
 
 
@@ -26,7 +26,7 @@ def cli_farm():
 @_handle_error
 def farm_list(**args):
     """
-    Lists the available Farms in Amazon Deadline Cloud.
+    Lists the available Farms in AWS Deadline Cloud.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
@@ -46,11 +46,11 @@ def farm_list(**args):
 
 @cli_farm.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @_handle_error
 def farm_get(**args):
     """
-    Get the details of an Amazon Deadline Cloud farm.
+    Get the details of an AWS Deadline Cloud farm.
 
     If farm ID is not provided, returns the configured default farm.
     """

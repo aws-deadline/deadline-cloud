@@ -27,11 +27,11 @@ from deadline.job_attachments.models import FileConflictResolution
 from ..exceptions import DeadlineOperationError
 import re
 
-# Default path where Amazon Deadline Cloud's configuration lives
+# Default path where AWS Deadline Cloud's configuration lives
 CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
 # Environment variable that, if set, overrides the value of CONFIG_FILE_PATH
 CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
-# The default Amazon Deadline Cloud endpoint URL
+# The default AWS Deadline Cloud endpoint URL
 # Environment variable that, if set, overrides the value of DEFAULT_DEADLINE_ENDPOINT_URL
 DEFAULT_DEADLINE_ENDPOINT_URL = os.getenv(
     "AWS_ENDPOINT_URL_DEADLINE", f"https://deadline.{boto3.Session().region_name}.amazonaws.com"
@@ -49,7 +49,7 @@ __config = ConfigParser()
 __config_file_path = None
 __config_mtime = None
 
-# This value defines the Amazon Deadline Cloud settings structure. For each named setting,
+# This value defines the AWS Deadline Cloud settings structure. For each named setting,
 # it stores:
 # "default" - The default value.
 # "depend"  - The setting it depends on, if any. This modifies the section name of the
@@ -160,7 +160,7 @@ def _should_read_config(config_file_path: Path) -> bool:
 def read_config() -> ConfigParser:
     """
     If the config hasn't been read yet, or was modified since it was last
-    read, reads the Amazon Deadline Cloud configuration.
+    read, reads the AWS Deadline Cloud configuration.
     """
     global __config
     global __config_file_path
@@ -257,7 +257,7 @@ def _reset_directory_permissions_windows(directory: Path, username: str, permiss
 
 def write_config(config: ConfigParser) -> None:
     """
-    Writes the provided config to the Amazon Deadline Cloud configuration.
+    Writes the provided config to the AWS Deadline Cloud configuration.
 
     Args:
         config (ConfigParser): The config object to write. Generally this is
@@ -305,7 +305,7 @@ def _get_setting_config(setting_name: str) -> dict:
     setting_config = SETTINGS.get(setting_name)
     if not setting_config:
         raise DeadlineOperationError(
-            f"Amazon Deadline Cloud configuration has no setting named {setting_name!r}."
+            f"AWS Deadline Cloud configuration has no setting named {setting_name!r}."
         )
     return setting_config
 
@@ -407,7 +407,7 @@ def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = 
         raise DeadlineOperationError(f"The setting name {setting_name!r} is not valid.")
     section, name = setting_name.split(".", 1)
 
-    # Get the type of the default to validate it is an Amazon Deadline Cloud setting, and retrieve its type
+    # Get the type of the default to validate it is an AWS Deadline Cloud setting, and retrieve its type
     setting_config = _get_setting_config(setting_name)
 
     # If no config was provided, then read from disk and signal to write it later

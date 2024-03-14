@@ -1,17 +1,17 @@
-# The Amazon Deadline Cloud Client Library (`deadline.client`)
+# The AWS Deadline Cloud Client Library (`deadline.client`)
 
 ## Overview
 
 This is a shared Python library that implements functionality to support
-client applications using Amazon Deadline Cloud.
+client applications using AWS Deadline Cloud.
 
 It is divided into the following submodules:
 
 ### api
 
 This submodule contains utilities to call boto3 in a standardized way
-using an aws profile configured for Amazon Deadline Cloud, helpers for working with
-Deadline Cloud Monitor Desktop login/logout, and objects representing Amazon Deadline Cloud
+using an aws profile configured for AWS Deadline Cloud, helpers for working with
+Deadline Cloud Monitor Desktop login/logout, and objects representing AWS Deadline Cloud
 resources.
 
 ### cli
@@ -21,14 +21,14 @@ by the library.
 
 ### config
 
-This submodule contains an interface to the machine-specific Amazon Deadline Cloud
+This submodule contains an interface to the machine-specific AWS Deadline Cloud
 configuration, specifically settings stored in `~/.deadline/*`
 
 ### ui
 
 This submodule contains Qt GUIs, based on PySide2, for common controls
 and widgets used in interactive submitters, and to display the status
-of various Amazon Deadline Cloud resoruces.
+of various AWS Deadline Cloud resoruces.
 
 ### job_bundle
 

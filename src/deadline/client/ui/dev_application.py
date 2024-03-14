@@ -46,9 +46,9 @@ class DevMainWindow(QMainWindow):
         submit.addAction("Submit Job Bundle...", self.submit_job_bundle)
         submit.addAction("Submit CLI Job...", self.submit_cli_job)
         account = self.menuBar().addMenu("&Account")
-        account.addAction("Amazon Deadline Cloud Workstation Configuration...", self.configure)
-        account.addAction("Log in to Amazon Deadline Cloud...", self.login)
-        account.addAction("Log out of Amazon Deadline Cloud...", self.logout)
+        account.addAction("AWS Deadline Cloud Workstation Configuration...", self.configure)
+        account.addAction("Log in to AWS Deadline Cloud...", self.login)
+        account.addAction("Log out of AWS Deadline Cloud...", self.logout)
 
         # Set up status bar
         # self.statusBar().setStyleSheet("QStatusBar::item{ border: none; }")
@@ -95,9 +95,9 @@ def app() -> None:
     app.setStyle(QStyleFactory.create("fusion"))
 
     # Set the application info.
-    app.setApplicationName("Amazon Deadline Cloud Client Test GUI")
-    app.setOrganizationName("Thinkbox Software Inc.")
-    app.setOrganizationDomain("www.awsthinkbox.com")
+    app.setApplicationName("AWS Deadline Cloud Client Test GUI")
+    app.setOrganizationName("AWS")
+    app.setOrganizationDomain("https://aws.amazon.com/")
     icon = QIcon(str(Path(__file__).parent / "resources" / "deadline_logo.svg"))
     app.setWindowIcon(icon)
 

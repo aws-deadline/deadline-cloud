@@ -63,7 +63,7 @@ def cli_handle_web_url(
     all_users: bool,
 ):
     """
-    Runs Amazon Deadline Cloud commands sent from a web browser.
+    Runs AWS Deadline Cloud commands sent from a web browser.
 
     Commands use the deadline:// URL scheme, with expected
     format deadline://<handle-web-url-command>?args=value&args=value.
@@ -81,7 +81,7 @@ def cli_handle_web_url(
     """
     ctx.obj[_PROMPT_WHEN_COMPLETE] = prompt_when_complete
 
-    # Determine whether we're handling a URL or installing/uninstalling the Amazon Deadline Cloud URL handler
+    # Determine whether we're handling a URL or installing/uninstalling the AWS Deadline Cloud URL handler
     if url:
         if install or uninstall or all_users:
             raise DeadlineOperationError(
