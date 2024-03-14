@@ -953,3 +953,32 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     if trace_file:
         with open(trace_file, "w", encoding="utf8") as f:
             json.dump(tracing_data, f, indent=1)
+
+
+@cli_job.command(name="gui-log")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The Amazon Deadline Cloud Job to view.")
+@_handle_error
+def job_gui_log(**args):
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+
+    deadline = api.get_boto3_client("deadline", config=config)
+    boto3_queue_user_session = api.get_queue_user_boto3_session(deadline, config=config)
+
+    from ...ui import gui_context_for_cli
+    from ...ui.dialogs.session_log_view_dialog import SessionLogViewDialog
+
+    with gui_context_for_cli() as app:
+        from ...ui.job_bundle_submitter import show_job_bundle_submitter
+
+        log_view_dialog = SessionLogViewDialog(boto3_deadline_client=deadline, boto3_logs_client=boto3_queue_user_session.client("logs"))
+        log_view_dialog.show()
+
+        app.exec_()
+
+        response = None
