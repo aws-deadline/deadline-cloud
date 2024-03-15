@@ -270,7 +270,9 @@ def test_create_job_from_job_bundle(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
     ) as input_shape_mock:
         input_shape_mock.return_value = {"template": ""}
-        with patch.object(api._session, "get_boto3_session") as session_mock:
+        with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
+            _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+        ):
             session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
             session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
 
@@ -325,7 +327,9 @@ def test_create_job_from_job_bundle_error_missing_template(
     """
     Test a job bundle with missing template.
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock:
+    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
@@ -353,7 +357,9 @@ def test_create_job_from_job_bundle_error_duplicate_template(
     """
     Test a job bundle with both a JSON and YAML template.
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock:
+    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
@@ -385,7 +391,9 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
     """
     Test a job bundle with an incorrect Amazon Deadline Cloud parameter
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock:
+    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
@@ -448,7 +456,7 @@ def test_create_job_from_job_bundle_job_attachments(
     ) as mock_prepare_paths, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_telemetry_client"
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
     ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
@@ -565,7 +573,7 @@ def test_create_job_from_job_bundle_empty_job_attachments(
     ) as mock_prepare_paths, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_telemetry_client"
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
     ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
@@ -657,7 +665,9 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with patch.object(api._session, "get_boto3_session") as session_mock:
             session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
@@ -723,7 +733,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     ) as mock_prepare_paths, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_telemetry_client"
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
     ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
