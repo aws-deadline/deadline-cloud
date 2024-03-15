@@ -50,7 +50,7 @@ DeadlineAuthenticationStatus.getInstance()
 
 class SubmitJobToDeadlineDialog(QDialog):
     """
-    A widget containing all the standard tabs for submitting an Amazon Deadline Cloud job.
+    A widget containing all the standard tabs for submitting an AWS Deadline Cloud job.
 
     If you're using this dialog within an application and want it to stay in front,
     pass f=Qt.Tool, a flag that tells it to do that.
@@ -88,7 +88,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
-        self.setWindowTitle("Submit to Amazon Deadline Cloud")
+        self.setWindowTitle("Submit to AWS Deadline Cloud")
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
@@ -185,7 +185,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def _set_submit_button_state(self):
         # Enable/disable the Submit button based on whether the
-        # Amazon Deadline Cloud API is accessible and the farm+queue are configured.
+        # AWS Deadline Cloud API is accessible and the farm+queue are configured.
         enable = (
             self.deadline_authentication_status.api_availability is True
             and get_setting("defaults.farm_id") != ""

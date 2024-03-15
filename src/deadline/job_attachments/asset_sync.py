@@ -63,7 +63,7 @@ logger = getLogger("deadline.job_attachments")
 
 
 class AssetSync:
-    """Class for managing Amazon Deadline Cloud job-level attachments."""
+    """Class for managing AWS Deadline Cloud job-level attachments."""
 
     _ENDING_PROGRESS = 100.0
 

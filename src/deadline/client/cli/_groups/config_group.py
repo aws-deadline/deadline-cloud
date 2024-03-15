@@ -14,12 +14,12 @@ from .._common import _handle_error
 @_handle_error
 def cli_config():
     """
-    Manage Amazon Deadline Cloud's workstation configuration.
+    Manage AWS Deadline Cloud's workstation configuration.
 
-    The available Amazon Deadline Cloud settings are:
+    The available AWS Deadline Cloud settings are:
 
     defaults.aws_profile_name:
-        The default AWS profile to use for Amazon Deadline Cloud commands.
+        The default AWS profile to use for AWS Deadline Cloud commands.
 
     defaults.farm_id:
         The default farm ID to use for job submissions or CLI operations.
@@ -34,7 +34,7 @@ def cli_config():
 
     settings.job_history_dir:
         The directory in which to create new job bundles for
-        submitting to Amazon Deadline Cloud, to produce a history of job submissions.
+        submitting to AWS Deadline Cloud, to produce a history of job submissions.
 
     settings.auto_accept:
         Flag to automatically confirm any confirmation prompts
@@ -52,11 +52,9 @@ def cli_config():
 @_handle_error
 def config_show():
     """
-    Show Amazon Deadline Cloud's current workstation configuration settings.
+    Show AWS Deadline Cloud's current workstation configuration settings.
     """
-    click.echo(
-        f"Amazon Deadline Cloud configuration file:\n   {config_file.get_config_file_path()}"
-    )
+    click.echo(f"AWS Deadline Cloud configuration file:\n   {config_file.get_config_file_path()}")
     click.echo()
 
     for setting_name in config_file.SETTINGS.keys():
@@ -89,7 +87,7 @@ def config_gui():
 @_handle_error
 def config_set(setting_name, value):
     """
-    Sets an Amazon Deadline Cloud workstation configuration setting.
+    Sets an AWS Deadline Cloud workstation configuration setting.
 
     For example `deadline config set defaults.farm_id <farm-id>`.
     Run `deadline config --help` to show available settings.
@@ -102,7 +100,7 @@ def config_set(setting_name, value):
 @_handle_error
 def config_get(setting_name):
     """
-    Gets an Amazon Deadline Cloud workstation configuration setting.
+    Gets an AWS Deadline Cloud workstation configuration setting.
 
     For example `deadline config get defaults.farm_id`.
     Run `deadline config --help` to show available settings.

@@ -520,7 +520,7 @@ def test_cli_handle_web_url_install_current_user_monkeypatched_windows(
             [
                 call.CreateKeyEx("HKEY_CURRENT_USER", "Software\\Classes\\deadline"),
                 call.SetValueEx(
-                    "FIRST_CREATED_KEY", None, 0, "REG_SZ", "URL:Amazon Deadline Cloud Protocol"
+                    "FIRST_CREATED_KEY", None, 0, "REG_SZ", "URL:AWS Deadline Cloud Protocol"
                 ),
                 call.SetValueEx("FIRST_CREATED_KEY", "URL Protocol", 0, "REG_SZ", ""),
                 call.CreateKeyEx("FIRST_CREATED_KEY", "shell\\open\\command"),
@@ -568,7 +568,7 @@ def test_cli_handle_web_url_install_all_users_monkeypatched_windows(
             [
                 call.CreateKeyEx("HKEY_CLASSES_ROOT", "deadline"),
                 call.SetValueEx(
-                    "FIRST_CREATED_KEY", None, 0, "REG_SZ", "URL:Amazon Deadline Cloud Protocol"
+                    "FIRST_CREATED_KEY", None, 0, "REG_SZ", "URL:AWS Deadline Cloud Protocol"
                 ),
                 call.SetValueEx("FIRST_CREATED_KEY", "URL Protocol", 0, "REG_SZ", ""),
                 call.CreateKeyEx("FIRST_CREATED_KEY", "shell\\open\\command"),

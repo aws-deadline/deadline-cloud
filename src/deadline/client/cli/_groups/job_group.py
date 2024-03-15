@@ -54,20 +54,20 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_job():
     """
-    Commands to work with Amazon Deadline Cloud Jobs.
+    Commands to work with AWS Deadline Cloud Jobs.
     """
 
 
 @cli_job.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @click.option("--page-size", default=5, help="The number of items shown in the page.")
 @click.option("--item-offset", default=0, help="The starting offset of the items.")
 @_handle_error
 def job_list(page_size, item_offset, **args):
     """
-    Lists the Jobs in an Amazon Deadline Cloud Queue.
+    Lists the Jobs in an AWS Deadline Cloud Queue.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -118,13 +118,13 @@ def job_list(page_size, item_offset, **args):
 
 @cli_job.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to get.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to get.")
 @_handle_error
 def job_get(**args):
     """
-    Get the details of an Amazon Deadline Cloud Job.
+    Get the details of an AWS Deadline Cloud Job.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -144,9 +144,9 @@ def job_get(**args):
 
 @cli_job.command(name="cancel")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to cancel.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to cancel.")
 @click.option(
     "--mark-as",
     type=click.Choice(["CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
@@ -161,7 +161,7 @@ def job_get(**args):
 @_handle_error
 def job_cancel(mark_as: str, yes: bool, **args):
     """
-    Cancel an Amazon Deadline Cloud Job from running.
+    Cancel an AWS Deadline Cloud Job from running.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -586,11 +586,11 @@ def _assert_valid_path(path: str) -> None:
 
 @cli_job.command(name="download-output")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to use.")
-@click.option("--step-id", help="The Amazon Deadline Cloud Step to use.")
-@click.option("--task-id", help="The Amazon Deadline Cloud Task to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to use.")
+@click.option("--step-id", help="The AWS Deadline Cloud Step to use.")
+@click.option("--task-id", help="The AWS Deadline Cloud Task to use.")
 @click.option(
     "--conflict-resolution",
     type=click.Choice(
@@ -626,7 +626,7 @@ def _assert_valid_path(path: str) -> None:
 @_handle_error
 def job_download_output(step_id, task_id, output, **args):
     """
-    Download the output attached to an Amazon Deadline Cloud Job.
+    Download the output attached to an AWS Deadline Cloud Job.
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
@@ -653,9 +653,9 @@ def job_download_output(step_id, task_id, output, **args):
 
 @cli_job.command(name="trace-schedule")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The Amazon Deadline Cloud Job to trace.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to trace.")
 @click.option("-v", "--verbose", is_flag=True, help="Output verbose trace details.")
 @click.option(
     "--trace-format",

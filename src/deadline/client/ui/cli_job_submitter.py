@@ -217,7 +217,7 @@ def reload_plugin() -> None:
     """
     close_submitter()
 
-    # Reload the Amazon Deadline Cloud submitter code
+    # Reload the AWS Deadline Cloud submitter code
     import deadline
 
     _reload_modules(deadline)

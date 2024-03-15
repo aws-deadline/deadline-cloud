@@ -49,7 +49,7 @@ def get_boto3_session(
     force_refresh: bool = False, config: Optional[ConfigParser] = None
 ) -> boto3.Session:
     """
-    Gets a boto3 session for the configured Amazon Deadline Cloud aws profile. This may
+    Gets a boto3 session for the configured AWS Deadline Cloud aws profile. This may
     either use a named profile or the default credentials provider chain.
 
     This implementation caches the session object for use across the CLI code,
@@ -58,7 +58,7 @@ def get_boto3_session(
 
     Args:
         force_refresh (bool, optional): If set to True, forces a cache refresh.
-        config (ConfigParser, optional): If provided, the Amazon Deadline Cloud config to use.
+        config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
     global __cached_boto3_session
     global __cached_boto3_session_profile_name
@@ -119,7 +119,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
 
     Args:
         service_name (str): The AWS service to get the client for, e.g. "deadline".
-        config (ConfigParser, optional): If provided, the Amazon Deadline Cloud config to use.
+        config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
     session = get_boto3_session(config=config)
 
@@ -136,7 +136,7 @@ def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredenti
     Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud Monitor wrote the credentials, HOST_PROVIDED otherwise.
 
     Args:
-        config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+        config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
     """
     try:
@@ -205,7 +205,7 @@ def get_queue_user_boto3_session(
 
     Args:
         deadline (BaseClient): A Deadline client.
-        config (ConfigParser, optional): If provided, the Amazon Deadline Cloud config to use.
+        config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
         farm_id (str, optional): The ID of the farm to use.
         queue_id (str, optional): The ID of the queue to use.
         queue_display_name (str, optional): The display name of the queue.
@@ -289,7 +289,7 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
     calling the sts::GetCallerIdentity API.
 
     Args:
-        config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+        config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
 
     Returns AwsAuthenticationStatus enum value:

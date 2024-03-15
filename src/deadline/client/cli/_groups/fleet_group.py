@@ -17,17 +17,17 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 @_handle_error
 def cli_fleet():
     """
-    Commands to work with Amazon Deadline Cloud Fleet resources.
+    Commands to work with AWS Deadline Cloud Fleet resources.
     """
 
 
 @cli_fleet.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @_handle_error
 def fleet_list(**args):
     """
-    Lists the available Fleets in Amazon Deadline Cloud.
+    Lists the available Fleets in AWS Deadline Cloud.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -50,13 +50,13 @@ def fleet_list(**args):
 
 @cli_fleet.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--fleet-id", help="The Amazon Deadline Cloud Fleet to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--fleet-id", help="The AWS Deadline Cloud Fleet to use.")
 @click.option("--queue-id", help="If provided, gets all Fleets associated with the Queue.")
 @_handle_error
 def fleet_get(fleet_id, queue_id, **args):
     """
-    Get the details of an Amazon Deadline Cloud Fleet.
+    Get the details of an AWS Deadline Cloud Fleet.
     """
     if fleet_id and queue_id:
         raise DeadlineOperationError(

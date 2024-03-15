@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Provides a widget to place in Amazon Deadline Cloud submitter dialogs, that shows
-the current status of Amazon Deadline Cloud authentication and API.
+Provides a widget to place in AWS Deadline Cloud submitter dialogs, that shows
+the current status of AWS Deadline Cloud authentication and API.
 The current status is handled by DeadlineAuthenticationStatus.
 """
 from logging import getLogger
@@ -25,7 +25,7 @@ logger = getLogger(__name__)
 
 class DeadlineAuthenticationStatusWidget(QWidget):
     """
-    A Widget that displays status information about Amazon Deadline Cloud
+    A Widget that displays status information about AWS Deadline Cloud
     authentication from a DeadlineAuthenticationStatus object.
     """
 
@@ -41,7 +41,7 @@ class DeadlineAuthenticationStatusWidget(QWidget):
         )
         layout.addWidget(self.auth_status_group)
         self.deadline_authorized_group = AuthenticationStatusGroup(
-            title="Amazon Deadline Cloud API", parent=self
+            title="AWS Deadline Cloud API", parent=self
         )
         layout.addWidget(self.deadline_authorized_group)
 

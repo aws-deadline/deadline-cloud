@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Provides the function to submit a job bundle to Amazon Deadline Cloud.
+Provides the function to submit a job bundle to AWS Deadline Cloud.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def create_job_from_job_bundle(
     create_job_result_callback: Optional[Callable[[], bool]] = None,
 ) -> Union[str, None]:
     """
-    Creates a job in the Amazon Deadline Cloud farm/queue configured as default for the
+    Creates a job in the AWS Deadline Cloud farm/queue configured as default for the
     workstation from the job bundle in the provided directory.
 
     A job bundle has the following directory structure:
@@ -72,7 +72,7 @@ def create_job_from_job_bundle(
     /template.json|yaml (required): An Open Job Description job template that specifies the work to be done. Job parameters
             are embedded here.
     /parameter_values.yson|yaml (optional): If provided, these are parameter values for the job template and for
-            the render farm. Amazon Deadline Cloud-specific parameters are like "deadline:priority".
+            the render farm. AWS Deadline Cloud-specific parameters are like "deadline:priority".
             Looks like:
             {
                 "parameterValues": [
@@ -112,7 +112,7 @@ def create_job_from_job_bundle(
                 instead of retrieving queue_parameters from the queue with get_queue_parameter_definitions.
         job_attachments_file_system (str, optional): define which file system to use;
                 (valid values: "COPIED", "VIRTUAL") instead of using the value in the config file.
-        config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+        config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
         priority (int, optional): explicit value for the priority of the job.
         max_failed_tasks_count (int, optional): explicit value for the maximum allowed failed tasks.

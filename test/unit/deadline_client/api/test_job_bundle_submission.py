@@ -42,7 +42,7 @@ MOCK_GET_QUEUE_RESPONSE = {
     "logBucketName": MOCK_BUCKET_NAME,
     "jobAttachmentSettings": {
         "s3BucketName": MOCK_BUCKET_NAME,
-        "rootPrefix": "Amazon Deadline Cloud",
+        "rootPrefix": "AWS Deadline Cloud",
     },
     "sessionRoleArn": "arn:aws:iam::123456789012:role/DeadlineQueueSessionRole",
     "createdAt": "2022-11-22T06:37:35+00:00",
@@ -148,7 +148,7 @@ parameterValues: []
 """,
         {},
     ),
-    # A parameter_values.json/yaml file with just Amazon Deadline Cloud-specific values
+    # A parameter_values.json/yaml file with just AWS Deadline Cloud-specific values
     "DEADLINE_ONLY_JSON": (
         "JSON",
         """
@@ -389,7 +389,7 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
     fresh_deadline_config, temp_job_bundle_dir
 ):
     """
-    Test a job bundle with an incorrect Amazon Deadline Cloud parameter
+    Test a job bundle with an incorrect AWS Deadline Cloud parameter
     """
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
         _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
@@ -403,7 +403,7 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
             f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
 
-        # Write the parameters file with a nonexistent Amazon Deadline Cloud parameter
+        # Write the parameters file with a nonexistent AWS Deadline Cloud parameter
         with open(
             os.path.join(temp_job_bundle_dir, "parameter_values.json"), "w", encoding="utf8"
         ) as f:

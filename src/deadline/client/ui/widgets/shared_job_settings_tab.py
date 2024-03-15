@@ -160,7 +160,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.canceled = CancelationFlag()
         self.__refresh_queue_parameters_thread = threading.Thread(
             target=self._load_queue_parameters_thread_function,
-            name="Amazon Deadline Cloud Load Queue Parameters Thread",
+            name="AWS Deadline Cloud Load Queue Parameters Thread",
             args=(self.__refresh_queue_parameters_id, farm_id, queue_id),
         )
         self.__refresh_queue_parameters_thread.start()
@@ -376,13 +376,13 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
     def refresh_setting_controls(self, deadline_authorized):
         """
-        Refreshes the controls for UI items that depend on the Amazon Deadline Cloud API
+        Refreshes the controls for UI items that depend on the AWS Deadline Cloud API
         for their values.
 
         Args:
             deadline_authorized (bool): Should be the result of a call to
                     api.check_deadline_available, for example from
-                    an Amazon Deadline Cloud Status Widget.
+                    an AWS Deadline Cloud Status Widget.
         """
         self.farm_box.refresh(deadline_authorized)
         self.queue_box.refresh(deadline_authorized)
@@ -390,8 +390,8 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
 class _DeadlineNamedResourceDisplay(QWidget):
     """
-    A Label for displaying an Amazon Deadline Cloud resource, that starts displaying
-    it as the Id, but does an async call to Amazon Deadline Cloud to convert it
+    A Label for displaying an AWS Deadline Cloud resource, that starts displaying
+    it as the Id, but does an async call to AWS Deadline Cloud to convert it
     to the name.
 
     Args:
@@ -449,7 +449,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
         Args:
             deadline_authorized (bool): Should be the result of a call to
                     api.check_deadline_available, for example from
-                    an Amazon Deadline Cloud Status Widget.
+                    an AWS Deadline Cloud Status Widget.
         """
         resource_id = get_setting(self.setting_name)
         if resource_id != self.item_id or not self.item_name:
@@ -457,14 +457,14 @@ class _DeadlineNamedResourceDisplay(QWidget):
             self.item_name = ""
             self.item_description = ""
             display_name = self.item_display_name()
-            # Only call the Amazon Deadline Cloud API if we've confirmed access
+            # Only call the AWS Deadline Cloud API if we've confirmed access
             if deadline_authorized:
                 display_name = "<refreshing> - " + display_name
 
                 self.__refresh_id += 1
                 self.__refresh_thread = threading.Thread(
                     target=self._refresh_thread_function,
-                    name=f"Amazon Deadline Cloud Refresh {self.resource_name} Item Thread",
+                    name=f"AWS Deadline Cloud Refresh {self.resource_name} Item Thread",
                     args=(self.__refresh_id,),
                 )
                 self.__refresh_thread.start()

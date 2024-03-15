@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Exceptions for the Amazon Deadline Cloud Client Library.
+Exceptions for the AWS Deadline Cloud Client Library.
 """
 
 

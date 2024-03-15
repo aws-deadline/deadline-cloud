@@ -61,8 +61,8 @@ def validate_parameters(ctx, param, value):
     "-p", "--parameter", multiple=True, callback=validate_parameters, help="Job template parameters"
 )
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @click.option("--name", help="The job name to use in place of the one in the job bundle.")
 @click.option("--priority", type=int, default=50, help="The priority of the job.")
 @click.option(
@@ -101,7 +101,7 @@ def bundle_submit(
     **args,
 ):
     """
-    Submits an Open Job Description job bundle to Amazon Deadline Cloud.
+    Submits an Open Job Description job bundle to AWS Deadline Cloud.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -189,7 +189,7 @@ def bundle_submit(
             return
     except ClientError as exc:
         raise DeadlineOperationError(
-            f"Failed to submit the job bundle to Amazon Deadline Cloud:\n{exc}"
+            f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}"
         ) from exc
     except Exception as exc:
         api.get_deadline_cloud_library_telemetry_client().record_error(
@@ -209,7 +209,7 @@ def bundle_submit(
 @_handle_error
 def bundle_gui_submit(job_bundle_dir, browse, **args):
     """
-    Opens GUI to submit an Open Job Description job bundle to Amazon Deadline Cloud.
+    Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
     from ...ui import gui_context_for_cli
 

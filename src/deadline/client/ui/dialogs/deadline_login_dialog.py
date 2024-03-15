@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """
-Provides a modal dialog box for logging in to Amazon Deadline Cloud.
+Provides a modal dialog box for logging in to AWS Deadline Cloud.
 
 Example code:
     from deadline.client.ui.dialogs import DeadlineLoginDialog
@@ -29,7 +29,7 @@ from ...api._session import AwsCredentialsSource
 
 class DeadlineLoginDialog(QMessageBox):
     """
-    A modal dialog box for logging in to Amazon Deadline Cloud. The return value
+    A modal dialog box for logging in to AWS Deadline Cloud. The return value
     of the static DeadlineLoginDialog.login() and the modal exec()
     is True when the login is successful, False otherwise.
 
@@ -63,7 +63,7 @@ class DeadlineLoginDialog(QMessageBox):
             force_refresh (bool, default False): Forces a re-login even when already authorized.
             close_on_success (bool, default True): Closes the dialog on successful login, instead
                    of showing a "successfully logged in" message.
-            config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+            config (ConfigParser, optional): The AWS Deadline Cloud configuration
                     object to use instead of the config file.
         """
         deadline_login = DeadlineLoginDialog(
@@ -90,7 +90,7 @@ class DeadlineLoginDialog(QMessageBox):
         self.login_thread_succeeded.connect(self.handle_login_thread_succeeded)
         self.buttonClicked.connect(self.on_button_clicked)
 
-        self.setWindowTitle("Log in to Amazon Deadline Cloud")
+        self.setWindowTitle("Log in to AWS Deadline Cloud")
         self.setText("Logging you in...")
         self.setStandardButtons(QMessageBox.Cancel)
 
@@ -132,7 +132,7 @@ class DeadlineLoginDialog(QMessageBox):
         """
 
         self.__login_thread = threading.Thread(
-            target=self._login_background_thread, name="Amazon Deadline Cloud Login Thread"
+            target=self._login_background_thread, name="AWS Deadline Cloud Login Thread"
         )
         self.__login_thread.start()
 
@@ -143,7 +143,7 @@ class DeadlineLoginDialog(QMessageBox):
         """
         self.setStandardButtons(QMessageBox.Close)
         self.setIcon(QMessageBox.Warning)
-        self.setText(f"Failed to log in to Amazon Deadline Cloud:<br/><br/>{html.escape(str(e))}")
+        self.setText(f"Failed to log in to AWS Deadline Cloud:<br/><br/>{html.escape(str(e))}")
 
     def handle_login_thread_message(self, message: str) -> None:
         """

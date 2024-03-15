@@ -57,7 +57,7 @@ def _handle_error(func: Callable) -> Callable:
         except Exception as e:
             # Log and print out unfamiliar exceptions with additional
             # messaging.
-            click.echo(f"The Amazon Deadline Cloud CLI encountered the following exception:\n{e}")
+            click.echo(f"The AWS Deadline Cloud CLI encountered the following exception:\n{e}")
             import traceback
 
             traceback.print_exc()
@@ -72,11 +72,11 @@ def _apply_cli_options_to_config(
     *, config: Optional[ConfigParser] = None, required_options: Set[str] = set(), **args
 ) -> Optional[ConfigParser]:
     """
-    Modifies an Amazon Deadline Cloud config object to apply standard option names to it, such as
-    the AWS profile, Amazon Deadline Cloud Farm, or Amazon Deadline Cloud Queue to use.
+    Modifies an AWS Deadline Cloud config object to apply standard option names to it, such as
+    the AWS profile, AWS Deadline Cloud Farm, or AWS Deadline Cloud Queue to use.
 
     Args:
-        config (ConfigParser, optional): an Amazon Deadline Cloud config, read by config_file.read_config().
+        config (ConfigParser, optional): an AWS Deadline Cloud config, read by config_file.read_config().
                 If not provided, loads the config from disk.
     """
     # Only work with a custom config if there are standard options provided
@@ -132,12 +132,12 @@ def _apply_cli_options_to_config(
 
     if required_options:
         raise RuntimeError(
-            f"Unexpected required Amazon Deadline Cloud CLI options: {required_options}"
+            f"Unexpected required AWS Deadline Cloud CLI options: {required_options}"
         )
 
     if args:
         raise RuntimeError(
-            f"Option names {tuple(args.keys())} are not standard Amazon Deadline Cloud CLI options, they need special handling"
+            f"Option names {tuple(args.keys())} are not standard AWS Deadline Cloud CLI options, they need special handling"
         )
 
     return config

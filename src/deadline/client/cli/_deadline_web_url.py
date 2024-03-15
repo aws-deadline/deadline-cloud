@@ -119,7 +119,7 @@ def validate_id_format(resource_type: str, full_id_str: str) -> bool:
 
 def install_deadline_web_url_handler(all_users: bool) -> None:
     """
-    Installs the called Amazon Deadline Cloud CLI command as the deadline:// web URL handler.
+    Installs the called AWS Deadline Cloud CLI command as the deadline:// web URL handler.
     """
     if sys.platform == "win32":
         import winreg
@@ -134,7 +134,7 @@ def install_deadline_web_url_handler(all_users: bool) -> None:
 
         if not os.path.isfile(deadline_cli_program):
             raise DeadlineOperationError(
-                f"Error determining the Amazon Deadline Cloud CLI program, {deadline_cli_program} does not exist."
+                f"Error determining the AWS Deadline Cloud CLI program, {deadline_cli_program} does not exist."
             )
 
         logger.info(
@@ -150,7 +150,7 @@ def install_deadline_web_url_handler(all_users: bool) -> None:
                 hkey = winreg.CreateKeyEx(
                     winreg.HKEY_CURRENT_USER, f"Software\\Classes\\{DEADLINE_URL_SCHEME_NAME}"
                 )
-            winreg.SetValueEx(hkey, None, 0, winreg.REG_SZ, "URL:Amazon Deadline Cloud Protocol")
+            winreg.SetValueEx(hkey, None, 0, winreg.REG_SZ, "URL:AWS Deadline Cloud Protocol")
             winreg.SetValueEx(hkey, "URL Protocol", 0, winreg.REG_SZ, "")
             hkey_command = winreg.CreateKeyEx(hkey, "shell\\open\\command")
             winreg.SetValueEx(
@@ -232,7 +232,7 @@ x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}={DEADLINE_URL_SCHEME_NAME}.desktop;
 
 def uninstall_deadline_web_url_handler(all_users: bool) -> None:
     """
-    Uninstalls the called Amazon Deadline Cloud CLI command as the deadline:// web URL handler.
+    Uninstalls the called AWS Deadline Cloud CLI command as the deadline:// web URL handler.
     """
     if sys.platform == "win32":
         import winreg

@@ -67,7 +67,7 @@ def test_validate_manifest_not_valid_schema(manifest_params: list[ManifestParam]
 
         bad_schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "title": "Amazon Deadline Cloud Asset Manifest Schema",
+            "title": "AWS Deadline Cloud Asset Manifest Schema",
             "type": "bad_type",
             "required": ["hashAlg"],
             "properties": {
