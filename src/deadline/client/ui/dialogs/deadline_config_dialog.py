@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """
-Provides a modal dialog box for modifying the Amazon Deadline Cloud
+Provides a modal dialog box for modifying the AWS Deadline Cloud
 local workstation configuration.
 
 Example code:
@@ -54,7 +54,7 @@ NOT_VALID_MARKER = "[NOT VALID]"
 
 class DeadlineConfigDialog(QDialog):
     """
-    A modal dialog box for modifying the Amazon Deadline Cloud local workstation
+    A modal dialog box for modifying the AWS Deadline Cloud local workstation
     configuration.
 
     Example code:
@@ -77,7 +77,7 @@ class DeadlineConfigDialog(QDialog):
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
-        self.setWindowTitle("Amazon Deadline Cloud Workstation Configuration")
+        self.setWindowTitle("AWS Deadline Cloud Workstation Configuration")
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
 
@@ -144,7 +144,7 @@ class DeadlineConfigDialog(QDialog):
         self.deadline_authentication_status.set_config(self.config_box.config)
 
     def on_auth_status_update(self):
-        # If the Amazon Deadline Cloud API is authorized successfully for the AWS profile
+        # If the AWS Deadline Cloud API is authorized successfully for the AWS profile
         # in the config dialog, refresh the farm/queue lists
         if self.deadline_authentication_status.api_availability and config_file.get_setting(
             "defaults.aws_profile_name", self.deadline_authentication_status.config
@@ -154,7 +154,7 @@ class DeadlineConfigDialog(QDialog):
 
 class DeadlineWorkstationConfigWidget(QWidget):
     """
-    A widget that displays and edits the Amazon Deadline Cloud local workstation.
+    A widget that displays and edits the AWS Deadline Cloud local workstation.
     """
 
     # Signal for when the GUI is refreshed
@@ -610,11 +610,11 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
 class _DeadlineResourceListComboBox(QWidget):
     """
-    A ComboBox for selecting an Amazon Deadline Cloud Id, with a refresh button.
+    A ComboBox for selecting an AWS Deadline Cloud Id, with a refresh button.
 
     The caller should connect the `background_exception` signal, e.g.
     to show a message box, and should call `set_config` whenever there is
-    a change to the Amazon Deadline Cloud config object.
+    a change to the AWS Deadline Cloud config object.
 
     Args:
         resource_name (str): The resource name for the list, like "Farm",
@@ -665,7 +665,7 @@ class _DeadlineResourceListComboBox(QWidget):
         return self.box.count()
 
     def set_config(self, config: ConfigParser) -> None:
-        """Updates the Amazon Deadline Cloud config object the control uses."""
+        """Updates the AWS Deadline Cloud config object the control uses."""
         self.config = config
 
     def clear_list(self):
@@ -691,7 +691,7 @@ class _DeadlineResourceListComboBox(QWidget):
         self.__refresh_id += 1
         self.__refresh_thread = threading.Thread(
             target=self._refresh_thread_function,
-            name=f"Amazon Deadline Cloud Refresh {self.resource_name} Thread",
+            name=f"AWS Deadline Cloud Refresh {self.resource_name} Thread",
             args=(self.__refresh_id, config),
         )
         self.__refresh_thread.start()

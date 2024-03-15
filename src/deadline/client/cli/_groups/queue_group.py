@@ -17,17 +17,17 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 @_handle_error
 def cli_queue():
     """
-    Commands for Amazon Deadline Cloud Queues.
+    Commands for AWS Deadline Cloud Queues.
     """
 
 
 @cli_queue.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @_handle_error
 def queue_list(**args):
     """
-    Lists the available Queues in Amazon Deadline Cloud.
+    Lists the available Queues in AWS Deadline Cloud.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -50,8 +50,8 @@ def queue_list(**args):
 
 @cli_queue.command(name="paramdefs")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @_handle_error
 def queue_paramdefs(**args):
     """
@@ -75,12 +75,12 @@ def queue_paramdefs(**args):
 
 @cli_queue.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The Amazon Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The Amazon Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @_handle_error
 def queue_get(**args):
     """
-    Get the details of an Amazon Deadline Cloud Queue.
+    Get the details of an AWS Deadline Cloud Queue.
 
     If Queue ID is not provided, returns the configured default Queue.
     """

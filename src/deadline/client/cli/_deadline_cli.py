@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-The Amazon Deadline Cloud CLI interface.
+The AWS Deadline Cloud CLI interface.
 """
 
 import logging
@@ -30,7 +30,7 @@ _DEADLINE_LOG_LEVELS = [
     "WARNING",
     "INFO",
     "DEBUG",
-]  # Log Levels Amazon Deadline Cloud Allows
+]  # Log Levels AWS Deadline Cloud Allows
 
 # Set the default log level based on the setting, must do here so we can pass into the click option
 _SETTING_LOG_LEVEL = get_setting("settings.log_level").upper()
@@ -55,7 +55,7 @@ else:
 @click.pass_context
 def main(ctx: click.Context, log_level: str):
     """
-    The Amazon Deadline Cloud CLI provides functionality to work with the Amazon Amazon Deadline Cloud
+    The AWS Deadline Cloud CLI provides functionality to work with the AWS Deadline Cloud
     closed beta service.
     """
     logging.basicConfig(level=log_level)

@@ -1,6 +1,6 @@
-# The Amazon Deadline Cloud Client Library (`deadline.client`)
+# The AWS Deadline Cloud Client Library (`deadline.client`)
 
-## Qt and Calling AWS (including Amazon Deadline Cloud) APIs
+## Qt and Calling AWS (including AWS Deadline Cloud) APIs
 
 > TL;DR Never call an AWS API from the main Qt event loop. Always run it in a separate thread,
 > and use a Signal/Slot to send the result back to GUI widget that needs an update. The code
@@ -70,7 +70,7 @@ class MyCustomWidget(QWidget):
         self.__refresh_id += 1
         self.__refresh_thread = threading.Thread(
             target=self._refresh_thread_function,
-            name=f"Amazon Deadline Cloud Refresh Thread",
+            name=f"AWS Deadline Cloud Refresh Thread",
             args=(self.__refresh_id,),
         )
         self.__refresh_thread.start()

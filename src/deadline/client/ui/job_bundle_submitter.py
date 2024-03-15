@@ -42,7 +42,7 @@ def show_job_bundle_submitter(
     *, input_job_bundle_dir: str = "", browse: bool = False, parent=None, f=Qt.WindowFlags()
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
-    Opens an Amazon Deadline Cloud job submission dialog for the provided job bundle.
+    Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
 
     Pass f=Qt.Tool if running it within an application context and want it
     to stay on top.

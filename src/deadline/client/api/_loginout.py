@@ -2,7 +2,7 @@
 
 """
 Provides functionality for logging in or out of the AWS Profile that is
-configured for Amazon Deadline Cloud to use on the local workstation.
+configured for AWS Deadline Cloud to use on the local workstation.
 """
 
 from configparser import ConfigParser
@@ -97,7 +97,7 @@ def login(
             All methods: 'credentials_source' parameter of type AwsCredentialsSource
             For Deadline Cloud Monitor: No additional parameters
         on_cancellation_check (Callable): A callback that allows the operation to cancel before login completes
-        config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+        config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
     """
     credentials_source = get_credentials_source(config)
@@ -115,7 +115,7 @@ def logout(config: Optional[ConfigParser] = None) -> str:
     For AWS profiles created by Deadline Cloud Monitor, logs out of Deadline Cloud.
 
      Args:
-        config (ConfigParser, optional): The Amazon Deadline Cloud configuration
+        config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
     """
     credentials_source = get_credentials_source(config)

@@ -1,12 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Provides an object that can be used to track current status of Amazon Deadline Cloud 
+Provides an object that can be used to track current status of AWS Deadline Cloud 
 authentication.
 
 The object emits the following Qt Signals:
    aws_creds_changed: The AWS credentials in ~/.aws changed.
-   deadline_config_changed: The Amazon Deadline Cloud configuration in ~/.deadline changed.
+   deadline_config_changed: The AWS Deadline Cloud configuration in ~/.deadline changed.
    creds_source_changed: triggered when credential source changes
    auth_status_changed: triggered when authentication status changes
    api_availability_changed: triggered when api availability changes
@@ -14,7 +14,7 @@ The object emits the following Qt Signals:
 The status includes three parts:
   1. Are credentials configured and available for use?
      This is checked with an sts:GetCallerIdentity AWS API call.
-  2. Do the credentials grant access to Amazon Deadline Cloud APIs?
+  2. Do the credentials grant access to AWS Deadline Cloud APIs?
      This is checked with a simplified deadline:ListFarms AWS API call.
   3. Do the credentials use Deadline Cloud Monitor?
      This is checked by looking for the relevant properties
@@ -38,20 +38,20 @@ _deadline_authentication_status = None
 
 class DeadlineAuthenticationStatus(QObject):
     """
-    Holds status information about Amazon Deadline Cloud credentials.
+    Holds status information about AWS Deadline Cloud credentials.
     Currently status values are available as properties:
 
        status.creds_source: result of api.get_credentials_source()
        status.auth_status: result of api.check_authentication_status()
        status.api_availability: result of api.check_deadline_api_available()
 
-    To initialize the status of a non-default Amazon Deadline Cloud configuration, pass in
-    an Amazon Deadline Cloud configuration object to config, call set_config to change it.
+    To initialize the status of a non-default AWS Deadline Cloud configuration, pass in
+    an AWS Deadline Cloud configuration object to config, call set_config to change it.
     """
 
     # This signal is sent when an AWS credential changes (e.g. config file)
     aws_creds_changed = Signal()
-    # This signal is sent when the Amazon Deadline Cloud configuration changes
+    # This signal is sent when the AWS Deadline Cloud configuration changes
     deadline_config_changed = Signal()
 
     # This signal is sent when an AWS authentication type changes
@@ -81,7 +81,7 @@ class DeadlineAuthenticationStatus(QObject):
 
         # Watch the ~/.aws path for any changes to config or credentials,
         # the ~/.aws/sso/cache to capture "aws sso login/logout", and
-        # the ~/.deadline path for any changes to the Amazon Deadline Cloud config.
+        # the ~/.deadline path for any changes to the AWS Deadline Cloud config.
         self.aws_creds_file_watcher = QFileSystemWatcher()
         self.aws_creds_paths = [
             os.path.expanduser(os.path.join("~", ".aws")),
@@ -95,7 +95,7 @@ class DeadlineAuthenticationStatus(QObject):
         )
         if failed_paths:
             logger.error(
-                "Failed to watch these AWS/Amazon Deadline Cloud configurations: %s", failed_paths
+                "Failed to watch these AWS Deadline Cloud configurations: %s", failed_paths
             )
         self.aws_creds_file_watcher.fileChanged.connect(self.files_changed)
         self.aws_creds_file_watcher.directoryChanged.connect(self.files_changed)
@@ -104,11 +104,11 @@ class DeadlineAuthenticationStatus(QObject):
 
     def set_config(self, config: Optional[ConfigParser]) -> None:
         """
-        Changes the Amazon Deadline Cloud configuration object used to display authentication
+        Changes the AWS Deadline Cloud configuration object used to display authentication
         status.
 
         Args:
-            config (ConfigParser): The Amazon Deadline Cloud configuration to use.
+            config (ConfigParser): The AWS Deadline Cloud configuration to use.
         """
 
         # Refresh the status if any setting that impacts authentication was changed

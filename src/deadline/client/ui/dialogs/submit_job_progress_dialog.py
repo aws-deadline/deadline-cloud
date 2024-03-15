@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """
 Provides a modal dialog box for the submission progress when submitting to
-Amazon Deadline Cloud
+AWS Deadline Cloud
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 class SubmitJobProgressDialog(QDialog):
     """
     A modal dialog box for the submission progress while submitting a job bundle
-    to Amazon Deadline Cloud.
+    to AWS Deadline Cloud.
     """
 
     # These signals are sent when the background threads raise an exception.
@@ -120,7 +120,7 @@ class SubmitJobProgressDialog(QDialog):
                 submit.
             asset_manager (S3AssetManager): A job attachments S3AssetManager
                 configured for the farm/queue to submit to
-            deadline_client (BaseClient): A boto client for Amazon Deadline Cloud
+            deadline_client (BaseClient): A boto client for AWS Deadline Cloud
             auto_accept (bool, default False): Flag for whether any confirmation
                 prompts should automatically be accepted.
         """
@@ -165,7 +165,7 @@ class SubmitJobProgressDialog(QDialog):
         self.lyt.addWidget(self.summary_edit)
         self.lyt.addWidget(self.button_box)
 
-        self.setWindowTitle("Amazon Deadline Cloud Submission")
+        self.setWindowTitle("AWS Deadline Cloud Submission")
 
         self.hashing_thread_progress_report.connect(self.handle_hashing_thread_progress_report)
         self.hashing_thread_succeeded.connect(self.handle_hashing_thread_succeeded)
@@ -413,7 +413,7 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label.setText("Hashing job attachments...")
         self.__hashing_thread = threading.Thread(
             target=self._hashing_background_thread,
-            name="Amazon Deadline Cloud Hashing Background Thread",
+            name="AWS Deadline Cloud Hashing Background Thread",
             args=(asset_groups, total_input_files, total_input_bytes),
         )
         self.__hashing_thread.start()
@@ -425,7 +425,7 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label.setText("Uploading job attachments...")
         self.__upload_thread = threading.Thread(
             target=self._upload_background_thread,
-            name="Amazon Deadline Cloud Upload Background Thread",
+            name="AWS Deadline Cloud Upload Background Thread",
             args=(asset_manifests,),
         )
         self.__upload_thread.start()
@@ -437,7 +437,7 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label.setText("Waiting for Job to be created...")
         self.__create_job_thread = threading.Thread(
             target=self._create_job_background_thread,
-            name="Amazon Deadline Cloud CreateJob Background Thread",
+            name="AWS Deadline Cloud CreateJob Background Thread",
         )
         self.__create_job_thread.start()
 

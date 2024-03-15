@@ -11,11 +11,11 @@ from deadline.client.config import config_file
 @pytest.fixture(scope="function")
 def fresh_deadline_config():
     """
-    Fixture to start with a blank Amazon Deadline Cloud config file.
+    Fixture to start with a blank AWS Deadline Cloud config file.
     """
 
     try:
-        # Create an empty temp file to set as the Amazon Deadline Cloud config
+        # Create an empty temp file to set as the AWS Deadline Cloud config
         temp_dir = tempfile.TemporaryDirectory()
         temp_dir_path = Path(temp_dir.name)
         temp_file_path = temp_dir_path / "config"
@@ -23,7 +23,7 @@ def fresh_deadline_config():
             temp_file.write("")
 
         # Yield the temp file name with it patched in as the
-        # Amazon Deadline Cloud config file
+        # AWS Deadline Cloud config file
         with patch.object(config_file, "CONFIG_FILE_PATH", str(temp_file_path)):
             yield str(temp_file_path)
     finally:
