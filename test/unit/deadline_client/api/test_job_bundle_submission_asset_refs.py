@@ -258,7 +258,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
     ) as mock_hash_assets, patch.object(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_telemetry_client"
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
     ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]

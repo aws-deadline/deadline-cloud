@@ -123,7 +123,7 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
     ), patch.object(
         _submit_job_bundle, "_upload_attachments"
     ), patch.object(
-        bundle_group.api, "get_telemetry_client"
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -158,7 +158,9 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
     # Use a temporary directory for the job bundle
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             boto3, "Session"
@@ -209,7 +211,9 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
     # Use a temporary directory for the job bundle
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             boto3, "Session"
@@ -264,7 +268,9 @@ def test_cli_bundle_job_name(fresh_deadline_config):
     # Use a temporary directory for the job bundle
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             boto3, "Session"
@@ -361,7 +367,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     ), patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        bundle_group.api, "get_telemetry_client"
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         bundle_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         bundle_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -413,7 +419,9 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
     # Use a temporary directory for the job bundle
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             boto3, "Session"
@@ -468,7 +476,9 @@ def test_cli_bundle_empty_job_parameter_from_cli(fresh_deadline_config):
     # Use a temporary directory for the job bundle
     with patch(
         "deadline.client.api._session.DeadlineClient._get_deadline_api_input_shape"
-    ) as input_shape_mock:
+    ) as input_shape_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ):
         input_shape_mock.return_value = {}
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             boto3, "Session"
@@ -585,7 +595,7 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
     ), patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        bundle_group.api, "get_telemetry_client"
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
@@ -661,7 +671,7 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
     ), patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        bundle_group.api, "get_telemetry_client"
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         get_boto3_client_mock().get_queue.return_value = {
             "displayName": "Test Queue",
