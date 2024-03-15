@@ -317,24 +317,3 @@ class FileConflictResolution(Enum):
     SKIP = 1
     OVERWRITE = 2
     CREATE_COPY = 3
-
-
-# TODO: remove once we fixed worker agent to import PosixFileSystemPermissionSettings from os_file_permission
-@dataclass
-class PosixFileSystemPermissionSettings:
-    """
-    A dataclass representing file system permission-related information
-    for Posix. The specified permission modes will be bitwise-OR'ed with
-    the directory or file's existing permissions.
-
-    Attributes:
-        os_user (str): The target operating system user for ownership.
-        os_group (str): The target operating system group for ownership.
-        dir_mode (int): The permission mode to be added to directories.
-        file_mode (int): The permission mode to be added to files.
-    """
-
-    os_user: str
-    os_group: str
-    dir_mode: int
-    file_mode: int
