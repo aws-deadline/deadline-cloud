@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 import shutil
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Set, Union
+from typing import List, Set, Union
 
 from .exceptions import AssetSyncError, PathOutsideDirectoryError
 from ._utils import _is_relative_to
@@ -58,12 +58,9 @@ class WindowsFileSystemPermissionSettings:
         file_mode (WindowsPermissionEnum): The permission mode to be added to files.
     """
 
-    # TODO: Remove the optional `os_group` once the jobRunAsUser - windows - group field
-    # is removed from our APIs
     os_user: str
     dir_mode: WindowsPermissionEnum
     file_mode: WindowsPermissionEnum
-    os_group: Optional[str] = field(default=None)
 
 
 # A union of different file system permission settings that are based on the underlying OS.
