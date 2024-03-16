@@ -8,9 +8,9 @@ import os
 from typing import Any, Dict, List
 from copy import deepcopy
 
-from PySide2.QtCore import QRegularExpression, Qt, Signal  # type: ignore
-from PySide2.QtGui import QValidator
-from PySide2.QtWidgets import (  # type: ignore
+from qtpy.QtCore import QRegularExpression, Qt, Signal  # type: ignore
+from qtpy.QtGui import QValidator
+from qtpy.QtWidgets import (  # type: ignore
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,

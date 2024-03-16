@@ -9,8 +9,8 @@ import sys
 import threading
 from typing import Any, Dict, Optional
 
-from PySide2.QtCore import Signal  # type: ignore
-from PySide2.QtWidgets import (  # type: ignore
+from qtpy.QtCore import Signal  # type: ignore
+from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QFormLayout,
     QGroupBox,

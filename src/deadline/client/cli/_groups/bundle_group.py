@@ -226,9 +226,9 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
         if not submitter:
             return
 
-        response = submitter.show()
+        submitter.show()
 
-        app.exec_()
+        app.exec()
 
         response = None
         if submitter:

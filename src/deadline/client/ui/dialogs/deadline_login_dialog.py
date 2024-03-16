@@ -17,8 +17,8 @@ import threading
 from configparser import ConfigParser
 from typing import Optional
 
-from PySide2.QtCore import Signal
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Signal
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMessageBox,
 )
@@ -171,14 +171,11 @@ class DeadlineLoginDialog(QMessageBox):
             self.canceled = True
             if self.__login_thread:
                 while self.__login_thread.is_alive():
-                    QApplication.instance().processEvents()
+                    QApplication.instance().processEvents()  # type: ignore[union-attr]
 
     def exec(self) -> bool:
         """
         Runs the modal login dialog, returning True if the login was
         successful, False otherwise.
         """
-        return super().exec_() == QMessageBox.Ok
-
-    def exec_(self) -> bool:
-        return self.exec()
+        return super().exec() == QMessageBox.Ok

@@ -4,8 +4,8 @@ __all__ = ["InputFilePickerWidget", "OutputFilePickerWidget", "DirectoryPickerWi
 
 import os
 
-from PySide2.QtCore import Signal
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Signal
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
