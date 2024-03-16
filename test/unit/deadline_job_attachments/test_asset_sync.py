@@ -8,7 +8,7 @@ import shutil
 from math import trunc
 from pathlib import Path
 from typing import Optional, Dict
-from unittest.mock import ANY, MagicMock, mock_open, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import boto3
 from deadline.job_attachments.progress_tracker import ProgressStatus
@@ -213,10 +213,7 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[f"{local_root}/manifest.json"],
-        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
-            side_effect=["test_manifest_data"],
+            return_value="test_manifest_data",
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
@@ -287,18 +284,13 @@ class TestAssetSync:
         job: Job = request.getfixturevalue(job_fixture_name)
         s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
         default_queue.jobAttachmentSettings = s3_settings
-        session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
-        local_root = str(Path(session_dir) / dest_dir)
         assert job.attachments
 
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[f"{local_root}/manifest.json"],
-        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
-            side_effect=["test_manifest_data"],
+            return_value="test_manifest_data",
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
@@ -349,10 +341,7 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[f"{local_root}/manifest.json"],
-        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
-            side_effect=["test_manifest_data"],
+            return_value="test_manifest_data",
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
@@ -420,8 +409,8 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[f"{local_root}/manifest.json"],
-        ), patch("builtins.open", mock_open(read_data=json.dumps(test_manifest_one))), patch(
+            return_value=json.dumps(test_manifest_one),
+        ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
         ), patch(
@@ -735,12 +724,6 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[
-                f"{local_root}/manifest_input",
-                f"{local_root}/manifest-movie1_input",
-            ],
-        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
             return_value="test_manifest_data",
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
@@ -817,10 +800,7 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            side_effect=[f"{local_root}/manifest.json"],
-        ), patch("builtins.open", mock_open(read_data="test_manifest_file")), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.decode_manifest",
-            side_effect=["test_manifest_data"],
+            return_value="test_manifest_data",
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
