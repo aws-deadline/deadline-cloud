@@ -8,7 +8,6 @@ import sys
 import time
 
 from deadline.job_attachments._aws.deadline import get_queue
-from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.download import download_files_from_manifests, get_manifest_from_s3
 from deadline.job_attachments.models import S3_MANIFEST_FOLDER_NAME
 from deadline.job_attachments.upload import S3AssetManager
@@ -132,9 +131,10 @@ if __name__ == "__main__":
         print("\nStarting download test...")
         start = time.perf_counter()
         manifest_key = f"{queue.jobAttachmentSettings.rootPrefix}/{S3_MANIFEST_FOLDER_NAME}/{attachment_settings.manifests[0].inputManifestPath}"
-        manifest = get_manifest_from_s3(manifest_key, queue.jobAttachmentSettings.s3BucketName)
-        with open(manifest) as manifest_file:
-            asset_manifest = decode_manifest(manifest_file.read())
+        asset_manifest = get_manifest_from_s3(
+            manifest_key, queue.jobAttachmentSettings.s3BucketName
+        )
+
         download_files_from_manifests(
             s3_bucket=queue.jobAttachmentSettings.s3BucketName,
             manifests_by_root={"/tmp/test_download": asset_manifest},

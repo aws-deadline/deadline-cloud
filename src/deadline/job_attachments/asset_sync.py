@@ -19,7 +19,6 @@ from .progress_tracker import (
     SummaryStatistics,
 )
 
-from .asset_manifests.decode import decode_manifest
 from .asset_manifests import (
     BaseAssetManifest,
     BaseManifestModel,
@@ -331,9 +330,7 @@ class AssetSync:
             self.logger.info(f"No attachments configured for Job {job_id}, no inputs to sync.")
             return (SummaryStatistics(), [])
 
-        grouped_manifests_by_root: DefaultDict[
-            str, list[tuple[BaseAssetManifest, str]]
-        ] = DefaultDict(list)
+        grouped_manifests_by_root: DefaultDict[str, list[BaseAssetManifest]] = DefaultDict(list)
         pathmapping_rules: Dict[str, Dict[str, str]] = {}
 
         storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
@@ -364,14 +361,12 @@ class AssetSync:
                 manifest_s3_key = s3_settings.add_root_and_manifest_folder_prefix(
                     manifest_properties.inputManifestPath
                 )
-                manifest_path = get_manifest_from_s3(
+                manifest = get_manifest_from_s3(
                     manifest_key=manifest_s3_key,
                     s3_bucket=s3_settings.s3BucketName,
                     session=self.session,
                 )
-                with open(manifest_path) as manifest_file:
-                    manifest = decode_manifest(manifest_file.read())
-                grouped_manifests_by_root[local_root].append((manifest, manifest_path))
+                grouped_manifests_by_root[local_root].append(manifest)
 
         # Handle step-step dependencies.
         if step_dependencies:
@@ -392,7 +387,7 @@ class AssetSync:
         # Merge the manifests in each root into a single manifest
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
         for root, manifests in grouped_manifests_by_root.items():
-            merged_manifest = merge_asset_manifests([manifest[0] for manifest in manifests])
+            merged_manifest = merge_asset_manifests(manifests)
 
             if merged_manifest:
                 merged_manifests_by_root[root] = merged_manifest
