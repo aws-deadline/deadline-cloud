@@ -1,3 +1,20 @@
+## 0.41.0 (2024-03-19)
+
+### BREAKING CHANGES
+* **job_attachments**: remove local storage of manifest files (#207) ([`8c5ea38`](https://github.com/casillas2/deadline-cloud/commit/8c5ea38946fa89d7248fd406ab1ba5fa6298775d))
+* Remove the special-case deadline endpoint logic ([`e936938`](https://github.com/casillas2/deadline-cloud/commit/e936938cf21fb3c989701a4569388df818d71422))
+* **job_attachment**: remove `os_group` field from Windows filesystem permission settings (#215) ([`739cb20`](https://github.com/casillas2/deadline-cloud/commit/739cb208978a5573772779932bb309cee57f0687))
+
+### Features
+* **job_attachments**: enhance handling S3 timeout errors and BotoCoreError (#206) ([`24fe21c`](https://github.com/casillas2/deadline-cloud/commit/24fe21c4bd0d579d6b5a56c0922ea00d8e4425d4))
+* Add telemetry opt-out env var (#212) ([`4f270ba`](https://github.com/casillas2/deadline-cloud/commit/4f270bad4e1179dbea43c309d4c16b276551ef36))
+* Add UI for custom host worker capability requirements (#186) ([`c5bbcd3`](https://github.com/casillas2/deadline-cloud/commit/c5bbcd3252d8c1e40e26c14db0392897d7333417))
+* Adds common data to telemetry events (#205) ([`7c2522c`](https://github.com/casillas2/deadline-cloud/commit/7c2522ca480f5b6220479f30a790ab8a468851f4))
+
+### Bug Fixes
+* **job_attachments**: Use files&#39; last modification time to identify output files to be synced (#211) ([`1688c5b`](https://github.com/casillas2/deadline-cloud/commit/1688c5bdf6a3f8b36408635acc2db7475cb401e9))
+* clear storage profiles in gui submitter (#204) ([`7223195`](https://github.com/casillas2/deadline-cloud/commit/7223195bf763dafd0613d9626e4903fb5729766d))
+
 ## 0.40.0 (2024-03-11)
 
 ### BREAKING CHANGES
