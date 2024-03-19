@@ -11,11 +11,11 @@ from typing import Optional, Dict
 from unittest.mock import ANY, MagicMock, patch
 
 import boto3
-from deadline.job_attachments.progress_tracker import ProgressStatus
 import pytest
 from moto import mock_sts
 
 import deadline
+from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.asset_sync import AssetSync
 from deadline.job_attachments.os_file_permission import PosixFileSystemPermissionSettings
 
@@ -34,11 +34,10 @@ from deadline.job_attachments.models import (
 )
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
+    ProgressStatus,
     SummaryStatistics,
 )
 from deadline.job_attachments._utils import _human_readable_file_size
-
-from deadline.job_attachments.asset_manifests.decode import decode_manifest
 
 
 class TestAssetSync:
@@ -189,6 +188,7 @@ class TestAssetSync:
         default_queue: Queue,
         job_fixture_name: str,
         s3_settings_fixture_name: str,
+        test_manifest_one: dict,
         request: pytest.FixtureRequest,
     ):
         """Asserts that a valid manifest can be processed to download attachments from S3"""
@@ -199,6 +199,7 @@ class TestAssetSync:
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
         local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
         test_fs_permission_settings: PosixFileSystemPermissionSettings = (
             PosixFileSystemPermissionSettings(
                 os_user="test-user",
@@ -213,7 +214,7 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            return_value="test_manifest_data",
+            return_value=test_manifest,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
@@ -224,6 +225,8 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
@@ -324,6 +327,7 @@ class TestAssetSync:
         default_queue: Queue,
         default_job: Job,
         s3_settings_fixture_name: str,
+        test_manifest_one: dict,
         request: pytest.FixtureRequest,
     ):
         """Asserts that input syncing is done correctly when step dependencies are provided."""
@@ -333,6 +337,7 @@ class TestAssetSync:
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
         local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
         assert default_job.attachments
 
         step_output_root = "/home/outputs_roots"
@@ -341,7 +346,7 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            return_value="test_manifest_data",
+            return_value=test_manifest,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
@@ -351,6 +356,8 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
             side_effect=[{step_output_root: {}}],
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
@@ -688,6 +695,7 @@ class TestAssetSync:
         self,
         default_queue: Queue,
         default_job: Job,
+        test_manifest_one: dict,
         tmp_path: Path,
     ):
         """Tests when a non-empty `storage_profiles_path_mapping_rules` is passed to `sync_inputs`.
@@ -714,6 +722,7 @@ class TestAssetSync:
                 ),
             ],
         )
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
         dest_dir = "assetroot-27bggh78dd2b568ab123"
         local_root = str(tmp_path.joinpath(dest_dir))
 
@@ -724,13 +733,15 @@ class TestAssetSync:
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            return_value="test_manifest_data",
+            return_value=test_manifest,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             return_value=DownloadSummaryStatistics(),
         ) as mock_download_files_from_manifests, patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
@@ -756,8 +767,8 @@ class TestAssetSync:
             mock_download_files_from_manifests.assert_called_once_with(
                 s3_bucket="test-bucket",
                 manifests_by_root={
-                    f"{local_root}": "test_manifest_data",
-                    "/tmp/movie1": "test_manifest_data",
+                    f"{local_root}": test_manifest,
+                    "/tmp/movie1": test_manifest,
                 },
                 cas_prefix="assetRoot/Data",
                 fs_permission_settings=None,
@@ -785,6 +796,7 @@ class TestAssetSync:
         default_queue: Queue,
         job_fixture_name: str,
         s3_settings_fixture_name: str,
+        test_manifest_one: dict,
         request: pytest.FixtureRequest,
     ):
         """Asserts that a valid manifest can be processed to download attachments from S3"""
@@ -795,12 +807,13 @@ class TestAssetSync:
         session_dir = str(tmp_path)
         dest_dir = "assetroot-27bggh78dd2b568ab123"
         local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
         assert job.attachments
 
         # WHEN
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
-            return_value="test_manifest_data",
+            return_value=test_manifest,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
             side_effect=[DownloadSummaryStatistics()],
@@ -814,6 +827,8 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ) as mock_mount_vfs, patch(
             "sys.platform", "linux"
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
 
