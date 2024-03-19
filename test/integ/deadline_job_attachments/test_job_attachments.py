@@ -53,6 +53,7 @@ class JobAttachmentTest:
     SCENE_MA_HASH = hash_file(str(SCENE_MA_PATH), HashAlgorithm.XXH128)
     BRICK_PNG_PATH = INPUT_PATH / "textures" / "brick.png"
     CLOTH_PNG_PATH = INPUT_PATH / "textures" / "cloth.png"
+    INPUT_IN_OUTPUT_DIR_PATH = OUTPUT_PATH / "not_for_sync_outputs.txt"
     FIRST_RENDER_OUTPUT_PATH = Path("outputs/render0000.exr")
     SECOND_RENDER_OUTPUT_PATH = Path("outputs/render0001.exr")
     MOV_FILE_OUTPUT_PATH = Path("outputs/end.mov")
@@ -64,17 +65,17 @@ class JobAttachmentTest:
         manifest_version: ManifestVersion,
     ):
         """
-        Sets ups resource that these integration tests will need.
+        Sets up resource that these integration tests will need.
         """
         self.job_attachment_resources = deploy_job_attachment_resources
 
         if self.job_attachment_resources.farm is None:
-            raise TypeError("The Farm was not properly created when initalizing resources.")
+            raise TypeError("The Farm was not properly created when initializing resources.")
         if (
             self.job_attachment_resources.queue is None
             or self.job_attachment_resources.queue_with_no_settings is None
         ):
-            raise TypeError("The Queues were not properly created when initalizing resources.")
+            raise TypeError("The Queues were not properly created when initializing resources.")
 
         self.farm_id = self.job_attachment_resources.farm.id
         self.queue_id = self.job_attachment_resources.queue.id
@@ -208,6 +209,7 @@ def upload_input_files_one_asset_in_cas(
         str(job_attachment_test.SCENE_MA_PATH),
         str(job_attachment_test.BRICK_PNG_PATH),
         str(job_attachment_test.CLOTH_PNG_PATH),
+        str(job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH),
     ]
 
     scene_ma_s3_path = (
@@ -244,9 +246,15 @@ def upload_input_files_one_asset_in_cas(
     # THEN
     brick_png_hash = hash_file(str(job_attachment_test.BRICK_PNG_PATH), HashAlgorithm.XXH128)
     cloth_png_hash = hash_file(str(job_attachment_test.CLOTH_PNG_PATH), HashAlgorithm.XXH128)
+    input_in_output_dir_hash = hash_file(
+        str(job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH), HashAlgorithm.XXH128
+    )
 
     brick_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{brick_png_hash}.xxh128"
     cloth_png_s3_path = f"{job_attachment_settings.full_cas_prefix()}/{cloth_png_hash}.xxh128"
+    input_in_output_dir_s3_path = (
+        f"{job_attachment_settings.full_cas_prefix()}/{input_in_output_dir_hash}.xxh128"
+    )
 
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
         Prefix=f"{job_attachment_settings.full_cas_prefix()}/",
@@ -254,12 +262,13 @@ def upload_input_files_one_asset_in_cas(
 
     s3_objects = {obj.key: obj for obj in object_summary_iterator}
 
-    assert {brick_png_s3_path, cloth_png_s3_path} <= set(
+    assert {brick_png_s3_path, cloth_png_s3_path, input_in_output_dir_s3_path} <= set(
         map(lambda x: x.key, object_summary_iterator)
     )
 
     assert brick_png_s3_path in s3_objects
     assert cloth_png_s3_path in s3_objects
+    assert input_in_output_dir_s3_path in s3_objects
     # Make sure that the file hasn't been modified/reuploaded
     assert s3_objects[scene_ma_s3_path].last_modified == scene_ma_upload_time
 
@@ -295,6 +304,7 @@ def test_upload_input_files_all_assets_in_cas(
         str(job_attachment_test.SCENE_MA_PATH),
         str(job_attachment_test.BRICK_PNG_PATH),
         str(job_attachment_test.CLOTH_PNG_PATH),
+        str(job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH),
     ]
 
     # This file has already been uploaded
@@ -404,6 +414,7 @@ def sync_inputs(
     assert Path(session_dir / dest_dir / job_attachment_test.SCENE_MA_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.BRICK_PNG_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.CLOTH_PNG_PATH).exists()
+    assert Path(session_dir / dest_dir / job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH).exists()
 
     return SyncInputsOutputs(
         session_dir=session_dir,
@@ -733,11 +744,6 @@ def sync_outputs(
         stepId=step1_id,
     )["tasks"][0]["taskId"]
 
-    Path(sync_inputs.session_dir / sync_inputs.dest_dir / "outputs").mkdir()
-
-    file_not_to_be_synced = (
-        sync_inputs.session_dir / sync_inputs.dest_dir / "outputs" / "don't sync me"
-    )
     file_to_be_synced_step0_task0_base = job_attachment_test.FIRST_RENDER_OUTPUT_PATH
     file_to_be_synced_step0_task1_base = job_attachment_test.SECOND_RENDER_OUTPUT_PATH
     file_to_be_synced_step1_task0_base = job_attachment_test.MOV_FILE_OUTPUT_PATH
@@ -752,15 +758,7 @@ def sync_outputs(
         sync_inputs.session_dir / sync_inputs.dest_dir / file_to_be_synced_step1_task0_base
     )
 
-    # Create files before the render start time in the output dir, these shouldn't be synced
-    with open(file_not_to_be_synced, "w") as f:
-        f.write("don't sync me")
-
     render_start_time = time.time()
-
-    # If we create the file too quickly after taking the time, there's high likelyhood that the time stamp will be
-    # the same.
-    time.sleep(1)
 
     # WHEN
     mock_on_uploading_files = MagicMock(return_value=True)
@@ -770,7 +768,7 @@ def sync_outputs(
     with open(file_to_be_synced_step0_task0, "w") as f:
         f.write("this is the first render")
 
-    sync_inputs.asset_syncer.sync_outputs(
+    summary_stats = sync_inputs.asset_syncer.sync_outputs(
         s3_settings=job_attachment_settings,
         attachments=sync_inputs.attachments,
         queue_id=job_attachment_test.queue_id,
@@ -782,15 +780,16 @@ def sync_outputs(
         session_dir=sync_inputs.session_dir,
         on_uploading_files=mock_on_uploading_files,
     )
+    # There should be one synced output for this task, Step 0 - Task 0
+    assert summary_stats.total_files == 1
 
     render_start_time = time.time()
-    time.sleep(1)
 
     # First step and second task
     with open(file_to_be_synced_step0_task1, "w") as f:
         f.write("this is a second render")
 
-    sync_inputs.asset_syncer.sync_outputs(
+    summary_stats = sync_inputs.asset_syncer.sync_outputs(
         s3_settings=job_attachment_settings,
         attachments=sync_inputs.attachments,
         queue_id=job_attachment_test.queue_id,
@@ -802,15 +801,16 @@ def sync_outputs(
         session_dir=sync_inputs.session_dir,
         on_uploading_files=mock_on_uploading_files,
     )
+    # There should be one synced output for this task, Step 0 - Task 1
+    assert summary_stats.total_files == 1
 
     render_start_time = time.time()
-    time.sleep(1)
 
     # Second step and first task
     with open(file_to_be_synced_step1_task0, "w") as f:
         f.write("this is a comp")
 
-    sync_inputs.asset_syncer.sync_outputs(
+    summary_stats = sync_inputs.asset_syncer.sync_outputs(
         s3_settings=job_attachment_settings,
         attachments=sync_inputs.attachments,
         queue_id=job_attachment_test.queue_id,
@@ -822,6 +822,8 @@ def sync_outputs(
         session_dir=sync_inputs.session_dir,
         on_uploading_files=mock_on_uploading_files,
     )
+    # There should be one synced output for this task, Step 1 - Task 0
+    assert summary_stats.total_files == 1
 
     # THEN
     object_summary_iterator = job_attachment_test.bucket.objects.filter(
@@ -833,10 +835,6 @@ def sync_outputs(
     assert (
         f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_to_be_synced_step0_task0), HashAlgorithm.XXH128)}.xxh128"
         in object_key_set
-    )
-    assert (
-        f"{job_attachment_settings.full_cas_prefix()}/{hash_file(str(file_not_to_be_synced), HashAlgorithm.XXH128)}.xxh128"
-        not in object_key_set
     )
 
     return SyncOutputsOutput(
@@ -899,10 +897,11 @@ def test_sync_inputs_with_step_dependencies(
     dest_dir = _get_unique_dest_dir_name(str(job_attachment_test.ASSET_ROOT))
 
     # THEN
-    # Check if the inputs specified in job settings were downlownded
+    # Check if the inputs specified in job settings were downloaded
     assert Path(session_dir / dest_dir / job_attachment_test.SCENE_MA_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.BRICK_PNG_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.CLOTH_PNG_PATH).exists()
+    assert Path(session_dir / dest_dir / job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH).exists()
     # Check if the outputs from step0_id ("custom-step") were downloaded
     assert Path(session_dir / dest_dir / job_attachment_test.FIRST_RENDER_OUTPUT_PATH).exists()
     assert Path(session_dir / dest_dir / job_attachment_test.SECOND_RENDER_OUTPUT_PATH).exists()
@@ -942,7 +941,7 @@ def test_download_outputs_with_job_id_step_id_task_id_and_download_directory(
         # THEN
         assert Path(job_attachment_test.ASSET_ROOT / sync_outputs.step0_task0_output_file).exists()
     finally:
-        shutil.rmtree(job_attachment_test.OUTPUT_PATH)
+        _cleanup_outputs_dir(job_attachment_test)
 
 
 @pytest.mark.integ
@@ -978,7 +977,7 @@ def test_download_outputs_with_job_id_step_id_and_download_directory(
         assert Path(job_attachment_test.ASSET_ROOT / sync_outputs.step0_task0_output_file).exists()
         assert Path(job_attachment_test.ASSET_ROOT / sync_outputs.step0_task1_output_file).exists()
     finally:
-        shutil.rmtree(job_attachment_test.OUTPUT_PATH)
+        _cleanup_outputs_dir(job_attachment_test)
 
 
 @pytest.mark.integ
@@ -1015,12 +1014,19 @@ def test_download_outputs_with_job_id_and_download_directory(
         assert Path(job_attachment_test.ASSET_ROOT / sync_outputs.step0_task1_output_file).exists()
         assert Path(job_attachment_test.ASSET_ROOT / sync_outputs.step1_task0_output_file).exists()
     finally:
-        shutil.rmtree(job_attachment_test.OUTPUT_PATH)
+        _cleanup_outputs_dir(job_attachment_test)
 
 
-@dataclass
-class UploadInputFilesWithJobAssetsOuput:
-    attachments: Attachments
+def _cleanup_outputs_dir(job_attachment_test: JobAttachmentTest) -> None:
+    shutil.rmtree(job_attachment_test.OUTPUT_PATH)
+    # Revive the INPUT_IN_OUTPUT_DIR_PATH file.
+    job_attachment_test.OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+    with open(job_attachment_test.INPUT_IN_OUTPUT_DIR_PATH, "w") as f:
+        f.write(
+            "Although it is in the output directory, it is actually an input file. It should be"
+            " downloaded (to the worker's session working directory) during sync_inputs, and"
+            " should not be captured as an output file when sync_outputs."
+        )
 
 
 @dataclass
@@ -1370,10 +1376,6 @@ def test_sync_outputs_bucket_wrong_account(
     )
 
     render_start_time = time.time()
-
-    # If we create the file too quickly after taking the time, there's high likelyhood that the time stamp will be
-    # the same.
-    time.sleep(1)
 
     # WHEN
 
