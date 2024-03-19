@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import boto3
 import py.path
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 from botocore.stub import Stubber
 from moto import mock_sts
 
@@ -1358,6 +1358,29 @@ class TestUpload:
             ) in str(err.value)
 
     @mock_sts
+    def test_file_already_uploaded_timeout(self):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during an S3 request to check file existence in an S3 bucket.
+        """
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        uploader = S3AssetUploader()
+        uploader._s3 = mock_s3_client
+
+        with pytest.raises(AssetSyncError) as err:
+            uploader.file_already_uploaded(self.job_attachment_s3_settings.s3BucketName, "test_key")
+        assert isinstance(err.value.__cause__, BotoCoreError)
+        assert (
+            "An issue occurred with AWS service request while checking for the existence of an object in the S3 bucket: "
+            'Read timeout on endpoint URL: "test_url"\n'
+            "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+            "Please verify your credentials and network connection. If the problem persists, try again later"
+            " or contact support for further assistance."
+        ) in str(err.value)
+
+    @mock_sts
     def test_upload_bytes_to_s3_bucket_in_different_account(self):
         """
         Test that the appropriate error is raised when uploading bytes, but the bucket
@@ -1391,6 +1414,31 @@ class TestUpload:
                 "Error uploading binary file in bucket 'test-bucket', Target key or prefix: 'test_key', "
                 "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
+
+    @mock_sts
+    def test_upload_bytes_to_s3_timeout(self):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during an S3 request to upload a binary file to an S3 bucket.
+        """
+        mock_s3_client = MagicMock()
+        mock_s3_client.upload_fileobj.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        uploader = S3AssetUploader()
+        uploader._s3 = mock_s3_client
+
+        with pytest.raises(AssetSyncError) as err:
+            uploader.upload_bytes_to_s3(
+                BytesIO(), self.job_attachment_s3_settings.s3BucketName, "test_key"
+            )
+        assert isinstance(err.value.__cause__, BotoCoreError)
+        assert (
+            "An issue occurred with AWS service request while uploading binary file: "
+            'Read timeout on endpoint URL: "test_url"\n'
+            "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+            "Please verify your credentials and network connection. If the problem persists, try again later"
+            " or contact support for further assistance."
+        ) in str(err.value)
 
     @mock_sts
     def test_upload_file_to_s3_bucket_in_different_account(self, tmp_path: Path):
@@ -1469,6 +1517,41 @@ class TestUpload:
                 "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
+
+    @mock_sts
+    def test_upload_file_to_s3_timeout(self, tmp_path: Path):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during an S3 request to upload a file to an S3 bucket.
+        """
+        mock_future = MagicMock()
+        mock_transfer_manager = MagicMock()
+        mock_transfer_manager.upload.return_value = mock_future
+        mock_future.result.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        s3 = boto3.client("s3")
+        uploader = S3AssetUploader()
+        uploader._s3 = s3
+
+        file = tmp_path / "test_file"
+        file.write_text("")
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.get_s3_transfer_manager",
+            return_value=mock_transfer_manager,
+        ):
+            with pytest.raises(AssetSyncError) as err:
+                uploader.upload_file_to_s3(
+                    file, self.job_attachment_s3_settings.s3BucketName, "test_key"
+                )
+            assert isinstance(err.value.__cause__, BotoCoreError)
+            assert (
+                "An issue occurred with AWS service request while uploading file: "
+                'Read timeout on endpoint URL: "test_url"\n'
+                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+                "Please verify your credentials and network connection. If the problem persists, try again later"
+                " or contact support for further assistance."
+            ) in str(err.value)
 
     @pytest.mark.parametrize(
         "manifest_version",
