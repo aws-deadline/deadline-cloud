@@ -19,7 +19,7 @@ from typing import Any, Callable, DefaultDict, List, Optional, Tuple, Union
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.client import BaseClient
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
 from .asset_manifests.hash_algorithms import HashAlgorithm
@@ -28,6 +28,7 @@ from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncError,
     AssetSyncCancelledError,
+    JobAttachmentS3BotoCoreError,
     JobAttachmentsS3ClientError,
     PathOutsideDirectoryError,
     JobAttachmentsError,
@@ -106,6 +107,13 @@ def get_manifest_from_s3(
             key_or_prefix=manifest_key,
             message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
         ) from exc
+    except BotoCoreError as bce:
+        raise JobAttachmentS3BotoCoreError(
+            action="downloading binary file",
+            error_details=str(bce),
+        ) from bce
+    except Exception as e:
+        raise AssetSyncError from e
 
 
 def _get_output_manifest_prefix(
@@ -195,6 +203,13 @@ def _get_tasks_manifests_keys_from_s3(
             key_or_prefix=manifest_prefix,
             message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
         ) from exc
+    except BotoCoreError as bce:
+        raise JobAttachmentS3BotoCoreError(
+            action="listing bucket contents",
+            error_details=str(bce),
+        ) from bce
+    except Exception as e:
+        raise AssetSyncError from e
 
     # 2. Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
     for task_folder, files in task_prefixes.items():
@@ -476,12 +491,17 @@ def download_file(
                 if progress_tracker and progress_tracker.continue_reporting is False:
                     raise AssetSyncCancelledError("File download cancelled.")
                 else:
-                    raise AssetSyncError("File upload failed.", ce) from ce
+                    raise AssetSyncError("File download failed.", ce) from ce
             except ClientError as secondExc:
                 status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
                 process_client_error(secondExc, status_code)
         else:
             process_client_error(exc, status_code)
+    except BotoCoreError as bce:
+        raise JobAttachmentS3BotoCoreError(
+            action="downloading file",
+            error_details=str(bce),
+        ) from bce
     except Exception as e:
         raise AssetSyncError from e
 
@@ -607,6 +627,13 @@ def _get_asset_root_from_s3(
             key_or_prefix=manifest_key,
             message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
         ) from exc
+    except BotoCoreError as bce:
+        raise JobAttachmentS3BotoCoreError(
+            action="checking for the existence of an object in the S3 bucket",
+            error_details=str(bce),
+        ) from bce
+    except Exception as e:
+        raise AssetSyncError from e
 
     return head["Metadata"].get("asset-root", None)
 

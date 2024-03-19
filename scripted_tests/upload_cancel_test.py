@@ -32,6 +32,7 @@ MESSAGE_HOW_TO_CANCEL = (
     "To stop the hash/upload process, please hit 'k' key and then 'Enter' key in succession.\n"
 )
 
+NUM_TINY_FILES = 0
 NUM_SMALL_FILES = 0
 NUM_MEDIUM_FILES = 0
 NUM_LARGE_FILES = 1
@@ -62,13 +63,21 @@ def run():
     root_path = pathlib.Path("/tmp/test_submit")
     root_path.mkdir(parents=True, exist_ok=True)
 
+    if NUM_TINY_FILES > 0:
+        for i in range(0, NUM_TINY_FILES):
+            file_path = root_path / f"tiny_test{i}.txt"
+            if not os.path.exists(file_path):
+                with file_path.open("wb") as f:
+                    f.write(os.urandom(2 * (1024**2)))  # 2 MB files
+            files.append(str(file_path))
+
     # Make small files
     if NUM_SMALL_FILES > 0:
         for i in range(0, NUM_SMALL_FILES):
             file_path = root_path / f"small_test{i}.txt"
             if not os.path.exists(file_path):
-                with file_path.open("w", encoding="utf-8") as f:
-                    f.write(f"test value: {i}")
+                with file_path.open("wb") as f:
+                    f.write(os.urandom(10 * (1024**2)))  # 10 MB files
             files.append(str(file_path))
 
     # Make medium-sized files
@@ -86,7 +95,7 @@ def run():
             file_path = root_path / f"large_test{i}.txt"
             if not os.path.exists(file_path):
                 with file_path.open("ab") as f:
-                    f.write(os.urandom(1 * (1024**3)))  # Write 1 GB at a time
+                    _create_large_file_with_chunks(file_path, 20 * (1024**3), 10**9)
             files.append(str(file_path))
 
     queue = get_queue(farm_id=farm_id, queue_id=queue_id)
@@ -128,6 +137,21 @@ def run():
 
     global main_terminated
     main_terminated = True
+
+
+def _create_large_file_with_chunks(file_path: str, total_size: int, chunk_size: int) -> None:
+    """
+    Creates a large file of a given total size by writing in chunks with random data.
+    It prevents MemoryError by dividing the size into manageable chunks and writing
+    each chunk sequentially.
+    """
+    with open(file_path, "wb") as f:
+        num_chunks = total_size // chunk_size
+        for _ in range(num_chunks):
+            f.write(os.urandom(chunk_size))
+        remaining = total_size % chunk_size
+        if remaining > 0:
+            f.write(os.urandom(remaining))
 
 
 def mock_on_preparing_to_submit(metadata):

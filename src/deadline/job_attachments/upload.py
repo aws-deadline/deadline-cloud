@@ -17,7 +17,7 @@ from typing import Any, Callable, Optional, Tuple, Type, Union
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from deadline.client.config import config_file
 
@@ -42,6 +42,7 @@ from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
     AssetSyncError,
+    JobAttachmentS3BotoCoreError,
     JobAttachmentsS3ClientError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
@@ -401,6 +402,11 @@ class S3AssetUploader:
                 key_or_prefix=s3_upload_key,
                 message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to upload {str(local_path)})",
             ) from exc
+        except BotoCoreError as bce:
+            raise JobAttachmentS3BotoCoreError(
+                action="uploading file",
+                error_details=str(bce),
+            ) from bce
         except Exception as e:
             raise AssetSyncError from e
 
@@ -425,6 +431,13 @@ class S3AssetUploader:
                     "checking if object exists", error_code, bucket, key, message
                 ) from exc
             return False
+        except BotoCoreError as bce:
+            raise JobAttachmentS3BotoCoreError(
+                action="checking for the existence of an object in the S3 bucket",
+                error_details=str(bce),
+            ) from bce
+        except Exception as e:
+            raise AssetSyncError from e
 
     def upload_bytes_to_s3(
         self,
@@ -470,6 +483,13 @@ class S3AssetUploader:
                 key_or_prefix=key,
                 message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
             ) from exc
+        except BotoCoreError as bce:
+            raise JobAttachmentS3BotoCoreError(
+                action="uploading binary file",
+                error_details=str(bce),
+            ) from bce
+        except Exception as e:
+            raise AssetSyncError from e
 
 
 class S3AssetManager:

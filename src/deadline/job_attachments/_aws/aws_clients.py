@@ -18,6 +18,7 @@ from ..exceptions import AssetSyncError
 from .aws_config import (
     S3_CONNECT_TIMEOUT_IN_SECS,
     S3_READ_TIMEOUT_IN_SECS,
+    S3_RETRIES_MODE,
     VENDOR_CODE,
 )
 
@@ -66,6 +67,7 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
             signature_version="s3v4",
             connect_timeout=S3_CONNECT_TIMEOUT_IN_SECS,
             read_timeout=S3_READ_TIMEOUT_IN_SECS,
+            retries={"mode": S3_RETRIES_MODE},
             user_agent_extra=f"S3A/Deadline/NA/JobAttachments/{version}",
             max_pool_connections=s3_max_pool_connections,
         ),

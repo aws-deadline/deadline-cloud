@@ -16,7 +16,7 @@ from typing import Any, Callable, List
 from unittest.mock import MagicMock, call, patch
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 from botocore.stub import Stubber
 
 import pytest
@@ -47,6 +47,7 @@ from deadline.job_attachments.download import (
     _get_tasks_manifests_keys_from_s3,
 )
 from deadline.job_attachments.exceptions import (
+    AssetSyncError,
     JobAttachmentsError,
     JobAttachmentsS3ClientError,
     MissingAssetRootError,
@@ -1734,6 +1735,30 @@ class TestFullDownload:
             ) in str(err.value)
 
     @mock_sts
+    def test_get_asset_root_from_s3_error_message_on_timeout(self):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during an S3 client's head_object call.
+        """
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                _get_asset_root_from_s3("test-key", "test-bucket")
+            assert isinstance(exc.value.__cause__, BotoCoreError)
+            assert (
+                "An issue occurred with AWS service request while checking for the existence of an object in the S3 bucket: "
+                'Read timeout on endpoint URL: "test_url"\n'
+                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+                "Please verify your credentials and network connection. If the problem persists, try again later"
+                " or contact support for further assistance."
+            ) in str(exc.value)
+
+    @mock_sts
     def test_get_manifest_from_s3_error_message_on_access_denied(self):
         """
         Test if the function raises the expected exception with a proper error message
@@ -1760,6 +1785,30 @@ class TestFullDownload:
             assert (
                 "Error downloading binary file in bucket 'test-bucket', Target key or prefix: 'test-key', "
                 "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(exc.value)
+
+    @mock_sts
+    def test_get_manifest_from_s3_error_message_on_timeout(self):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during an S3 client's download_fileobj call.
+        """
+        mock_s3_client = MagicMock()
+        mock_s3_client.download_fileobj.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                get_manifest_from_s3("test-key", "test-bucket")
+            assert isinstance(exc.value.__cause__, BotoCoreError)
+            assert (
+                "An issue occurred with AWS service request while downloading binary file: "
+                'Read timeout on endpoint URL: "test_url"\n'
+                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+                "Please verify your credentials and network connection. If the problem persists, try again later"
+                " or contact support for further assistance."
             ) in str(exc.value)
 
     @mock_sts
@@ -1792,6 +1841,33 @@ class TestFullDownload:
             assert (
                 "Error listing bucket contents in bucket 'test-bucket', Target key or prefix: 'assetRoot', "
                 "HTTP Status Code: 403, Forbidden or Access denied. "
+            ) in str(exc.value)
+
+    @mock_sts
+    def test_get_tasks_manifests_keys_from_s3_error_message_on_timeout(self):
+        """
+        Test that the appropriate error is raised when S3 client's get_paginator call triggers
+        a ReadTimeoutError while getting the keys of task output manifests from S3.
+        """
+        mock_s3_client = MagicMock()
+        mock_s3_client.get_paginator.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                _get_tasks_manifests_keys_from_s3(
+                    "assetRoot",
+                    "test-bucket",
+                )
+            assert isinstance(exc.value.__cause__, BotoCoreError)
+            assert (
+                "An issue occurred with AWS service request while listing bucket contents: "
+                'Read timeout on endpoint URL: "test_url"\n'
+                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+                "Please verify your credentials and network connection. If the problem persists, try again later"
+                " or contact support for further assistance."
             ) in str(exc.value)
 
     @mock_sts
@@ -1835,6 +1911,49 @@ class TestFullDownload:
             ) in str(exc.value)
             failed_file_path = Path("/home/username/assets/inputs/input1.txt")
             assert (f"(Failed to download the file to {str(failed_file_path)})") in str(exc.value)
+
+    @mock_sts
+    def test_download_file_error_message_on_timeout(self):
+        """
+        Test that the appropriate error is raised when a ReadTimeoutError occurs
+        during a transfer manager's download operation.
+        """
+        mock_s3_client = MagicMock()
+        mock_future = MagicMock()
+        mock_transfer_manager = MagicMock()
+        mock_transfer_manager.download.return_value = mock_future
+        mock_future.result.side_effect = ReadTimeoutError(endpoint_url="test_url")
+
+        file_path = ManifestPathv2023_03_03(
+            path="inputs/input1.txt", hash="input1", size=1, mtime=1234000000
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
+            return_value=mock_transfer_manager,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                download_file(
+                    file_path,
+                    HashAlgorithm.XXH128,
+                    "/home/username/assets",
+                    "test-bucket",
+                    "rootPrefix/Data",
+                    mock_s3_client,
+                )
+            assert isinstance(exc.value.__cause__, BotoCoreError)
+            assert (
+                "An issue occurred with AWS service request while downloading file: "
+                'Read timeout on endpoint URL: "test_url"\n'
+                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
+                "Please verify your credentials and network connection. If the problem persists, try again later"
+                " or contact support for further assistance."
+            ) in str(exc.value)
 
 
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
