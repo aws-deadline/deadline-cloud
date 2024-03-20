@@ -111,9 +111,19 @@ class OutputFile:
 
 
 class StorageProfileOperatingSystemFamily(str, Enum):
+    """Case-insensitive enum for the storage profile operating system family type."""
+
     WINDOWS = "windows"
     LINUX = "linux"
     MACOS = "macos"
+
+    @classmethod
+    def _missing_(cls, value):
+        value = value.lower()
+        for member in cls:
+            if member == value:
+                return member
+        return None
 
 
 class PathFormat(str, Enum):
