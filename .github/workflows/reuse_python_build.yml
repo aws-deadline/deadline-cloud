@@ -54,10 +54,10 @@ jobs:
         pip install --upgrade hatch
 
     - name: Run Linting
-      run: hatch run lint
+      run: hatch -v run lint
 
     - name: Run Build
-      run: hatch build
+      run: hatch -v build
 
     - name: Run Tests
       run: hatch run test -vv
