@@ -145,9 +145,9 @@ class TestAssetSync:
 
             # THEN
             expected_source_path_format = (
-                "windows"
+                "WINDOWS"
                 if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
-                else "posix"
+                else "POSIX"
             )
             assert result_pathmap_rules == [
                 {
@@ -243,9 +243,9 @@ class TestAssetSync:
 
             # THEN
             expected_source_path_format = (
-                "windows"
+                "WINDOWS"
                 if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
-                else "posix"
+                else "POSIX"
             )
             assert result_pathmap_rules == [
                 {
@@ -373,9 +373,9 @@ class TestAssetSync:
 
             # THEN
             expected_source_path_format = (
-                "windows"
+                "WINDOWS"
                 if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
-                else "posix"
+                else "POSIX"
             )
             assert result_pathmap_rules == [
                 {
@@ -449,9 +449,9 @@ class TestAssetSync:
             # THEN
             merge_manifests_mock.assert_called()
             expected_source_path_format = (
-                "windows"
+                "WINDOWS"
                 if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
-                else "posix"
+                else "POSIX"
             )
 
             assert result_pathmap_rules == [
@@ -758,7 +758,7 @@ class TestAssetSync:
             # THEN
             assert result_pathmap_rules == [
                 {
-                    "source_path_format": "posix",
+                    "source_path_format": "POSIX",
                     "source_path": default_job.attachments.manifests[0].rootPath,
                     "destination_path": local_root,
                 }
@@ -843,9 +843,9 @@ class TestAssetSync:
 
             # THEN
             expected_source_path_format = (
-                "windows"
+                "WINDOWS"
                 if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
-                else "posix"
+                else "POSIX"
             )
             assert result_pathmap_rules == [
                 {
