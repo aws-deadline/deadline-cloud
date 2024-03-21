@@ -273,7 +273,7 @@ def _download_job_output(
     if job_attachments:
         job_attachments_manifests = job_attachments["manifests"]
         for manifest in job_attachments_manifests:
-            root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
+            root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"].upper()
 
     job_output_downloader = OutputDownloader(
         s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
