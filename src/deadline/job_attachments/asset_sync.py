@@ -289,6 +289,17 @@ class AssetSync:
         )
         return job.attachments if job and job.attachments else None
 
+    def _record_attachment_mtimes(
+        self, merged_manifests_by_root: dict[str, BaseAssetManifest]
+    ) -> None:
+        # Record the mapping of downloaded files' absolute paths to their last modification time
+        # (in microseconds). This is used to later determine which files have been modified or
+        # newly created during the session and need to be uploaded as output.
+        for local_root, merged_manifest in merged_manifests_by_root.items():
+            for manifest_path in merged_manifest.paths:
+                abs_path = str(Path(local_root) / manifest_path.path)
+                self.synced_assets_mtime[abs_path] = Path(abs_path).stat().st_mtime_ns
+
     def sync_inputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
@@ -427,6 +438,7 @@ class AssetSync:
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
                 summary_statistics = SummaryStatistics()
+                self._record_attachment_mtimes(merged_manifests_by_root)
                 return (summary_statistics, list(pathmapping_rules.values()))
             except VFSExecutableMissingError:
                 logger.error(
@@ -459,13 +471,7 @@ class AssetSync:
             else:
                 raise
 
-        # Record the mapping of downloaded files' absolute paths to their last modification time
-        # (in microseconds). This is used to later determine which files have been modified or
-        # newly created during the session and need to be uploaded as output.
-        for local_root, merged_manifest in merged_manifests_by_root.items():
-            for manifest_path in merged_manifest.paths:
-                abs_path = str(Path(local_root) / manifest_path.path)
-                self.synced_assets_mtime[abs_path] = Path(abs_path).stat().st_mtime_ns
+        self._record_attachment_mtimes(merged_manifests_by_root)
 
         return (
             download_summary_statistics.convert_to_summary_statistics(),
