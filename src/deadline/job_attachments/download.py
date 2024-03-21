@@ -855,7 +855,7 @@ def write_manifest_to_temp_file(manifest: BaseAssetManifest) -> str:
 
 
 def handle_existing_vfs(
-    manifest: BaseAssetManifest, session_dir: Path, mount_point: str
+    manifest: BaseAssetManifest, session_dir: Path, mount_point: str, os_user: str
 ) -> BaseAssetManifest:
     """
     Combines provided manifest with the input manifest of the running VFS at the
@@ -865,7 +865,7 @@ def handle_existing_vfs(
     Args:
         manifests (BaseAssetManifest): The manifest for the new inputs to be mounted
         mount_point (str): The local directory where the manifest is to be mounted
-
+        os_user: the user executing the job.
     Returns:
         BaseAssetManifest : A single manifest containing the merged paths or the original manifest
     """
@@ -887,7 +887,9 @@ def handle_existing_vfs(
         download_logger.error(f"input manifest not found for mount at {mount_point}")
         return manifest
 
-    VFSProcessManager.kill_process_at_mount(session_dir=session_dir, mount_point=mount_point)
+    VFSProcessManager.kill_process_at_mount(
+        session_dir=session_dir, mount_point=mount_point, os_user=os_user
+    )
 
     return manifest
 
@@ -898,6 +900,7 @@ def mount_vfs_from_manifests(
     boto3_session: boto3.Session,
     session_dir: Path,
     os_user: str,
+    os_group: str,
     os_env_vars: dict[str, str],
     cas_prefix: Optional[str] = None,
 ) -> None:
@@ -910,6 +913,7 @@ def mount_vfs_from_manifests(
         boto3_session: The boto3 session to use.
         session_dir: the directory that the session is going to use.
         os_user: the user executing the job.
+        os_group: the group of the user executing the job
         os_env_vars: environment variables to set for launched subprocesses
         cas_prefix: The CAS prefix of the files.
 
@@ -924,7 +928,7 @@ def mount_vfs_from_manifests(
         )
 
         final_manifest: BaseAssetManifest = handle_existing_vfs(
-            manifest=manifest, session_dir=session_dir, mount_point=mount_point
+            manifest=manifest, session_dir=session_dir, mount_point=mount_point, os_user=os_user
         )
 
         # Write out a temporary file with the contents of the newly merged manifest
@@ -937,6 +941,7 @@ def mount_vfs_from_manifests(
             mount_point,
             os_user,
             os_env_vars,
+            os_group,
             cas_prefix,
         )
         vfs_manager.start(session_dir=session_dir)

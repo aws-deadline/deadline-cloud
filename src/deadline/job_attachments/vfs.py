@@ -8,7 +8,6 @@ import sys
 import time
 from pathlib import Path
 import threading
-from signal import SIGTERM
 from typing import Dict, List, Union, Optional
 
 from .exceptions import (
@@ -26,6 +25,7 @@ DEADLINE_VFS_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_deadline_vfs_al2.s
 
 
 DEADLINE_VFS_PID_FILE_NAME = "vfs_pids.txt"
+DEADLINE_MANIFEST_GROUP_READ_PERMS = 0o640
 
 
 class VFSProcessManager(object):
@@ -44,6 +44,7 @@ class VFSProcessManager(object):
     _manifest_path: str
     _os_user: str
     _os_env_vars: Dict[str, str]
+    _os_group: Optional[str]
     _cas_prefix: Optional[str]
 
     def __init__(
@@ -54,6 +55,7 @@ class VFSProcessManager(object):
         mount_point: str,
         os_user: str,
         os_env_vars: Dict[str, str],
+        os_group: Optional[str] = None,
         cas_prefix: Optional[str] = None,
     ):
         # TODO: Once Windows pathmapping is implemented we can remove this
@@ -69,14 +71,16 @@ class VFSProcessManager(object):
         self._region = region
         self._manifest_path = manifest_path
         self._os_user = os_user
+        self._os_group = os_group
         self._os_env_vars = os_env_vars
         self._cas_prefix = cas_prefix
 
     @classmethod
-    def kill_all_processes(cls, session_dir: Path) -> None:
+    def kill_all_processes(cls, session_dir: Path, os_user: str) -> None:
         """
         Kill all existing VFS processes when outputs have been uploaded.
         :param session_dir: tmp directory for session
+        :param os_user: the user executing the job.
         """
         log.info("Terminating all VFS processes.")
         try:
@@ -84,32 +88,55 @@ class VFSProcessManager(object):
             with open(pid_file_path, "r") as file:
                 for line in file.readlines():
                     line = line.strip()
-                    mount_point, pid, manifest_path = line.split(":")
-
-                    log.info(f"Sending SIGTERM to child processes of {pid} at {mount_point}.")
-                    subprocess.run(["/bin/pkill", "-P", pid])
-                    log.info(f"Sending SIGTERM to {pid}.")
-                    try:
-                        os.kill(int(pid), SIGTERM)
-                    except OSError as e:
-                        # This is raised when the VFS process has already terminated.
-                        # This shouldn't happen, but won't cause an error if ignored
-                        if e.errno == 3:
-                            log.error(f"No process found for {pid}")
+                    mount_point, _, _ = line.split(":")
+                    cls.shutdown_libfuse_mount(mount_point, os_user)
             os.remove(pid_file_path)
         except FileNotFoundError:
             log.warning(f"VFS pid file not found at {pid_file_path}")
 
     @classmethod
-    def kill_process_at_mount(cls, session_dir: Path, mount_point: str) -> bool:
+    def get_shutdown_args(cls, mount_path: str, os_user: str):
+        """
+        Return the argument list to provide the subprocess run command to shut down the mount
+        :param mount_path: path to mounted folder
+        :param os_user: the user executing the job.
+        """
+        fusermount3_path = os.path.join(cls.find_vfs_link_dir(), "fusermount3")
+        if not os.path.exists(fusermount3_path):
+            log.warn(f"fusermount3 not found at {cls.find_vfs_link_dir()}")
+            return None
+        return ["sudo", "-u", os_user, fusermount3_path, "-u", mount_path]
+
+    @classmethod
+    def shutdown_libfuse_mount(cls, mount_path: str, os_user: str) -> bool:
+        """
+        Shut down the mount at the provided path using the fusermount3 unmount option
+        as the provided user
+        :param mount_path: path to mounted folder
+        """
+        log.info(f"Attempting to shut down {mount_path} as {os_user}")
+        shutdown_args = cls.get_shutdown_args(mount_path, os_user)
+        if not shutdown_args:
+            return False
+        try:
+            run_result = subprocess.run(shutdown_args, check=True)
+        except subprocess.CalledProcessError as e:
+            log.warn(f"Shutdown failed with error {e}")
+            # Don't reraise, check if mount is gone
+        log.info(f"Shutdown returns {run_result.returncode}")
+        return cls.wait_for_mount(mount_path, expected=False)
+
+    @classmethod
+    def kill_process_at_mount(cls, session_dir: Path, mount_point: str, os_user: str) -> bool:
         """
         Kill the VFS instance running at the given mount_point and modify the VFS pid tracking
         file to remove the entry.
 
         :param session_dir: tmp directory for session
         :param mount_point: local directory to search for
+        :param os_user: user to attempt shut down as
         """
-        if not os.path.ismount(mount_point):
+        if not cls.is_mount(mount_point):
             log.info(f"{mount_point} is not a mount, returning")
             return False
         log.info(f"Terminating deadline_vfs processes at {mount_point}.")
@@ -124,23 +151,9 @@ class VFSProcessManager(object):
                     if mount_point_found:
                         file.write(line)
                     else:
-                        mount_for_pid, pid, manifest_path = line.split(":")
+                        mount_for_pid, _, _ = line.split(":")
                         if mount_for_pid == mount_point:
-                            log.info(f"Sending SIGTERM to child processes of {pid}.")
-                            subprocess.run(["/bin/pkill", "-P", pid])
-                            log.info(f"Sending SIGTERM to {pid}.")
-                            try:
-                                os.kill(int(pid), SIGTERM)
-                            except OSError as e:
-                                # This is raised when the VFS process has already terminated.
-                                # This shouldn't happen, but won't cause an error if ignored
-                                if e.errno == 3:
-                                    log.error(f"No process found for {pid}")
-                                else:
-                                    log.error(
-                                        f"{e} when attempting to kill VFS process at {mount_for_pid}"
-                                    )
-                                    raise e
+                            cls.shutdown_libfuse_mount(mount_point, os_user)
                             mount_point_found = True
                         else:
                             file.write(line)
@@ -165,7 +178,7 @@ class VFSProcessManager(object):
             with open(pid_file_path, "r") as file:
                 for line in file.readlines():
                     line = line.strip()
-                    mount_for_pid, pid, manifest_path = line.split(":")
+                    mount_for_pid, _, manifest_path = line.split(":")
                     if mount_for_pid == mount_point:
                         if os.path.exists(manifest_path):
                             return Path(manifest_path)
@@ -178,22 +191,33 @@ class VFSProcessManager(object):
         log.warning(f"No manifest found for mount {mount_point}")
         return None
 
-    def wait_for_mount(self, mount_wait_seconds=60) -> bool:
+    @classmethod
+    def is_mount(cls, path) -> bool:
+        """
+        os.path.ismount returns false for libfuse mounts owned by "other users",
+        use findmnt instead
+        """
+        return subprocess.run(["findmnt", path]).returncode == 0
+
+    @classmethod
+    def wait_for_mount(cls, mount_path, mount_wait_seconds=60, expected=True) -> bool:
         """
         After we've launched the VFS subprocess we need to wait
         for the OS to validate that the mount is in place before use
+        :param mount_wait_seconds: Duration to wait for mount state
+        :param expected: Wait for the mount to exist or no longer exist
         """
-        log.info(f"Testing for mount at {self.get_mount_point()}")
+        log.info(f"Waiting for is_mount at {mount_path} to return {expected}..")
         wait_seconds = mount_wait_seconds
         while wait_seconds >= 0:
-            if os.path.ismount(self.get_mount_point()):
-                log.info(f"{self.get_mount_point()} is a mount, returning")
+            if cls.is_mount(mount_path) == expected:
+                log.info(f"is_mount on {mount_path} returns {expected}, returning")
                 return True
             wait_seconds -= 1
             if wait_seconds >= 0:
-                log.info(f"{self.get_mount_point()} not a mount, sleeping...")
+                log.info(f"is_mount on {mount_path} not {expected}, sleeping...")
                 time.sleep(1)
-        log.info(f"Failed to find mount at {self.get_mount_point()}")
+        log.info(f"Failed to find is_mount {expected} at {mount_path} after {mount_wait_seconds}")
         VFSProcessManager.print_log_end()
         return False
 
@@ -242,13 +266,21 @@ class VFSProcessManager(object):
         executable = VFSProcessManager.find_vfs_launch_script()
         if self._cas_prefix is None:
             command = [
-                "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
-                % (executable, mount_point, self._asset_bucket, self._manifest_path, self._region)
+                "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
+                % (
+                    self._os_user,
+                    executable,
+                    mount_point,
+                    self._asset_bucket,
+                    self._manifest_path,
+                    self._region,
+                )
             ]
         else:
             command = [
-                "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
+                "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
                 % (
+                    self._os_user,
                     executable,
                     mount_point,
                     self._asset_bucket,
@@ -391,6 +423,23 @@ class VFSProcessManager(object):
 
         return my_env
 
+    def set_manifest_owner(self) -> None:
+        """
+        Set the manifest path to be owned by _os_user
+        """
+        log.info(
+            f"Attempting to set group ownership on {self._manifest_path} for {self._os_user} to {self._os_group}"
+        )
+        if not os.path.exists(self._manifest_path):
+            log.error(f"Manifest not found at {self._manifest_path}")
+            return
+        if self._os_group is not None:
+            try:
+                shutil.chown(self._manifest_path, group=self._os_group)
+                os.chmod(self._manifest_path, DEADLINE_MANIFEST_GROUP_READ_PERMS)
+            except OSError as e:
+                log.error(f"Failed to set ownership with error {e}")
+
     def start(self, session_dir: Path) -> None:
         """
         Start our VFS process
@@ -399,11 +448,13 @@ class VFSProcessManager(object):
         self._run_path = VFSProcessManager.get_cwd()
         log.info(f"Using run_path {self._run_path}")
         log.info(f"Using mount_point {self._mount_point}")
+        self.set_manifest_owner()
         VFSProcessManager.create_mount_point(self._mount_point)
         start_command = self.build_launch_command(self._mount_point)
         launch_env = self.get_launch_environ()
         log.info(f"Launching VFS with command {start_command}")
         log.info(f"Launching with environment {launch_env}")
+        log.info(f"Launching as user {self._os_user}")
 
         try:
 
@@ -434,7 +485,7 @@ class VFSProcessManager(object):
             log.exception(f"Exception during launch with command {start_command} exception {e}")
             raise e
         log.info(f"Launched VFS as pid {self._vfs_proc.pid}")
-        if not self.wait_for_mount():
+        if not VFSProcessManager.wait_for_mount(self.get_mount_point()):
             log.error("Failed to mount, shutting down")
             raise VFSFailedToMountError
 

@@ -10,7 +10,6 @@ from pathlib import Path
 import threading
 from typing import List, Union
 from unittest.mock import Mock, patch, call, MagicMock
-from signal import SIGTERM
 
 import pytest
 
@@ -28,6 +27,7 @@ from deadline.job_attachments.vfs import (
     DEADLINE_VFS_EXECUTABLE_SCRIPT,
     DEADLINE_VFS_INSTALL_PATH,
     DEADLINE_VFS_PID_FILE_NAME,
+    DEADLINE_MANIFEST_GROUP_READ_PERMS,
 )
 
 
@@ -86,22 +86,23 @@ class TestVFSProcessmanager:
         dest_dir: str = "assetroot-27bggh78dd2b568ab123"
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
-
+        test_os_user = "test-user"
         # Create process manager without CAS prefix
         process_manager: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
         test_executable = os.environ[DEADLINE_VFS_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
 
         expected_launch_command: List = [
-            "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
+            "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
             % (
+                test_os_user,
                 test_executable,
                 local_root,
                 self.s3_settings.s3BucketName,
@@ -125,7 +126,7 @@ class TestVFSProcessmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path,
             mount_point=local_root,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
             cas_prefix=test_CAS_prefix,
         )
@@ -134,8 +135,9 @@ class TestVFSProcessmanager:
         VFSProcessManager.launch_script_path = None
 
         expected_launch_command = [
-            "%s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
+            "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
             % (
+                test_os_user,
                 test_executable,
                 local_root,
                 self.s3_settings.s3BucketName,
@@ -448,14 +450,14 @@ class TestVFSProcessmanager:
         os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         test_pid1 = 12345
         test_pid2 = 67890
-
+        test_os_user = "test-user"
         # Create process managers
         process_manager1: VFSProcessManager = VFSProcessManager(
             asset_bucket=self.s3_settings.s3BucketName,
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
         process_manager2: VFSProcessManager = VFSProcessManager(
@@ -463,7 +465,7 @@ class TestVFSProcessmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
             mount_point=local_root2,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
@@ -476,8 +478,6 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.vfs.os.kill",
-        ) as mock_os_kill, patch(
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ), patch(
@@ -506,19 +506,16 @@ class TestVFSProcessmanager:
             assert os.path.exists(local_root1)
             assert os.path.exists(local_root2)
 
-            VFSProcessManager.kill_all_processes(tmp_path)
-            # Verify all processes in pid file were killed
-            mock_os_kill.assert_has_calls(
-                [
-                    call(test_pid1, SIGTERM),
-                    call(test_pid2, SIGTERM),
-                ],
-                any_order=True,
-            )
+            VFSProcessManager.kill_all_processes(tmp_path, os_user=test_os_user)
+            # Verify all mounts were killed
             mock_subprocess_run.assert_has_calls(
                 [
-                    call(["/bin/pkill", "-P", str(test_pid1)]),
-                    call(["/bin/pkill", "-P", str(test_pid2)]),
+                    call(
+                        VFSProcessManager.get_shutdown_args(local_root1, test_os_user), check=True
+                    ),
+                    call(
+                        VFSProcessManager.get_shutdown_args(local_root2, test_os_user), check=True
+                    ),
                 ],
                 any_order=True,
             )
@@ -623,6 +620,7 @@ class TestVFSProcessmanager:
         os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
         test_pid1 = 12345
         test_pid2 = 67890
+        test_os_user = "test-user"
 
         # Create process managers
         process_manager1: VFSProcessManager = VFSProcessManager(
@@ -630,7 +628,7 @@ class TestVFSProcessmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path1,
             mount_point=local_root1,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
         process_manager2: VFSProcessManager = VFSProcessManager(
@@ -638,7 +636,7 @@ class TestVFSProcessmanager:
             region=os.environ["AWS_DEFAULT_REGION"],
             manifest_path=manifest_path2,
             mount_point=local_root2,
-            os_user="test-user",
+            os_user=test_os_user,
             os_env_vars={"AWS_PROFILE": "test-profile"},
         )
 
@@ -651,8 +649,6 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
             return_value=True,
         ), patch(
-            f"{deadline.__package__}.job_attachments.vfs.os.kill",
-        ) as mock_os_kill, patch(
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
         ), patch(
@@ -661,7 +657,7 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ), patch(
-            f"{deadline.__package__}.job_attachments.vfs.os.path.ismount",
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.is_mount",
             return_value=True,
         ):
             # start first mock VFS process
@@ -692,9 +688,11 @@ class TestVFSProcessmanager:
 
             # Verify killing process 1 removes pid entry
             assert VFSProcessManager.kill_process_at_mount(
-                session_dir=tmp_path, mount_point=local_root1
+                session_dir=tmp_path, mount_point=local_root1, os_user=test_os_user
             )
-            mock_os_kill.assert_called_once_with(test_pid1, SIGTERM)
+            mock_subprocess_run.assert_called_with(
+                VFSProcessManager.get_shutdown_args(local_root1, test_os_user), check=True
+            )
             assert not VFSProcessManager.get_manifest_path_for_mount(
                 session_dir=tmp_path, mount_point=local_root1
             )
@@ -702,19 +700,71 @@ class TestVFSProcessmanager:
                 session_dir=tmp_path, mount_point=local_root2
             ) == Path(manifest_path2)
 
-            VFSProcessManager.kill_all_processes(tmp_path)
+            VFSProcessManager.kill_all_processes(tmp_path, os_user=test_os_user)
 
-            mock_os_kill.assert_has_calls(
-                [
-                    call(test_pid1, SIGTERM),
-                    call(test_pid2, SIGTERM),
-                ],
-                any_order=True,
-            )
             mock_subprocess_run.assert_has_calls(
                 [
-                    call(["/bin/pkill", "-P", str(test_pid1)]),
-                    call(["/bin/pkill", "-P", str(test_pid2)]),
+                    call(
+                        VFSProcessManager.get_shutdown_args(local_root1, test_os_user), check=True
+                    ),
+                    call(
+                        VFSProcessManager.get_shutdown_args(local_root2, test_os_user), check=True
+                    ),
                 ],
                 any_order=True,
             )
+
+    def test_manifest_group_set(
+        self,
+        tmp_path: Path,
+    ):
+        # Test to verify group ownership of the manifest is set properly on startup
+
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-27bggh78dd2b568ab123"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+        test_os_user = "test-user"
+        test_os_group = "test-group"
+
+        # Create process manager
+        process_manager1: VFSProcessManager = VFSProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+            os_user=test_os_user,
+            os_group=test_os_group,
+            os_env_vars={"AWS_PROFILE": "test-profile"},
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
+            return_value="/test/directory/path",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.shutil.chown",
+        ) as mock_chown, patch(
+            f"{deadline.__package__}.job_attachments.vfs.os.chmod",
+        ) as mock_chmod, patch(
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.run"
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.is_mount",
+            return_value=True,
+        ):
+            process_manager1.start(tmp_path)
+
+            mock_chown.assert_called_with(manifest_path, group=test_os_group)
+
+            mock_chmod.assert_called_with(manifest_path, DEADLINE_MANIFEST_GROUP_READ_PERMS)

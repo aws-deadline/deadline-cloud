@@ -409,6 +409,7 @@ class AssetSync:
                     boto3_session=self.session,
                     session_dir=session_dir,
                     os_user=fs_permission_settings.os_user,  # type: ignore[union-attr]
+                    os_group=getattr(fs_permission_settings, "os_group", ""),
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
@@ -538,12 +539,14 @@ class AssetSync:
             summary_stats = SummaryStatistics()
         return summary_stats
 
-    def cleanup_session(self, session_dir: Path, file_system: JobAttachmentsFileSystem):
+    def cleanup_session(
+        self, session_dir: Path, file_system: JobAttachmentsFileSystem, os_user: str
+    ):
         if file_system == JobAttachmentsFileSystem.COPIED.value:
             return
         try:
             VFSProcessManager.find_vfs()
             # Shutdown all running Deadline VFS processes since session is complete
-            VFSProcessManager.kill_all_processes(session_dir=session_dir)
+            VFSProcessManager.kill_all_processes(session_dir=session_dir, os_user=os_user)
         except VFSExecutableMissingError:
             logger.error("Virtual File System not found, no processes to kill.")
