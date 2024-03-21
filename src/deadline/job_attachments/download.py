@@ -892,7 +892,7 @@ def handle_existing_vfs(
     Args:
         manifests (BaseAssetManifest): The manifest for the new inputs to be mounted
         mount_point (str): The local directory where the manifest is to be mounted
-        os_user: the user executing the job.
+        os_user: the user running the job.
     Returns:
         BaseAssetManifest : A single manifest containing the merged paths or the original manifest
     """
@@ -939,8 +939,8 @@ def mount_vfs_from_manifests(
         manifests_by_root: a map from each local root path to a corresponding list of tuples of manifest contents and their path.
         boto3_session: The boto3 session to use.
         session_dir: the directory that the session is going to use.
-        os_user: the user executing the job.
-        os_group: the group of the user executing the job
+        os_user: the user running the job.
+        os_group: the group of the user running the job
         os_env_vars: environment variables to set for launched subprocesses
         cas_prefix: The CAS prefix of the files.
 
