@@ -4,10 +4,14 @@
 tests the deadline.client.api functions relating to boto3.Client
 """
 
+from typing import Dict, List
 from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
 from deadline.client import api, config
+from deadline.client.api._session import DeadlineClient
+
+import pytest
 
 
 def test_get_boto3_session(fresh_deadline_config):
@@ -171,3 +175,72 @@ def test_check_deadline_api_available_fails(fresh_deadline_config):
         assert result is False
         # It should have called list_farms with to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(maxResults=1)
+
+
+@pytest.mark.parametrize(
+    "model_enums, manifests_input, manifests_output",
+    [
+        pytest.param(
+            (["windows", "posix"]),
+            (
+                [
+                    {"rootPathFormat": "WINDOWS"},
+                    {"rootPathFormat": "POSIX"},
+                ]
+            ),
+            (
+                [
+                    {"rootPathFormat": "windows"},
+                    {"rootPathFormat": "posix"},
+                ]
+            ),
+            id="old service model - all lowers",
+        ),
+        pytest.param(
+            (["WINDOWS", "POSIX"]),
+            (
+                [
+                    {"rootPathFormat": "WINDOWS", "rootPath": ""},
+                    {"rootPathFormat": "POSIX", "rootPath": ""},
+                ]
+            ),
+            (
+                [
+                    {"rootPathFormat": "WINDOWS", "rootPath": ""},
+                    {"rootPathFormat": "POSIX", "rootPath": ""},
+                ]
+            ),
+            id="new service model - ALL UPPERS",
+        ),
+    ],
+)
+def test_create_job_root_path_format_compat(
+    model_enums: List[str],
+    manifests_input: List[Dict[str, str]],
+    manifests_output: List[Dict[str, str]],
+) -> None:
+    """
+    create_job will eventually be updated so that rootPathFormat is all UPPERS.
+
+    Here we make sure that the shim is doing its job of:
+    1. Calling the underlying client method
+    2. Replacing all rootPathFormats to be the right casing
+    """
+    # GIVEN
+    fake_client = MagicMock()
+    fake_path_format_shape = MagicMock()
+    fake_path_format_shape.metadata.get.return_value = model_enums
+    fake_client.meta.service_model.shape_for.return_value = fake_path_format_shape
+    deadline_client = DeadlineClient(fake_client)
+
+    def create_job_manifests(manifests):
+        return {"attachments": {"manifests": manifests}}
+
+    kwargs_input = create_job_manifests(manifests_input)
+    kwargs_output = create_job_manifests(manifests_output)
+
+    # WHEN
+    deadline_client.create_job(**kwargs_input)
+
+    # THEN
+    fake_client.create_job.assert_called_once_with(**kwargs_output)
