@@ -1,3 +1,12 @@
+## 0.42.0 (2024-03-21)
+
+### BREAKING CHANGES
+* prep for rootPathFormat becoming ALL UPPERS (#222) ([`d49c885`](https://github.com/casillas2/deadline-cloud/commit/d49c885efe3b97b79d1eca3dfaaac472bf85aaf2))
+
+
+### Bug Fixes
+* Make StorageProfileOperatingSystemFamily enum case-insensitive ([`0da921c`](https://github.com/casillas2/deadline-cloud/commit/0da921c5f46b3c63aff3a8fdcd892701447900b6))
+
 ## 0.41.0 (2024-03-19)
 
 ### BREAKING CHANGES
