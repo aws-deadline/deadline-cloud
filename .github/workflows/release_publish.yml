@@ -101,31 +101,30 @@ jobs:
         run: |
           export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
           pip install --upgrade hatch
-          hatch build
+          hatch -v build
 
-      # TODO: Uncomment below once the Deadline Cloud PGP key is available
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
-      #     aws-region: us-west-2
-      #     mask-aws-account-id: true
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
 
-      # - name: Import PGP Key
-      #   run: |
-      #     export SECRET_STRING="$(aws secretsmanager get-secret-value --secret-id ${{ secrets.AWS_PGP_KEY_SECRET }} --query 'SecretString')"
-      #     printenv SECRET_STRING | jq -r '. | fromjson | .PrivateKey' | gpg --batch --pinentry-mode loopback --import --armor
+      - name: Import PGP Key
+        run: |
+          export SECRET_STRING="$(aws secretsmanager get-secret-value --secret-id ${{ secrets.AWS_PGP_KEY_SECRET }} --query 'SecretString')"
+          printenv SECRET_STRING | jq -r '. | fromjson | .PrivateKey' | gpg --batch --pinentry-mode loopback --import --armor
 
-      #     PGP_KEY_PASSPHRASE=$(printenv SECRET_STRING | jq -r '. | fromjson | .Passphrase')
-      #     echo "::add-mask::$PGP_KEY_PASSPHRASE"
-      #     echo "PGP_KEY_PASSPHRASE=$PGP_KEY_PASSPHRASE" >> $GITHUB_ENV
+          PGP_KEY_PASSPHRASE=$(printenv SECRET_STRING | jq -r '. | fromjson | .Passphrase')
+          echo "::add-mask::$PGP_KEY_PASSPHRASE"
+          echo "PGP_KEY_PASSPHRASE=$PGP_KEY_PASSPHRASE" >> $GITHUB_ENV
 
-      # - name: Sign
-      #   run: |
-      #     for file in dist/*; do
-      #       printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "Open Job Description" --passphrase-fd 0 --output $file.sig --detach-sign $file
-      #       echo "Created signature file for $file"
-      #     done
+      - name: Sign
+        run: |
+          for file in dist/*; do
+            printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
+            echo "Created signature file for $file"
+          done
 
       - name: PushRelease
         env:
@@ -133,6 +132,26 @@ jobs:
         run: |
           git push origin $TAG
           gh release create $TAG dist/* --notes "$RELEASE_NOTES"
+
+  PublishToInternal:
+    needs: Release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ${{ github.event.repository.name }}-Publish
+          hide-cloudwatch-logs: true
 
   PublishToRepository:
     needs: Release
@@ -176,7 +195,7 @@ jobs:
           pip install --upgrade twine
 
       - name: Build
-        run: hatch build
+        run: hatch -v build
 
       - name: Publish to Repository
         run: |
@@ -196,23 +215,3 @@ jobs:
       # # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-pypi
       # - name: Publish to PyPI
       #   uses: pypa/gh-action-pypi-publish@release/v1
-
-  PublishToInternal:
-    needs: Release
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
-
-      - name: Run CodeBuild
-        uses: aws-actions/aws-codebuild-run-build@v1
-        with:
-          project-name: ${{ github.event.repository.name }}-Publish
-          hide-cloudwatch-logs: true
