@@ -80,7 +80,7 @@ class VFSProcessManager(object):
         """
         Kill all existing VFS processes when outputs have been uploaded.
         :param session_dir: tmp directory for session
-        :param os_user: the user executing the job.
+        :param os_user: the user running the job.
         """
         log.info("Terminating all VFS processes.")
         try:
@@ -99,7 +99,7 @@ class VFSProcessManager(object):
         """
         Return the argument list to provide the subprocess run command to shut down the mount
         :param mount_path: path to mounted folder
-        :param os_user: the user executing the job.
+        :param os_user: the user running the job.
         """
         fusermount3_path = os.path.join(cls.find_vfs_link_dir(), "fusermount3")
         if not os.path.exists(fusermount3_path):
@@ -439,6 +439,7 @@ class VFSProcessManager(object):
                 os.chmod(self._manifest_path, DEADLINE_MANIFEST_GROUP_READ_PERMS)
             except OSError as e:
                 log.error(f"Failed to set ownership with error {e}")
+                raise
 
     def start(self, session_dir: Path) -> None:
         """
