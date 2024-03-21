@@ -127,8 +127,16 @@ class StorageProfileOperatingSystemFamily(str, Enum):
 
 
 class PathFormat(str, Enum):
-    WINDOWS = "windows"
-    POSIX = "posix"
+    WINDOWS = "WINDOWS"
+    POSIX = "POSIX"
+
+    @classmethod
+    def _missing_(cls, value) -> Optional[PathFormat]:
+        value = value.upper()
+        for member in cls:
+            if member == value:
+                return member
+        return None
 
     @classmethod
     def get_host_path_format(cls) -> PathFormat:
