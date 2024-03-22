@@ -17,6 +17,7 @@ from .versions import ManifestVersion
 
 alphanum_regex = re.compile("[a-zA-Z0-9]+")
 
+
 def _get_schema(version) -> dict[str, Any]:
     schema_filename = Path(__file__).parent.joinpath("schemas", version + ".json").resolve()
 
