@@ -865,6 +865,7 @@ class TestAssetSync:
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.COPIED,
+                os_user="test-user",
             )
 
             mock_find_vfs.assert_not_called()
@@ -872,6 +873,7 @@ class TestAssetSync:
             self.default_asset_sync.cleanup_session(
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.VIRTUAL,
+                os_user="test-user",
             )
 
             mock_find_vfs.assert_called_once()
