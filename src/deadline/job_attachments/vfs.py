@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 import threading
-from typing import Dict, List, Union, Optional
+from typing import Dict, Union, Optional
 
 from .exceptions import (
     VFSExecutableMissingError,
@@ -22,7 +22,6 @@ DEADLINE_VFS_ENV_VAR = "DEADLINE_VFS_PATH"
 DEADLINE_VFS_EXECUTABLE = "deadline_vfs"
 DEADLINE_VFS_INSTALL_PATH = "/opt/deadline_vfs"
 DEADLINE_VFS_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_deadline_vfs_al2.sh"
-
 
 DEADLINE_VFS_PID_FILE_NAME = "vfs_pids.txt"
 DEADLINE_MANIFEST_GROUP_READ_PERMS = 0o640
@@ -46,6 +45,7 @@ class VFSProcessManager(object):
     _os_env_vars: Dict[str, str]
     _os_group: Optional[str]
     _cas_prefix: Optional[str]
+    _asset_cache_path: Optional[str]
 
     def __init__(
         self,
@@ -57,6 +57,7 @@ class VFSProcessManager(object):
         os_env_vars: Dict[str, str],
         os_group: Optional[str] = None,
         cas_prefix: Optional[str] = None,
+        asset_cache_path: Optional[str] = None,
     ):
         # TODO: Once Windows pathmapping is implemented we can remove this
         if sys.platform == "win32":
@@ -74,6 +75,7 @@ class VFSProcessManager(object):
         self._os_group = os_group
         self._os_env_vars = os_env_vars
         self._cas_prefix = cas_prefix
+        self._asset_cache_path = asset_cache_path
 
     @classmethod
     def kill_all_processes(cls, session_dir: Path, os_user: str) -> None:
@@ -255,40 +257,26 @@ class VFSProcessManager(object):
         """
         return os.path.join(os.path.dirname(VFSProcessManager.find_vfs()), "..", "link")
 
-    def build_launch_command(self, mount_point: Union[os.PathLike, str]) -> List:
+    def build_launch_command(self, mount_point: Union[os.PathLike, str]) -> str:
         """
         Build command to pass to Popen to launch VFS
         :param mount_point: directory to mount which must be the first parameter seen by our executable
         :return: command
         """
-        command = []
-
         executable = VFSProcessManager.find_vfs_launch_script()
-        if self._cas_prefix is None:
-            command = [
-                "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
-                % (
-                    self._os_user,
-                    executable,
-                    mount_point,
-                    self._asset_bucket,
-                    self._manifest_path,
-                    self._region,
-                )
-            ]
-        else:
-            command = [
-                "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
-                % (
-                    self._os_user,
-                    executable,
-                    mount_point,
-                    self._asset_bucket,
-                    self._manifest_path,
-                    self._region,
-                    self._cas_prefix,
-                )
-            ]
+
+        command = (
+            f"sudo -u {self._os_user}"
+            f" {executable} {mount_point} -f --clienttype=deadline"
+            f" --bucket={self._asset_bucket}"
+            f" --manifest={self._manifest_path}"
+            f" --region={self._region}"
+            f" -oallow_other"
+        )
+        if self._cas_prefix is not None:
+            command += f" --casprefix={self._cas_prefix}"
+        if self._asset_cache_path is not None:
+            command += f" --cachedir={self._asset_cache_path}"
 
         log.info(f"Got launch command {command}")
         return command

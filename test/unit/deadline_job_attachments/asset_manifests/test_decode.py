@@ -95,19 +95,19 @@ def test_decode_manifest_v2023_03_03(default_manifest_str_v2023_03_03: str):
         hash_alg=HashAlgorithm.XXH128,
         total_size=10,
         paths=[
-            Path_v2023_03_03(path="\r", hash="Carriage Return", size=1, mtime=1679079744833848),
+            Path_v2023_03_03(path="\r", hash="CarriageReturn", size=1, mtime=1679079744833848),
             Path_v2023_03_03(path="1", hash="One", size=1, mtime=1679079344833868),
             Path_v2023_03_03(path="another_test_file", hash="c", size=1, mtime=1675079344833848),
             Path_v2023_03_03(path="test_dir/test_file", hash="b", size=1, mtime=1479079344833848),
             Path_v2023_03_03(path="test_file", hash="a", size=1, mtime=167907934333848),
             Path_v2023_03_03(path="\u0080", hash="Control", size=1, mtime=1679079344833348),
             Path_v2023_03_03(
-                path="ö", hash="Latin Small Letter O With Diaeresis", size=1, mtime=1679079344833848
+                path="ö", hash="LatinSmallLetterOWithDiaeresis", size=1, mtime=1679079344833848
             ),
-            Path_v2023_03_03(path="€", hash="Euro Sign", size=1, mtime=1679079344836848),
-            Path_v2023_03_03(path="😀", hash="Emoji: Grinning Face", size=1, mtime=1679579344833848),
+            Path_v2023_03_03(path="€", hash="EuroSign", size=1, mtime=1679079344836848),
+            Path_v2023_03_03(path="😀", hash="EmojiGrinningFace", size=1, mtime=1679579344833848),
             Path_v2023_03_03(
-                path="דּ", hash="Hebrew Letter Dalet With Dagesh", size=1, mtime=1679039344833848
+                path="דּ", hash="HebrewLetterDaletWithDagesh", size=1, mtime=1679039344833848
             ),
         ],
     )
@@ -173,3 +173,29 @@ def test_decode_manifest_missing_manifest_version():
         match='Manifest is missing the required "manifestVersion" field',
     ):
         decode.decode_manifest('{"hashAlg": "xxh128"}')
+
+
+def test_decode_manifest_hash_not_alphanumeric():
+    """
+    Test that a ManifestDecodeValidationError is raised if the manifest contains non-alphanumeric hashes
+    """
+    invalid_hashes: list[tuple[str, str]] = [
+        ("no_dots", "O.o"),
+        ("no_foward_slash", "a/b"),
+        ("no_back_slash", "a\\\\b"),
+        ("no_tildas", "o~o"),
+    ]
+
+    for path, hash in invalid_hashes:
+        with pytest.raises(ManifestDecodeValidationError, match=r".*is not alphanumeric"):
+            manifest_str = (
+                "{"
+                '"hashAlg":"xxh128",'
+                '"manifestVersion":"2023-03-03",'
+                '"paths":['
+                f'{{"hash":"{hash}","mtime":1679079744833848,"path":"{path}","size":1}}'
+                "],"
+                '"totalSize":10'
+                "}"
+            )
+            decode.decode_manifest(manifest_str)
