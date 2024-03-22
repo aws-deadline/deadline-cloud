@@ -1,3 +1,13 @@
+## 0.42.1 (2024-03-22)
+
+
+### Features
+* use qtpy and add support for pyside6 (#202) ([`deb2cca`](https://github.com/casillas2/deadline-cloud/commit/deb2ccabe00f7c97d65216ee91a18b9535b1d5f6))
+* Switch to running deadline_vfs as os_user (#223) ([`cf9c2d2`](https://github.com/casillas2/deadline-cloud/commit/cf9c2d29c4e5e90055f0bfcca13e6928613c1c35))
+
+### Bug Fixes
+* record attachments mtimes after mounting vfs ([`f0dcfa3`](https://github.com/casillas2/deadline-cloud/commit/f0dcfa314da8962e7bc089961265de0c63277ad6))
+
 ## 0.42.0 (2024-03-21)
 
 ### BREAKING CHANGES
