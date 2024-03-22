@@ -8,7 +8,7 @@ import stat
 import sys
 from pathlib import Path
 import threading
-from typing import List, Union
+from typing import Union
 from unittest.mock import Mock, patch, call, MagicMock
 
 import pytest
@@ -99,17 +99,14 @@ class TestVFSProcessmanager:
 
         test_executable = os.environ[DEADLINE_VFS_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
 
-        expected_launch_command: List = [
-            "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s -oallow_other"
-            % (
-                test_os_user,
-                test_executable,
-                local_root,
-                self.s3_settings.s3BucketName,
-                manifest_path,
-                os.environ["AWS_DEFAULT_REGION"],
-            )
-        ]
+        expected_launch_command = (
+            f"sudo -u {test_os_user}"
+            f" {test_executable} {local_root} -f --clienttype=deadline"
+            f" --bucket={self.s3_settings.s3BucketName}"
+            f" --manifest={manifest_path}"
+            f" --region={os.environ['AWS_DEFAULT_REGION']}"
+            f" -oallow_other"
+        )
         with patch(
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
@@ -134,18 +131,15 @@ class TestVFSProcessmanager:
         # intermediate cleanup
         VFSProcessManager.launch_script_path = None
 
-        expected_launch_command = [
-            "sudo -u %s %s %s -f --clienttype=deadline --bucket=%s --manifest=%s --region=%s --casprefix=%s -oallow_other"
-            % (
-                test_os_user,
-                test_executable,
-                local_root,
-                self.s3_settings.s3BucketName,
-                manifest_path,
-                os.environ["AWS_DEFAULT_REGION"],
-                test_CAS_prefix,
-            )
-        ]
+        expected_launch_command = (
+            f"sudo -u {test_os_user}"
+            f" {test_executable} {local_root} -f --clienttype=deadline"
+            f" --bucket={self.s3_settings.s3BucketName}"
+            f" --manifest={manifest_path}"
+            f" --region={os.environ['AWS_DEFAULT_REGION']}"
+            f" -oallow_other"
+            f" --casprefix={test_CAS_prefix}"
+        )
         with patch(
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,

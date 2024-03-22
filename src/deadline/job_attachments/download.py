@@ -65,6 +65,7 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
+VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
 
 
 def get_manifest_from_s3(
@@ -952,12 +953,19 @@ def mount_vfs_from_manifests(
         None
     """
 
+    vfs_cache_dir: Path = session_dir / VFS_CACHE_REL_PATH_IN_SESSION
+    asset_cache_hash_path: Path = vfs_cache_dir
+    if cas_prefix is not None:
+        asset_cache_hash_path = vfs_cache_dir / cas_prefix
+        _ensure_paths_within_directory(str(vfs_cache_dir), [str(asset_cache_hash_path)])
+
+    asset_cache_hash_path.mkdir(parents=True, exist_ok=True)
+
     for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.
         _ensure_paths_within_directory(
             mount_point, [path.path for path in manifest.paths]  # type: ignore
         )
-
         final_manifest: BaseAssetManifest = handle_existing_vfs(
             manifest=manifest, session_dir=session_dir, mount_point=mount_point, os_user=os_user
         )
@@ -974,6 +982,7 @@ def mount_vfs_from_manifests(
             os_env_vars,
             os_group,
             cas_prefix,
+            str(vfs_cache_dir),
         )
         vfs_manager.start(session_dir=session_dir)
 

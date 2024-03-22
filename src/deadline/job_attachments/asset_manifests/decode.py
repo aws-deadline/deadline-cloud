@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -13,6 +14,8 @@ from ..exceptions import ManifestDecodeValidationError
 from .base_manifest import BaseAssetManifest
 from .manifest_model import ManifestModelRegistry
 from .versions import ManifestVersion
+
+alphanum_regex = re.compile("[a-zA-Z0-9]+")
 
 
 def _get_schema(version) -> dict[str, Any]:
@@ -31,6 +34,7 @@ def validate_manifest(
     """
     try:
         jsonschema.validate(manifest, _get_schema(version))
+
     except (jsonschema.ValidationError, jsonschema.SchemaError) as e:
         return False, str(e)
 
@@ -67,5 +71,13 @@ def decode_manifest(manifest: str) -> BaseAssetManifest:
         raise ManifestDecodeValidationError(error_string)
 
     manifest_model = ManifestModelRegistry.get_manifest_model(version=version)
+    decoded_manifest = manifest_model.AssetManifest.decode(manifest_data=document)
 
-    return manifest_model.AssetManifest.decode(manifest_data=document)
+    # Validate hashes are alphanumeric
+    for path in decoded_manifest.paths:
+        if alphanum_regex.fullmatch(path.hash) is None:
+            raise ManifestDecodeValidationError(
+                f"The hash {path.hash} for path {path.path} is not alphanumeric"
+            )
+
+    return decoded_manifest
