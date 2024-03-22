@@ -2348,6 +2348,7 @@ class TestUpload:
         )
         assert actual_queues == expected_queues
 
+    @mock_sts
     @pytest.mark.parametrize(
         "manifest_version",
         [
@@ -2395,6 +2396,7 @@ class TestUpload:
             assert file_size == 5
             s3_cache.put_entry.assert_not_called()
 
+    @mock_sts
     @pytest.mark.parametrize(
         "manifest_version",
         [
