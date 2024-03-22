@@ -5,8 +5,8 @@ UI widgets for the Scene Settings tab.
 """
 import os
 
-from PySide2.QtCore import Qt  # type: ignore
-from PySide2.QtWidgets import (  # type: ignore
+from qtpy.QtCore import Qt  # type: ignore
+from qtpy.QtWidgets import (  # type: ignore
     QCheckBox,
     QComboBox,
     QGridLayout,

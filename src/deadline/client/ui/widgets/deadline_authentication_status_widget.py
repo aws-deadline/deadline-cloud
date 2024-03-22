@@ -8,8 +8,8 @@ The current status is handled by DeadlineAuthenticationStatus.
 from logging import getLogger
 from typing import Optional
 
-from PySide2.QtCore import Qt
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QFormLayout,
     QGroupBox,
     QHBoxLayout,

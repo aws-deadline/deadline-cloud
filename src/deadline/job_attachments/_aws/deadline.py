@@ -86,25 +86,29 @@ def get_job(
         raise JobAttachmentsError(f'Failed to get job "{job_id}" from Deadline') from exc
     return Job(
         jobId=response["jobId"],
-        attachments=Attachments(
-            manifests=[
-                ManifestProperties(
-                    fileSystemLocationName=manifest_properties.get("fileSystemLocationName", None),
-                    rootPath=manifest_properties["rootPath"],
-                    rootPathFormat=PathFormat(manifest_properties["rootPathFormat"]),
-                    outputRelativeDirectories=manifest_properties.get(
-                        "outputRelativeDirectories", None
-                    ),
-                    inputManifestPath=manifest_properties.get("inputManifestPath", None),
-                )
-                for manifest_properties in response["attachments"]["manifests"]
-            ],
-            fileSystem=JobAttachmentsFileSystem(
-                response["attachments"].get("fileSystem", JobAttachmentsFileSystem.COPIED.value)
-            ),
-        )
-        if "attachments" in response and response["attachments"]
-        else None,
+        attachments=(
+            Attachments(
+                manifests=[
+                    ManifestProperties(
+                        fileSystemLocationName=manifest_properties.get(
+                            "fileSystemLocationName", None
+                        ),
+                        rootPath=manifest_properties["rootPath"],
+                        rootPathFormat=PathFormat(manifest_properties["rootPathFormat"]),
+                        outputRelativeDirectories=manifest_properties.get(
+                            "outputRelativeDirectories", None
+                        ),
+                        inputManifestPath=manifest_properties.get("inputManifestPath", None),
+                    )
+                    for manifest_properties in response["attachments"]["manifests"]
+                ],
+                fileSystem=JobAttachmentsFileSystem(
+                    response["attachments"].get("fileSystem", JobAttachmentsFileSystem.COPIED.value)
+                ),
+            )
+            if "attachments" in response and response["attachments"]
+            else None
+        ),
     )
 
 

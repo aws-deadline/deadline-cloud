@@ -8,9 +8,9 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
-from PySide2.QtCore import QSize, Qt  # pylint: disable=import-error
-from PySide2.QtGui import QKeyEvent  # pylint: disable=import-error
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
+from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
@@ -76,7 +76,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     def __init__(
         self,
         *,
-        job_setup_widget_type: QWidget,
+        job_setup_widget_type: type[QWidget],
         initial_job_settings,
         initial_shared_parameter_values: dict[str, Any],
         auto_detected_attachments: AssetReferences,
@@ -396,7 +396,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         job_progress_dialog = SubmitJobProgressDialog(parent=self)
         job_progress_dialog.show()
-        QApplication.instance().processEvents()
+        QApplication.instance().processEvents()  # type: ignore[union-attr]
 
         # Submit the job
         try:

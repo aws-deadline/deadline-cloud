@@ -6,8 +6,8 @@ import os
 from logging import getLogger
 from typing import Any, Optional, Dict
 
-from PySide2.QtCore import Qt  # pylint: disable=import-error
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Qt  # pylint: disable=import-error
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QFileDialog,
     QMainWindow,
@@ -52,7 +52,7 @@ def show_job_bundle_submitter(
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
         main_windows = [
-            widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)
+            widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)  # type: ignore[union-attr]
         ]
         if main_windows:
             parent = main_windows[0]

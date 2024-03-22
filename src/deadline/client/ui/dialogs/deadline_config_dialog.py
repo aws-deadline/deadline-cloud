@@ -19,8 +19,8 @@ from typing import Callable, Dict, List, Optional
 import boto3  # type: ignore[import]
 from botocore.exceptions import ProfileNotFound  # type: ignore[import]
 from deadline.job_attachments.models import FileConflictResolution, JobAttachmentsFileSystem
-from PySide2.QtCore import QSize, Qt, Signal
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import QSize, Qt, Signal
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QCheckBox,
     QComboBox,
@@ -401,7 +401,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         """
         Creates and adds a combo box setting to the given group and layout, similar to `_init_combobox_setting`
         method. This method differentiates itself by adding tooltips for label and combo box items. Also,
-        appends an (PySide2's built-in) Information icon at the label end to indicate tooltip availability.
+        appends an (PySide6's built-in) Information icon at the label end to indicate tooltip availability.
 
         Args:
             group (QWidget): The parent of the combobox

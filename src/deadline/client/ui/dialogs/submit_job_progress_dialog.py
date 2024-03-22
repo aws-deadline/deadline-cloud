@@ -13,9 +13,9 @@ import textwrap
 from typing import Any, Dict, List, Optional, cast
 
 from botocore.client import BaseClient  # type: ignore[import]
-from PySide2.QtCore import Qt, Signal
-from PySide2.QtGui import QCloseEvent
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Qt, Signal
+from qtpy.QtGui import QCloseEvent
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
@@ -75,9 +75,9 @@ class SubmitJobProgressDialog(QDialog):
     create_job_thread_exception = Signal(BaseException)
 
     # These signals are sent when the background threads succeed.
-    hashing_thread_succeeded = Signal([SummaryStatistics, list])
-    upload_thread_succeeded = Signal([SummaryStatistics, dict])
-    create_job_thread_succeeded = Signal([bool, str])
+    hashing_thread_succeeded = Signal(SummaryStatistics, list)
+    upload_thread_succeeded = Signal(SummaryStatistics, dict)
+    create_job_thread_succeeded = Signal(bool, str)
 
     # These signals are sent when the progress reporting callbacks are called
     # from job attachments during hashing/uploading.
@@ -581,7 +581,7 @@ class SubmitJobProgressDialog(QDialog):
         message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
 
         message_box.setWindowTitle("Job Attachments Valid Files Confirmation")
-        selection = message_box.exec_()
+        selection = message_box.exec()
 
         return selection != QMessageBox.Cancel
 
@@ -611,19 +611,16 @@ class SubmitJobProgressDialog(QDialog):
         for thread in threads:
             if thread:
                 while thread.is_alive():
-                    QApplication.instance().processEvents()
+                    QApplication.instance().processEvents()  # type: ignore[union-attr]
 
-    def exec(self) -> Optional[Dict[str, Any]]:
+    def exec(self) -> Optional[Dict[str, Any]]:  # type: ignore[override]
         """
         Runs the modal job progress dialog, returns the response from calling
         create job if the dialog was accepted. Otherwise returns None
         """
-        if super().exec_() == QDialog.Accepted:
+        if super().exec() == QDialog.Accepted:
             return self._create_job_response
         return None
-
-    def exec_(self) -> Optional[Dict[str, Any]]:
-        return self.exec()
 
 
 class JobAttachmentsProgressWidget(QGroupBox):
