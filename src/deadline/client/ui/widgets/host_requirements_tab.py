@@ -5,9 +5,10 @@ UI widgets for the Host Requirements tab.
 """
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
-from PySide2.QtCore import Qt  # type: ignore
-from PySide2.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QRegExpValidator
-from PySide2.QtWidgets import (  # type: ignore
+
+from qtpy.QtCore import Qt  # type: ignore
+from qtpy.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QRegularExpressionValidator  # type: ignore
+from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QGroupBox,
     QHBoxLayout,
@@ -485,7 +486,9 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.name_line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
+        self.name_line_edit.setValidator(
+            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
+        )
         assert (100 - len(AMOUNT_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_PREFIX))
 
@@ -583,7 +586,9 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         assert (100 - len(ATTRIBUTE_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
-        self.name_line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
+        self.name_line_edit.setValidator(
+            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
+        )
         self.add_value_button = None
 
         self.top_row = QHBoxLayout()
@@ -735,7 +740,7 @@ class CustomAttributeValueWidget(QWidget):
         self.line_edit = QLineEdit()
         self.line_edit.setFixedWidth(LABEL_FIXED_WIDTH + 20)
         self.line_edit.setMaxLength(100)
-        self.line_edit.setValidator(QRegExpValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
+        self.line_edit.setValidator(QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
 
         self.remove_button = QPushButton("Remove")
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -879,7 +884,7 @@ class OptionalSpinBox(QSpinBox):
             validator = QIntValidator()
             validator.setBottom(self.min)
             validator.setTop(self.max)
-            return validator.validate(input, pos)
+            return validator.validate(input, pos)  # type: ignore[return-value]
 
     def valueFromText(self, text: str) -> int:
         """

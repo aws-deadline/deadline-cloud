@@ -103,8 +103,8 @@ def test_get_queue_user_boto3_session_cache(fresh_deadline_config):
     session_mock.region_name = "us-west-2"
     deadline_mock = MagicMock()
     mock_botocore_session = MagicMock()
-    mock_botocore_session.get_config_variable = (
-        lambda name: "test_profile" if name == "profile" else None
+    mock_botocore_session.get_config_variable = lambda name: (
+        "test_profile" if name == "profile" else None
     )
 
     with patch.object(api._session, "get_boto3_session", return_value=session_mock), patch(
@@ -138,8 +138,8 @@ def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):
     session_mock.region_name = "us-west-2"
     deadline_mock = MagicMock()
     mock_botocore_session = MagicMock()
-    mock_botocore_session.get_config_variable = (
-        lambda name: "default" if name == "profile" else None
+    mock_botocore_session.get_config_variable = lambda name: (
+        "default" if name == "profile" else None
     )
 
     with patch.object(api._session, "get_boto3_session", return_value=session_mock), patch(

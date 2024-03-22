@@ -5,9 +5,9 @@ __all__ = ["DecimalMode", "FloatDragSpinBox", "IntDragSpinBox"]
 import enum
 from math import ceil, floor, log10
 
-from PySide2.QtCore import QEvent, QObject, Qt
-from PySide2.QtGui import QCursor, QKeyEvent, QMouseEvent
-from PySide2.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QSpinBox, QWidget
+from qtpy.QtCore import QEvent, QObject, Qt
+from qtpy.QtGui import QCursor, QKeyEvent, QMouseEvent
+from qtpy.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QSpinBox, QWidget
 
 
 class DecimalMode(enum.Enum):
@@ -32,7 +32,7 @@ class FloatDragSpinBox(QDoubleSpinBox):
     MAX_FLOAT_VALUE = 1e308
     MIN_FLOAT_VALUE = -1e308
 
-    def __init__(self, parent: QObject = None):
+    def __init__(self, parent: QWidget = None):
         super().__init__(parent)
 
         self.setKeyboardTracking(False)
@@ -89,7 +89,7 @@ class FloatDragSpinBox(QDoubleSpinBox):
         self.setCursor(Qt.SizeVerCursor)
         self._dragging = False
 
-    def stepEnabled(self) -> QAbstractSpinBox.StepEnabled:
+    def stepEnabled(self) -> QAbstractSpinBox.StepEnabled:  # type: ignore[name-defined]
         """
         Disables the arrow buttons if the user is using the hold and drag
         functionaltiy to change the value.
@@ -220,7 +220,7 @@ class IntDragSpinBox(QSpinBox):
         self.setCursor(Qt.SizeVerCursor)
         self._is_dragging = False
 
-    def stepEnabled(self) -> QAbstractSpinBox.StepEnabled:
+    def stepEnabled(self) -> QAbstractSpinBox.StepEnabled:  # type: ignore[name-defined]
         """
         Disables the arrow buttons if the user is using the hold and drag
         functionaltiy to change the value.

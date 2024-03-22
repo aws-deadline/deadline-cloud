@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "deadline"
 dynamic = ["version"]
 readme = "README.md"
-license = ""
+license = "Apache-2.0"
 requires-python = ">=3.7"
 
 # Note: All deps should be using >= since this is a *library* as well as an application.
@@ -24,6 +24,13 @@ dependencies = [
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
     "jsonschema == 4.17.*",
     "pywin32 == 306; sys_platform == 'win32'",
+    "QtPy == 2.4.*",
+]
+
+[project.optional-dependencies]
+gui = [
+    # If the version changes, update the version in deadline/client/ui/__init__.py
+    "PySide6-essentials == 6.6.*",
 ]
 
 [project.scripts]
@@ -63,8 +70,6 @@ include = [
 [tool.hatch.build.targets.wheel]
 packages = [
   "src/deadline",
-  # TODO: Remove this once consumers update to deadline.job_attachments
-  "src/deadline_job_attachments",
 ]
 
 [tool.mypy]
@@ -84,7 +89,7 @@ mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = [
-  "PySide2.*",
+  "qtpy.*",
   "boto3.*",
   "botocore.*",
   "moto.*",
@@ -92,13 +97,21 @@ module = [
   "jsonschema",
 ]
 
+[[tool.mypy.overrides]]
+module = "deadline.client.ui.*"
+# 1. [attr-defined] - It thinks Qt, etc. are types and can't see their attributes
+# 2. [assignment] - we have a lot of self.layout assignments in QWidgets
+disable_error_code = ["attr-defined", "assignment"]
+
 [tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
 ignore = [
   "E501",
 ]
-line-length = 100
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = [
   "deadline"
 ]

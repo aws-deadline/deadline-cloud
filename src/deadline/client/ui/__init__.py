@@ -33,7 +33,7 @@ def gui_error_handler(message_title: str, parent: Any = None):
 
     """
     try:
-        from PySide2.QtWidgets import QMessageBox
+        from qtpy.QtWidgets import QMessageBox
 
         yield
     except DeadlineOperationError as e:
@@ -57,22 +57,79 @@ def gui_context_for_cli():
 
         show_cli_job_submitter()
 
-        app.exec_()
+        app.exec()
     """
+    import importlib
+    from os.path import basename, dirname, join, normpath
+    import shlex
+    import shutil
+    import subprocess
     import sys
     from pathlib import Path
 
     import click
 
+    has_pyside = importlib.util.find_spec("PySide6") or importlib.util.find_spec("PySide2")
+    if not has_pyside:
+        message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
+        will_install_gui = click.confirm(message, default=False)
+        if not will_install_gui:
+            click.echo("Unable to continue without GUI, exiting")
+            sys.exit(1)
+
+        # this should match what's in the pyproject.toml
+        pyside6_pypi = "PySide6-essentials==6.6.*"
+        if "deadline" in basename(sys.executable).lower():
+            # running with a deadline executable, not standard python.
+            # So exit the deadline folder into the main deps dir
+            deps_folder = normpath(
+                join(
+                    dirname(__file__),
+                    "..",
+                    "..",
+                    "..",
+                )
+            )
+            runtime_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+            pip_command = [
+                "-m",
+                "pip",
+                "install",
+                pyside6_pypi,
+                "--python-version",
+                runtime_version,
+                "--only-binary=:all:",
+                "-t",
+                deps_folder,
+            ]
+            python_executable = shutil.which("python3") or shutil.which("python")
+            if python_executable:
+                command = " ".join(shlex.quote(v) for v in [python_executable] + pip_command)
+                subprocess.run([python_executable] + pip_command)
+            else:
+                click.echo(
+                    "Unable to install GUI dependencies, if you have python available you can install it by running:"
+                )
+                click.echo()
+                click.echo(f"\t{' '.join(shlex.quote(v) for v in ['python'] + pip_command)}")
+                click.echo()
+                sys.exit(1)
+        else:
+            # standard python sys.executable
+            # TODO: swap to deadline[gui]==version once published and at the same
+            # time consider local editables `pip install .[gui]`
+            subprocess.run([sys.executable, "-m", "pip", "install", pyside6_pypi])
+
     try:
-        from PySide2.QtGui import QIcon
-        from PySide2.QtWidgets import QApplication, QMessageBox
+        from qtpy.QtGui import QIcon
+        from qtpy.QtWidgets import QApplication, QMessageBox
     except ImportError as e:
-        click.echo(f"Failed to import PySide2, which is required to show the GUI:\n{e}")
+        click.echo(f"Failed to import qtpy/PySide/Qt, which is required to show the GUI:\n{e}")
         sys.exit(1)
 
     try:
         app = QApplication(sys.argv)
+        app.setApplicationName("AWS Deadline Cloud")
         icon = QIcon(str(Path(__file__).parent.parent / "ui" / "resources" / "deadline_logo.svg"))
         app.setWindowIcon(icon)
 
@@ -84,7 +141,7 @@ def gui_context_for_cli():
         command = f"{os.path.basename(sys.argv[0])} " + " ".join(
             shlex.quote(v) for v in sys.argv[1:]
         )
-        QMessageBox.warning(None, f'Error running "{command}"', str(e))
+        QMessageBox.warning(None, f'Error running "{command}"', str(e))  # type: ignore[call-overload]
     except Exception:
         import os
         import shlex
@@ -93,7 +150,7 @@ def gui_context_for_cli():
         command = f"{os.path.basename(sys.argv[0])} " + " ".join(
             shlex.quote(v) for v in sys.argv[1:]
         )
-        QMessageBox.warning(
+        QMessageBox.warning(  # type: ignore[call-overload]
             None, f'Error running "{command}"', f"Exception caught:\n{traceback.format_exc()}"
         )
 

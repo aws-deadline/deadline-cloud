@@ -89,14 +89,16 @@ def get_manifest_from_s3(
         status_code_guidance = {
             **COMMON_ERROR_GUIDANCE_FOR_S3,
             403: (
-                "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket. "
-            )
-            if "kms:" not in str(exc)
-            else (
-                "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
-                "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
-                "User has the 'kms:Decrypt' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                (
+                    "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
+                    "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket. "
+                )
+                if "kms:" not in str(exc)
+                else (
+                    "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
+                    "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                    "User has the 'kms:Decrypt' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                )
             ),
             404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
         }
@@ -453,14 +455,16 @@ def download_file(
             status_code_guidance = {
                 **COMMON_ERROR_GUIDANCE_FOR_S3,
                 403: (
-                    "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                    "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket. "
-                )
-                if "kms:" not in str(exc)
-                else (
-                    "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
-                    "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
-                    "User has the 'kms:Decrypt' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                    (
+                        "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
+                        "your AWS IAM Role or User has the 's3:GetObject' permission for this bucket. "
+                    )
+                    if "kms:" not in str(exc)
+                    else (
+                        "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
+                        "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                        "User has the 'kms:Decrypt' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                    )
                 ),
                 404: (
                     "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account."

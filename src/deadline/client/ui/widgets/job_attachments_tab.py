@@ -8,7 +8,7 @@ import os
 from logging import getLogger
 from typing import Optional
 
-from PySide2.QtWidgets import (  # type: ignore
+from qtpy.QtWidgets import (  # type: ignore
     QAbstractItemView,
     QFileDialog,
     QHBoxLayout,

@@ -26,7 +26,7 @@ configuration, specifically settings stored in `~/.deadline/*`
 
 ### ui
 
-This submodule contains Qt GUIs, based on PySide2, for common controls
+This submodule contains Qt GUIs, based on PySide(2/6), for common controls
 and widgets used in interactive submitters, and to display the status
 of various AWS Deadline Cloud resoruces.
 
@@ -118,3 +118,8 @@ hatch run all:test
 ```
 ./publish.sh
 ```
+
+# Optional Third Party Dependencies - GUI
+
+N.B.: Although this repository is released under the Apache-2.0 license, its optional GUI feature
+uses the third party Qt && PySide projects. The Qt and PySide projects' licensing includes the LGPL-3.0 license.

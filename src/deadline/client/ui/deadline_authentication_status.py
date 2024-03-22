@@ -26,7 +26,7 @@ from configparser import ConfigParser
 from logging import getLogger
 from typing import Optional
 
-from PySide2.QtCore import QObject, QFileSystemWatcher, Signal
+from qtpy.QtCore import QObject, QFileSystemWatcher, Signal
 
 from .. import api
 from ..config import config_file

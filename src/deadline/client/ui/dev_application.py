@@ -7,9 +7,9 @@ import sys
 from logging import getLogger
 from pathlib import Path
 
-from PySide2.QtCore import Qt
-from PySide2.QtGui import QColor, QIcon, QPalette
-from PySide2.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QColor, QIcon, QPalette
+from qtpy.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory
 
 from .. import api
 from .cli_job_submitter import show_cli_job_submitter
@@ -35,7 +35,7 @@ class DevMainWindow(QMainWindow):
 
         # Remove the central widget. This leaves us with just dockable widgets, which provides
         # the most flexibility, since we don't really have a "main" widget.
-        self.setCentralWidget(None)
+        self.setCentralWidget(None)  # type: ignore[arg-type]
 
         self.setDockOptions(
             QMainWindow.AllowNestedDocks | QMainWindow.AllowTabbedDocks | QMainWindow.AnimatedDocks
@@ -142,9 +142,9 @@ def app() -> None:
         + """);}"""
     )
 
-    window = DevMainWindow()
-    window.show()
+    main_window = DevMainWindow()
+    main_window.show()
 
-    window.submit_job_bundle()
+    main_window.submit_job_bundle()
 
     app.exec_()

@@ -8,8 +8,8 @@ from logging import getLogger
 from typing import Any, Dict, Optional
 import copy
 
-from PySide2.QtCore import Qt  # pylint: disable=import-error
-from PySide2.QtWidgets import (  # pylint: disable=import-error; type: ignore
+from qtpy.QtCore import Qt  # pylint: disable=import-error
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMainWindow,
 )
@@ -43,7 +43,7 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
     if parent is None:
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
-        parent = [widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)][0]
+        parent = [widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)][0]  # type: ignore[union-attr]
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,
