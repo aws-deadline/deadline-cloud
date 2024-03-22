@@ -15,6 +15,7 @@ from .base_manifest import BaseAssetManifest
 from .manifest_model import ManifestModelRegistry
 from .versions import ManifestVersion
 
+alphanum_regex = re.compile("[a-zA-Z0-9]+")
 
 def _get_schema(version) -> dict[str, Any]:
     schema_filename = Path(__file__).parent.joinpath("schemas", version + ".json").resolve()
@@ -73,7 +74,7 @@ def decode_manifest(manifest: str) -> BaseAssetManifest:
 
     # Validate hashes are alphanumeric
     for path in decoded_manifest.paths:
-        if re.fullmatch("[a-zA-Z0-9]+", path.hash) is None:
+        if alphanum_regex.fullmatch(path.hash) is None:
             raise ManifestDecodeValidationError(
                 f"The hash {path.hash} for path {path.path} is not alphanumeric"
             )
