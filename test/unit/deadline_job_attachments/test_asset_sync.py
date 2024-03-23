@@ -22,6 +22,7 @@ from deadline.job_attachments.os_file_permission import PosixFileSystemPermissio
 from deadline.job_attachments.exceptions import (
     VFSExecutableMissingError,
     JobAttachmentsS3ClientError,
+    VFSOSUserNotSetError,
 )
 from deadline.job_attachments.models import (
     Attachments,
@@ -877,3 +878,16 @@ class TestAssetSync:
             )
 
             mock_find_vfs.assert_called_once()
+
+    def test_cleanup_session_virtual_witout_os_user_raises(self, tmp_path):
+        self.default_asset_sync.cleanup_session(
+            session_dir=tmp_path,
+            file_system=JobAttachmentsFileSystem.COPIED,
+        )
+
+        with pytest.raises(VFSOSUserNotSetError):
+            self.default_asset_sync.cleanup_session(
+                session_dir=tmp_path,
+                file_system=JobAttachmentsFileSystem.VIRTUAL,
+            )
+
