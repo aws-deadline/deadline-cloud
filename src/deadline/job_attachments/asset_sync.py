@@ -39,7 +39,12 @@ from .download import (
     mount_vfs_from_manifests,
 )
 
-from .exceptions import AssetSyncError, VFSExecutableMissingError, JobAttachmentsS3ClientError
+from .exceptions import (
+    AssetSyncError,
+    VFSExecutableMissingError,
+    JobAttachmentsS3ClientError,
+    VFSOSUserNotSetError,
+)
 from .vfs import VFSProcessManager
 from .models import (
     Attachments,
@@ -566,10 +571,15 @@ class AssetSync:
         return summary_stats
 
     def cleanup_session(
-        self, session_dir: Path, file_system: JobAttachmentsFileSystem, os_user: str
+        self,
+        session_dir: Path,
+        file_system: JobAttachmentsFileSystem,
+        os_user: Optional[str] = None,
     ):
         if file_system == JobAttachmentsFileSystem.COPIED.value:
             return
+        if not os_user:
+            raise VFSOSUserNotSetError("No os user set - can't clean up vfs session")
         try:
             VFSProcessManager.find_vfs()
             # Shutdown all running Deadline VFS processes since session is complete
