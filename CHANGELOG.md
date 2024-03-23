@@ -1,11 +1,14 @@
-## 0.42.1 (2024-03-22)
+## 0.43.0 (2024-03-23)
 
+### BREAKING CHANGES
+* Switch to running deadline_vfs as os_user (#223) ([`cf9c2d2`](https://github.com/casillas2/deadline-cloud/commit/cf9c2d29c4e5e90055f0bfcca13e6928613c1c35))
+* use qtpy and add support for pyside6 (#202) ([`deb2cca`](https://github.com/casillas2/deadline-cloud/commit/deb2ccabe00f7c97d65216ee91a18b9535b1d5f6))
 
 ### Features
-* use qtpy and add support for pyside6 (#202) ([`deb2cca`](https://github.com/casillas2/deadline-cloud/commit/deb2ccabe00f7c97d65216ee91a18b9535b1d5f6))
-* Switch to running deadline_vfs as os_user (#223) ([`cf9c2d2`](https://github.com/casillas2/deadline-cloud/commit/cf9c2d29c4e5e90055f0bfcca13e6928613c1c35))
+* enable cache for VFS (#209) ([`91dfa83`](https://github.com/casillas2/deadline-cloud/commit/91dfa83594cde8121ec7dd1621dc4cace86bfb2e))
 
 ### Bug Fixes
+* Mock STS calls for some JA upload tests (#229) ([`119aabd`](https://github.com/casillas2/deadline-cloud/commit/119aabdc115d35371e80a733bc4ed49acb19753a))
 * record attachments mtimes after mounting vfs ([`f0dcfa3`](https://github.com/casillas2/deadline-cloud/commit/f0dcfa314da8962e7bc089961265de0c63277ad6))
 
 ## 0.42.0 (2024-03-21)
