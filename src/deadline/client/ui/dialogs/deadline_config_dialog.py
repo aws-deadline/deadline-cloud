@@ -69,7 +69,7 @@ class DeadlineConfigDialog(QDialog):
         Returns True if any changes were applied, False otherwise.
         """
         deadline_config = DeadlineConfigDialog(parent=parent)
-        deadline_config.exec()
+        deadline_config.exec_()
         return deadline_config.changes_were_applied
 
     def __init__(self, parent=None) -> None:

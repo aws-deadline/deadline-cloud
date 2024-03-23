@@ -71,7 +71,7 @@ class DeadlineLoginDialog(QMessageBox):
             close_on_success=close_on_success,
             config=config,
         )
-        return deadline_login.exec()
+        return deadline_login.exec_()
 
     def __init__(
         self,
@@ -173,9 +173,9 @@ class DeadlineLoginDialog(QMessageBox):
                 while self.__login_thread.is_alive():
                     QApplication.instance().processEvents()  # type: ignore[union-attr]
 
-    def exec(self) -> bool:
+    def exec_(self) -> bool:
         """
         Runs the modal login dialog, returning True if the login was
         successful, False otherwise.
         """
-        return super().exec() == QMessageBox.Ok
+        return super().exec_() == QMessageBox.Ok
