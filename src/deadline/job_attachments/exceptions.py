@@ -148,6 +148,12 @@ class VFSFailedToMountError(JobAttachmentsError):
     """
 
 
+class VFSOSUserNotSetError(JobAttachmentsError):
+    """
+    Exception attempting to use the vfs without an os user
+    """
+
+
 class UnsupportedHashingAlgorithmError(JobAttachmentsError):
     """
     Exception for when an unsupported hashing algorithm is provided.
