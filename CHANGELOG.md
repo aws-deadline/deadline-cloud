@@ -1,3 +1,10 @@
+## 0.44.0 (2024-03-23)
+
+
+### Features
+* make os_user optional in cleanup_session (#232) ([`241d12b`](https://github.com/casillas2/deadline-cloud/commit/241d12bc484299614c1d1ebec6c4366e125d0c78))
+
+
 ## 0.43.0 (2024-03-23)
 
 ### BREAKING CHANGES
