@@ -890,4 +890,3 @@ class TestAssetSync:
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.VIRTUAL,
             )
-
