@@ -4,6 +4,7 @@
 
 import json
 from logging import getLogger
+import os
 import shutil
 from math import trunc
 from pathlib import Path
@@ -39,6 +40,7 @@ from deadline.job_attachments.progress_tracker import (
     SummaryStatistics,
 )
 from deadline.job_attachments._utils import _human_readable_file_size
+from ..conftest import is_windows_non_admin
 
 
 class TestAssetSync:
@@ -628,6 +630,59 @@ class TestAssetSync:
             )
 
             assert summary_statistics == expected_summary_statistics
+
+    @pytest.mark.parametrize(
+        "file_path, directory_path, expected",
+        [
+            (Path("/path/to/directory/file.txt"), Path("/path/to/directory"), True),
+            (Path("/path/to/another/directory/file.txt"), Path("/path/to/directory"), False),
+            (Path("/path/to/directory/subdirectory/file.txt"), Path("/path/to/directory"), True),
+            (Path("/path/to/directory/file.txt"), Path("/"), True),
+            (Path("/path/to/directory/../file.txt"), Path("/path/to"), True),
+            (Path("directory/file.txt"), Path("directory"), True),
+        ],
+    )
+    def test_is_file_within_directory(self, file_path, directory_path, expected):
+        assert (
+            self.default_asset_sync._is_file_within_directory(file_path, directory_path) == expected
+        )
+
+    @pytest.mark.skipif(
+        is_windows_non_admin(),
+        reason="Windows requires Admin to create symlinks, skipping this test.",
+    )
+    def test_is_file_within_directory_with_symlink(self, tmp_path: Path):
+        """
+        Test the `_is_file_within_directory` method when dealing with symbolic links.
+        Ensures that it correctly identifies whether the target file of the given
+        symlink is within the specified directory or not.
+        """
+        tmp_dir = tmp_path / "tmp_dir"
+        tmp_dir.mkdir()
+
+        # Create a file inside the directory
+        inside_file_path = tmp_dir / "file.txt"
+        inside_file_path.touch()
+        # Create a file outside the directory
+        outside_file_path = tmp_path / "outside_file.txt"
+        outside_file_path.touch()
+
+        # Create a symlink that points to a file inside the directory
+        symlink_path_inside = tmp_dir / "symlink_inside.txt"
+        os.symlink(inside_file_path, symlink_path_inside)
+        # Create a symlink that points to a file outside the directory
+        symlink_path_outside = tmp_dir / "symlink_outside.txt"
+        os.symlink(outside_file_path, symlink_path_outside)
+
+        assert symlink_path_inside.is_symlink()
+        assert symlink_path_outside.is_symlink()
+        assert (
+            self.default_asset_sync._is_file_within_directory(symlink_path_inside, tmp_dir) is True
+        )
+        assert (
+            self.default_asset_sync._is_file_within_directory(symlink_path_outside, tmp_dir)
+            is False
+        )
 
     @pytest.mark.parametrize(
         ("job", "expected_settings"),
