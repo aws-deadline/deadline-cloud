@@ -13,7 +13,7 @@ from deadline.client.api._telemetry import TelemetryClient, TelemetryEvent
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 
-@pytest.fixture(scope="function", name="telemetry_client")
+@pytest.fixture(scope="function", name="mock_telemetry_client")
 def fixture_telemetry_client(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
@@ -25,9 +25,13 @@ def fixture_telemetry_client(fresh_deadline_config):
     ), patch.object(
         api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
-        return TelemetryClient(
-            "deadline-cloud-library", "0.1.2.1234", config=config.config_file.read_config()
+        client = TelemetryClient(
+            package_name="deadline-cloud-library",
+            package_ver="0.1.2.1234",
+            config=config.config_file.read_config(),
         )
+        assert client.is_initialized
+        return client
 
 
 def test_opt_out_config(fresh_deadline_config):
@@ -37,13 +41,11 @@ def test_opt_out_config(fresh_deadline_config):
     config.set_setting("telemetry.opt_out", "true")
     # WHEN
     client = TelemetryClient(
-        "test-library", "test-version", config=config.config_file.read_config()
+        "deadline-cloud-library", "test-version", config=config.config_file.read_config()
     )
     # THEN
+    assert not client.is_initialized
     assert not hasattr(client, "endpoint")
-    assert not hasattr(client, "session_id")
-    assert not hasattr(client, "telemetry_id")
-    assert not hasattr(client, "system_metadata")
     assert not hasattr(client, "event_queue")
     assert not hasattr(client, "processing_thread")
     # Ensure nothing blows up if we try recording telemetry after we've opted out
@@ -71,13 +73,11 @@ def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
     )  # Ensure we ignore the config file if env var is set
     # WHEN
     client = TelemetryClient(
-        "test-library", "test-version", config=config.config_file.read_config()
+        "deadline-cloud-library", "test-version", config=config.config_file.read_config()
     )
     # THEN
+    assert not client.is_initialized
     assert not hasattr(client, "endpoint")
-    assert not hasattr(client, "session_id")
-    assert not hasattr(client, "telemetry_id")
-    assert not hasattr(client, "system_metadata")
     assert not hasattr(client, "event_queue")
     assert not hasattr(client, "processing_thread")
     # Ensure nothing blows up if we try recording telemetry after we've opted out
@@ -86,33 +86,68 @@ def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
     client.record_error({}, str(type(Exception)))
 
 
-def test_get_telemetry_identifier(telemetry_client):
+def test_initialize_failure_then_success(fresh_deadline_config):
+    """
+    Tests that a failure in initializing set keeps the property as false, but trying again
+    without an exception initializes everything successfully.
+    """
+    config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
+    with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
+        api._telemetry, "get_monitor_id", side_effect=["monitor-id"]
+    ), patch.object(
+        api._telemetry,
+        "get_user_and_identity_store_id",
+        side_effect=[("user-id", "identity-store-id")],
+    ), patch.object(
+        api._telemetry,
+        "get_deadline_endpoint_url",
+        side_effect=[Exception("Boto3 blew up!"), "https://fake-endpoint-url"],
+    ):
+        client = TelemetryClient(
+            package_name="deadline-cloud-library",
+            package_ver="0.1.2.1234",
+            config=config.config_file.read_config(),
+        )
+
+        assert not client.is_initialized
+        assert not hasattr(client, "endpoint")
+        assert not hasattr(client, "event_queue")
+        assert not hasattr(client, "processing_thread")
+
+        client.initialize(config=config.config_file.read_config())
+        assert client.is_initialized
+        assert client.endpoint == "https://management.fake-endpoint-url/2023-10-12/telemetry"
+        assert client._system_metadata["user_id"] == "user-id"
+        assert client._system_metadata["monitor_id"] == "monitor-id"
+
+
+def test_get_telemetry_identifier(mock_telemetry_client):
     """Ensures that getting the local-user-id handles empty/malformed strings"""
     # Confirm that we generate a new UUID if the setting doesn't exist, and write to config
-    uuid.UUID(telemetry_client.telemetry_id, version=4)  # Should not raise ValueError
-    assert config.get_setting("telemetry.identifier") == telemetry_client.telemetry_id
+    uuid.UUID(mock_telemetry_client.telemetry_id, version=4)  # Should not raise ValueError
+    assert config.get_setting("telemetry.identifier") == mock_telemetry_client.telemetry_id
 
     # Confirm we generate a new UUID if the local_user_id is not a valid UUID
     config.set_setting("telemetry.identifier", "bad-id")
-    telemetry_id = telemetry_client._get_telemetry_identifier()
+    telemetry_id = mock_telemetry_client._get_telemetry_identifier()
     assert telemetry_id != "bad-id"
     uuid.UUID(telemetry_id, version=4)  # Should not raise ValueError
 
     # Confirm the new user id was saved and is retrieved properly
     assert config.get_setting("telemetry.identifier") == telemetry_id
-    assert telemetry_client._get_telemetry_identifier() == telemetry_id
+    assert mock_telemetry_client._get_telemetry_identifier() == telemetry_id
 
 
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread(telemetry_client):
+def test_process_event_queue_thread(mock_telemetry_client):
     """Test that the queue processing thread function exits cleanly after getting None"""
     # GIVEN
     queue_mock = MagicMock()
     queue_mock.get.side_effect = [TelemetryEvent(), None]
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
     # WHEN
     with patch.object(request, "urlopen") as urlopen_mock:
-        telemetry_client._process_event_queue_thread()
+        mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
     assert queue_mock.get.call_count == 2
@@ -127,18 +162,20 @@ def test_process_event_queue_thread(telemetry_client):
     ],
 )
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread_retries_and_exits(telemetry_client, http_code, attempt_count):
+def test_process_event_queue_thread_retries_and_exits(
+    mock_telemetry_client, http_code, attempt_count
+):
     """Test that the thread exits cleanly after getting an unexpected exception"""
     # GIVEN
     http_error = request.HTTPError("http://test.com", http_code, "Http Error", {}, None)  # type: ignore
     queue_mock = MagicMock()
     queue_mock.get.side_effect = [TelemetryEvent(), None]
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
     # WHEN
     with patch.object(request, "urlopen", side_effect=http_error) as urlopen_mock, patch.object(
         time, "sleep"
     ) as sleep_mock:
-        telemetry_client._process_event_queue_thread()
+        mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.call_count = attempt_count
         sleep_mock.call_count = attempt_count
     # THEN
@@ -146,21 +183,21 @@ def test_process_event_queue_thread_retries_and_exits(telemetry_client, http_cod
 
 
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread_handles_unexpected_error(telemetry_client):
+def test_process_event_queue_thread_handles_unexpected_error(mock_telemetry_client):
     """Test that the thread exits cleanly after getting an unexpected exception"""
     # GIVEN
     queue_mock = MagicMock()
     queue_mock.get.side_effect = [TelemetryEvent(), None]
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
     # WHEN
     with patch.object(request, "urlopen", side_effect=Exception("Some error")) as urlopen_mock:
-        telemetry_client._process_event_queue_thread()
+        mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
     assert queue_mock.get.call_count == 1
 
 
-def test_record_hashing_summary(telemetry_client):
+def test_record_hashing_summary(mock_telemetry_client):
     """Tests that recording a hashing summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -171,16 +208,16 @@ def test_record_hashing_summary(telemetry_client):
         event_type="com.amazon.rum.deadline.job_attachments.hashing_summary",
         event_details=expected_summary,
     )
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
 
     # WHEN
-    telemetry_client.record_hashing_summary(test_summary)
+    mock_telemetry_client.record_hashing_summary(test_summary)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_record_upload_summary(telemetry_client):
+def test_record_upload_summary(mock_telemetry_client):
     """Tests that recording an upload summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -191,16 +228,16 @@ def test_record_upload_summary(telemetry_client):
         event_type="com.amazon.rum.deadline.job_attachments.upload_summary",
         event_details=expected_summary,
     )
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
 
     # WHEN
-    telemetry_client.record_upload_summary(test_summary, from_gui=True)
+    mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_record_error(telemetry_client):
+def test_record_error(mock_telemetry_client):
     """Test that recording an error sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -214,10 +251,10 @@ def test_record_error(telemetry_client):
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
     )
-    telemetry_client.event_queue = queue_mock
+    mock_telemetry_client.event_queue = queue_mock
 
     # WHEN
-    telemetry_client.record_error(test_error_details, str(type(test_exc)))
+    mock_telemetry_client.record_error(test_error_details, str(type(test_exc)))
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -247,7 +284,7 @@ def test_record_error(telemetry_client):
     ],
 )
 def test_get_prefixed_endpoint(
-    telemetry_client: TelemetryClient, endpoint: str, prefix: str, expected_result: str
+    mock_telemetry_client: TelemetryClient, endpoint: str, prefix: str, expected_result: str
 ):
     """Test that the _get_prefixed_endpoint function returns the expected prefixed endpoint"""
-    assert telemetry_client._get_prefixed_endpoint(endpoint, prefix) == expected_result
+    assert mock_telemetry_client._get_prefixed_endpoint(endpoint, prefix) == expected_result

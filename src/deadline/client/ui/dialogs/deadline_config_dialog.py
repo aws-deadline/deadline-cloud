@@ -282,6 +282,9 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.auto_accept = self._init_checkbox_setting(
             group, layout, "settings.auto_accept", "Auto Accept Confirmation Prompts"
         )
+        self.telemetry_opt_out = self._init_checkbox_setting(
+            group, layout, "telemetry.opt_out", "Telemetry Opt Out"
+        )
 
         self._conflict_resolution_options = [option.name for option in FileConflictResolution]
         self.conflict_resolution_box = self._init_combobox_setting(
@@ -561,6 +564,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         for setting_name, value in self.changes.items():
             config_file.set_setting(setting_name, value, self.config)
         root.setLevel(config_file.get_setting("settings.log_level"))
+        api.get_deadline_cloud_library_telemetry_client().set_opt_out(config=self.config)
 
         # Only update self.changes_were_applied if false. We don't want to invalidate that a change has
         # occurred if the user repeatedly hits "Apply" or hits "Apply" and then "Save".
