@@ -437,8 +437,7 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
-                    os_user=fs_permission_settings.os_user,  # type: ignore[union-attr]
-                    os_group=getattr(fs_permission_settings, "os_group", ""),
+                    fs_permission_settings=fs_permission_settings,
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )

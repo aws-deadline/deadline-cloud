@@ -12,6 +12,7 @@ from io import BytesIO
 import json
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any, Callable, List
 from unittest.mock import MagicMock, call, patch
 
@@ -41,10 +42,15 @@ from deadline.job_attachments.download import (
     get_job_input_paths_by_asset_root,
     get_job_output_paths_by_asset_root,
     get_manifest_from_s3,
+    handle_existing_vfs,
+    mount_vfs_from_manifests,
     merge_asset_manifests,
     _ensure_paths_within_directory,
     _get_asset_root_from_s3,
     _get_tasks_manifests_keys_from_s3,
+    VFS_CACHE_REL_PATH_IN_SESSION,
+    VFS_MERGED_MANIFEST_FOLDER_IN_SESSION,
+    VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS,
 )
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
@@ -2254,3 +2260,136 @@ def test_download_files_from_manifests(
         )
 
     assert sorted(downloaded_files) == ["a.txt", "b.txt", "c.txt", "d.txt"]
+
+
+def test_handle_existing_vfs_no_mount_returns(test_manifest_one: dict):
+    """
+    Test that handling an existing manifest for a non existent mount returns the manifest
+    """
+    manifest = decode_manifest(json.dumps(test_manifest_one))
+    with patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.is_mount",
+        return_value=False,
+    ) as mock_is_mount:
+        result_manifest = handle_existing_vfs(
+            manifest, Path("/some/session/dir"), "/not/a/mount", "test-user"
+        )
+        mock_is_mount.assert_called_once_with("/not/a/mount")
+    assert manifest == result_manifest
+
+
+def test_handle_existing_vfs_success(
+    test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
+):
+    """
+    Test that handling an existing manifest for a mount which exists attempts to merge the manifests and
+    shut down the mount
+    """
+    manifest_one = decode_manifest(json.dumps(test_manifest_one))
+    manifest_two = decode_manifest(json.dumps(test_manifest_two))
+    merged_decoded = decode_manifest(json.dumps(merged_manifest))
+    session_path = Path("/some/session/dir")
+    with patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.is_mount",
+        return_value=True,
+    ) as mock_is_mount, patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.get_manifest_path_for_mount",
+        return_value="/some/manifest/path",
+    ) as mock_get_manifest_path, patch(
+        f"{deadline.__package__}.job_attachments.download.decode_manifest_file",
+        return_value=manifest_one,
+    ) as mock_decode_manifest, patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.kill_process_at_mount",
+    ) as mock_kill_process:
+        result_manifest = handle_existing_vfs(
+            manifest_two, session_path, "/some/mount", "test-user"
+        )
+        mock_is_mount.assert_called_once_with("/some/mount")
+        mock_get_manifest_path.assert_called_once_with(
+            session_dir=session_path, mount_point="/some/mount"
+        )
+        mock_decode_manifest.assert_called_once_with("/some/manifest/path")
+        mock_kill_process.assert_called_once_with(
+            session_dir=session_path, mount_point="/some/mount", os_user="test-user"
+        )
+    assert result_manifest == merged_decoded
+
+
+def test_mount_vfs_from_manifests(
+    test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
+):
+    """
+    Test that handling an existing manifest for a mount which exists attempts to merge the manifests and
+    shut down the mount
+    """
+    manifest_one = decode_manifest(json.dumps(test_manifest_one))
+    manifest_two = decode_manifest(json.dumps(test_manifest_two))
+    merged_decoded = decode_manifest(json.dumps(merged_manifest))
+    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir_path = Path(temp_dir.name)
+    manifests_by_root = {"/some/root/one": manifest_one, "/some/root/two": manifest_two}
+    fs_permissions = PosixFileSystemPermissionSettings("test-user", "test-group", 0o31, 0o66)
+    manifest_permissions = PosixFileSystemPermissionSettings(
+        fs_permissions.os_user,
+        fs_permissions.os_group,
+        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.dir_mode,
+        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.file_mode,
+    )
+
+    cache_path = temp_dir_path / VFS_CACHE_REL_PATH_IN_SESSION
+    manifest_path = temp_dir_path / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
+    with patch(
+        f"{deadline.__package__}.job_attachments.download._set_fs_group",
+    ) as mock_set_vs_group, patch(
+        f"{deadline.__package__}.job_attachments.download.handle_existing_vfs",
+        return_value=merged_decoded,
+    ) as mock_handle_existing, patch(
+        f"{deadline.__package__}.job_attachments.download.write_manifest_to_temp_file",
+    ) as mock_write_manifest, patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.start",
+    ) as mock_vfs_start:
+        mount_vfs_from_manifests(
+            "test-bucket",
+            manifests_by_root,
+            boto3_session=boto3.Session(region_name="us-west-2"),
+            session_dir=temp_dir_path,
+            os_env_vars={},
+            fs_permission_settings=fs_permissions,
+            cas_prefix="cas/test",
+        )
+        # Were the cache and manifest folders created
+        assert os.path.isdir(cache_path)
+        assert os.path.isdir(manifest_path)
+
+        #
+        # Did we attempt to assign the expected permissions
+        mock_set_vs_group.assert_has_calls(
+            [
+                call([str(cache_path / "cas/test")], str(cache_path), fs_permissions),
+                call([str(manifest_path)], str(manifest_path), manifest_permissions),
+            ]
+        )
+
+        mock_handle_existing.assert_has_calls(
+            [
+                call(
+                    manifest=manifest_one,
+                    session_dir=temp_dir_path,
+                    mount_point="/some/root/one",
+                    os_user="test-user",
+                ),
+                call(
+                    manifest=manifest_two,
+                    session_dir=temp_dir_path,
+                    mount_point="/some/root/two",
+                    os_user="test-user",
+                ),
+            ]
+        )
+
+        mock_write_manifest.assert_has_calls(
+            [call(merged_decoded, dir=manifest_path), call(merged_decoded, dir=manifest_path)]
+        )
+        mock_vfs_start.assert_has_calls(
+            [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
+        )

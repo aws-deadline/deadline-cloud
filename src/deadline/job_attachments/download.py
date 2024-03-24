@@ -66,6 +66,14 @@ download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
 VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
+VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = "merged_manifests"
+
+VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS = PosixFileSystemPermissionSettings(
+    os_user="",
+    os_group="",
+    dir_mode=0o31,
+    file_mode=0o64,
+)
 
 
 def get_manifest_from_s3(
@@ -878,12 +886,24 @@ def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManife
     return output_manifest
 
 
-def write_manifest_to_temp_file(manifest: BaseAssetManifest) -> str:
+def write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:
     with NamedTemporaryFile(
-        suffix=".json", prefix="deadline-merged-manifest-", delete=False, mode="w"
+        suffix=".json", prefix="deadline-merged-manifest-", delete=False, mode="w", dir=dir
     ) as file:
         file.write(manifest.encode())
         return file.name
+
+
+def decode_manifest_file(input_manifest_path: Path):
+    """
+    Given a manifest path, open the file at that location and decode
+    Args:
+        input_manifest_path: Path to manifest
+    Returns:
+        BaseAssetManifest : Single decoded manifest
+    """
+    with open(input_manifest_path) as input_manifest_file:
+        return decode_manifest(input_manifest_file.read())
 
 
 def handle_existing_vfs(
@@ -901,15 +921,14 @@ def handle_existing_vfs(
     Returns:
         BaseAssetManifest : A single manifest containing the merged paths or the original manifest
     """
-    if not os.path.ismount(mount_point):
+    if not VFSProcessManager.is_mount(mount_point):
         return manifest
 
     input_manifest_path: Optional[Path] = VFSProcessManager.get_manifest_path_for_mount(
         session_dir=session_dir, mount_point=mount_point
     )
     if input_manifest_path is not None:
-        with open(input_manifest_path) as input_manifest_file:
-            input_manifest: BaseAssetManifest = decode_manifest(input_manifest_file.read())
+        input_manifest = decode_manifest_file(input_manifest_path)
 
         merged_input_manifest: Optional[BaseAssetManifest] = merge_asset_manifests(
             [input_manifest, manifest]
@@ -931,9 +950,8 @@ def mount_vfs_from_manifests(
     manifests_by_root: dict[str, BaseAssetManifest],
     boto3_session: boto3.Session,
     session_dir: Path,
-    os_user: str,
-    os_group: str,
     os_env_vars: dict[str, str],
+    fs_permission_settings: FileSystemPermissionSettings,
     cas_prefix: Optional[str] = None,
 ) -> None:
     """
@@ -952,7 +970,8 @@ def mount_vfs_from_manifests(
     Returns:
         None
     """
-
+    if not isinstance(fs_permission_settings, PosixFileSystemPermissionSettings):
+        raise TypeError("VFS can only be mounted from manifests on posix file systems.")
     vfs_cache_dir: Path = session_dir / VFS_CACHE_REL_PATH_IN_SESSION
     asset_cache_hash_path: Path = vfs_cache_dir
     if cas_prefix is not None:
@@ -961,26 +980,39 @@ def mount_vfs_from_manifests(
 
     asset_cache_hash_path.mkdir(parents=True, exist_ok=True)
 
+    _set_fs_group([str(asset_cache_hash_path)], str(vfs_cache_dir), fs_permission_settings)
+
+    manifest_dir: Path = session_dir / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest_dir_permissions = VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS
+    manifest_dir_permissions.os_user = fs_permission_settings.os_user
+    manifest_dir_permissions.os_group = fs_permission_settings.os_group
+
+    _set_fs_group([str(manifest_dir)], str(manifest_dir), manifest_dir_permissions)
+
     for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.
         _ensure_paths_within_directory(
             mount_point, [path.path for path in manifest.paths]  # type: ignore
         )
         final_manifest: BaseAssetManifest = handle_existing_vfs(
-            manifest=manifest, session_dir=session_dir, mount_point=mount_point, os_user=os_user
+            manifest=manifest,
+            session_dir=session_dir,
+            mount_point=mount_point,
+            os_user=fs_permission_settings.os_user,
         )
 
         # Write out a temporary file with the contents of the newly merged manifest
-        manifest_path: str = write_manifest_to_temp_file(final_manifest)
+        manifest_path: str = write_manifest_to_temp_file(final_manifest, dir=manifest_dir)
 
         vfs_manager: VFSProcessManager = VFSProcessManager(
             s3_bucket,
             boto3_session.region_name,
             manifest_path,
             mount_point,
-            os_user,
+            fs_permission_settings.os_user,
             os_env_vars,
-            os_group,
+            getattr(fs_permission_settings, "os_group", ""),
             cas_prefix,
             str(vfs_cache_dir),
         )
