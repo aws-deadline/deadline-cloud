@@ -438,7 +438,7 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
-                    fs_permission_settings=fs_permission_settings,
+                    fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
