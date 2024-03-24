@@ -2315,6 +2315,10 @@ def test_handle_existing_vfs_success(
     assert result_manifest == merged_decoded
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="This VFS test is currently not valid for windows - VFS is a linux only feature currently.",
+)
 def test_mount_vfs_from_manifests(
     test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
 ):
