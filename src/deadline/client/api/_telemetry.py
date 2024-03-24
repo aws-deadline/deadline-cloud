@@ -7,8 +7,10 @@ import os
 import platform
 import uuid
 import random
+import ssl
 import time
 
+from botocore.httpsession import get_cert_path
 from configparser import ConfigParser
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -88,28 +90,16 @@ class TelemetryClient:
         package_ver: str,
         config: Optional[ConfigParser] = None,
     ):
-        # Environment variable supersedes config file setting.
-        env_var_value = os.environ.get("DEADLINE_CLOUD_TELEMETRY_OPT_OUT")
-        if env_var_value:
-            self.telemetry_opted_out = env_var_value in config_file._TRUE_VALUES
-        else:
-            self.telemetry_opted_out = config_file.str2bool(
-                config_file.get_setting("telemetry.opt_out", config=config)
-            )
-        logger.info(
-            "Deadline Cloud telemetry is " + "not enabled."
-            if self.telemetry_opted_out
-            else "enabled."
-        )
-        if self.telemetry_opted_out:
-            return
-
+        self._initialized: bool = False
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
-        self.endpoint: str = self._get_prefixed_endpoint(
-            f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
-            TelemetryClient.ENDPOINT_PREFIX,
-        )
+
+        # Need to set up a valid SSL context so requests can make it through
+        self._urllib3_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+        self._urllib3_context.verify_mode = ssl.CERT_REQUIRED
+        self._urllib3_context.check_hostname = True
+        self._urllib3_context.load_default_certs()
+        self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())
@@ -118,8 +108,60 @@ class TelemetryClient:
         if package_name != "deadline-cloud-library":
             self._common_details["deadline-cloud-version"] = version
         self._system_metadata = self._get_system_metadata(config=config)
+        self.set_opt_out(config=config)
+        self.initialize(config=config)
 
-        self._start_threads()
+    def set_opt_out(self, config: Optional[ConfigParser] = None) -> None:
+        """
+        Checks whether telemetry has been opted out by checking the DEADLINE_CLOUD_TELEMETRY_OPT_OUT
+        environment variable and the 'telemetry.opt_out' config file setting.
+        Note the environment variable supersedes the config file setting.
+        """
+        env_var_value = os.environ.get("DEADLINE_CLOUD_TELEMETRY_OPT_OUT")
+        if env_var_value:
+            self.telemetry_opted_out = env_var_value in config_file._TRUE_VALUES
+        else:
+            self.telemetry_opted_out = config_file.str2bool(
+                config_file.get_setting("telemetry.opt_out", config=config)
+            )
+        logger.info(
+            "Deadline Cloud telemetry is "
+            + ("not enabled." if self.telemetry_opted_out else "enabled.")
+        )
+
+    def initialize(self, config: Optional[ConfigParser] = None) -> None:
+        """
+        Starts up the telemetry background thread after getting settings from the boto3 client.
+        Note that if this is called before boto3 is successfully configured / initialized,
+        an error can be raised. In that case we silently fail and don't mark the client as
+        initialized.
+        """
+        if self.telemetry_opted_out:
+            return
+
+        try:
+            self.endpoint: str = self._get_prefixed_endpoint(
+                f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
+                TelemetryClient.ENDPOINT_PREFIX,
+            )
+
+            user_id, _ = get_user_and_identity_store_id(config=config)
+            if user_id:
+                self._system_metadata["user_id"] = user_id
+
+            monitor_id: Optional[str] = get_monitor_id(config=config)
+            if monitor_id:
+                self._system_metadata["monitor_id"] = monitor_id
+
+            self._initialized = True
+            self._start_threads()
+        except Exception:
+            # Silently swallow any exceptions
+            return
+
+    @property
+    def is_initialized(self) -> bool:
+        return self._initialized
 
     def _get_prefixed_endpoint(self, endpoint: str, prefix: str) -> str:
         """Insert the prefix right after 'https://'"""
@@ -163,14 +205,6 @@ class TelemetryClient:
             "osVersion": platform_info.release,
         }
 
-        user_id, _ = get_user_and_identity_store_id(config=config)
-        if user_id:
-            metadata["user_id"] = user_id
-
-        monitor_id: Optional[str] = get_monitor_id(config=config)
-        if monitor_id:
-            metadata["monitor_id"] = monitor_id
-
         return metadata
 
     def _exit_cleanly(self):
@@ -182,7 +216,7 @@ class TelemetryClient:
         success = False
         while not success:
             try:
-                with request.urlopen(req):
+                with request.urlopen(req, context=self._urllib3_context):
                     logger.debug("Successfully sent telemetry.")
                     success = True
             except error.HTTPError as httpe:
@@ -232,13 +266,14 @@ class TelemetryClient:
             try:
                 logger.debug("Sending telemetry data: %s", request_body)
                 self._send_request(req)
-            except Exception:
-                # Silently swallow any kind of uncaught exception and stop sending telemetry
+            except Exception as exc:
+                # Swallow any kind of uncaught exception and stop sending telemetry
+                logger.debug(f"Error received from service. {str(exc)}")
                 return
             self.event_queue.task_done()
 
     def _put_telemetry_record(self, event: TelemetryEvent) -> None:
-        if self.telemetry_opted_out:
+        if not self._initialized or self.telemetry_opted_out:
             return
         try:
             self.event_queue.put_nowait(event)
@@ -303,6 +338,8 @@ def get_telemetry_client(
             package_ver=package_ver,
             config=config,
         )
+    elif not __cached_telemetry_client.is_initialized:
+        __cached_telemetry_client.initialize(config=config)
 
     return __cached_telemetry_client
 
