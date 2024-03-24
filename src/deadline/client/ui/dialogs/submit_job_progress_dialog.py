@@ -134,7 +134,7 @@ class SubmitJobProgressDialog(QDialog):
         self._auto_accept = auto_accept
 
         self._start_submission()
-        return self.exec()
+        return self.exec_()
 
     def _build_ui(self):
         """Builds up the Dialog UI"""
@@ -613,12 +613,12 @@ class SubmitJobProgressDialog(QDialog):
                 while thread.is_alive():
                     QApplication.instance().processEvents()  # type: ignore[union-attr]
 
-    def exec(self) -> Optional[Dict[str, Any]]:  # type: ignore[override]
+    def exec_(self) -> Optional[Dict[str, Any]]:  # type: ignore[override]
         """
         Runs the modal job progress dialog, returns the response from calling
         create job if the dialog was accepted. Otherwise returns None
         """
-        if super().exec() == QDialog.Accepted:
+        if super().exec_() == QDialog.Accepted:
             return self._create_job_response
         return None
 
