@@ -19,6 +19,7 @@ from deadline.client.job_bundle.loader import (
     validate_directory_symlink_containment,
 )
 from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+from ...conftest import is_windows_non_admin
 
 JOB_TEMPLATE_WITH_PARAMETERS_2023_09 = """
 specificationVersion: 'jobtemplate-2023-09'
@@ -194,7 +195,7 @@ def test_parse_yaml_or_json_content_fail(content, type):
 
 
 @pytest.mark.skipif(
-    sys.platform == "win32",
+    is_windows_non_admin(),
     reason="Windows requires Admin to create symlinks, skipping this test.",
 )
 def test_validate_directory_symlink_containment_success(tmpdir):

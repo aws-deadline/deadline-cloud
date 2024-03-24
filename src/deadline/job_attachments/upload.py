@@ -6,14 +6,17 @@ Classes for handling uploading of assets.
 from __future__ import annotations
 
 import concurrent.futures
+from contextlib import contextmanager
+import errno
 import logging
 import os
+import sys
 import time
 from datetime import datetime
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from math import trunc
 from pathlib import Path, PurePath
-from typing import Any, Callable, Optional, Tuple, Type, Union
+from typing import Any, Callable, Generator, Optional, Tuple, Type, Union
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
@@ -157,6 +160,7 @@ class S3AssetUploader:
         Returns:
             A tuple of (the partial key for the manifest on S3, the hash of input manifest).
         """
+        # Upload assets
         self.upload_input_files(
             manifest,
             job_attachment_settings.s3BucketName,
@@ -165,9 +169,10 @@ class S3AssetUploader:
             progress_tracker,
             s3_check_cache_dir,
         )
+
+        # Upload asset manifest
         hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
-
         manifest_name_prefix = hash_data(
             f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
         )
@@ -302,7 +307,7 @@ class S3AssetUploader:
         if s3_cas_prefix:
             s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
         is_uploaded = False
-        file_size = local_path.stat().st_size
+        file_size = local_path.resolve().stat().st_size
 
         if s3_check_cache.get_entry(s3_key=f"{s3_bucket}/{s3_upload_key}"):
             logger.debug(
@@ -338,6 +343,7 @@ class S3AssetUploader:
         s3_bucket: str,
         s3_upload_key: str,
         progress_tracker: Optional[ProgressTracker] = None,
+        base_dir_path: Optional[Path] = None,
     ) -> None:
         """
         Uploads a single file to an S3 bucket using TransferManager, allowing mid-way
@@ -359,58 +365,160 @@ class S3AssetUploader:
                     future.cancel()
 
         subscribers = [ProgressCallbackInvoker(handler)]
+        real_path = local_path.resolve()
 
-        future = transfer_manager.upload(
-            fileobj=str(local_path),
-            bucket=s3_bucket,
-            key=s3_upload_key,
-            subscribers=subscribers,
-        )
+        if base_dir_path:
+            # If base_dir_path is given, check if the file is actually within the base directory
+            is_file_within_base_dir = self._is_file_within_directory(real_path, base_dir_path)
+        else:
+            # If base_dir_path is not set, assume the file is within the base directory.
+            is_file_within_base_dir = True
 
+        # Skip the file if it's (1) a directory, 2. not existing, or 3. not within the base directory.
+        if real_path.is_dir() or not real_path.exists() or not is_file_within_base_dir:
+            return
+
+        with self._open_non_symlink_file_binary(str(real_path)) as file_obj:
+            if file_obj is None:
+                return
+
+            future = transfer_manager.upload(
+                fileobj=file_obj,
+                bucket=s3_bucket,
+                key=s3_upload_key,
+                subscribers=subscribers,
+            )
+
+            try:
+                future.result()
+                is_uploaded = True
+                if progress_tracker and is_uploaded:
+                    progress_tracker.increase_processed(1, 0)
+            except concurrent.futures.CancelledError as ce:
+                if progress_tracker and progress_tracker.continue_reporting is False:
+                    raise AssetSyncCancelledError(
+                        "File upload cancelled.", progress_tracker.get_summary_statistics()
+                    )
+                else:
+                    raise AssetSyncError("File upload failed.", ce) from ce
+            except ClientError as exc:
+                status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
+                status_code_guidance = {
+                    **COMMON_ERROR_GUIDANCE_FOR_S3,
+                    403: (
+                        (
+                            "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
+                            "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
+                        )
+                        if "kms:" not in str(exc)
+                        else (
+                            "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
+                            "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
+                            "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                        )
+                    ),
+                    404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
+                }
+                raise JobAttachmentsS3ClientError(
+                    action="uploading file",
+                    status_code=status_code,
+                    bucket_name=s3_bucket,
+                    key_or_prefix=s3_upload_key,
+                    message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to upload {str(local_path)})",
+                ) from exc
+            except BotoCoreError as bce:
+                raise JobAttachmentS3BotoCoreError(
+                    action="uploading file",
+                    error_details=str(bce),
+                ) from bce
+            except Exception as e:
+                raise AssetSyncError from e
+
+    @contextmanager
+    def _open_non_symlink_file_binary(
+        self, path: str
+    ) -> Generator[Optional[BufferedReader], None, None]:
+        """
+        Open a file in binary mode after verifying that it is not a symbolic link.
+        Raises:
+            OSError: If the given path is a symbolic link or doesn't match the actual file.
+        """
+        fd = None
+        file_obj = None
         try:
-            future.result()
-            is_uploaded = True
-            if progress_tracker and is_uploaded:
-                progress_tracker.increase_processed(1, 0)
-        except concurrent.futures.CancelledError as ce:
-            if progress_tracker and progress_tracker.continue_reporting is False:
-                raise AssetSyncCancelledError(
-                    "File upload cancelled.", progress_tracker.get_summary_statistics()
-                )
+            open_flags = os.O_RDONLY
+            # Make sure the file isn’t following a symlink to a different path.
+            if hasattr(os, "O_NOFOLLOW"):
+                open_flags |= os.O_NOFOLLOW
+
+            fd = os.open(path, open_flags)
+            if sys.platform == "win32":
+                # On Windows, check the file handle with GetFinalPathNameByHandle
+                if not self._is_path_win32_final_path_of_file_descriptor(path, fd):
+                    # ELOOP is the error code that open with NOFOLLOW will return
+                    # if the path is a symlink.  We raise the same error here for
+                    # the sake of consistency.
+                    raise OSError(errno.ELOOP, "Mismatch between path and its final path", path)
+
+            if str(Path(path).resolve()) != path:
+                raise OSError(errno.ELOOP, "Mismatch between path and its final path", path)
+
+            with os.fdopen(fd, "rb", closefd=False) as file_obj:
+                yield file_obj
+        except OSError as e:
+            logger.warning(f"Failed to open file {path}: {e}")
+            yield None
+        finally:
+            if fd is not None:
+                os.close(fd)
+            if file_obj is not None:
+                file_obj.close()
+
+    def _is_path_win32_final_path_of_file_descriptor(self, path: str, fd: int):
+        """
+        Check if the normalized path from the file descriptor matches the specified path.
+        """
+        if sys.platform != "win32":
+            raise EnvironmentError("This function can only be executed on Windows systems.")
+
+        import win32con
+        import win32file
+
+        if sys.platform != "win32" and sys.getwindowsversion()[:2] >= (6, 0):
+            from nt import _getfinalpathname  # type: ignore[attr-defined]
+        else:
+            _getfinalpathname = None
+
+        h = win32file._get_osfhandle(fd)
+        final_path = win32file.GetFinalPathNameByHandle(h, win32con.VOLUME_NAME_DOS)
+
+        # GetFinalPathNameByHandle() returns a path that starts with the \\?\
+        # prefix, which pathlib.Path.resolve() removes.  The following is intended
+        # to match the behavior of resolve().
+        prefix = r"\\?" "\\"
+        unc_prefix = r"\\?\UNC" "\\"
+
+        if final_path.startswith(prefix) and not path.startswith(prefix):
+            if final_path.startswith(unc_prefix):
+                simplified_path = "\\\\" + final_path[len(unc_prefix) :]
             else:
-                raise AssetSyncError("File upload failed.", ce) from ce
-        except ClientError as exc:
-            status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
-            status_code_guidance = {
-                **COMMON_ERROR_GUIDANCE_FOR_S3,
-                403: (
-                    (
-                        "Forbidden or Access denied. Please check your AWS credentials, and ensure that "
-                        "your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
-                    )
-                    if "kms:" not in str(exc)
-                    else (
-                        "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket "
-                        "encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or "
-                        "User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
-                    )
-                ),
-                404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
-            }
-            raise JobAttachmentsS3ClientError(
-                action="uploading file",
-                status_code=status_code,
-                bucket_name=s3_bucket,
-                key_or_prefix=s3_upload_key,
-                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to upload {str(local_path)})",
-            ) from exc
-        except BotoCoreError as bce:
-            raise JobAttachmentS3BotoCoreError(
-                action="uploading file",
-                error_details=str(bce),
-            ) from bce
-        except Exception as e:
-            raise AssetSyncError from e
+                simplified_path = final_path[len(prefix) :]
+
+            if _getfinalpathname and _getfinalpathname(simplified_path) == final_path:
+                final_path = simplified_path
+            if _getfinalpathname is None:
+                final_path = simplified_path
+
+        return path == final_path
+
+    def _is_file_within_directory(self, file_path: Path, directory_path: Path) -> bool:
+        """
+        Checks if the given file path is within the given directory path.
+        """
+        real_file_path = file_path.resolve()
+        real_directory_path = directory_path.resolve()
+        common_path = os.path.commonpath([real_file_path, real_directory_path])
+        return common_path.startswith(str(real_directory_path))
 
     def file_already_uploaded(self, bucket: str, key: str) -> bool:
         """
@@ -516,7 +624,7 @@ class S3AssetManager:
 
         if not self.job_attachment_settings.s3BucketName:
             raise MissingS3BucketError(
-                "To use Job Attachments, the 's3BucketName' must be set in  your queue's JobAttachmentSettings"
+                "To use Job Attachments, the 's3BucketName' must be set in your queue's JobAttachmentSettings"
             )
         if not self.job_attachment_settings.rootPrefix:
             raise MissingS3RootPrefixError(
@@ -832,11 +940,11 @@ class S3AssetManager:
         Given a list of AssetRootGroups and a root directory, return a dict of root paths and file counts that
         are outside of that root path, and aren't in any storage profile locations.
         """
-        real_root_path = os.path.realpath(root_path)
+        real_root_path = Path(root_path).resolve()
         deviated_file_count_by_root: dict[str, int] = {}
         for group in groups:
             if (
-                not os.path.realpath(group.root_path).startswith(real_root_path)
+                not str(Path(group.root_path).resolve()).startswith(str(real_root_path))
                 and not group.file_system_location_name
                 and group.inputs
             ):

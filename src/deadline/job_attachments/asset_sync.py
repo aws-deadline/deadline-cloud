@@ -2,6 +2,7 @@
 
 """ Module for File Attachment synching """
 from __future__ import annotations
+import os
 import sys
 import time
 from io import BytesIO
@@ -131,10 +132,11 @@ class AssetSync:
                 continue
 
             self.s3_uploader.upload_file_to_s3(
-                Path(file.full_path),
-                s3_settings.s3BucketName,
-                file.s3_key,
-                progress_tracker,
+                local_path=Path(file.full_path),
+                s3_bucket=s3_settings.s3BucketName,
+                s3_upload_key=file.s3_key,
+                progress_tracker=progress_tracker,
+                base_dir_path=Path(file.base_dir) if file.base_dir else None,
             )
 
         progress_tracker.total_time = time.perf_counter() - start_time
@@ -197,6 +199,7 @@ class AssetSync:
         manifest_properties: ManifestProperties,
         s3_settings: JobAttachmentS3Settings,
         local_root: Path,
+        session_dir: Path,
     ) -> List[OutputFile]:
         """
         Walks the output directories for this asset root for any output files that have been created or modified
@@ -238,9 +241,28 @@ class AssetSync:
                     self.synced_assets_mtime[str(file_path)] = int(file_mtime)
                     is_modified = True
 
-                if not file_path.is_dir() and file_path.exists() and is_modified:
-                    file_size = file_path.lstat().st_size
-                    file_hash = hash_file(str(file_path), self.hash_alg)
+                # Resolve the real path to prevent time-of-check/time-of-use vulnerability
+                file_real_path = file_path.resolve()
+
+                # validate that the file resolves inside of the session working directory.
+                is_file_path_under_session_dir = self._is_file_within_directory(
+                    file_real_path, session_dir
+                )
+                if is_file_path_under_session_dir is False:
+                    self.logger.info(
+                        f"Skipping file '{file_path}' as its resolved path '{file_real_path}' is"
+                        f" outside the session directory '{session_dir}'"
+                    )
+                    continue
+
+                if (
+                    not file_real_path.is_dir()
+                    and file_real_path.exists()
+                    and is_modified
+                    and is_file_path_under_session_dir
+                ):
+                    file_size = file_real_path.resolve().lstat().st_size
+                    file_hash = hash_file(str(file_real_path), self.hash_alg)
                     s3_key = f"{file_hash}.{self.hash_alg.value}"
 
                     if s3_settings.full_cas_prefix():
@@ -248,16 +270,17 @@ class AssetSync:
                     in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
 
                     total_file_count += 1
-                    total_file_size += file_path.lstat().st_size
+                    total_file_size += file_size
 
                     output_files.append(
                         OutputFile(
                             file_size=file_size,
                             file_hash=file_hash,
                             rel_path=str(PurePosixPath(*file_path.relative_to(local_root).parts)),
-                            full_path=str(file_path.resolve()),
+                            full_path=str(file_real_path),
                             s3_key=s3_key,
                             in_s3=in_s3,
+                            base_dir=str(session_dir),
                         )
                     )
 
@@ -268,6 +291,15 @@ class AssetSync:
             )
 
         return output_files
+
+    def _is_file_within_directory(self, file_path: Path, directory_path: Path) -> bool:
+        """
+        Checks if the given file path is within the given directory path.
+        """
+        real_file_path = file_path.resolve()
+        real_directory_path = directory_path.resolve()
+        common_path = os.path.commonpath([real_file_path, real_directory_path])
+        return common_path.startswith(str(real_directory_path))
 
     def get_s3_settings(self, farm_id: str, queue_id: str) -> Optional[JobAttachmentS3Settings]:
         """
@@ -534,6 +566,7 @@ class AssetSync:
                 manifest_properties,
                 s3_settings,
                 local_root,
+                session_dir,
             )
             if output_files:
                 output_manifest = self._generate_output_manifest(output_files)

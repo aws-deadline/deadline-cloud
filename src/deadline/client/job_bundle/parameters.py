@@ -104,7 +104,7 @@ def validate_job_parameter(
     input : Any
         The input to validate
     type_required : bool = False
-        Whether the "type" field is required. This is imporant for job bundles which may contain
+        Whether the "type" field is required. This is important for job bundles which may contain
         app-specific parameter values without accompanying metadata such as the parameter type.
     default_required : bool = False
         Whether the "default" field is required. In queue environments, defaults are required. In

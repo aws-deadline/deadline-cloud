@@ -53,6 +53,7 @@ from deadline.job_attachments.progress_tracker import (
 )
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 from deadline.job_attachments._utils import _human_readable_file_size
+from ..conftest import is_windows_non_admin
 
 
 class TestUpload:
@@ -1732,7 +1733,7 @@ class TestUpload:
         ],
     )
     @pytest.mark.skipif(
-        sys.platform == "win32",
+        is_windows_non_admin(),
         reason="Windows requires Admin to create symlinks, skipping this test.",
     )
     def test_manage_assets_with_symlinks(
@@ -2395,6 +2396,37 @@ class TestUpload:
             assert not is_uploaded
             assert file_size == 5
             s3_cache.put_entry.assert_not_called()
+
+    def test_open_non_symlink_file_binary(self, tmp_path: Path):
+        temp_file = tmp_path / "temp_file.txt"
+        temp_file.write_text("this is test file")
+
+        a3_asset_uploader = S3AssetUploader()
+        with a3_asset_uploader._open_non_symlink_file_binary(str(temp_file)) as file_obj:
+            assert file_obj is not None
+            assert file_obj.read() == b"this is test file"
+
+    def test_open_non_symlink_file_binary_posix_fail(self, tmp_path: Path, caplog):
+        caplog.set_level(DEBUG)
+
+        # IF
+        target_file = tmp_path / "target_file.txt"
+        target_file.write_text(("This is target"))
+        symlink_path = tmp_path / "symlink"
+        os.symlink(target_file, symlink_path)
+
+        # WHEN
+        a3_asset_uploader = S3AssetUploader()
+        with a3_asset_uploader._open_non_symlink_file_binary(str(symlink_path)) as file_obj:
+            # THEN
+            assert file_obj is None
+            assert f"Failed to open file {symlink_path}" in caplog.text
+            if hasattr(os, "O_NOFOLLOW") is False:
+                # Windows or other platforms that don't support O_NOFOLLOW
+                assert "Mismatch between path and its final path" in caplog.text
+            else:
+                # Posix
+                assert "Too many levels of symbolic links:" in caplog.text
 
     @mock_sts
     @pytest.mark.parametrize(

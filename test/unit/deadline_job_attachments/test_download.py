@@ -76,6 +76,7 @@ from deadline.job_attachments.os_file_permission import (
 from deadline.job_attachments._utils import _human_readable_file_size
 
 from .conftest import has_posix_target_user, has_posix_disjoint_user
+from ..conftest import is_windows_non_admin
 
 
 @dataclass
@@ -1233,7 +1234,7 @@ class TestFullDownload:
         }
 
     @pytest.mark.skipif(
-        sys.platform == "win32",
+        is_windows_non_admin(),
         reason="Windows requires Admin to create symlinks, skipping this test.",
     )
     @mock_sts

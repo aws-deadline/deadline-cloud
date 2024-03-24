@@ -34,6 +34,7 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
     _get_unique_dest_dir_name,
 )
+from .conftest import is_windows_non_admin
 
 
 def notifier_callback(progress: float, message: str) -> None:
@@ -849,6 +850,86 @@ def sync_outputs(
         step0_task1_output_file=file_to_be_synced_step0_task1_base,
         step1_task0_output_file=file_to_be_synced_step1_task0_base,
     )
+
+
+@pytest.mark.integ
+@pytest.mark.skipif(
+    is_windows_non_admin(),
+    reason="Windows requires Admin to create symlinks, skipping this test.",
+)
+def test_sync_outputs_with_symlink(
+    job_attachment_test: JobAttachmentTest,
+    sync_inputs: SyncInputsOutputs,
+    tmp_path,
+) -> None:
+    """
+    Test that a symlink pointing to a file outside the session directory is not synced as output.
+    """
+    job_attachment_settings = get_queue(
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        deadline_endpoint_url=job_attachment_test.deadline_endpoint,
+    ).jobAttachmentSettings
+
+    if job_attachment_settings is None:
+        raise Exception("Job attachment settings must be set for this test.")
+
+    waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
+    waiter.wait(
+        jobId=sync_inputs.job_id,
+        queueId=job_attachment_test.queue_id,
+        farmId=job_attachment_test.farm_id,
+    )
+
+    # Get the Step ID
+    list_steps_response = job_attachment_test.deadline_client.list_steps(
+        farmId=job_attachment_test.farm_id,
+        queueId=job_attachment_test.queue_id,
+        jobId=sync_inputs.job_id,
+    )
+    step_ids = {step["name"]: step["stepId"] for step in list_steps_response["steps"]}
+    step0_id = step_ids["custom-step"]
+
+    # Get the Task ID
+    list_tasks_response = job_attachment_test.deadline_client.list_tasks(
+        farmId=job_attachment_test.farm_id,
+        queueId=job_attachment_test.queue_id,
+        jobId=sync_inputs.job_id,
+        stepId=step0_id,
+    )
+    task_ids = {
+        task["parameters"]["frame"]["int"]: task["taskId"] for task in list_tasks_response["tasks"]
+    }
+    step0_task0_id = task_ids["0"]
+
+    # Create a symlink, in the output directory, pointing to a file located outside the session directory.
+    symlink_output = Path("outputs/symlink")
+    symlink_path = sync_inputs.session_dir / sync_inputs.dest_dir / symlink_output
+    tmp_dir = tmp_path / "tmp_dir"
+    tmp_dir.mkdir()
+    symlink_target_path = tmp_dir / "symlink_target"
+    symlink_target_path.write_text(
+        "this is a symlink target, located outside the session directory"
+    )
+    symlink_path.symlink_to(symlink_target_path)
+    assert symlink_path.is_symlink()
+
+    mock_on_uploading_files = MagicMock(return_value=True)
+
+    summary_stats = sync_inputs.asset_syncer.sync_outputs(
+        s3_settings=job_attachment_settings,
+        attachments=sync_inputs.attachments,
+        queue_id=job_attachment_test.queue_id,
+        job_id=sync_inputs.job_id,
+        step_id=step0_id,
+        task_id=step0_task0_id,
+        session_action_id="session_action_id",
+        start_time=time.time(),
+        session_dir=sync_inputs.session_dir,
+        on_uploading_files=mock_on_uploading_files,
+    )
+    # The symlink should not be synced as output.
+    assert summary_stats.total_files == 0
 
 
 @pytest.mark.integ
