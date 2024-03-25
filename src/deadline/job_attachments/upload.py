@@ -450,10 +450,20 @@ class S3AssetUploader:
             # Make sure the file isn’t following a symlink to a different path.
             if hasattr(os, "O_NOFOLLOW"):
                 open_flags |= os.O_NOFOLLOW
+            elif sys.platform != "win32" and not os.path.islink(path):
+                # We are on a non-Windows system that does not support O_NOFOLLOW. When we encounter
+                # symbolic link, we cannot guarantee security here, so log a warning and reject the file.
+                logger.warning(
+                    f"Job Attachments does not support files referenced by symbolic links on this system ({sys.platform}). "
+                    "Please refrain from using symbolic links in Job Attachment asset roots and use real files instead. "
+                    f"The following file will be skipped: {path}."
+                )
+                yield None
 
             fd = os.open(path, open_flags)
             if sys.platform == "win32":
-                # On Windows, check the file handle with GetFinalPathNameByHandle
+                # Windows does not support O_NOFOLLOW. So, check the file handle with GetFinalPathNameByHandle
+                # to verify it is actually pointing to the path that we verified to be safe to open.
                 if not self._is_path_win32_final_path_of_file_descriptor(path, fd):
                     # ELOOP is the error code that open with NOFOLLOW will return
                     # if the path is a symlink.  We raise the same error here for
@@ -466,7 +476,7 @@ class S3AssetUploader:
             with os.fdopen(fd, "rb", closefd=False) as file_obj:
                 yield file_obj
         except OSError as e:
-            logger.warning(f"Failed to open file {path}: {e}")
+            logger.warning(f"Failed to open file. The following file will be skipped: {path}: {e}")
             yield None
         finally:
             if fd is not None:
