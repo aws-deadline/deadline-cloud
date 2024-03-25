@@ -9,7 +9,7 @@ import logging
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 import boto3  # type: ignore[import]
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
@@ -17,6 +17,7 @@ from botocore.exceptions import (  # type: ignore[import]
     ClientError,
     ProfileNotFound,
 )
+
 from botocore.session import get_session as get_botocore_session
 
 from ..config import get_setting
@@ -109,9 +110,6 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
         config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
     session = get_boto3_session(config=config)
-
-    if service_name == "deadline":
-        return DeadlineClient(session.client(service_name))
     return session.client(service_name)
 
 
@@ -281,50 +279,6 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
             if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
                 return AwsAuthenticationStatus.NEEDS_LOGIN
             return AwsAuthenticationStatus.CONFIGURATION_ERROR
-
-
-class DeadlineClient:
-    """
-    A shim layer for boto Deadline client.
-
-    If a method doesn't exist here, it calls the real client
-    """
-
-    _real_client: Any
-
-    def __init__(self, real_client: Any) -> None:
-        self._real_client = real_client
-        self.meta = self._real_client.meta
-
-    def create_job(self, *args, **kwargs) -> Any:
-        deadline_service_model = self._real_client.meta.service_model
-
-        # revert to service model style if old service model is used, entries
-        # here can then be deleted after their migration period
-        path_format_enums = deadline_service_model.shape_for("PathFormat").metadata.get("enum")
-        if path_format_enums[0] == path_format_enums[0].lower():
-            # old enums are 'windows', and 'posix'
-            # new enums are 'WINDOWS', and 'POSIX'
-            if "attachments" in kwargs:
-                for manifest in kwargs["attachments"]["manifests"]:
-                    manifest["rootPathFormat"] = manifest["rootPathFormat"].lower()
-
-        return self._real_client.create_job(*args, **kwargs)
-
-    def __getattr__(self, __name: str) -> Any:
-        """
-        Respond to unknown method calls by calling the underlying _real_client
-        If the underlying _real_client does not have a given method, an AttributeError
-        will be raised.
-        Note that __getattr__ is only called if the attribute cannot otherwise be found,
-        so if this class alread has the called method defined, __getattr__ will not be called.
-        This is in opposition to __getattribute__ which is called by default.
-        """
-
-        def method(*args, **kwargs) -> Any:
-            return getattr(self._real_client, __name)(*args, **kwargs)
-
-        return method
 
 
 class QueueUserCredentialProvider(CredentialProvider):
