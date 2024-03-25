@@ -66,7 +66,7 @@ download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
 VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
-VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = "merged_manifests"
+VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
 
 VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS = PosixFileSystemPermissionSettings(
     os_user="",
@@ -886,7 +886,7 @@ def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManife
     return output_manifest
 
 
-def write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:
+def _write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:
     with NamedTemporaryFile(
         suffix=".json", prefix="deadline-merged-manifest-", delete=False, mode="w", dir=dir
     ) as file:
@@ -894,7 +894,7 @@ def write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:
         return file.name
 
 
-def decode_manifest_file(input_manifest_path: Path):
+def _read_manifest_file(input_manifest_path: Path):
     """
     Given a manifest path, open the file at that location and decode
     Args:
@@ -928,7 +928,7 @@ def handle_existing_vfs(
         session_dir=session_dir, mount_point=mount_point
     )
     if input_manifest_path is not None:
-        input_manifest = decode_manifest_file(input_manifest_path)
+        input_manifest = _read_manifest_file(input_manifest_path)
 
         merged_input_manifest: Optional[BaseAssetManifest] = merge_asset_manifests(
             [input_manifest, manifest]
@@ -1003,7 +1003,7 @@ def mount_vfs_from_manifests(
         )
 
         # Write out a temporary file with the contents of the newly merged manifest
-        manifest_path: str = write_manifest_to_temp_file(final_manifest, dir=manifest_dir)
+        manifest_path: str = _write_manifest_to_temp_file(final_manifest, dir=manifest_dir)
 
         vfs_manager: VFSProcessManager = VFSProcessManager(
             s3_bucket,

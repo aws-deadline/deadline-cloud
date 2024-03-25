@@ -2296,7 +2296,7 @@ def test_handle_existing_vfs_success(
         f"{deadline.__package__}.job_attachments.download.VFSProcessManager.get_manifest_path_for_mount",
         return_value="/some/manifest/path",
     ) as mock_get_manifest_path, patch(
-        f"{deadline.__package__}.job_attachments.download.decode_manifest_file",
+        f"{deadline.__package__}.job_attachments.download._read_manifest_file",
         return_value=manifest_one,
     ) as mock_decode_manifest, patch(
         f"{deadline.__package__}.job_attachments.download.VFSProcessManager.kill_process_at_mount",
@@ -2348,7 +2348,7 @@ def test_mount_vfs_from_manifests(
         f"{deadline.__package__}.job_attachments.download.handle_existing_vfs",
         return_value=merged_decoded,
     ) as mock_handle_existing, patch(
-        f"{deadline.__package__}.job_attachments.download.write_manifest_to_temp_file",
+        f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
     ) as mock_write_manifest, patch(
         f"{deadline.__package__}.job_attachments.download.VFSProcessManager.start",
     ) as mock_vfs_start:

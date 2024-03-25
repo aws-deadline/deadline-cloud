@@ -430,7 +430,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.merge_asset_manifests",
         ) as merge_manifests_mock, patch(
-            f"{deadline.__package__}.job_attachments.download.write_manifest_to_temp_file",
+            f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
             return_value="tmp_manifest",
         ), patch(
             "sys.platform", "linux"
