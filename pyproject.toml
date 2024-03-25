@@ -181,6 +181,7 @@ allowed_tags = [
     "style",
     "refactor",
     "test",
+    "revert",
 ]
 minor_tags = []
 patch_tags = [
