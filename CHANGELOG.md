@@ -1,3 +1,11 @@
+## 0.44.1 (2024-03-24)
+
+
+
+### Bug Fixes
+* Use boto SSL for telemetry requests, add opt out settings in UI (#230) ([`b678086`](https://github.com/casillas2/deadline-cloud/commit/b678086a6b90da4904ed5b1f84e3a410369641d1))
+* swap exec to exec_ (#234) ([`b3853c2`](https://github.com/casillas2/deadline-cloud/commit/b3853c22808de730f99c7ef322b713cc05d7b878))
+
 ## 0.44.0 (2024-03-23)
 
 

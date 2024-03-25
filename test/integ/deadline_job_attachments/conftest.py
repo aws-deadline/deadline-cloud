@@ -1,7 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import getpass
 import json
-
+import sys
 import pytest
 
 
@@ -98,3 +99,7 @@ def external_bucket() -> str:
     Return a bucket that all developers and test accounts have access to, but isn't in the testers account.
     """
     return "job-attachment-bucket-snipe-test"
+
+
+def is_windows_non_admin():
+    return sys.platform == "win32" and getpass.getuser() != "Administrator"

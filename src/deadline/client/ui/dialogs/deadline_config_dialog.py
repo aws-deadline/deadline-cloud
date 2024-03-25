@@ -69,7 +69,7 @@ class DeadlineConfigDialog(QDialog):
         Returns True if any changes were applied, False otherwise.
         """
         deadline_config = DeadlineConfigDialog(parent=parent)
-        deadline_config.exec()
+        deadline_config.exec_()
         return deadline_config.changes_were_applied
 
     def __init__(self, parent=None) -> None:
@@ -281,6 +281,9 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
             group, layout, "settings.auto_accept", "Auto Accept Confirmation Prompts"
+        )
+        self.telemetry_opt_out = self._init_checkbox_setting(
+            group, layout, "telemetry.opt_out", "Telemetry Opt Out"
         )
 
         self._conflict_resolution_options = [option.name for option in FileConflictResolution]
@@ -561,6 +564,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         for setting_name, value in self.changes.items():
             config_file.set_setting(setting_name, value, self.config)
         root.setLevel(config_file.get_setting("settings.log_level"))
+        api.get_deadline_cloud_library_telemetry_client().set_opt_out(config=self.config)
 
         # Only update self.changes_were_applied if false. We don't want to invalidate that a change has
         # occurred if the user repeatedly hits "Apply" or hits "Apply" and then "Save".

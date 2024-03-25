@@ -1,5 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import getpass
+import sys
 import pytest
 import tempfile
 
@@ -28,3 +30,7 @@ def fresh_deadline_config():
             yield str(temp_file_path)
     finally:
         temp_dir.cleanup()
+
+
+def is_windows_non_admin():
+    return sys.platform == "win32" and getpass.getuser() != "Administrator"

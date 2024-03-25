@@ -102,12 +102,16 @@ class ManifestPathGroup:
 class OutputFile:
     """Files for output"""
 
-    file_size: int  # File size in Bytes
+    # File size in Bytes
+    file_size: int
     file_hash: str
     rel_path: str
     full_path: str
     s3_key: str
-    in_s3: bool  # If the file already exists in the CAS
+    # If the file already exists in the CAS
+    in_s3: bool
+    # The base directory path against which file paths are containment-checked
+    base_dir: Optional[str]
 
 
 class StorageProfileOperatingSystemFamily(str, Enum):
