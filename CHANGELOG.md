@@ -1,3 +1,12 @@
+## 0.45.0 (2024-03-25)
+
+### BREAKING CHANGES
+* revert &#34;feat!: prep for rootPathFormat becoming ALL UPPERS (#222)&#34; (#243) ([`9de687e`](https://github.com/casillas2/deadline-cloud/commit/9de687e5256634165c2e73e42da03acd3974c539))
+
+### Features
+* **job_attachment**: reject files on non-Windows systems that do not support O_NOFOLLOW (#242) ([`9e23b81`](https://github.com/casillas2/deadline-cloud/commit/9e23b81535e769946610c82b19d12e5922abcaf0))
+
+
 ## 0.44.2 (2024-03-25)
 
 
