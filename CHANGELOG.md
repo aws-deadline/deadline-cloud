@@ -1,3 +1,12 @@
+## 0.44.2 (2024-03-25)
+
+
+### Features
+* prevent uploading files outside session directory via symlinks (#225) ([`3c3a4fa`](https://github.com/casillas2/deadline-cloud/commit/3c3a4facd4118082afdf028076c3966eea7463b8))
+
+### Bug Fixes
+* VFS Disk Cache Group Permissions, Merged Manifests Folder, is_mount checks (#235) ([`30dac3d`](https://github.com/casillas2/deadline-cloud/commit/30dac3d8c09c67fd2ca69e30841e634e4fb2b3b2))
+
 ## 0.44.1 (2024-03-24)
 
 
