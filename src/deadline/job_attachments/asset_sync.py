@@ -56,7 +56,7 @@ from .models import (
     PathFormat,
 )
 from .upload import S3AssetUploader
-from .os_file_permission import FileSystemPermissionSettings
+from .os_file_permission import FileSystemPermissionSettings, PosixFileSystemPermissionSettings
 from ._utils import (
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
@@ -461,6 +461,7 @@ class AssetSync:
             and fs_permission_settings is not None
             and os_env_vars is not None
             and "AWS_PROFILE" in os_env_vars
+            and isinstance(fs_permission_settings, PosixFileSystemPermissionSettings)
         ):
             try:
                 VFSProcessManager.find_vfs()
@@ -469,8 +470,7 @@ class AssetSync:
                     manifests_by_root=merged_manifests_by_root,
                     boto3_session=self.session,
                     session_dir=session_dir,
-                    os_user=fs_permission_settings.os_user,  # type: ignore[union-attr]
-                    os_group=getattr(fs_permission_settings, "os_group", ""),
+                    fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
                 )
