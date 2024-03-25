@@ -1,3 +1,10 @@
+## 0.44.3 (2024-03-25)
+
+
+### Features
+* **job_attachment**: reject files on non-Windows systems that do not support O_NOFOLLOW (#242) ([`9e23b81`](https://github.com/casillas2/deadline-cloud/commit/9e23b81535e769946610c82b19d12e5922abcaf0))
+
+
 ## 0.44.2 (2024-03-25)
 
 
