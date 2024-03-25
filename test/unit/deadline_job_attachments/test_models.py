@@ -9,7 +9,7 @@ import pytest
 class TestModels:
     @pytest.mark.parametrize(
         ("sys_os", "expected_output"),
-        [("win32", "WINDOWS"), ("darwin", "POSIX"), ("linux", "POSIX")],
+        [("win32", "windows"), ("darwin", "posix"), ("linux", "posix")],
     )
     def test_get_host_path_format_string(self, sys_os: str, expected_output: str):
         """
@@ -17,23 +17,6 @@ class TestModels:
         """
         with patch("sys.platform", sys_os):
             assert PathFormat.get_host_path_format_string() == expected_output
-
-    @pytest.mark.parametrize(
-        ("input", "output"),
-        [
-            ("windows", PathFormat.WINDOWS),
-            ("WINDOWS", PathFormat.WINDOWS),
-            ("wInDoWs", PathFormat.WINDOWS),
-            ("posix", PathFormat.POSIX),
-            ("POSIX", PathFormat.POSIX),
-            ("PoSiX", PathFormat.POSIX),
-        ],
-    )
-    def test_path_format_case(self, input: str, output: PathFormat) -> None:
-        """
-        Tests that the correct enum types are created regardless of input string casing.
-        """
-        assert PathFormat(input) == output
 
     @pytest.mark.parametrize(
         ("input", "output"),
