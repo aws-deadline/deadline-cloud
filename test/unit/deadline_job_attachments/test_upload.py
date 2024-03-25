@@ -2420,7 +2420,10 @@ class TestUpload:
         with a3_asset_uploader._open_non_symlink_file_binary(str(symlink_path)) as file_obj:
             # THEN
             assert file_obj is None
-            assert f"Failed to open file {symlink_path}" in caplog.text
+            assert (
+                f"Failed to open file. The following file will be skipped: {symlink_path}"
+                in caplog.text
+            )
             if hasattr(os, "O_NOFOLLOW") is False:
                 # Windows or other platforms that don't support O_NOFOLLOW
                 assert "Mismatch between path and its final path" in caplog.text
