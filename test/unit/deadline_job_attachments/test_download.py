@@ -51,7 +51,8 @@ from deadline.job_attachments.download import (
     VFS_CACHE_REL_PATH_IN_SESSION,
     VFS_MERGED_MANIFEST_FOLDER_IN_SESSION,
     VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS,
-    VFS_ENABLE_CACHE_ENV_VAR,
+    VFS_CACHE_ENV_VAR,
+    VFS_ENABLE_CACHE_VALUE,
 )
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
@@ -2321,7 +2322,7 @@ def test_handle_existing_vfs_success(
     sys.platform == "win32",
     reason="This VFS test is currently not valid for windows - VFS is a linux only feature currently.",
 )
-@patch.dict(os.environ, {VFS_ENABLE_CACHE_ENV_VAR: "true"})
+@patch.dict(os.environ, {VFS_CACHE_ENV_VAR: VFS_ENABLE_CACHE_VALUE})
 def test_mount_vfs_from_manifests(
     test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
 ):
@@ -2401,6 +2402,7 @@ def test_mount_vfs_from_manifests(
             [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
         )
 
+
 @pytest.mark.skipif(
     sys.platform == "win32",
     reason="This VFS test is currently not valid for windows - VFS is a linux only feature currently.",
@@ -2452,3 +2454,34 @@ def test_mount_vfs_from_manifests_no_cache(
         assert not os.path.isdir(cache_path)
         assert os.path.isdir(manifest_path)
 
+        #
+        # Did we attempt to assign the expected permissions
+        mock_set_vs_group.assert_has_calls(
+            [
+                call([str(manifest_path)], str(manifest_path), manifest_permissions),
+            ]
+        )
+
+        mock_handle_existing.assert_has_calls(
+            [
+                call(
+                    manifest=manifest_one,
+                    session_dir=temp_dir_path,
+                    mount_point="/some/root/one",
+                    os_user="test-user",
+                ),
+                call(
+                    manifest=manifest_two,
+                    session_dir=temp_dir_path,
+                    mount_point="/some/root/two",
+                    os_user="test-user",
+                ),
+            ]
+        )
+
+        mock_write_manifest.assert_has_calls(
+            [call(merged_decoded, dir=manifest_path), call(merged_decoded, dir=manifest_path)]
+        )
+        mock_vfs_start.assert_has_calls(
+            [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
+        )

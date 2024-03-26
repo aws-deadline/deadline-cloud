@@ -65,7 +65,8 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
-VFS_ENABLE_CACHE_ENV_VAR = "VFS_CACHING_ENABLED"
+VFS_CACHE_ENV_VAR = "DEADLINE_VFS_CACHE"
+VFS_ENABLE_CACHE_VALUE = "V0"
 VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
 VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
 
@@ -971,7 +972,7 @@ def mount_vfs_from_manifests(
     Returns:
         None
     """
-    vfs_cache_enabled = os.environ.get(VFS_ENABLE_CACHE_ENV_VAR) is not None
+    vfs_cache_enabled = os.environ.get(VFS_CACHE_ENV_VAR) == VFS_ENABLE_CACHE_VALUE
 
     if not isinstance(fs_permission_settings, PosixFileSystemPermissionSettings):
         raise TypeError("VFS can only be mounted from manifests on posix file systems.")
