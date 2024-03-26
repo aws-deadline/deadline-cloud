@@ -491,18 +491,54 @@ class S3AssetUploader:
         if sys.platform != "win32":
             raise EnvironmentError("This function can only be executed on Windows systems.")
 
-        import win32con
-        import win32file
+        import ctypes
+        import msvcrt
+        from .windows import file as win_file
 
-        if sys.platform != "win32" and sys.getwindowsversion()[:2] >= (6, 0):
-            from nt import _getfinalpathname  # type: ignore[attr-defined]
-        else:
-            _getfinalpathname = None
+        # Get the handle from the file descriptor
+        try:
+            h = msvcrt.get_osfhandle(fd)
+        except OSError as e:
+            logger.warning(f"Error resolving file descriptor ({fd}) to '{path}': {e}")
+            return False
 
-        h = win32file._get_osfhandle(fd)
-        final_path = win32file.GetFinalPathNameByHandle(h, win32con.VOLUME_NAME_DOS)
+        # Get the final path name using Win32 API GetFinalPathNameByHandleW
+        buffer_len = 4096
+        buffer = ctypes.create_unicode_buffer(buffer_len)
+        path_len = win_file.GetFinalPathNameByHandleW(
+            h,
+            buffer,
+            buffer_len,
+            win_file.VOLUME_NAME_DOS,
+        )
+        if path_len == 0:
+            ctypes.WinError()
+        elif path_len > buffer_len:
+            # path_len has the required buffer length (returned by GetFinalPathNameByHandleW)
+            # Create a buffer of this size and call the API again
+            buffer_len = path_len
+            buffer = ctypes.create_unicode_buffer(buffer_len)
+            path_len = win_file.GetFinalPathNameByHandleW(
+                h,
+                buffer,
+                buffer_len,
+                win_file.VOLUME_NAME_DOS,
+            )
 
-        # GetFinalPathNameByHandle() returns a path that starts with the \\?\
+            if path_len != buffer_len or path_len == 0:
+                # MS documentation states that if GetFinalPathNameByHandleW returns a positive value
+                # greater than the initial buffer length, it is the required buffer length to fit the
+                # path name. This branch uses the that value to create a new buffer, so this should
+                # never fail unless GetFinalPathNameByHandleW behavior has changed.
+                logger.error(
+                    "GetFinalPathNameByHandleW reported incorrect required buffer length. "
+                    f"Rejecting file at '{path}'"
+                )
+                return False
+
+        final_path = ctypes.wstring_at(buffer)
+
+        # GetFinalPathNameByHandleW() returns a path that starts with the \\?\
         # prefix, which pathlib.Path.resolve() removes.  The following is intended
         # to match the behavior of resolve().
         prefix = r"\\?" "\\"
@@ -514,10 +550,7 @@ class S3AssetUploader:
             else:
                 simplified_path = final_path[len(prefix) :]
 
-            if _getfinalpathname and _getfinalpathname(simplified_path) == final_path:
-                final_path = simplified_path
-            if _getfinalpathname is None:
-                final_path = simplified_path
+            final_path = simplified_path
 
         return path == final_path
 
