@@ -266,7 +266,7 @@ class VFSProcessManager(object):
         executable = VFSProcessManager.find_vfs_launch_script()
 
         command = (
-            f"sudo -u {self._os_user}"
+            f"sudo -E -u {self._os_user}"
             f" {executable} {mount_point} -f --clienttype=deadline"
             f" --bucket={self._asset_bucket}"
             f" --manifest={self._manifest_path}"
@@ -403,11 +403,9 @@ class VFSProcessManager(object):
         Get the environment variables we'll pass to the launch command.
         :returns: dictionary of default environment variables with VFS changes applied
         """
-        my_env = {**os.environ, **self._os_env_vars}
+        my_env = {**self._os_env_vars}
         my_env["PATH"] = f"{VFSProcessManager.find_vfs_link_dir()}{os.pathsep}{os.environ['PATH']}"
         my_env["LD_LIBRARY_PATH"] = VFSProcessManager.get_library_path()  # type: ignore[assignment]
-
-        my_env["AWS_CONFIG_FILE"] = str(Path(f"~{self._os_user}/.aws/config").expanduser())
 
         return my_env
 
