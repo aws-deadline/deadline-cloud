@@ -100,7 +100,7 @@ class TestVFSProcessmanager:
         test_executable = os.environ[DEADLINE_VFS_ENV_VAR] + DEADLINE_VFS_EXECUTABLE_SCRIPT
 
         expected_launch_command = (
-            f"sudo -u {test_os_user}"
+            f"sudo -E -u {test_os_user}"
             f" {test_executable} {local_root} -f --clienttype=deadline"
             f" --bucket={self.s3_settings.s3BucketName}"
             f" --manifest={manifest_path}"
@@ -132,7 +132,7 @@ class TestVFSProcessmanager:
         VFSProcessManager.launch_script_path = None
 
         expected_launch_command = (
-            f"sudo -u {test_os_user}"
+            f"sudo -E -u {test_os_user}"
             f" {test_executable} {local_root} -f --clienttype=deadline"
             f" --bucket={self.s3_settings.s3BucketName}"
             f" --manifest={manifest_path}"
@@ -762,3 +762,43 @@ class TestVFSProcessmanager:
             mock_chown.assert_called_with(manifest_path, group=test_os_group)
 
             mock_chmod.assert_called_with(manifest_path, DEADLINE_MANIFEST_GROUP_READ_PERMS)
+
+    def test_launch_environment_has_expected_settings(
+        self,
+        tmp_path: Path,
+    ):
+        # Test to verify when retrieving the launch environment it does not contain os.environ variables (Unless passed in),
+        # it DOES contain the VFSProcessManager's environment variables, and aws configuration variables aren't modified
+        session_dir: str = str(tmp_path)
+        test_mount: str = f"{session_dir}/test_mount"
+        manifest_path1: str = f"{session_dir}/manifests/some_manifest.json"
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+
+        provided_vars = {
+            "VFS_ENV_VAR": "test-vfs-env-var",
+            "AWS_PROFILE": "test-profile",
+            "AWS_CONFIG_FILE": "test-config",
+            "AWS_SHARED_CREDENTIALS_FILE": "test-credentials",
+        }
+        # Create process managers
+        process_manager: VFSProcessManager = VFSProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path1,
+            mount_point=test_mount,
+            os_user="test-user",
+            os_env_vars=provided_vars,
+        )
+
+        # Provided environment variables are passed through
+        with patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
+            return_value="/test/directory/path",
+        ):
+            launch_env = process_manager.get_launch_environ()
+
+        for key, value in provided_vars.items():
+            assert launch_env.get(key) == value
+
+        # Base environment variables are not passed through
+        assert not launch_env.get(DEADLINE_VFS_ENV_VAR)
