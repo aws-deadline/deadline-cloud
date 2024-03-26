@@ -1,3 +1,10 @@
+## 0.45.2 (2024-03-26)
+
+
+
+### Bug Fixes
+* **job-attachments**: remove dependency on pywin32 for submission code (#250) ([`30b44df`](https://github.com/casillas2/deadline-cloud/commit/30b44dfec56f89bce486b1a3e5dc461ed42a0232))
+
 ## 0.45.1 (2024-03-26)
 
 
