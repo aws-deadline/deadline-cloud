@@ -51,6 +51,7 @@ from deadline.job_attachments.download import (
     VFS_CACHE_REL_PATH_IN_SESSION,
     VFS_MERGED_MANIFEST_FOLDER_IN_SESSION,
     VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS,
+    VFS_ENABLE_CACHE_ENV_VAR,
 )
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
@@ -2320,6 +2321,7 @@ def test_handle_existing_vfs_success(
     sys.platform == "win32",
     reason="This VFS test is currently not valid for windows - VFS is a linux only feature currently.",
 )
+@patch.dict(os.environ, {VFS_ENABLE_CACHE_ENV_VAR: "true"})
 def test_mount_vfs_from_manifests(
     test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
 ):
@@ -2398,3 +2400,55 @@ def test_mount_vfs_from_manifests(
         mock_vfs_start.assert_has_calls(
             [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
         )
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="This VFS test is currently not valid for windows - VFS is a linux only feature currently.",
+)
+@patch.dict(os.environ, {})
+def test_mount_vfs_from_manifests_no_cache(
+    test_manifest_one: dict, test_manifest_two: dict, merged_manifest: dict
+):
+    """
+    Test that handling an existing manifest for a mount which exists attempts to merge the manifests and
+    shut down the mount
+    """
+    manifest_one = decode_manifest(json.dumps(test_manifest_one))
+    manifest_two = decode_manifest(json.dumps(test_manifest_two))
+    merged_decoded = decode_manifest(json.dumps(merged_manifest))
+    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir_path = Path(temp_dir.name)
+    manifests_by_root = {"/some/root/one": manifest_one, "/some/root/two": manifest_two}
+    fs_permissions = PosixFileSystemPermissionSettings("test-user", "test-group", 0o31, 0o66)
+    manifest_permissions = PosixFileSystemPermissionSettings(
+        fs_permissions.os_user,
+        fs_permissions.os_group,
+        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.dir_mode,
+        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.file_mode,
+    )
+
+    cache_path = temp_dir_path / VFS_CACHE_REL_PATH_IN_SESSION
+    manifest_path = temp_dir_path / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
+    with patch(
+        f"{deadline.__package__}.job_attachments.download._set_fs_group",
+    ) as mock_set_vs_group, patch(
+        f"{deadline.__package__}.job_attachments.download.handle_existing_vfs",
+        return_value=merged_decoded,
+    ) as mock_handle_existing, patch(
+        f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
+    ) as mock_write_manifest, patch(
+        f"{deadline.__package__}.job_attachments.download.VFSProcessManager.start",
+    ) as mock_vfs_start:
+        mount_vfs_from_manifests(
+            "test-bucket",
+            manifests_by_root,
+            boto3_session=boto3.Session(region_name="us-west-2"),
+            session_dir=temp_dir_path,
+            os_env_vars={},
+            fs_permission_settings=fs_permissions,
+            cas_prefix="cas/test",
+        )
+        # Were the cache and manifest folders created
+        assert not os.path.isdir(cache_path)
+        assert os.path.isdir(manifest_path)
+

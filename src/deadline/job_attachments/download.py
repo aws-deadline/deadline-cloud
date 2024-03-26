@@ -65,6 +65,7 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
+VFS_ENABLE_CACHE_ENV_VAR = "VFS_CACHING_ENABLED"
 VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
 VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
 
@@ -970,17 +971,21 @@ def mount_vfs_from_manifests(
     Returns:
         None
     """
+    vfs_cache_enabled = os.environ.get(VFS_ENABLE_CACHE_ENV_VAR) is not None
+
     if not isinstance(fs_permission_settings, PosixFileSystemPermissionSettings):
         raise TypeError("VFS can only be mounted from manifests on posix file systems.")
-    vfs_cache_dir: Path = session_dir / VFS_CACHE_REL_PATH_IN_SESSION
-    asset_cache_hash_path: Path = vfs_cache_dir
-    if cas_prefix is not None:
-        asset_cache_hash_path = vfs_cache_dir / cas_prefix
-        _ensure_paths_within_directory(str(vfs_cache_dir), [str(asset_cache_hash_path)])
 
-    asset_cache_hash_path.mkdir(parents=True, exist_ok=True)
+    if vfs_cache_enabled:
+        vfs_cache_dir: Path = session_dir / VFS_CACHE_REL_PATH_IN_SESSION
+        asset_cache_hash_path: Path = vfs_cache_dir
+        if cas_prefix is not None:
+            asset_cache_hash_path = vfs_cache_dir / cas_prefix
+            _ensure_paths_within_directory(str(vfs_cache_dir), [str(asset_cache_hash_path)])
 
-    _set_fs_group([str(asset_cache_hash_path)], str(vfs_cache_dir), fs_permission_settings)
+        asset_cache_hash_path.mkdir(parents=True, exist_ok=True)
+
+        _set_fs_group([str(asset_cache_hash_path)], str(vfs_cache_dir), fs_permission_settings)
 
     manifest_dir: Path = session_dir / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
     manifest_dir.mkdir(parents=True, exist_ok=True)
@@ -1014,7 +1019,7 @@ def mount_vfs_from_manifests(
             os_env_vars,
             getattr(fs_permission_settings, "os_group", ""),
             cas_prefix,
-            str(vfs_cache_dir),
+            str(vfs_cache_dir) if vfs_cache_enabled else None,
         )
         vfs_manager.start(session_dir=session_dir)
 
