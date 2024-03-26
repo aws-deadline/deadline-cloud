@@ -2,6 +2,11 @@
 
 import ctypes
 import ctypes.wintypes
+import sys
+
+# This assertion short-circuits mypy from type checking this module on platforms other than Windows
+# https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
+assert sys.platform == "win32"
 
 kernel32 = ctypes.WinDLL("Kernel32")
 

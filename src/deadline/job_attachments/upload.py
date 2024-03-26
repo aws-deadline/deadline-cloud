@@ -493,7 +493,7 @@ class S3AssetUploader:
 
         import ctypes
         import msvcrt
-        from .windows import file as win_file
+        from ._windows import file as win_file
 
         # Get the handle from the file descriptor
         try:
