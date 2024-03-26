@@ -116,6 +116,12 @@ known-first-party = [
   "deadline"
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# We need to use a platform assertion to short-circuit mypy type checking on non-Windows platforms
+# https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
+# This causes imports to come after regular Python statements causing flake8 rule E402 to be flagged
+"src/deadline/job_attachments/_windows/*.py" = ["E402"]
+
 [tool.black]
 line-length = 100
 
@@ -156,6 +162,9 @@ source_pkgs = [ "deadline" ]
 omit = [
     "*/deadline/client/ui/*",
 ]
+plugins = [
+  "coverage_conditional_plugin"
+]
 
 [tool.coverage.paths]
 source = [ "src/" ]
@@ -163,6 +172,24 @@ source = [ "src/" ]
 [tool.coverage.report]
 show_missing = true
 fail_under = 80
+
+# https://github.com/wemake-services/coverage-conditional-plugin
+[tool.coverage.coverage_conditional_plugin.omit]
+"sys_platform != 'win32'" = [
+  "src/deadline/job_attachments/_windows/*.py",
+]
+
+[tool.coverage.coverage_conditional_plugin.rules]
+# This cannot be empty otherwise coverage-conditional-plugin crashes with:
+# AttributeError: 'NoneType' object has no attribute 'items'
+#
+# =========== WARNING TO REVIEWERS ============
+#
+# Any rules added here are ran through Python's
+# eval() function so watch for code injection
+# attacks.
+#
+# =========== WARNING TO REVIEWERS ============
 
 [tool.semantic_release]
 # Can be removed or set to true once we are v1
