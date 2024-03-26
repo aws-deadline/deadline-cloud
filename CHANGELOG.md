@@ -1,3 +1,10 @@
+## 0.45.1 (2024-03-26)
+
+
+
+### Bug Fixes
+* Removing overridden AWS_CONFIG_FILE path and base environment variables from deadline_vfs POpen launch env and using -E option to persist environment through sudo (#247) ([`4a7be81`](https://github.com/casillas2/deadline-cloud/commit/4a7be8131e7af99cfe2e0b8e6459591079f27154))
+
 ## 0.45.0 (2024-03-25)
 
 ### BREAKING CHANGES
