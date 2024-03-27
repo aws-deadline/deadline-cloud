@@ -34,7 +34,14 @@ from .exceptions import (
     JobAttachmentsError,
     MissingAssetRootError,
 )
-from .vfs import VFSProcessManager
+from .vfs import (
+    VFSProcessManager,
+    VFS_CACHE_REL_PATH_IN_SESSION,
+    VFS_MANIFEST_FOLDER_IN_SESSION,
+    VFS_LOGS_DIR,
+    VFS_MANIFEST_FOLDER_PERMISSIONS,
+)
+
 from .models import (
     Attachments,
     FileConflictResolution,
@@ -65,15 +72,6 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
-VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
-VFS_MERGED_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
-
-VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS = PosixFileSystemPermissionSettings(
-    os_user="",
-    os_group="",
-    dir_mode=0o31,
-    file_mode=0o64,
-)
 
 
 def get_manifest_from_s3(
@@ -982,13 +980,18 @@ def mount_vfs_from_manifests(
 
     _set_fs_group([str(asset_cache_hash_path)], str(vfs_cache_dir), fs_permission_settings)
 
-    manifest_dir: Path = session_dir / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
+    manifest_dir: Path = session_dir / VFS_MANIFEST_FOLDER_IN_SESSION
     manifest_dir.mkdir(parents=True, exist_ok=True)
-    manifest_dir_permissions = VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS
+    manifest_dir_permissions = VFS_MANIFEST_FOLDER_PERMISSIONS
     manifest_dir_permissions.os_user = fs_permission_settings.os_user
     manifest_dir_permissions.os_group = fs_permission_settings.os_group
 
     _set_fs_group([str(manifest_dir)], str(manifest_dir), manifest_dir_permissions)
+
+    vfs_logs_dir: Path = session_dir / VFS_LOGS_DIR
+    vfs_logs_dir.mkdir(parents=True, exist_ok=True)
+
+    _set_fs_group([str(vfs_logs_dir)], str(vfs_logs_dir), fs_permission_settings)
 
     for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.

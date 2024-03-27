@@ -49,8 +49,8 @@ from deadline.job_attachments.download import (
     _get_asset_root_from_s3,
     _get_tasks_manifests_keys_from_s3,
     VFS_CACHE_REL_PATH_IN_SESSION,
-    VFS_MERGED_MANIFEST_FOLDER_IN_SESSION,
-    VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS,
+    VFS_MANIFEST_FOLDER_IN_SESSION,
+    VFS_MANIFEST_FOLDER_PERMISSIONS,
 )
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
@@ -2337,12 +2337,12 @@ def test_mount_vfs_from_manifests(
     manifest_permissions = PosixFileSystemPermissionSettings(
         fs_permissions.os_user,
         fs_permissions.os_group,
-        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.dir_mode,
-        VFS_MERGED_MANIFEST_FOLDER_PERMISSIONS.file_mode,
+        VFS_MANIFEST_FOLDER_PERMISSIONS.dir_mode,
+        VFS_MANIFEST_FOLDER_PERMISSIONS.file_mode,
     )
 
     cache_path = temp_dir_path / VFS_CACHE_REL_PATH_IN_SESSION
-    manifest_path = temp_dir_path / VFS_MERGED_MANIFEST_FOLDER_IN_SESSION
+    manifest_path = temp_dir_path / VFS_MANIFEST_FOLDER_IN_SESSION
     with patch(
         f"{deadline.__package__}.job_attachments.download._set_fs_group",
     ) as mock_set_vs_group, patch(
