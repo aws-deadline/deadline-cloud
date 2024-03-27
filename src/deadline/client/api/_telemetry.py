@@ -7,10 +7,9 @@ import os
 import platform
 import uuid
 import random
-import ssl
 import time
 
-from botocore.httpsession import get_cert_path
+from botocore.httpsession import create_urllib3_context, get_cert_path
 from configparser import ConfigParser
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -93,12 +92,8 @@ class TelemetryClient:
         self._initialized: bool = False
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
-
-        # Need to set up a valid SSL context so requests can make it through
-        self._urllib3_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-        self._urllib3_context.verify_mode = ssl.CERT_REQUIRED
-        self._urllib3_context.check_hostname = True
-        self._urllib3_context.load_default_certs()
+        # Some environments might not have SSL, so we'll use the vendored botocore SSL context
+        self._urllib3_context = create_urllib3_context()
         self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
         # IDs for this session
