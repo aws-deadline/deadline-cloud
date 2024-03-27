@@ -802,7 +802,7 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
                 [
                     (item["displayName"], item["storageProfileId"])
                     for item in storage_profiles
-                    if self._get_current_os() == item["osFamily"]
+                    if self._get_current_os() == item["osFamily"].lower()
                 ],
                 key=lambda item: (item[0].casefold(), item[1]),
             )
