@@ -36,6 +36,22 @@ cli_a = Analysis(
     cipher=BLOCK_CIPHER,
 )
 
+# Need to ensure we bundle python3.dll to ensure Shiboken works on windows
+if sys.platform == "win32":
+    python3_dll = None
+    for name, path, _ in cli_a.binaries:
+        if name == "python3.dll":
+            break
+        if not (name.startswith("python") and name.endswith(".dll")):
+            continue 
+        python3_dll = str(Path(path).parent / "python3.dll")
+        break
+
+    if not python3_dll:
+        raise RuntimeError("python3.dll was not added to binaries, but is required for windows to download pyside. Failing build")
+    
+    cli_a.binaries += [('python3.dll', python3_dll, 'BINARY')]
+
 # Filter out the UI submodule for now
 deadline_ui = os.path.join('deadline', 'ui')
 cli_a.datas = [item for item in cli_a.datas if not item[0].startswith(deadline_ui)]
