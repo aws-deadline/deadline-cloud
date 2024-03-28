@@ -1,3 +1,10 @@
+## 0.46.0 (2024-03-28)
+
+### BREAKING CHANGES
+* move VFS Logs to under sessionfolder/.vfs_logs (#259) ([`28e16bb`](https://github.com/casillas2/deadline-cloud/commit/28e16bbce5a70ec651eeab89d8ae0f31a58541fd))
+
+
+
 ## 0.45.3 (2024-03-28)
 
 
