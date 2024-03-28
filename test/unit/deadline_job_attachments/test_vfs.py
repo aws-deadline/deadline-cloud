@@ -342,9 +342,9 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
         ) as mock_os_path_exists:
             mock_os_path_exists.return_value = True
-            deadline_vfs_launch_script_path: Union[
-                os.PathLike, str
-            ] = process_manager.find_vfs_launch_script()
+            deadline_vfs_launch_script_path: Union[os.PathLike, str] = (
+                process_manager.find_vfs_launch_script()
+            )
             assert (
                 str(deadline_vfs_launch_script_path)
                 == vfs_test_path + DEADLINE_VFS_EXECUTABLE_SCRIPT
@@ -384,9 +384,9 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists"
         ) as mock_os_path_exists:
             mock_os_path_exists.return_value = True
-            deadline_vfs_launch_script_path: Union[
-                os.PathLike, str
-            ] = process_manager.find_vfs_launch_script()
+            deadline_vfs_launch_script_path: Union[os.PathLike, str] = (
+                process_manager.find_vfs_launch_script()
+            )
 
             # Will return preset vfs install path with exe script path appended since env is not set
             assert (

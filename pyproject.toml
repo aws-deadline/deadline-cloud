@@ -7,7 +7,7 @@ name = "deadline"
 dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 
 # Note: All deps should be using >= since this is a *library* as well as an application.
 # Applications that consume this library should be the ones that are more strictly
@@ -17,8 +17,7 @@ dependencies = [
     "click >= 8.1.7",
     "pyyaml >= 6.0",
     # Job Attachments
-    "typing_extensions == 4.7.*; python_version == '3.7'",
-    "typing_extensions >= 4.8; python_version > '3.7'",
+    "typing_extensions >= 4.8",
     # Pinning due to 3.4 not being available upstream
     "xxhash == 3.4.*",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
