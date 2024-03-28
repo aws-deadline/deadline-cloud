@@ -1,5 +1,6 @@
 # -*- mode: python -*-
 import os
+import sys
 
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
@@ -42,7 +43,7 @@ if sys.platform == "win32":
     for name, path, _ in cli_a.binaries:
         if name == "python3.dll":
             break
-        if not (name.startswith("python") and name.endswith(".dll")):
+        if not (name.startswith("python3") and name.endswith(".dll")):
             continue 
         python3_dll = str(Path(path).parent / "python3.dll")
         break
