@@ -4,7 +4,6 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 import threading
@@ -14,7 +13,10 @@ from .exceptions import (
     VFSExecutableMissingError,
     VFSFailedToMountError,
     VFSLaunchScriptMissingError,
+    VFSRunPathNotSetError,
 )
+
+from .os_file_permission import PosixFileSystemPermissionSettings
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +27,17 @@ DEADLINE_VFS_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_deadline_vfs_al2.s
 
 DEADLINE_VFS_PID_FILE_NAME = "vfs_pids.txt"
 DEADLINE_MANIFEST_GROUP_READ_PERMS = 0o640
+
+VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
+VFS_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
+VFS_LOGS_FOLDER_IN_SESSION = ".vfs_logs"
+
+VFS_MANIFEST_FOLDER_PERMISSIONS = PosixFileSystemPermissionSettings(
+    os_user="",
+    os_group="",
+    dir_mode=0o31,
+    file_mode=0o64,
+)
 
 
 class VFSProcessManager(object):
@@ -59,10 +72,6 @@ class VFSProcessManager(object):
         cas_prefix: Optional[str] = None,
         asset_cache_path: Optional[str] = None,
     ):
-        # TODO: Once Windows pathmapping is implemented we can remove this
-        if sys.platform == "win32":
-            raise NotImplementedError("Windows is not currently supported for Job Attachments")
-
         self._mount_point = mount_point
         self._vfs_proc = None
         self._vfs_thread = None
@@ -91,7 +100,7 @@ class VFSProcessManager(object):
                 for line in file.readlines():
                     line = line.strip()
                     mount_point, _, _ = line.split(":")
-                    cls.shutdown_libfuse_mount(mount_point, os_user)
+                    cls.shutdown_libfuse_mount(mount_point, os_user, session_dir)
             os.remove(pid_file_path)
         except FileNotFoundError:
             log.warning(f"VFS pid file not found at {pid_file_path}")
@@ -110,7 +119,7 @@ class VFSProcessManager(object):
         return ["sudo", "-u", os_user, fusermount3_path, "-u", mount_path]
 
     @classmethod
-    def shutdown_libfuse_mount(cls, mount_path: str, os_user: str) -> bool:
+    def shutdown_libfuse_mount(cls, mount_path: str, os_user: str, session_dir: Path) -> bool:
         """
         Shut down the mount at the provided path using the fusermount3 unmount option
         as the provided user
@@ -126,7 +135,7 @@ class VFSProcessManager(object):
             log.warn(f"Shutdown failed with error {e}")
             # Don't reraise, check if mount is gone
         log.info(f"Shutdown returns {run_result.returncode}")
-        return cls.wait_for_mount(mount_path, expected=False)
+        return cls.wait_for_mount(mount_path, session_dir, expected=False)
 
     @classmethod
     def kill_process_at_mount(cls, session_dir: Path, mount_point: str, os_user: str) -> bool:
@@ -155,7 +164,7 @@ class VFSProcessManager(object):
                     else:
                         mount_for_pid, _, _ = line.split(":")
                         if mount_for_pid == mount_point:
-                            cls.shutdown_libfuse_mount(mount_point, os_user)
+                            cls.shutdown_libfuse_mount(mount_point, os_user, session_dir)
                             mount_point_found = True
                         else:
                             file.write(line)
@@ -202,10 +211,12 @@ class VFSProcessManager(object):
         return subprocess.run(["findmnt", path]).returncode == 0
 
     @classmethod
-    def wait_for_mount(cls, mount_path, mount_wait_seconds=60, expected=True) -> bool:
+    def wait_for_mount(cls, mount_path, session_dir, mount_wait_seconds=60, expected=True) -> bool:
         """
         After we've launched the VFS subprocess we need to wait
         for the OS to validate that the mount is in place before use
+        :param mount_path: Path to mount to watch for
+        :param session_dir: Session folder associated with mount
         :param mount_wait_seconds: Duration to wait for mount state
         :param expected: Wait for the mount to exist or no longer exist
         """
@@ -220,27 +231,38 @@ class VFSProcessManager(object):
                 log.info(f"is_mount on {mount_path} not {expected}, sleeping...")
                 time.sleep(1)
         log.info(f"Failed to find is_mount {expected} at {mount_path} after {mount_wait_seconds}")
-        VFSProcessManager.print_log_end()
+        cls.print_log_end(session_dir)
         return False
 
     @classmethod
-    def get_logs_folder(cls) -> Union[os.PathLike, str]:
+    def logs_folder_path(cls, session_dir: Path) -> Union[os.PathLike, str]:
         """
         Find the folder we expect VFS logs to be written to
         """
-        return os.path.join(os.path.dirname(VFSProcessManager.find_vfs()), "..", "logs")
+        return session_dir / VFS_LOGS_FOLDER_IN_SESSION
+
+    def get_logs_folder(self) -> Union[os.PathLike, str]:
+        """
+        Find the folder we expect VFS logs to be written to
+        """
+        if self._run_path:
+            return self.logs_folder_path(Path(self._run_path))
+        raise VFSRunPathNotSetError("Attempted to find logs folder without run path")
 
     @classmethod
-    def print_log_end(cls, log_file_name="vfs_log.txt", lines=100, log_level=logging.WARNING):
+    def print_log_end(
+        self, session_dir: Path, log_file_name="vfs_log.txt", lines=100, log_level=logging.WARNING
+    ):
         """
         Print out the end of our VFS Log.  Reads the full log file into memory.  Our VFS logs are size
         capped so this is not an issue for the intended use case.
+        :param session_dir: Session folder for mount
         :param log_file_name: Name of file within the logs folder to read from.  Defaults to vfs_log.txt which
         is our "most recent" log file.
         :param lines: Maximum number of lines from the end of the log to print
         :param log_level: Level to print logging as
         """
-        log_file_path = os.path.join(VFSProcessManager.get_logs_folder(), log_file_name)
+        log_file_path = self.logs_folder_path(session_dir) / log_file_name
         log.log(log_level, f"Printing last {lines} lines from {log_file_path}")
         if not os.path.exists(log_file_path):
             log.warning(f"No log file found at {log_file_path}")
@@ -432,7 +454,7 @@ class VFSProcessManager(object):
         Start our VFS process
         :return: VFS process id
         """
-        self._run_path = VFSProcessManager.get_cwd()
+        self._run_path = session_dir
         log.info(f"Using run_path {self._run_path}")
         log.info(f"Using mount_point {self._mount_point}")
         self.set_manifest_owner()
@@ -457,7 +479,7 @@ class VFSProcessManager(object):
                 args=start_command,
                 stdout=subprocess.PIPE,  # Create a new pipe
                 stderr=subprocess.STDOUT,  # Merge stderr into the stdout pipe
-                cwd=self._run_path,
+                cwd=str(self._run_path),
                 env=launch_env,
                 shell=True,
                 executable="/bin/bash",
@@ -472,7 +494,7 @@ class VFSProcessManager(object):
             log.exception(f"Exception during launch with command {start_command} exception {e}")
             raise e
         log.info(f"Launched VFS as pid {self._vfs_proc.pid}")
-        if not VFSProcessManager.wait_for_mount(self.get_mount_point()):
+        if not VFSProcessManager.wait_for_mount(self.get_mount_point(), session_dir):
             log.error("Failed to mount, shutting down")
             raise VFSFailedToMountError
 

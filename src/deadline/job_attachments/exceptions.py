@@ -158,3 +158,9 @@ class UnsupportedHashingAlgorithmError(JobAttachmentsError):
     """
     Exception for when an unsupported hashing algorithm is provided.
     """
+
+
+class VFSRunPathNotSetError(JobAttachmentsError):
+    """
+    Exception for when the run path hasn't been set for the vfs
+    """
