@@ -4,7 +4,6 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 import threading
@@ -73,10 +72,6 @@ class VFSProcessManager(object):
         cas_prefix: Optional[str] = None,
         asset_cache_path: Optional[str] = None,
     ):
-        # TODO: Once Windows pathmapping is implemented we can remove this
-        if sys.platform == "win32":
-            raise NotImplementedError("Windows is not currently supported for Job Attachments")
-
         self._mount_point = mount_point
         self._vfs_proc = None
         self._vfs_thread = None

@@ -64,21 +64,6 @@ class TestVFSProcessmanager:
         VFSProcessManager.library_path = None
         VFSProcessManager.cwd_path = None
 
-    # TODO: Remove this test once we support Windows for VFS
-    @patch("sys.platform", "win32")
-    def test_init_fails_on_windows(self) -> None:
-        """Asserts an error is raised when trying to create a VFSProcessManager
-        instance on a Windows OS"""
-        with pytest.raises(NotImplementedError):
-            VFSProcessManager(
-                asset_bucket=self.s3_settings.s3BucketName,
-                region=os.environ["AWS_DEFAULT_REGION"],
-                manifest_path="/test/manifest/path",
-                mount_point="/test/mount/point",
-                os_user="test-user",
-                os_env_vars={"AWS_PROFILE": "test-profile"},
-            )
-
     def test_build_launch_command(
         self,
         tmp_path: Path,
