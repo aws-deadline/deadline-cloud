@@ -38,7 +38,7 @@ from .vfs import (
     VFSProcessManager,
     VFS_CACHE_REL_PATH_IN_SESSION,
     VFS_MANIFEST_FOLDER_IN_SESSION,
-    VFS_LOGS_DIR,
+    VFS_LOGS_FOLDER_IN_SESSION,
     VFS_MANIFEST_FOLDER_PERMISSIONS,
 )
 
@@ -988,7 +988,7 @@ def mount_vfs_from_manifests(
 
     _set_fs_group([str(manifest_dir)], str(manifest_dir), manifest_dir_permissions)
 
-    vfs_logs_dir: Path = session_dir / VFS_LOGS_DIR
+    vfs_logs_dir: Path = session_dir / VFS_LOGS_FOLDER_IN_SESSION
     vfs_logs_dir.mkdir(parents=True, exist_ok=True)
 
     _set_fs_group([str(vfs_logs_dir)], str(vfs_logs_dir), fs_permission_settings)

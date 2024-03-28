@@ -7,6 +7,7 @@ import os
 import stat
 import sys
 from pathlib import Path
+import subprocess
 import threading
 from typing import Union
 from unittest.mock import Mock, patch, call, MagicMock
@@ -28,6 +29,7 @@ from deadline.job_attachments.vfs import (
     DEADLINE_VFS_INSTALL_PATH,
     DEADLINE_VFS_PID_FILE_NAME,
     DEADLINE_MANIFEST_GROUP_READ_PERMS,
+    VFS_LOGS_FOLDER_IN_SESSION,
 )
 
 
@@ -802,3 +804,99 @@ class TestVFSProcessmanager:
 
         # Base environment variables are not passed through
         assert not launch_env.get(DEADLINE_VFS_ENV_VAR)
+
+    def test_vfs_launched_in_session_folder(
+        self,
+        tmp_path: Path,
+    ):
+        # Test to verify the cwd of launched vfs is the session folder
+
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-cwdtest"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+
+        # Create process manager
+        process_manager: VFSProcessManager = VFSProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+            os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
+        )
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
+            return_value="/test/directory/path",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
+        ) as mock_popen, patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ):
+            process_manager.start(tmp_path)
+
+            launch_command = process_manager.build_launch_command(mount_point=local_root)
+            launch_env = process_manager.get_launch_environ()
+
+            mock_popen.assert_called_once_with(
+                args=launch_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=session_dir,  # Was the session folder used as cwd
+                env=launch_env,
+                shell=True,
+                executable="/bin/bash",
+            )
+
+    def test_vfs_has_expected_logs_folder(
+        self,
+        tmp_path: Path,
+    ):
+        # Test to verify the expected logs folder is returned
+
+        session_dir: str = str(tmp_path)
+        dest_dir: str = "assetroot-logsdirtest"
+        local_root: str = f"{session_dir}/{dest_dir}"
+        manifest_path: str = f"{local_root}/manifest.json"
+        os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+        expected_logs_folder = tmp_path / VFS_LOGS_FOLDER_IN_SESSION
+
+        # Create process manager
+        process_manager: VFSProcessManager = VFSProcessManager(
+            asset_bucket=self.s3_settings.s3BucketName,
+            region=os.environ["AWS_DEFAULT_REGION"],
+            manifest_path=manifest_path,
+            mount_point=local_root,
+            os_user="test-user",
+            os_env_vars={"AWS_PROFILE": "test-profile"},
+        )
+
+        assert VFSProcessManager.logs_folder_path(tmp_path) == expected_logs_folder
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.find_vfs",
+            return_value="/test/directory/path",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.subprocess.Popen",
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.wait_for_mount",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
+            return_value=True,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
+            return_value=os.environ,
+        ):
+            process_manager.start(tmp_path)
+
+            assert process_manager.get_logs_folder() == expected_logs_folder

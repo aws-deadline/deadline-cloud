@@ -31,7 +31,7 @@ DEADLINE_MANIFEST_GROUP_READ_PERMS = 0o640
 
 VFS_CACHE_REL_PATH_IN_SESSION = ".vfs_object_cache"
 VFS_MANIFEST_FOLDER_IN_SESSION = ".vfs_manifests"
-VFS_LOGS_DIR = ".vfs_logs"
+VFS_LOGS_FOLDER_IN_SESSION = ".vfs_logs"
 
 VFS_MANIFEST_FOLDER_PERMISSIONS = PosixFileSystemPermissionSettings(
     os_user="",
@@ -244,7 +244,7 @@ class VFSProcessManager(object):
         """
         Find the folder we expect VFS logs to be written to
         """
-        return session_dir / VFS_LOGS_DIR
+        return session_dir / VFS_LOGS_FOLDER_IN_SESSION
 
     def get_logs_folder(self) -> Union[os.PathLike, str]:
         """
