@@ -1,3 +1,14 @@
+## 0.45.3 (2024-03-28)
+
+
+
+### Bug Fixes
+* add missing import to pyinstaller spec (#256) ([`a81694f`](https://github.com/casillas2/deadline-cloud/commit/a81694f5fd1b87e408df14534b74ee9680e6f8ed))
+* include python3.dll in windows pyinstaller builds (#255) ([`a63f3ae`](https://github.com/casillas2/deadline-cloud/commit/a63f3ae85368ea73aac040a9c7bb21870026372c))
+* Update config command help text (#254) ([`98b14c7`](https://github.com/casillas2/deadline-cloud/commit/98b14c710c4373f1c46c2a652bb5a21a7c7c77be))
+* Use botocore ssl context for telemetry requests (#253) ([`6a6b114`](https://github.com/casillas2/deadline-cloud/commit/6a6b114f67faf992e544d8cc8957a8ec85f94327))
+* Fix storage profiles list broken osFamily matching (#252) ([`c8151db`](https://github.com/casillas2/deadline-cloud/commit/c8151db55eec6c0e7878e9a816fa163edac7f7df))
+
 ## 0.45.2 (2024-03-26)
 
 
