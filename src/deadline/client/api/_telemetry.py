@@ -9,7 +9,6 @@ import uuid
 import random
 import time
 
-from botocore.httpsession import create_urllib3_context, get_cert_path
 from configparser import ConfigParser
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -92,9 +91,6 @@ class TelemetryClient:
         self._initialized: bool = False
         self.package_name = package_name
         self.package_ver = ".".join(package_ver.split(".")[:3])
-        # Some environments might not have SSL, so we'll use the vendored botocore SSL context
-        self._urllib3_context = create_urllib3_context()
-        self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())
@@ -139,6 +135,11 @@ class TelemetryClient:
                 f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
                 TelemetryClient.ENDPOINT_PREFIX,
             )
+            # Some environments might not have SSL, so we'll use the vendored botocore SSL context
+            from botocore.httpsession import create_urllib3_context, get_cert_path
+
+            self._urllib3_context = create_urllib3_context()
+            self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
             user_id, _ = get_user_and_identity_store_id(config=config)
             if user_id:
