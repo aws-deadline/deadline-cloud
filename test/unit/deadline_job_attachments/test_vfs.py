@@ -24,6 +24,7 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.vfs import (
     VFSProcessManager,
     DEADLINE_VFS_ENV_VAR,
+    DEADLINE_VFS_CACHE_ENV_VAR,
     DEADLINE_VFS_EXECUTABLE,
     DEADLINE_VFS_EXECUTABLE_SCRIPT,
     DEADLINE_VFS_INSTALL_PATH,
@@ -751,8 +752,10 @@ class TestVFSProcessmanager:
             mock_chmod.assert_called_with(manifest_path, DEADLINE_MANIFEST_GROUP_READ_PERMS)
 
 
+@pytest.mark.parametrize("vfs_cache_enabled", [True, False])
 def test_launch_environment_has_expected_settings(
     tmp_path: Path,
+    vfs_cache_enabled: bool,
 ):
     # Test to verify when retrieving the launch environment it does not contain os.environ variables (Unless passed in),
     # it DOES contain the VFSProcessManager's environment variables, and aws configuration variables aren't modified
@@ -760,6 +763,10 @@ def test_launch_environment_has_expected_settings(
     test_mount: str = f"{session_dir}/test_mount"
     manifest_path1: str = f"{session_dir}/manifests/some_manifest.json"
     os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
+    if vfs_cache_enabled:
+        os.environ[DEADLINE_VFS_CACHE_ENV_VAR] = "V0"
+    else:
+        os.environ.pop(DEADLINE_VFS_CACHE_ENV_VAR, None)
 
     provided_vars = {
         "VFS_ENV_VAR": "test-vfs-env-var",
@@ -786,6 +793,11 @@ def test_launch_environment_has_expected_settings(
 
     for key, value in provided_vars.items():
         assert launch_env.get(key) == value
+
+    if vfs_cache_enabled:
+        assert launch_env.get(DEADLINE_VFS_CACHE_ENV_VAR) == "V0"
+    else:
+        assert launch_env.get(DEADLINE_VFS_CACHE_ENV_VAR) is None
 
     # Base environment variables are not passed through
     assert not launch_env.get(DEADLINE_VFS_ENV_VAR)
