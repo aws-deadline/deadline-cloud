@@ -765,6 +765,8 @@ def test_launch_environment_has_expected_settings(
     os.environ[DEADLINE_VFS_ENV_VAR] = str((Path(__file__) / "deadline_vfs").resolve())
     if vfs_cache_enabled:
         os.environ[DEADLINE_VFS_CACHE_ENV_VAR] = "V0"
+    else:
+        os.environ.pop(DEADLINE_VFS_CACHE_ENV_VAR, None)
 
     provided_vars = {
         "VFS_ENV_VAR": "test-vfs-env-var",
