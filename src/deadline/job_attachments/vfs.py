@@ -21,6 +21,7 @@ from .os_file_permission import PosixFileSystemPermissionSettings
 log = logging.getLogger(__name__)
 
 DEADLINE_VFS_ENV_VAR = "DEADLINE_VFS_PATH"
+DEADLINE_VFS_CACHE_ENV_VAR = "DEADLINE_VFS_CACHE"
 DEADLINE_VFS_EXECUTABLE = "deadline_vfs"
 DEADLINE_VFS_INSTALL_PATH = "/opt/deadline_vfs"
 DEADLINE_VFS_EXECUTABLE_SCRIPT = "/scripts/production/al2/run_deadline_vfs_al2.sh"
@@ -428,6 +429,8 @@ class VFSProcessManager(object):
         my_env = {**self._os_env_vars}
         my_env["PATH"] = f"{VFSProcessManager.find_vfs_link_dir()}{os.pathsep}{os.environ['PATH']}"
         my_env["LD_LIBRARY_PATH"] = VFSProcessManager.get_library_path()  # type: ignore[assignment]
+        if os.environ.get(DEADLINE_VFS_CACHE_ENV_VAR) is not None:
+            my_env[DEADLINE_VFS_CACHE_ENV_VAR] = os.environ.get(DEADLINE_VFS_CACHE_ENV_VAR)  # type: ignore[assignment]
 
         return my_env
 
