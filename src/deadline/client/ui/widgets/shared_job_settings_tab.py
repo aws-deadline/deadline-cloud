@@ -118,7 +118,11 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         """
         If the default queue id has changed, refresh the queue parameters.
         """
+        farm_id = get_setting("defaults.farm_id")
         queue_id = get_setting("defaults.queue_id")
+        if not farm_id or not queue_id:
+            self.queue_parameters_box.rebuild_ui(async_loading_state="")
+            return  # If the user has not selected a farm or queue ID, don't try to load
         if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id:
             self.queue_parameters_box.rebuild_ui(
                 async_loading_state="Reloading Queue Environments..."
@@ -156,6 +160,10 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         """
         self.farm_id = farm_id = get_setting("defaults.farm_id")
         self.queue_id = queue_id = get_setting("defaults.queue_id")
+        if not self.farm_id or not self.queue_id:
+            # If the user has not selected a farm or queue ID, don't bother starting
+            # the thread.
+            return
         self.__refresh_queue_parameters_id += 1
         self.canceled = CancelationFlag()
         self.__refresh_queue_parameters_thread = threading.Thread(
