@@ -75,15 +75,6 @@ Note that setting the environment variable supersedes the config file setting.
 
 # Build / Test / Release
 
-## Setup Code Artifact
-```
-export CODEARTIFACT_ACCOUNT_ID=<account-id>
-export CODEARTIFACT_DOMAIN=<domain>
-export CODEARTIFACT_REPOSITORY=<repository>
-export REGION=us-west-2
-export CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_ACCOUNT_ID --query authorizationToken --output text`
-```
-
 ## Build the package.
 ```
 hatch build
@@ -112,11 +103,6 @@ hatch run fmt
 ## Run tests for all supported Python versions.
 ```
 hatch run all:test
-```
-
-## Publish
-```
-./publish.sh
 ```
 
 # Optional Third Party Dependencies - GUI
