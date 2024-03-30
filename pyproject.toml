@@ -8,6 +8,24 @@ dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.7"
+description = "Shared Python library that implements functionality to support client applications using AWS Deadline Cloud."
+# https://pypi.org/classifiers/
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "License :: OSI Approved :: Apache Software License",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Topic :: Software Development :: Libraries"
+]
 
 # Note: All deps should be using >= since this is a *library* as well as an application.
 # Applications that consume this library should be the ones that are more strictly
