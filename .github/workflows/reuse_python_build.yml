@@ -15,14 +15,10 @@ jobs:
       contents: read
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.8', '3.9', '3.10', '3.11']
         os: [ubuntu-latest, windows-latest, macOS-latest]
     env:
       PYTHON: ${{ matrix.python-version }}
-      CODEARTIFACT_REGION: "us-west-2"
-      CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
-      CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
-      CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
     - uses: actions/checkout@v4
       if: ${{ !inputs.branch }}
@@ -38,19 +34,9 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
-        aws-region: us-west-2
-        mask-aws-account-id: true
-
     - name: Install Hatch
       shell: bash
       run: |
-        CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
-        echo "::add-mask::$CODEARTIFACT_AUTH_TOKEN"
-        echo CODEARTIFACT_AUTH_TOKEN=$CODEARTIFACT_AUTH_TOKEN >> $GITHUB_ENV
         pip install --upgrade hatch
     
     - name: Run Linting

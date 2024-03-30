@@ -41,11 +41,6 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    env:
-      CODEARTIFACT_REGION: "us-west-2"
-      CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
-      CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
-      CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,17 +84,9 @@ jobs:
             echo EOF
           } >> $GITHUB_ENV
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
-
       # Tag must be made before building so the generated _version.py files have the correct version
       - name: Build
         run: |
-          export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
           pip install --upgrade hatch
           hatch -v build
 
@@ -188,9 +175,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text --region us-west-2)
-          echo "::add-mask::$CODEARTIFACT_AUTH_TOKEN"
-          echo CODEARTIFACT_AUTH_TOKEN=$CODEARTIFACT_AUTH_TOKEN >> $GITHUB_ENV
           pip install --upgrade hatch
           pip install --upgrade twine
 
@@ -211,7 +195,6 @@ jobs:
           export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
           twine upload dist/*
 
-      # TODO: Uncomment this block to publish to PyPI once this package is public
       # # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-pypi
-      # - name: Publish to PyPI
-      #   uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
