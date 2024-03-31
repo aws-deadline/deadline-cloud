@@ -67,10 +67,8 @@ make_exe = "python scripts/pyinstaller/make_exe.py --output {env:OUT_FILE}"
 
 [envs.release]
 detached = true
-dependencies = [
-  "python-semantic-release == 8.7.*"
-]
 
 [envs.release.scripts]
+deps = "pip install -r requirements-release.txt"
 bump = "semantic-release -v --strict version --no-push --no-commit --no-tag --skip-build {args}"
 version = "semantic-release -v --strict version --print {args}"

@@ -63,6 +63,7 @@ jobs:
           # Run semantic-release to generate new changelog
           pip install --upgrade hatch
           hatch env create release
+          hatch run release:deps
           NEXT_SEMVER=$(hatch run release:bump $BUMP_ARGS)
 
           # Grab the new version's changelog and prepend it to the original changelog contents
