@@ -59,67 +59,13 @@ def gui_context_for_cli():
 
         app.exec()
     """
-    import importlib
-    from os.path import basename, dirname, join, normpath
     import shlex
-    import shutil
-    import subprocess
     import sys
     from pathlib import Path
 
     import click
 
-    has_pyside = importlib.util.find_spec("PySide6") or importlib.util.find_spec("PySide2")
-    if not has_pyside:
-        message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
-        will_install_gui = click.confirm(message, default=False)
-        if not will_install_gui:
-            click.echo("Unable to continue without GUI, exiting")
-            sys.exit(1)
-
-        # this should match what's in the pyproject.toml
-        pyside6_pypi = "PySide6-essentials==6.6.*"
-        if "deadline" in basename(sys.executable).lower():
-            # running with a deadline executable, not standard python.
-            # So exit the deadline folder into the main deps dir
-            deps_folder = normpath(
-                join(
-                    dirname(__file__),
-                    "..",
-                    "..",
-                    "..",
-                )
-            )
-            runtime_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-            pip_command = [
-                "-m",
-                "pip",
-                "install",
-                pyside6_pypi,
-                "--python-version",
-                runtime_version,
-                "--only-binary=:all:",
-                "-t",
-                deps_folder,
-            ]
-            python_executable = shutil.which("python3") or shutil.which("python")
-            if python_executable:
-                command = " ".join(shlex.quote(v) for v in [python_executable] + pip_command)
-                subprocess.run([python_executable] + pip_command)
-            else:
-                click.echo(
-                    "Unable to install GUI dependencies, if you have python available you can install it by running:"
-                )
-                click.echo()
-                click.echo(f"\t{' '.join(shlex.quote(v) for v in ['python'] + pip_command)}")
-                click.echo()
-                sys.exit(1)
-        else:
-            # standard python sys.executable
-            # TODO: swap to deadline[gui]==version once published and at the same
-            # time consider local editables `pip install .[gui]`
-            subprocess.run([sys.executable, "-m", "pip", "install", pyside6_pypi])
-
+    _ensure_pyside()
     try:
         from qtpy.QtGui import QIcon
         from qtpy.QtWidgets import QApplication, QMessageBox
@@ -153,6 +99,165 @@ def gui_context_for_cli():
         QMessageBox.warning(  # type: ignore[call-overload]
             None, f'Error running "{command}"', f"Exception caught:\n{traceback.format_exc()}"
         )
+
+
+def _ensure_pyside():
+    """Attempts to ensure that pyside is available in the runtime environment.
+
+    In a nutshell, it does this via 2 different, yet similar methods:
+        * if it's a standard python installation:
+            * start a sys.executable `python -m pip install` subprocess
+        * if it's a pyinstaller builder:
+            * check PATH for python, and
+            * use `/path/to/python -m to pip install` subprocess
+
+    There's a lot of error-cases to potentially deal with this:
+        * does a python install exist
+        * do the process have write access to the location we're targeting
+        * is python an alias to the microsoft store
+        * are there any other missing system libraries a user has to install
+        * etc.
+
+    And so attempts should be made here to give users the easiest path forward
+    to setting up their environment.
+    """
+    import importlib
+    from os.path import basename, dirname, join, normpath
+    from pathlib import Path
+    import shlex
+    import shutil
+    import subprocess
+    import sys
+
+    import click
+
+    has_pyside = importlib.util.find_spec("PySide6") or importlib.util.find_spec("PySide2")
+    if has_pyside:
+        return
+
+    message = (
+        "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
+    )
+    will_install_gui = click.confirm(message, default=False)
+    if not will_install_gui:
+        click.echo("Unable to continue without GUI, exiting")
+        sys.exit(1)
+
+    # TODO: swap to deadline[gui]=={this_client_version} once published
+    pyside6_pypi = "PySide6-essentials==6.6.*"
+    if "deadline" not in basename(sys.executable).lower():
+        # standard python sys.executable
+        # TODO: consider local editables `pip install .[gui]` for a dev env
+        command = [sys.executable, "-m", "pip", "install", pyside6_pypi]
+        if all(path in sys.executable.lower() for path in ("microsoft", "windowsapps")):
+            # pip error when python installed from microsoft store:
+            #     ERROR: Can not combine '--user' and '--target'
+            # so we specify --no-user
+            command += ["--no-user"]
+        printed_command = " ".join(shlex.quote(v) for v in command)
+        click.echo(f"running command: {printed_command}")
+        subprocess.run(command)
+        return
+
+    # running with a deadline executable, not standard python.
+    # So exit the deadline folder into the main deps dir
+    deps_folder = normpath(
+        join(
+            dirname(__file__),
+            "..",
+            "..",
+            "..",
+        )
+    )
+    runtime_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    pip_command = [
+        "-m",
+        "pip",
+        "install",
+        pyside6_pypi,
+        "--python-version",
+        runtime_version,
+        "--only-binary=:all:",
+        "--target",
+        deps_folder,
+    ]
+    # Linux, python may be the built-in python2, check for python3 first
+    python_executable = shutil.which("python3") or shutil.which("python")
+    if sys.platform == "win32":
+        # reverse the order for Windows, since a standard install of python will have
+        # python.exe, but not nessarily python3. python3 might still be an alias to
+        # the windows store.
+        python_executable = shutil.which("python") or shutil.which("python3")
+        if python_executable and all(
+            path in python_executable.lower() for path in ("microsoft", "windowsapps")
+        ):
+            # pip error when python installed from microsoft store:
+            #     ERROR: Can not combine '--user' and '--target'
+            # so we specify --no-user
+            pip_command += ["--no-user"]
+
+    if not python_executable:
+        python = "python" if sys.platform == "win32" else "python3"
+        command = [python] + pip_command
+        printed_command = " ".join(shlex.quote(v) for v in command)
+        if sys.platform == "win32":
+            # windows definitely doesn't like shlex, ' != "
+            printed_command = " ".join(command)
+        click.echo(
+            "Unable to install GUI dependencies, if you have python you can finish installing by running:"
+        )
+        click.echo()
+        click.echo(f"\t{printed_command}")
+        click.echo()
+        sys.exit(1)
+
+    command = [python_executable] + pip_command
+    printed_command = " ".join(shlex.quote(v) for v in command)
+    if sys.platform == "win32":
+        # windows definitely doesn't like shlex, ' != "
+        printed_command = " ".join(command)
+
+    # Attempt to write to deps folder to ensure we have permission to do so
+    test_file = Path(deps_folder) / "test_file"
+    try:
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        with test_file.open("w", encoding="utf-8"):
+            # successfully created file
+            pass
+    except Exception:
+        click.echo(
+            f"Unable to install GUI dependencies, you do not have the permissions to write to '{deps_folder}'."
+        )
+        click.echo(
+            "You can finish the install by running the following command as a user who can write to that folder:"
+        )
+        click.echo()
+        click.echo(f"\t{printed_command}")
+        click.echo()
+        sys.exit(1)
+    else:
+        test_file.unlink()
+
+    click.echo(f"running command: {printed_command}")
+    result = subprocess.run(command, capture_output=True, encoding="utf-8")
+
+    if "run without arguments to install from the Microsoft Store".lower() in result.stderr.lower():
+        click.echo(f"The python install, {python_executable}, is an alias to the Microsoft store.")
+        click.echo(
+            "To install AWS Deadline Cloud's GUI dependencies, install python and re-run this command."
+        )
+        sys.exit(1)
+
+    if "ModuleNotFoundError: No module named 'encodings'".lower() in result.stderr.lower():
+        # Occurred on deadline 0.46 - this seemed to happen when running on linux using /usr/bin/python3,
+        # could not reproduce when built on the same machine the install fails on.
+        # Debug info DOES indicate it's /usr/bin/python3 running and not happening within
+        # the deadline executable. Running the command manually also appears to work fine
+        click.echo("Unable to install GUI dependencies, you can fix this by running:")
+        click.echo()
+        click.echo(f"\t{printed_command}")
+        click.echo()
+        sys.exit(1)
 
 
 class CancelationFlag:
