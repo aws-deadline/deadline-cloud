@@ -42,12 +42,16 @@ def _login_deadline_cloud_monitor(
 
     # Open Deadline Cloud Monitor, non-blocking the user will keep Deadline Cloud Monitor running in the background.
     try:
-        # We don't hookup to stdin but do this to avoid issues on windows
-        # See https://docs.python.org/3/library/subprocess.html#subprocess.STARTUPINFO.lpAttributeList
-
-        p = subprocess.Popen(
-            args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE
-        )
+        if sys.platform.startswith("win"):
+            # We don't hookup to stdin but do this to avoid issues on windows
+            # See https://docs.python.org/3/library/subprocess.html#subprocess.STARTUPINFO.lpAttributeList
+            p = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE
+            )
+        else:
+            p = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL
+            )
         # Linux takes time to start DCM binary, which causes the TTY to suspend the process and send it to background job
         # With wait here, the DCM binary starts and TTY does not suspend the deadline process.
         if sys.platform == "linux":

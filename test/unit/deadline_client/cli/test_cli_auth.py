@@ -5,6 +5,8 @@ Tests for the CLI auth commands.
 """
 import json
 import subprocess
+import sys
+
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -45,12 +47,20 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
 
         assert result.exit_code == 0, result.output
 
-        popen_mock.assert_called_once_with(
-            ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE,
-        )
+        if sys.platform.startswith("win"):
+            popen_mock.assert_called_once_with(
+                ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
+            )
+        else:
+            popen_mock.assert_called_once_with(
+                ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+            )
 
         assert result.exit_code == 0
 
