@@ -1,3 +1,16 @@
+## 0.47.0 (2024-04-01)
+
+### BREAKING CHANGES
+* public release (#265) ([`e8680c6`](https://github.com/aws-deadline/deadline-cloud/commit/e8680c63a35a4c1eb3736f3ec537c16ec53c9b74))
+* python 3.8 or higher is required
+
+
+### Bug Fixes
+* only hookup stdin on windows for dcm login (#271) ([`cb91b2c`](https://github.com/aws-deadline/deadline-cloud/commit/cb91b2c5831301ee4f3f6022004fbc98bc992ab0))
+* Move telemetry urllib3 context to initialize function (#263) ([`aebd13b`](https://github.com/aws-deadline/deadline-cloud/commit/aebd13b11ad444e9edd2dcb35cc829464a722c6e))
+* only load queue environments when connected to a queue (#264) ([`ea1e617`](https://github.com/aws-deadline/deadline-cloud/commit/ea1e61776fa8483fa35873ffc276914c15514c3a))
+* bringing vfs_cache env var into vfs launch environment (#262) ([`1a6b8c8`](https://github.com/aws-deadline/deadline-cloud/commit/1a6b8c8a9070d4389e65e4d5b2694f32401050ef))
+
 ## 0.46.0 (2024-03-28)
 
 ### BREAKING CHANGES
