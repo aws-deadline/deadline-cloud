@@ -11,13 +11,12 @@ authors = [
 dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 # https://pypi.org/classifiers/
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.7",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -36,7 +35,7 @@ classifiers = [
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-    "boto3 >= 1.28.80",
+    "boto3 >= 1.34.75",
     "click >= 8.1.7",
     "pyyaml >= 6.0",
     # Job Attachments

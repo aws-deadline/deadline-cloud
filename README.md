@@ -21,7 +21,7 @@ To support building workflows on top of AWS Deadline Cloud it implements its own
 
 This library requires:
 
-1. Python 3.7 or higher; and
+1. Python 3.8 or higher; and
 2. Linux, Windows, or macOS operating system.
 
 ## Getting Started
