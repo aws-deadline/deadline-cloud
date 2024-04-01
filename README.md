@@ -7,7 +7,7 @@
 
 AWS Deadline Cloud client is a multi-purpose python library and command line tool for interacting with and submitting [Open Job Description (OpenJD)][openjd] jobs to [AWS Deadline Cloud][deadline-cloud].
 
-To support building workflows on-top of AWS Deadline Cloud it implements its own user interaction, job creation, file upload/download, and other useful helpers around the service's api. It can function as a pipeline tool, a standalone gui application, or even be embedded within other application's runtimes.
+To support building workflows on top of AWS Deadline Cloud it implements its own user interaction, job creation, file upload/download, and other useful helpers around the service's api. It can function as a pipeline tool, a standalone gui application, or even be embedded within other applications' runtimes.
 
 [cas]: https://en.wikipedia.org/wiki/Content-addressable_storage
 [deadline-cloud]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html
@@ -26,7 +26,7 @@ This library requires:
 
 ## Getting Started
 
-AWS Deadline Cloud client can be installed by the standard python packaging mechanisms:
+The AWS Deadline Cloud client can be installed by the standard python packaging mechanisms:
 ```sh
 $ pip install deadline
 ```
