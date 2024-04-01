@@ -55,8 +55,8 @@ else:
 @click.pass_context
 def main(ctx: click.Context, log_level: str):
     """
-    The AWS Deadline Cloud CLI provides functionality to work with the AWS Deadline Cloud
-    closed beta service.
+    The AWS Deadline Cloud CLI provides functionality to interact with the AWS Deadline Cloud
+    service.
     """
     logging.basicConfig(level=log_level)
     if log_level == "DEBUG":

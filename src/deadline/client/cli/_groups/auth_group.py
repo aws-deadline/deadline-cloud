@@ -85,7 +85,7 @@ def auth_logout():
 )
 @_handle_error
 def auth_status(output, **args):
-    """EXPERIMENTAL - Gets the authentication status for the given AWS profile"""
+    """Gets the authentication status for the given AWS profile"""
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
     profile_name = get_setting("defaults.aws_profile_name", config=config)

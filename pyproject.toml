@@ -8,7 +8,7 @@ dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.7"
-description = "Shared Python library that implements functionality to support client applications using AWS Deadline Cloud."
+description = "Multi-purpose library and command line tool that implements functionality to support applications using AWS Deadline Cloud."
 # https://pypi.org/classifiers/
 classifiers = [
   "Development Status :: 5 - Production/Stable",
