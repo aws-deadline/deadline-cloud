@@ -107,13 +107,13 @@ def _ensure_pyside():
     In a nutshell, it does this via 2 different, yet similar methods:
         * if it's a standard python installation:
             * start a sys.executable `python -m pip install` subprocess
-        * if it's a pyinstaller builder:
+        * if it's a pyinstaller build:
             * check PATH for python, and
             * use `/path/to/python -m to pip install` subprocess
 
-    There's a lot of error-cases to potentially deal with this:
+    There's a lot of error-cases to potentially deal with:
         * does a python install exist
-        * do the process have write access to the location we're targeting
+        * does the process have write access to the target location
         * is python an alias to the microsoft store
         * are there any other missing system libraries a user has to install
         * etc.
@@ -145,7 +145,8 @@ def _ensure_pyside():
 
     # TODO: swap to deadline[gui]=={this_client_version} once published
     pyside6_pypi = "PySide6-essentials==6.6.*"
-    if "deadline" not in basename(sys.executable).lower():
+    # Check if not pyinstaller (https://pyinstaller.org/en/stable/runtime-information.html)
+    if not (getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")):
         # standard python sys.executable
         # TODO: consider local editables `pip install .[gui]` for a dev env
         command = [sys.executable, "-m", "pip", "install", pyside6_pypi]
@@ -185,7 +186,7 @@ def _ensure_pyside():
     python_executable = shutil.which("python3") or shutil.which("python")
     if sys.platform == "win32":
         # reverse the order for Windows, since a standard install of python will have
-        # python.exe, but not nessarily python3. python3 might still be an alias to
+        # python.exe, but not necessarily python3. python3 might still be an alias to
         # the windows store.
         python_executable = shutil.which("python") or shutil.which("python3")
         if python_executable and all(
@@ -221,9 +222,7 @@ def _ensure_pyside():
     test_file = Path(deps_folder) / "test_file"
     try:
         test_file.parent.mkdir(parents=True, exist_ok=True)
-        with test_file.open("w", encoding="utf-8"):
-            # successfully created file
-            pass
+        test_file.touch()
     except Exception:
         click.echo(
             f"Unable to install GUI dependencies, you do not have the permissions to write to '{deps_folder}'."
