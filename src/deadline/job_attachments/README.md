@@ -1,12 +1,12 @@
-# AWS Deadline Cloud Job Attachments
+# Job attachments
 
-[Job attachments][job-attachments] enable you to transfer files back and forth between your workstation and [AWS Deadline Cloud][deadline-cloud], using an Amazon S3 bucket in your AWS account associated with your [Deadline Cloud queues][queue]. 
+[Job attachments][job-attachments] enable you to transfer files back and forth between your workstation and [AWS Deadline Cloud][deadline-cloud], using an Amazon S3 bucket in your AWS account associated with your [AWS Deadline Cloud queues][queue]. 
 
-Job attachments uses your configured S3 bucket as a [content-addressable storage](https://en.wikipedia.org/wiki/Content-addressable_storage), which creates a snapshot of the files used in your job submission in [asset manifests](#asset-manifests), only uploading files that aren't already in S3. This saves you time and bandwidth when iterating on jobs. When an [AWS Deadline Cloud Worker Agent][worker-agent] starts working on a job with job attachments, it recreates the file system snapshot in the worker agent session directory, and uploads any outputs back to your S3 bucket. 
+Job attachments uses your configured S3 bucket as a [content-addressable storage](https://en.wikipedia.org/wiki/Content-addressable_storage), which creates a snapshot of the files used in your job submission in [asset manifests](#asset-manifests), only uploading files that aren't already in S3. This saves you time and bandwidth when iterating on jobs. When an [AWS Deadline Cloud worker agent][worker-agent] starts working on a job with job attachments, it recreates the file system snapshot in the worker agent session directory, and uploads any outputs back to your S3 bucket. 
 
-You can then easily download your outputs with the [Deadline client](../client/) `deadline job download-output` command, or using the [protocol handler](#protocol-handler) to download from a click of a button in the [Deadline Cloud Monitor][monitor].
+You can then easily download your outputs with the [deadline cli](../client/) `deadline job download-output` command, or using the [protocol handler](#protocol-handler) to download from a click of a button in the [AWS Deadline Cloud monitor][monitor].
 
-Job attachments also works as an auxiliary storage when used with [AWS Deadline Cloud Storage Profiles][shared-storage], allowing you to flexibly upload files to your Amazon S3 bucket that aren't on your configured shared storage.
+Job attachments also works as an auxiliary storage when used with [AWS Deadline Cloud storage profiles][shared-storage], allowing you to flexibly upload files to your Amazon S3 bucket that aren't on your configured shared storage.
 
 See the [`examples`](../../../examples/) directory for some simple examples on how to use job attachments.
 
@@ -53,7 +53,7 @@ In order to further improve submission time, there are currently two local [`cac
 
 ## Protocol Handler
 
-On Windows and Linux operating systems, you can choose to install the [Deadline client](../client/) protocol handler in order to run AWS Deadline Cloud commands sent from a web browser. Of note is the ability to download job attachments outputs from your jobs through the [Deadline Cloud monitor][downloading-output]. 
+On Windows and Linux operating systems, you can choose to install the [Deadline client](../client/) protocol handler in order to run AWS Deadline Cloud commands sent from a web browser. Of note is the ability to download job attachments outputs from your jobs through the [AWS Deadline Cloud monitor][downloading-output]. 
 
 You can install the protocol handler by running the command: `deadline handle-web-url --install`
 
@@ -61,4 +61,4 @@ You can install the protocol handler by running the command: `deadline handle-we
 
 ## Security
 
-When creating a queue, provide the name of the an S3 bucket in the same account and region as the queue you are creating, and provide a 'root prefix' name for files to be uploaded to. You also must provide an IAM role that has access to the S3 bucket. See the [security best practices][ja-security] documentation for more information on securely configuring job attachments.
+When creating a queue, provide the name of an S3 bucket in the same account and region as the queue you are creating, and provide a 'root prefix' name for files to be uploaded to. You also must provide an IAM role that has access to the S3 bucket. See the [security best practices][ja-security] documentation for more information on securely configuring job attachments.
