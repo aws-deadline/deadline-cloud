@@ -50,6 +50,10 @@ dependencies = [
     "QtPy == 2.4.*",
 ]
 
+[project.urls]
+Homepage = "https://github.com/aws-deadline/deadline-cloud"
+Source = "https://github.com/aws-deadline/deadline-cloud"
+
 [project.optional-dependencies]
 gui = [
     # If the version changes, update the version in deadline/client/ui/__init__.py
