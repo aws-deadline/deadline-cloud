@@ -1,4 +1,77 @@
-# The AWS Deadline Cloud Client Library (`deadline.client`)
+# Development documentation
+
+This documentation provides guidance on developer workflows for working with the code in this repository.
+
+## Code organization
+
+This repository is split up into two main modules:
+1. `src/client`
+2. `src/job_attachments`
+
+The `src/client` organization is laid out below.
+
+For more information on job attachments, see [here](src/deadline/job_attachments/README.md).
+
+### `src/client/api`
+
+This submodule contains utilities to call boto3 in a standardized way
+using an aws profile configured for AWS Deadline Cloud, helpers for working with the
+AWS Deadline Cloud monitor login/logout, and objects representing AWS Deadline Cloud
+resources.
+
+### `src/client/cli`
+
+This submodule contains entry points for the CLI applications provided
+by the library.
+
+### `src/client/config`
+
+This submodule contains an interface to the machine-specific AWS Deadline Cloud
+configuration, specifically settings stored in `~/.deadline/*`
+
+### `src/client/ui`
+
+This submodule contains Qt GUIs, based on PySide(2/6), for common controls
+and widgets used in interactive submitters, and to display the status
+of various AWS Deadline Cloud resoruces.
+
+### `src/client/job_bundle`
+
+This submodule contains code related to the history of job submissions
+performed on the workstation. Its initial functionality is to create
+job bundle directories in a standardized manner.
+
+# Build / Test / Release
+
+## Build the package.
+```
+hatch build
+```
+
+## Run tests
+```
+hatch run test
+```
+
+## Run integration tests
+```
+hatch run integ:test
+```
+
+## Run linting
+```
+hatch run lint
+```
+
+## Run formating
+```
+hatch run fmt
+```
+
+## Run tests for all supported Python versions.
+```
+hatch run all:test
+```
 
 ## Qt and Calling AWS (including AWS Deadline Cloud) APIs
 
@@ -90,7 +163,7 @@ class MyCustomWidget(QWidget):
 
 ```
 
-**We recommend you set up your runtimes via `asdf`.**
+**We recommend you set up your runtimes via `mise`.**
 
 ## Running Docker-based Unit Tests
 
