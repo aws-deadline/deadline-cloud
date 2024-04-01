@@ -4,11 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "deadline"
+description = "Multi-purpose library and command line tool that implements functionality to support applications using AWS Deadline Cloud."
+authors = [
+  {name = "Amazon Web Services"},
+]
 dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.7"
-description = "Multi-purpose library and command line tool that implements functionality to support applications using AWS Deadline Cloud."
 # https://pypi.org/classifiers/
 classifiers = [
   "Development Status :: 5 - Production/Stable",
