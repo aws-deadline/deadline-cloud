@@ -49,7 +49,9 @@ class HashCache(CacheDB):
 
     def __init__(self, cache_dir: Optional[str] = None) -> None:
         table_name: str = f"hashesV{self.CACHE_DB_VERSION}"
-        create_query: str = f"CREATE TABLE hashesV{self.CACHE_DB_VERSION}(file_path text primary key, hash_algorithm text secondary key, file_hash text, last_modified_time timestamp)"
+        create_query: str = (
+            f"CREATE TABLE hashesV{self.CACHE_DB_VERSION}(file_path text primary key, hash_algorithm text secondary key, file_hash text, last_modified_time timestamp)"
+        )
         super().__init__(
             cache_name=self.CACHE_NAME,
             table_name=table_name,
