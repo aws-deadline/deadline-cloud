@@ -546,9 +546,9 @@ class DeadlineWorkstationConfigWidget(QWidget):
         """
 
         # We need to retrieve here as changing Queue's won't update.
-        self.changes[
-            "settings.storage_profile_id"
-        ] = self.default_storage_profile_box.box.currentData()
+        self.changes["settings.storage_profile_id"] = (
+            self.default_storage_profile_box.box.currentData()
+        )
 
         for setting_name, value in self.changes.items():
             if value.startswith(NOT_VALID_MARKER):
