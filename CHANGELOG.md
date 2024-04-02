@@ -1,3 +1,10 @@
+## 0.47.1 (2024-04-02)
+
+
+
+### Bug Fixes
+* catch on correct exception type if downloading with no outputs (#278) ([`dafa5a8`](https://github.com/aws-deadline/deadline-cloud/commit/dafa5a85fa37bd2fe71c5cfa66cffa19ad76994f))
+
 ## 0.47.0 (2024-04-01)
 
 ### BREAKING CHANGES
