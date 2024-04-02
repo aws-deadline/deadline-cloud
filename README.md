@@ -33,7 +33,7 @@ $ pip install deadline
 
 or if you want the optional gui dependencies:
 ```sh
-pip install deadline[gui]
+$ pip install "deadline[gui]"
 ```
 
 ## Usage
