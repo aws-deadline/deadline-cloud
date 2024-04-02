@@ -217,6 +217,8 @@ def _get_tasks_manifests_keys_from_s3(
             action="listing bucket contents",
             error_details=str(bce),
         ) from bce
+    except JobAttachmentsError:
+        raise  # pass along JobAttachmentsErrors if we get them
     except Exception as e:
         raise AssetSyncError from e
 
