@@ -33,7 +33,7 @@ configuration, specifically settings stored in `~/.deadline/*`
 
 This submodule contains Qt GUIs, based on PySide(2/6), for common controls
 and widgets used in interactive submitters, and to display the status
-of various AWS Deadline Cloud resoruces.
+of various AWS Deadline Cloud resources.
 
 ### `src/client/job_bundle`
 
