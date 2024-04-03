@@ -60,6 +60,7 @@ def gui_context_for_cli():
         app.exec()
     """
     import importlib
+    import os
     from os.path import basename, dirname, join, normpath
     import shlex
     import shutil
@@ -69,8 +70,9 @@ def gui_context_for_cli():
 
     import click
 
-    has_pyside = importlib.util.find_spec("PySide6") or importlib.util.find_spec("PySide2")
-    if not has_pyside:
+    has_pyside6 = importlib.util.find_spec("PySide6")
+    has_pyside2 = importlib.util.find_spec("PySide2")
+    if not (has_pyside6 or has_pyside2):
         message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
         will_install_gui = click.confirm(message, default=False)
         if not will_install_gui:
@@ -120,6 +122,12 @@ def gui_context_for_cli():
             # time consider local editables `pip install .[gui]`
             subprocess.run([sys.executable, "-m", "pip", "install", pyside6_pypi])
 
+    # set QT_API to inform qtpy which dependencies to look for.
+    # default to pyside6 and fallback to pyside2.
+    # Does not work with PyQt5 which is qtpy default
+    os.environ["QT_API"] = "pyside6"
+    if has_pyside2:
+        os.environ["QT_API"] = "pyside2"
     try:
         from qtpy.QtGui import QIcon
         from qtpy.QtWidgets import QApplication, QMessageBox
