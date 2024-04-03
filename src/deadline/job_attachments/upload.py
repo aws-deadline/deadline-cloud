@@ -432,7 +432,7 @@ class S3AssetUploader:
                     error_details=str(bce),
                 ) from bce
             except Exception as e:
-                raise AssetSyncError from e
+                raise AssetSyncError(e) from e
 
     @contextmanager
     def _open_non_symlink_file_binary(
@@ -590,7 +590,7 @@ class S3AssetUploader:
                 error_details=str(bce),
             ) from bce
         except Exception as e:
-            raise AssetSyncError from e
+            raise AssetSyncError(e) from e
 
     def upload_bytes_to_s3(
         self,
@@ -644,7 +644,7 @@ class S3AssetUploader:
                 error_details=str(bce),
             ) from bce
         except Exception as e:
-            raise AssetSyncError from e
+            raise AssetSyncError(e) from e
 
 
 class S3AssetManager:
