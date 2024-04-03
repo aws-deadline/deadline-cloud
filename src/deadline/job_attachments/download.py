@@ -122,7 +122,7 @@ def get_manifest_from_s3(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        raise AssetSyncError from e
+        raise AssetSyncError(e) from e
 
 
 def _get_output_manifest_prefix(
@@ -220,7 +220,7 @@ def _get_tasks_manifests_keys_from_s3(
     except JobAttachmentsError:
         raise  # pass along JobAttachmentsErrors if we get them
     except Exception as e:
-        raise AssetSyncError from e
+        raise AssetSyncError(e) from e
 
     # 2. Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
     for task_folder, files in task_prefixes.items():
@@ -516,7 +516,7 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        raise AssetSyncError from e
+        raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
@@ -646,7 +646,7 @@ def _get_asset_root_from_s3(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        raise AssetSyncError from e
+        raise AssetSyncError(e) from e
 
     return head["Metadata"].get("asset-root", None)
 
