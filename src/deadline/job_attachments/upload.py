@@ -144,6 +144,7 @@ class S3AssetUploader:
         file_system_location_name: Optional[str] = None,
         progress_tracker: Optional[ProgressTracker] = None,
         s3_check_cache_dir: Optional[str] = None,
+        manifest_write_dir: Optional[str] = None,
     ) -> tuple[str, str]:
         """
         Uploads assets based off of an asset manifest, uploads the asset manifest.
@@ -160,15 +161,6 @@ class S3AssetUploader:
         Returns:
             A tuple of (the partial key for the manifest on S3, the hash of input manifest).
         """
-        # Upload assets
-        self.upload_input_files(
-            manifest,
-            job_attachment_settings.s3BucketName,
-            source_root,
-            job_attachment_settings.full_cas_prefix(),
-            progress_tracker,
-            s3_check_cache_dir,
-        )
 
         # Upload asset manifest
         hash_alg = manifest.get_default_hash_alg()
@@ -177,6 +169,15 @@ class S3AssetUploader:
             f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
         )
         manifest_name = f"{manifest_name_prefix}_input"
+
+        if manifest_write_dir:
+            local_manifest_file = os.path.join(
+                manifest_write_dir, "manifests", partial_manifest_prefix, manifest_name
+            )
+            logger.info(f"Creating local manifest file: {local_manifest_file}\n")
+            os.makedirs(os.path.dirname(local_manifest_file), exist_ok=True)
+            with open(local_manifest_file, "w") as file:
+                file.write(manifest.encode())
 
         if partial_manifest_prefix:
             partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -191,6 +192,16 @@ class S3AssetUploader:
             bytes=BytesIO(manifest_bytes),
             bucket=job_attachment_settings.s3BucketName,
             key=full_manifest_key,
+        )
+
+        # Upload assets
+        self.upload_input_files(
+            manifest,
+            job_attachment_settings.s3BucketName,
+            source_root,
+            job_attachment_settings.full_cas_prefix(),
+            progress_tracker,
+            s3_check_cache_dir,
         )
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
@@ -1132,6 +1143,7 @@ class S3AssetManager:
         manifests: list[AssetRootManifest],
         on_uploading_assets: Optional[Callable[[Any], bool]] = None,
         s3_check_cache_dir: Optional[str] = None,
+        manifest_write_dir: Optional[str] = None,
     ) -> tuple[SummaryStatistics, Attachments]:
         """
         Uploads all the files for provided manifests and manifests themselves to S3.
@@ -1182,6 +1194,7 @@ class S3AssetManager:
                     file_system_location_name=asset_root_manifest.file_system_location_name,
                     progress_tracker=progress_tracker,
                     s3_check_cache_dir=s3_check_cache_dir,
+                    manifest_write_dir=manifest_write_dir,
                 )
                 manifest_properties.inputManifestPath = partial_manifest_key
                 manifest_properties.inputManifestHash = asset_manifest_hash

@@ -41,6 +41,8 @@ These snapshots are encapsulated in one or more [`asset_manifests`](asset_manife
 
 When starting work, the worker downloads the manifest associated with your job, and recreates the file structure of your submission locally, either downloading all files at once, or as needed if using the [virtual][vfs] job attachments filesystem type. When a task completes, the worker creates a new manifest for any outputs that were specified in the job submission, and uploads the manifest and the outputs back to your S3 bucket.
 
+Manifest files are written to a `manifests` directory within each job bundle that is added to the job history if submitted through the GUI (default: `~/.deadline/job_history`). The file path inside the `manifests` directory corresponds to the S3 manifest path in the submitted job's job attachments metadata.
+
 [vfs]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-virtual.html
 
 ## Local Cache Files
