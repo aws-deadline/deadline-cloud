@@ -127,6 +127,18 @@ class TestUpload:
         output_dir1 = tmpdir.join("outputs")
         output_dir2 = tmpdir.join("outputs").join("textures")
 
+        history_dir = tmpdir.join("history")
+        expected_manifest_file = (
+            history_dir.join("manifests")
+            .join(farm_id)
+            .join(queue_id)
+            .join("Inputs")
+            .join("0000")
+            .join("e_input")
+        )
+        assert not os.path.exists(history_dir)
+        assert not os.path.exists(expected_manifest_file)
+
         expected_total_input_bytes = (
             scene_file.size() + texture_file.size() + normal_file.size() + meta_file.size()
         )
@@ -196,6 +208,7 @@ class TestUpload:
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=str(cache_dir),
+                manifest_write_dir=str(history_dir),
             )
 
             # Then
@@ -235,6 +248,10 @@ class TestUpload:
             }
 
             assert f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/e_input" in caplog.text
+
+            # Ensure we wrote our manifest file locally
+            assert os.path.exists(expected_manifest_file)
+            assert os.path.isfile(expected_manifest_file)
 
             assert_progress_report_last_callback(
                 num_input_files=4,
