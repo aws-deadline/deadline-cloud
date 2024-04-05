@@ -339,6 +339,7 @@ class SubmitJobProgressDialog(QDialog):
                 manifests=manifests,
                 on_uploading_assets=_update_upload_progress,
                 s3_check_cache_dir=config_file.get_cache_directory(),
+                manifest_write_dir=self._job_bundle_dir,
             )
 
             logger.info("Finished uploading job attachments files.")
