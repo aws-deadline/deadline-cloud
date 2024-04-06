@@ -2123,6 +2123,24 @@ class TestUpload:
                 [],
             ),
             (
+                {"c:\\USERNAME\\DOCS\\inputs\\input1.txt"},  # input paths
+                {"C:\\username\\docs\\outputs"},  # output paths
+                set(),  # referenced paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="C:\\username\\docs",
+                        inputs={
+                            Path("C:\\username\\docs\\inputs\\input1.txt"),
+                        },
+                        outputs={
+                            Path("C:\\username\\docs\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
                 {"C:\\username\\docs\\inputs\\input1.txt"},  # input paths
                 {"C:\\username\\docs\\outputs"},  # output paths
                 set(),  # referenced paths
@@ -2250,7 +2268,11 @@ class TestUpload:
         sorted_result = sorted(result, key=lambda x: x.root_path)
         sorted_expected_result = sorted(expected_result, key=lambda x: x.root_path)
 
-        assert sorted_result == sorted_expected_result
+        assert len(sorted_result) == len(sorted_expected_result)
+        for i in range(len(sorted_result)):
+            assert sorted_result[i].root_path.upper() == sorted_expected_result[i].root_path.upper()
+            assert sorted_result[i].inputs == sorted_expected_result[i].inputs
+            assert sorted_result[i].outputs == sorted_expected_result[i].outputs
 
     @pytest.mark.skipif(
         sys.platform != "win32",

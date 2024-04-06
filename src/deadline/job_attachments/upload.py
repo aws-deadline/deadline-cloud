@@ -906,10 +906,11 @@ class S3AssetManager:
                 )
             return matched_root
         else:
+            keys_upper = [key.upper() for key in groupings.keys()]
             top_directory = PurePath(abs_path).parts[0]
-            if top_directory not in groupings:
-                groupings[top_directory] = AssetRootGroup()
-            return top_directory
+            if top_directory.upper() not in keys_upper:
+                groupings[top_directory.upper()] = AssetRootGroup()
+            return top_directory.upper()
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
         total_bytes = 0
