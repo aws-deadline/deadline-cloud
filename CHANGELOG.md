@@ -1,3 +1,12 @@
+## 0.47.2 (2024-04-07)
+
+
+
+### Bug Fixes
+* **job_attachments**: handle case-insensitive path extraction on Windows (#287) ([`7c3cc3d`](https://github.com/aws-deadline/deadline-cloud/commit/7c3cc3dfa4a861c22fc3e212a5a55132e5386820))
+* **job_attachments**: pass original exception to AssetSyncError (#285) ([`c1707b3`](https://github.com/aws-deadline/deadline-cloud/commit/c1707b311e5e3cdfd28bca349920e9d62c7dabef))
+* set QT_API to pyside6 or pyside2 for deadline-cli (#284) ([`e6ca757`](https://github.com/aws-deadline/deadline-cloud/commit/e6ca757fe027a76f73b93583e5a8ab2ac6af6c9e))
+
 ## 0.47.1 (2024-04-02)
 
 
