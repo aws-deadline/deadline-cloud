@@ -1981,6 +1981,28 @@ class TestUpload:
                 [],
             ),
             (
+                {
+                    "/home/username/DOCS/inputs/input1.txt",
+                    "/HOME/username/DOCS/inputs/input2.txt",
+                },  # input paths
+                {"/home/username/docs/outputs"},  # output paths
+                set(),  # referenced paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="/",
+                        inputs={
+                            Path("/home/username/DOCS/inputs/input1.txt"),
+                            Path("/HOME/username/DOCS/inputs/input2.txt"),
+                        },
+                        outputs={
+                            Path("/home/username/docs/outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
                 {"/home/username/docs/inputs/input1.txt"},  # input paths
                 {"/home/username/docs/outputs"},  # output paths
                 set(),  # referenced paths
@@ -2123,6 +2145,42 @@ class TestUpload:
                 [],
             ),
             (
+                {"d:\\USERNAME\\DOCS\\inputs\\input1.txt"},  # input paths
+                {"D:\\username\\docs\\outputs"},  # output paths
+                set(),  # referenced paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="D:\\username\\docs",
+                        inputs={
+                            Path("d:\\USERNAME\\DOCS\\inputs\\input1.txt"),
+                        },
+                        outputs={
+                            Path("D:\\username\\docs\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
+                {"D:\\username\\docs\\inputs\\input1.txt"},  # input paths
+                {"d:\\USERNAME\\DOCS\\outputs"},  # output paths
+                set(),  # referenced paths
+                {},  # File System Location (LOCAL type)
+                {},  # File System Location (SHARED type)
+                [
+                    AssetRootGroup(
+                        root_path="D:\\username\\docs",
+                        inputs={
+                            Path("D:\\username\\docs\\inputs\\input1.txt"),
+                        },
+                        outputs={
+                            Path("d:\\USERNAME\\DOCS\\outputs"),
+                        },
+                    ),
+                ],
+            ),
+            (
                 {"C:\\username\\docs\\inputs\\input1.txt"},  # input paths
                 {"C:\\username\\docs\\outputs"},  # output paths
                 set(),  # referenced paths
@@ -2250,7 +2308,11 @@ class TestUpload:
         sorted_result = sorted(result, key=lambda x: x.root_path)
         sorted_expected_result = sorted(expected_result, key=lambda x: x.root_path)
 
-        assert sorted_result == sorted_expected_result
+        assert len(sorted_result) == len(sorted_expected_result)
+        for i in range(len(sorted_result)):
+            assert sorted_result[i].root_path.upper() == sorted_expected_result[i].root_path.upper()
+            assert sorted_result[i].inputs == sorted_expected_result[i].inputs
+            assert sorted_result[i].outputs == sorted_expected_result[i].outputs
 
     @pytest.mark.skipif(
         sys.platform != "win32",

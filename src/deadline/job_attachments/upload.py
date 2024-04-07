@@ -832,7 +832,8 @@ class S3AssetManager:
                 abs_path=abs_path,
                 local_type_locations=local_type_locations,
             )
-            groupings[matched_root].inputs.add(abs_path)
+            matched_group = self._get_matched_group(matched_root, groupings)
+            matched_group.inputs.add(abs_path)
 
         for _path in output_paths:
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
@@ -849,7 +850,8 @@ class S3AssetManager:
                 abs_path=abs_path,
                 local_type_locations=local_type_locations,
             )
-            groupings[matched_root].outputs.add(abs_path)
+            matched_group = self._get_matched_group(matched_root, groupings)
+            matched_group.outputs.add(abs_path)
 
         for _path in referenced_paths:
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
@@ -865,7 +867,8 @@ class S3AssetManager:
                 abs_path=abs_path,
                 local_type_locations=local_type_locations,
             )
-            groupings[matched_root].references.add(abs_path)
+            matched_group = self._get_matched_group(matched_root, groupings)
+            matched_group.references.add(abs_path)
 
         # Finally, build the list of asset root groups
         for asset_group in groupings.values():
@@ -879,6 +882,20 @@ class S3AssetManager:
             asset_group.root_path = str(common_path)
 
         return list(groupings.values())
+
+    def _get_matched_group(
+        self, root_path: str, groupings: dict[str, AssetRootGroup]
+    ) -> AssetRootGroup:
+        root_normcase = os.path.normcase(root_path)
+        matched_group = next(
+            (group for key, group in groupings.items() if os.path.normcase(key) == root_normcase),
+            None,
+        )
+        if matched_group is None:
+            raise ValueError(
+                f"No group found for the root path '{root_path}' in the groupings dictionary: {groupings}"
+            )
+        return matched_group
 
     def _find_matched_root_from_local_type_locations(
         self,
@@ -906,9 +923,13 @@ class S3AssetManager:
                 )
             return matched_root
         else:
+            keys_normcase = [os.path.normcase(key) for key in groupings.keys()]
             top_directory = PurePath(abs_path).parts[0]
-            if top_directory not in groupings:
+            top_directory_normcase = os.path.normcase(top_directory)
+            if top_directory_normcase not in keys_normcase:
                 groupings[top_directory] = AssetRootGroup()
+            else:
+                return top_directory_normcase
             return top_directory
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
