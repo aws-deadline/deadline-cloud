@@ -3,6 +3,7 @@
 """ Module for File Attachment synching """
 from __future__ import annotations
 import os
+import shutil
 import sys
 import time
 from io import BytesIO
@@ -337,6 +338,19 @@ class AssetSync:
                 abs_path = str(Path(local_root) / manifest_path.path)
                 self.synced_assets_mtime[abs_path] = Path(abs_path).stat().st_mtime_ns
 
+    def _ensure_disk_capacity(self, session_dir: Path, total_input_bytes: int) -> None:
+        """
+        Raises an AssetSyncError if the given input bytes is larger than the available disk space.
+        """
+        disk_free: int = shutil.disk_usage(session_dir).free
+        if total_input_bytes > disk_free:
+            input_size_readable = _human_readable_file_size(total_input_bytes)
+            disk_free_readable = _human_readable_file_size(disk_free)
+            raise AssetSyncError(
+                "Error occurred while attempting to sync input files: "
+                f"Total file size required for download ({input_size_readable}) is larger than available disk space ({disk_free_readable})"
+            )
+
     def sync_inputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
@@ -447,14 +461,16 @@ class AssetSync:
 
         # Merge the manifests in each root into a single manifest
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
+        total_input_size: int = 0
         for root, manifests in grouped_manifests_by_root.items():
             merged_manifest = merge_asset_manifests(manifests)
 
             if merged_manifest:
                 merged_manifests_by_root[root] = merged_manifest
+                total_input_size += merged_manifest.totalSize  # type: ignore[attr-defined]
 
         # Download
-
+        # Virtual Download Flow
         if (
             attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
@@ -482,6 +498,8 @@ class AssetSync:
                     f"Virtual File System not found, falling back to {JobAttachmentsFileSystem.COPIED} for JobAttachmentsFileSystem."
                 )
 
+        # Copied Download flow
+        self._ensure_disk_capacity(session_dir, total_input_size)
         try:
             download_summary_statistics = download_files_from_manifests(
                 s3_bucket=s3_settings.s3BucketName,
