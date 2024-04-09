@@ -435,6 +435,29 @@ def fixture_merged_manifest():
     }
 
 
+@pytest.fixture(name="really_big_manifest")
+def fixture_really_big_manifest():
+    return {
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [
+            {
+                "hash": "a20ddfc33590cd7d2391f1972f66a72a",
+                "mtime": 4444444444444444,
+                "path": "a.txt",
+                "size": 100000000000000000,  # 100 Petabytes
+            },
+            {
+                "hash": "b96ddfc33590cd7d2391f1972f66a72a",
+                "mtime": 2222222222222222,
+                "path": "b.txt",
+                "size": 200000000000000000,  # 200 Petabytes
+            },
+        ],
+        "totalSize": 300000000000000000,
+    }
+
+
 def has_posix_target_user() -> bool:
     """Returns if the testing environment exported the env variables for doing
     cross-account posix target-user tests.
