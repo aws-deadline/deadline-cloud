@@ -19,9 +19,13 @@ from deadline.job_attachments.models import (
     AssetRootGroup,
     AssetUploadGroup,
     Attachments,
+    FileSystemLocation,
+    FileSystemLocationType,
     JobAttachmentsFileSystem,
     ManifestProperties,
     PathFormat,
+    StorageProfile,
+    StorageProfileOperatingSystemFamily,
 )
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
@@ -58,6 +62,34 @@ MOCK_CREATE_JOB_RESPONSE = {"jobId": MOCK_JOB_ID}
 MOCK_STATUS_MESSAGE = "Testing123"
 
 MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
+
+MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE = {
+    "storageProfileId": MOCK_STORAGE_PROFILE_ID,
+    "displayName": "SP-linux",
+    "osFamily": "LINUX",
+    "fileSystemLocations": [
+        {"name": "FSL Local", "path": "/home/username/my_bundle", "type": "LOCAL"},
+        {"name": "FSL Shared", "path": "/mnt/shared/movie1", "type": "SHARED"},
+    ],
+}
+
+MOCK_STORAGE_PROFILE = StorageProfile(
+    storageProfileId=MOCK_STORAGE_PROFILE_ID,
+    displayName="SP-linux",
+    osFamily=StorageProfileOperatingSystemFamily.LINUX,
+    fileSystemLocations=[
+        FileSystemLocation(
+            name="FSL Local",
+            path="/home/username/my_bundle",
+            type=FileSystemLocationType.LOCAL,
+        ),
+        FileSystemLocation(
+            name="FSL Shared",
+            path="/mnt/shared/movie1",
+            type=FileSystemLocationType.SHARED,
+        ),
+    ],
+)
 
 
 def get_minimal_json_job_template(job_name):
@@ -269,6 +301,9 @@ def test_create_job_from_job_bundle(
     with patch.object(api._session, "get_boto3_session") as session_mock:
         session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock().client(
+            "deadline"
+        ).get_storage_profile_for_queue.return_value = MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
@@ -455,6 +490,9 @@ def test_create_job_from_job_bundle_job_attachments(
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        client_mock().get_storage_profile_for_queue.side_effect = [
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        ]
         expected_upload_group = AssetUploadGroup(
             total_input_files=3, total_input_bytes=256, asset_groups=[AssetRootGroup()]
         )
@@ -522,7 +560,7 @@ def test_create_job_from_job_bundle_job_attachments(
             ),
             output_paths=[os.path.join(temp_assets_dir, "somedir")],
             referenced_paths=[],
-            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            storage_profile=MOCK_STORAGE_PROFILE,
         )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,
@@ -574,6 +612,9 @@ def test_create_job_from_job_bundle_empty_job_attachments(
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        client_mock().get_storage_profile_for_queue.side_effect = [
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        ]
 
         # When this function returns an empty object, we skip Job Attachments calls
         expected_upload_group = AssetUploadGroup()
@@ -637,7 +678,7 @@ def test_create_job_from_job_bundle_empty_job_attachments(
             ),
             output_paths=[os.path.join(temp_assets_dir, "somedir")],
             referenced_paths=[],
-            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            storage_profile=MOCK_STORAGE_PROFILE,
         )
         mock_hash_attachments.assert_not_called()
         mock_upload_assets.assert_not_called()
@@ -662,6 +703,9 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
     with patch.object(api._session, "get_boto3_session") as session_mock:
         session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         session_mock().client("deadline").get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        session_mock().client("deadline").get_storage_profile_for_queue.side_effect = [
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        ]
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
@@ -730,6 +774,9 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
+        client_mock().get_storage_profile_for_queue.side_effect = [
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        ]
         expected_upload_group = AssetUploadGroup(
             total_input_files=1, total_input_bytes=1, asset_groups=[AssetRootGroup()]
         )
@@ -797,7 +844,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
             input_paths=[os.path.join(temp_assets_dir, "asset-1.txt")],
             output_paths=[],
             referenced_paths=[],
-            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            storage_profile=MOCK_STORAGE_PROFILE,
         )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,

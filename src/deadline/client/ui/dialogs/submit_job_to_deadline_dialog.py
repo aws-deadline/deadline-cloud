@@ -432,6 +432,12 @@ class SubmitJobToDeadlineDialog(QDialog):
             queue_id = get_setting("defaults.queue_id")
             storage_profile_id = get_setting("settings.storage_profile_id")
 
+            storage_profile = None
+            if storage_profile_id:
+                storage_profile = api.get_storage_profile_for_queue(
+                    farm_id, queue_id, storage_profile_id, deadline
+                )
+
             queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
 
             queue_role_session = api.get_queue_user_boto3_session(
@@ -463,7 +469,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.create_job_response = job_progress_dialog.start_submission(
                 farm_id,
                 queue_id,
-                storage_profile_id,
+                storage_profile,
                 job_history_bundle_dir,
                 queue_parameters,
                 asset_manager,

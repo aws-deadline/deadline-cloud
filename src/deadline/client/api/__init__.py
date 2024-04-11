@@ -22,6 +22,7 @@ __all__ = [
     "get_queue_parameter_definitions",
     "get_telemetry_client",
     "get_deadline_cloud_library_telemetry_client",
+    "get_storage_profile_for_queue",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -57,6 +58,7 @@ from ._telemetry import (
     get_deadline_cloud_library_telemetry_client,
     TelemetryClient,
 )
+from ._get_storage_profile_for_queue import get_storage_profile_for_queue
 
 logger = getLogger(__name__)
 
