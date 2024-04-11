@@ -562,6 +562,7 @@ class AssetSync:
         storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
 
         for manifest_properties in attachments.manifests:
+            session_root = session_dir
             local_root: Path = Path()
             if (
                 len(storage_profiles_path_mapping_rules) > 0
@@ -571,6 +572,10 @@ class AssetSync:
                     local_root = Path(
                         storage_profiles_path_mapping_rules[manifest_properties.rootPath]
                     )
+                    # We use session_root to filter out any files resolved to a location outside
+                    # of that directory. If storage profile's path mapping rules are available,
+                    # we can consider the session_root to be the mapped-storage profile path.
+                    session_root = local_root
                 else:
                     raise AssetSyncError(
                         "Error occurred while attempting to sync output files: "
@@ -584,7 +589,7 @@ class AssetSync:
                 manifest_properties,
                 s3_settings,
                 local_root,
-                session_dir,
+                session_root,
             )
             if output_files:
                 output_manifest = self._generate_output_manifest(output_files)
