@@ -1333,7 +1333,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
 
     # WHEN
     with pytest.raises(
-        AssetSyncError, match=f"Error checking if object exists in bucket '{external_bucket}'"
+            JobAttachmentsS3ClientError, match=".*when calling the PutObject operation: Access Denied"
     ):
         upload_group = asset_manager.prepare_paths_for_upload(
             job_bundle_path=str(job_attachment_test.ASSET_ROOT),
