@@ -1,3 +1,14 @@
+## 0.47.3 (2024-04-16)
+
+
+
+### Bug Fixes
+* Use correct paths on windows for local manifest file (#301) ([`c691be1`](https://github.com/aws-deadline/deadline-cloud/commit/c691be1c043380c37cefb56411654b0bf63db0df))
+* **job_attachments**: fix integration test exception (#298) ([`3c700b0`](https://github.com/aws-deadline/deadline-cloud/commit/3c700b00f1c20097fd178bbffac9b635c7bec3bc))
+* **job_attachments**: fix output syncing when using identically named local File System Locations across different OS (#295) ([`7fcf845`](https://github.com/aws-deadline/deadline-cloud/commit/7fcf845d84f0e6d5776bca5b0c810b55fd14f325))
+* Write job attachment manifests locally when submitting ([`70958f5`](https://github.com/aws-deadline/deadline-cloud/commit/70958f5e583e9c5ba0cfda3fe7a53c8dca13b7a6))
+* Throw error in sync-inputs if total input size is too large (#290) ([`4d40b8c`](https://github.com/aws-deadline/deadline-cloud/commit/4d40b8c75ac6a38a40a4028793739331206e9d2a))
+
 ## 0.47.2 (2024-04-07)
 
 
