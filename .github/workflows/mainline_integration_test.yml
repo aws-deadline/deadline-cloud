@@ -1,0 +1,32 @@
+name: Mainline Integration Test
+
+on:
+  workflow_dispatch:
+
+jobs:  
+  MainlineIntegrationTest:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    environment: mainline
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mainline
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INTEG_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: deadline-cloud-dev-IntegTest
+          hide-cloudwatch-logs: true
+          env-vars-for-codebuild: |
+            TEST_TYPE
+        env:
+          TEST_TYPE: WHEEL
