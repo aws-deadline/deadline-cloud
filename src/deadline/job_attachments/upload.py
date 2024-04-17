@@ -40,7 +40,6 @@ from ._aws.aws_clients import (
     get_s3_client,
     get_s3_transfer_manager,
 )
-from ._aws.deadline import get_storage_profile_for_queue
 from .exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
     AssetSyncCancelledError,
@@ -60,6 +59,7 @@ from .models import (
     JobAttachmentS3Settings,
     ManifestProperties,
     PathFormat,
+    StorageProfile,
 )
 from .progress_tracker import (
     ProgressStatus,
@@ -1004,21 +1004,13 @@ class S3AssetManager:
 
     def _get_file_system_locations_by_type(
         self,
-        storage_profile_id: str,
-        session: Optional[boto3.Session] = None,
+        storage_profile_for_queue: StorageProfile,
     ) -> Tuple[dict, dict]:
         """
-        Given the Storage Profile ID, fetches Storage Profile for Queue object, and
-        extracts and groups path and name pairs from the File System Locations into
-        two dicts - LOCAL and SHARED type, respectively. Returns a tuple of two dicts.
+        Given the Storage Profile for Queue object, extracts and groups
+        path and name pairs from the File System Locations into two dicts,
+        LOCAL and SHARED type, respectively. Returns a tuple of two dicts.
         """
-        storage_profile_for_queue = get_storage_profile_for_queue(
-            farm_id=self.farm_id,
-            queue_id=self.queue_id,
-            storage_profile_id=storage_profile_id,
-            session=session,
-        )
-
         local_type_locations: dict[str, str] = {}
         shared_type_locations: dict[str, str] = {}
         for fs_loc in storage_profile_for_queue.fileSystemLocations:
@@ -1051,18 +1043,18 @@ class S3AssetManager:
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
-        storage_profile_id: Optional[str] = None,
+        storage_profile: Optional[StorageProfile] = None,
     ) -> list[AssetRootGroup]:
         """
         Resolves all of the paths that will be uploaded, sorting by storage profile location.
         """
         local_type_locations: dict[str, str] = {}
         shared_type_locations: dict[str, str] = {}
-        if storage_profile_id:
+        if storage_profile:
             (
                 local_type_locations,
                 shared_type_locations,
-            ) = self._get_file_system_locations_by_type(storage_profile_id)
+            ) = self._get_file_system_locations_by_type(storage_profile)
 
         # Group the paths by asset root, removing duplicates and empty strings
         asset_groups: list[AssetRootGroup] = self._get_asset_groups(
@@ -1081,7 +1073,7 @@ class S3AssetManager:
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
-        storage_profile_id: Optional[str] = None,
+        storage_profile: Optional[StorageProfile] = None,
     ) -> AssetUploadGroup:
         """
         Processes all of the paths required for upload, grouping them by asset root and local storage profile locations.
@@ -1089,7 +1081,7 @@ class S3AssetManager:
         for files that were not under the root path or any local storage profile locations.
         """
         asset_groups = self._group_asset_paths(
-            input_paths, output_paths, referenced_paths, storage_profile_id
+            input_paths, output_paths, referenced_paths, storage_profile
         )
         (input_file_count, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
         num_outside_files_by_bundle_path = self._get_deviated_file_count_by_root(

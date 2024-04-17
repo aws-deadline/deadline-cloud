@@ -10,15 +10,11 @@ from ..exceptions import JobAttachmentsError
 from ..models import (
     Attachments,
     JobAttachmentsFileSystem,
-    FileSystemLocation,
-    FileSystemLocationType,
     Job,
     JobAttachmentS3Settings,
     ManifestProperties,
-    StorageProfileOperatingSystemFamily,
     PathFormat,
     Queue,
-    StorageProfile,
 )
 from .aws_clients import get_deadline_client
 
@@ -109,39 +105,4 @@ def get_job(
             if "attachments" in response and response["attachments"]
             else None
         ),
-    )
-
-
-def get_storage_profile_for_queue(
-    farm_id: str,
-    queue_id: str,
-    storage_profile_id: str,
-    session: Optional[boto3.Session] = None,
-    deadline_endpoint_url: Optional[str] = None,
-) -> StorageProfile:
-    """
-    Retrieves a specific storage profile for queue from AWS Deadline Cloud.
-    """
-    try:
-        response = get_deadline_client(
-            session=session, endpoint_url=deadline_endpoint_url
-        ).get_storage_profile_for_queue(
-            farmId=farm_id, queueId=queue_id, storageProfileId=storage_profile_id
-        )
-    except ClientError as exc:
-        raise JobAttachmentsError(
-            f'Failed to get Storage profile "{storage_profile_id}" from Deadline'
-        ) from exc
-    return StorageProfile(
-        storageProfileId=response["storageProfileId"],
-        displayName=response["displayName"],
-        osFamily=StorageProfileOperatingSystemFamily(response["osFamily"]),
-        fileSystemLocations=[
-            FileSystemLocation(
-                name=file_system_location["name"],
-                path=file_system_location["path"],
-                type=FileSystemLocationType(file_system_location["type"]),
-            )
-            for file_system_location in response.get("fileSystemLocations", [])
-        ],
     )
