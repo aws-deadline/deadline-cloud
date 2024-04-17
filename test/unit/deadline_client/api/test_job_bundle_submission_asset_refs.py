@@ -380,7 +380,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             input_paths=input_paths,
             output_paths=output_paths,
             referenced_paths=referenced_paths,
-            storage_profile_id="",
+            storage_profile=None,
         )
         mock_hash_assets.assert_called_once_with(
             asset_groups=[AssetRootGroup()],

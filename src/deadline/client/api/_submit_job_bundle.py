@@ -71,7 +71,7 @@ def create_job_from_job_bundle(
 
     /template.json|yaml (required): An Open Job Description job template that specifies the work to be done. Job parameters
             are embedded here.
-    /parameter_values.yson|yaml (optional): If provided, these are parameter values for the job template and for
+    /parameter_values.json|yaml (optional): If provided, these are parameter values for the job template and for
             the render farm. AWS Deadline Cloud-specific parameters are like "deadline:priority".
             Looks like:
             {
@@ -126,7 +126,7 @@ def create_job_from_job_bundle(
         hashing_progress_callback / upload_progress_callback / create_job_result_callback (Callable -> bool):
                 Callbacks periodically called while hashing / uploading / waiting for job creation. If returns false,
                 the operation will be cancelled. If return true, the operation continues. Default behavior for each
-                is to not cancel the operation. hashing_progress_callback and upload_progress_callback both recieve
+                is to not cancel the operation. hashing_progress_callback and upload_progress_callback both receive
                 ProgressReport as a parameter, which can be used for projecting remaining time, as in done in the CLI.
     """
 
@@ -171,8 +171,12 @@ def create_job_from_job_bundle(
     }
 
     storage_profile_id = get_setting("settings.storage_profile_id", config=config)
+    storage_profile = None
     if storage_profile_id:
         create_job_args["storageProfileId"] = storage_profile_id
+        storage_profile = api.get_storage_profile_for_queue(
+            farm_id, queue_id, storage_profile_id, deadline
+        )
 
     # The job parameters
     job_bundle_parameters = read_job_bundle_parameters(job_bundle_dir)
@@ -233,7 +237,7 @@ def create_job_from_job_bundle(
             input_paths=sorted(asset_references.input_filenames),
             output_paths=sorted(asset_references.output_directories),
             referenced_paths=sorted(asset_references.referenced_paths),
-            storage_profile_id=storage_profile_id,
+            storage_profile=storage_profile,
         )
         if upload_group.asset_groups:
             if decide_cancel_submission_callback(

@@ -1335,6 +1335,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
     with pytest.raises(
         JobAttachmentsS3ClientError, match=".*when calling the PutObject operation: Access Denied"
     ):
+        # The attempt to upload the asset manifest should be blocked.
         upload_group = asset_manager.prepare_paths_for_upload(
             job_bundle_path=str(job_attachment_test.ASSET_ROOT),
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],

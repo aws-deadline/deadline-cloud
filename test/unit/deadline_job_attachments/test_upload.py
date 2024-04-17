@@ -1967,21 +1967,17 @@ class TestUpload:
             fileSystemLocations=mock_file_system_locations,
         )
 
-        with patch(
-            f"{deadline.__package__}.job_attachments.upload.get_storage_profile_for_queue",
-            side_effect=[mock_storage_profile_for_queue],
-        ):
-            asset_manager = S3AssetManager(
-                farm_id=farm_id,
-                queue_id=queue_id,
-                job_attachment_settings=self.job_attachment_s3_settings,
-            )
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+        )
 
-            result = asset_manager._get_file_system_locations_by_type(
-                storage_profile_id="sp-0123456789"
-            )
+        result = asset_manager._get_file_system_locations_by_type(
+            storage_profile_for_queue=mock_storage_profile_for_queue
+        )
 
-            assert result == expected_result
+        assert result == expected_result
 
     @pytest.mark.skipif(
         sys.platform == "win32",

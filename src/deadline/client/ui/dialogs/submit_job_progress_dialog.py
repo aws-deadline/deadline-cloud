@@ -53,7 +53,7 @@ from deadline.client.job_bundle.submission import (
     split_parameter_args,
 )
 from deadline.job_attachments.exceptions import AssetSyncCancelledError
-from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest
+from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest, StorageProfile
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
@@ -100,7 +100,7 @@ class SubmitJobProgressDialog(QDialog):
         self,
         farm_id: str,
         queue_id: str,
-        storage_profile_id: str,
+        storage_profile: Optional[StorageProfile],
         job_bundle_dir: str,
         queue_parameters: list[JobParameter],
         asset_manager: Optional[S3AssetManager],
@@ -114,7 +114,7 @@ class SubmitJobProgressDialog(QDialog):
         Args:
             farm_id (str): Id of the farm to submit to
             queue_id (str): Id of the queue to submit to
-            storage_profile_id (str): Id of the storage profile to associate
+            storage_profile (StorageProfile): the storage profile to associate
                 with the job.
             job_bundle_dir (str): Path to the folder containing the job bundle to
                 submit.
@@ -126,7 +126,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         self._farm_id = farm_id
         self._queue_id = queue_id
-        self._storage_profile_id = storage_profile_id
+        self._storage_profile = storage_profile
         self._job_bundle_dir = job_bundle_dir
         self._queue_parameters = queue_parameters
         self._asset_manager = asset_manager
@@ -201,8 +201,8 @@ class SubmitJobProgressDialog(QDialog):
         self._create_job_args["template"] = file_contents
         self._create_job_args["templateType"] = file_type
 
-        if self._storage_profile_id:
-            self._create_job_args["storageProfileId"] = self._storage_profile_id
+        if self._storage_profile:
+            self._create_job_args["storageProfileId"] = self._storage_profile.storageProfileId
 
         # The job parameters
         job_bundle_parameters = read_job_bundle_parameters(self._job_bundle_dir)
@@ -252,7 +252,7 @@ class SubmitJobProgressDialog(QDialog):
                 input_paths=sorted(self.asset_references.input_filenames),
                 output_paths=sorted(self.asset_references.output_directories),
                 referenced_paths=sorted(self.asset_references.referenced_paths),
-                storage_profile_id=self._storage_profile_id,
+                storage_profile=self._storage_profile,
             )
             # If we find any Job Attachments, start a background thread
             if upload_group.asset_groups:
