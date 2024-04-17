@@ -24,7 +24,6 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QLabel,
     QMessageBox,
     QProgressBar,
-    QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -52,7 +51,7 @@ from deadline.client.job_bundle.submission import (
     AssetReferences,
     split_parameter_args,
 )
-from deadline.job_attachments.exceptions import AssetSyncCancelledError
+from deadline.job_attachments.exceptions import AssetSyncCancelledError, MisconfiguredInputsError
 from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest, StorageProfile
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
@@ -240,12 +239,67 @@ class SubmitJobProgressDialog(QDialog):
             or self.asset_references.output_directories
         ):
             # Extend input_filenames with all the files in the input_directories
+            missing_directories: set[str] = set()
+            empty_directories: set[str] = set()
             for directory in self.asset_references.input_directories:
+                if not os.path.isdir(directory):
+                    missing_directories.add(directory)
+                    continue
+
+                is_dir_empty = True
                 for root, _, files in os.walk(directory):
+                    if not files:
+                        continue
+                    is_dir_empty = False
                     self.asset_references.input_filenames.update(
                         os.path.normpath(os.path.join(root, file)) for file in files
                     )
+                if is_dir_empty:
+                    empty_directories.add(directory)
             self.asset_references.input_directories.clear()
+
+            misconfigured_directories = missing_directories or empty_directories
+            if misconfigured_directories:
+                sample_size = 3
+                sample_of_misconfigured_inputs = ""
+                all_misconfigured_inputs = ""
+                misconfigured_directories_msg = (
+                    "Job submission contains misconfigured input directories and cannot be submitted."
+                    " All input directories must exist and cannot be empty."
+                )
+
+                if missing_directories:
+                    missing_directory_list = sorted(list(missing_directories))
+                    sample_of_missing_directories = "\n\t".join(
+                        missing_directory_list[:sample_size]
+                    )
+                    sample_of_misconfigured_inputs += (
+                        f"\nNon-existent directories:\n\t{sample_of_missing_directories}\n"
+                    )
+                    all_missing_directories = "\n\t".join(missing_directory_list)
+                    all_misconfigured_inputs += (
+                        f"\nNon-existent directories:\n\t{all_missing_directories}"
+                    )
+                if empty_directories:
+                    empty_directory_list = sorted(list(empty_directories))
+                    sample_of_empty_directories = "\n\t".join(empty_directory_list[:sample_size])
+                    sample_of_misconfigured_inputs += (
+                        f"\nEmpty directories:\n\t{sample_of_empty_directories}"
+                    )
+                    all_empty_directories = "\n\t".join(empty_directory_list)
+                    all_misconfigured_inputs += f"\nEmpty directories:\n\t{all_empty_directories}"
+
+                logging.error(misconfigured_directories_msg + all_misconfigured_inputs)
+                just_a_sample = (
+                    len(missing_directories) > sample_size or len(empty_directories) > sample_size
+                )
+                if just_a_sample:
+                    misconfigured_directories_msg += (
+                        " Check logs for all occurrences, here's a sample:\n"
+                    )
+                misconfigured_directories_msg += f"{sample_of_misconfigured_inputs}"
+
+                raise MisconfiguredInputsError(misconfigured_directories_msg)
 
             upload_group = self._asset_manager.prepare_paths_for_upload(
                 job_bundle_path=self._job_bundle_dir,
@@ -256,13 +310,10 @@ class SubmitJobProgressDialog(QDialog):
             )
             # If we find any Job Attachments, start a background thread
             if upload_group.asset_groups:
-                if (
-                    not self._auto_accept
-                    and not self._confirm_asset_references_outside_storage_profile(
-                        upload_group.num_outside_files_by_root,
-                        upload_group.total_input_files,
-                        upload_group.total_input_bytes,
-                    )
+                if not self._confirm_asset_references_outside_storage_profile(
+                    upload_group.num_outside_files_by_root,
+                    upload_group.total_input_files,
+                    upload_group.total_input_bytes,
                 ):
                     raise UserInitiatedCancel("Submission canceled.")
 
@@ -561,25 +612,20 @@ class SubmitJobProgressDialog(QDialog):
         if deviated_file_count_by_root:
             root_by_count_message = "\n\n".join(
                 [
-                    f"{file_count} files from : '{directory}'"
+                    f"{file_count} files from: '{directory}'"
                     for directory, file_count in deviated_file_count_by_root.items()
                 ]
             )
             message_text += (
                 f"\n\nFiles were found outside of the configured storage profile location(s). "
                 " Please confirm that you intend to upload files from the following directories:\n\n"
-                f"{root_by_count_message}"
+                f"{root_by_count_message}\n\n"
+                "To remove this warning you must only upload files located within a storage profile location."
             )
             message_box.setIcon(QMessageBox.Warning)
         message_box.setText(message_text)
         message_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         message_box.setDefaultButton(QMessageBox.Ok)
-
-        # Add the "Do not ask again" button that acts like 'OK' but sets the config
-        # setting to always auto-accept similar prompts in the future.
-        dont_ask_button = QPushButton("Do not ask again", self)
-        dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
-        message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
 
         message_box.setWindowTitle("Job Attachments Valid Files Confirmation")
         selection = message_box.exec()

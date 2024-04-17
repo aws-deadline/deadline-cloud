@@ -13,8 +13,12 @@ from contextlib import ExitStack
 from botocore.exceptions import ClientError
 
 from deadline.client import api
-from deadline.client.config import config_file, get_setting, set_setting
-from deadline.job_attachments.exceptions import AssetSyncError, AssetSyncCancelledError
+from deadline.client.config import set_setting
+from deadline.job_attachments.exceptions import (
+    AssetSyncError,
+    AssetSyncCancelledError,
+    MisconfiguredInputsError,
+)
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 from deadline.job_attachments._utils import _human_readable_file_size
@@ -124,18 +128,19 @@ def bundle_submit(
         if deviated_file_count_by_root:
             root_by_count_message = "\n\n".join(
                 [
-                    f"{file_count} files from : '{directory}'"
+                    f"{file_count} files from: '{directory}'"
                     for directory, file_count in deviated_file_count_by_root.items()
                 ]
             )
             message_text += (
                 f"\n\nFiles were found outside of the configured storage profile location(s). "
                 " Please confirm that you intend to upload files from the following directories:\n\n"
-                f"{root_by_count_message}"
+                f"{root_by_count_message}\n\n"
+                "To permanently remove this warning you must only upload files located within a storage profile location."
             )
         message_text += "\n\nDo you wish to proceed?"
         return (
-            not (yes or config_file.str2bool(get_setting("settings.auto_accept", config=config)))
+            not yes
             and num_files > 0
             and not click.confirm(
                 message_text,
@@ -191,6 +196,10 @@ def bundle_submit(
         raise DeadlineOperationError(
             f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}"
         ) from exc
+    except MisconfiguredInputsError as exc:
+        click.echo(str(exc))
+        click.echo("Job submission canceled.")
+        return
     except Exception as exc:
         api.get_deadline_cloud_library_telemetry_client().record_error(
             event_details={"exception_scope": "on_submit"},

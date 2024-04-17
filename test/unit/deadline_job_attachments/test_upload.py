@@ -9,7 +9,7 @@ import sys
 from copy import deepcopy
 from datetime import datetime
 from io import BytesIO
-from logging import DEBUG, WARNING
+from logging import DEBUG
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock, patch
@@ -33,6 +33,7 @@ from deadline.job_attachments.caches import HashCacheEntry, S3CheckCacheEntry
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
     JobAttachmentsS3ClientError,
+    MisconfiguredInputsError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
 )
@@ -1657,17 +1658,18 @@ class TestUpload:
 
     @mock_sts
     def test_asset_management_input_not_exists(self, farm_id, queue_id, tmpdir, caplog):
-        """Test the input paths that does not exist are properly skipped"""
+        """Ensure that when:
+            * input paths do not exist, or
+            * directories are classified as files
+        the submission is prevented with a MisconfiguredInputsError
+        """
         asset_root = str(tmpdir)
 
         # GIVEN
         scene_file = tmpdir.mkdir("scene").join("maya.ma")
         scene_file.write("a")
         input_not_exist = "/texture/that/doesnt/exist.anywhere"
-
-        cache_dir = tmpdir.mkdir("cache")
-
-        expected_total_input_bytes = scene_file.size()
+        directory_as_file = str(Path(scene_file).parent)
 
         with patch(
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
@@ -1678,11 +1680,6 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
         ):
-            caplog.set_level(WARNING)
-
-            mock_on_preparing_to_submit = MagicMock(return_value=True)
-            mock_on_uploading_assets = MagicMock(return_value=True)
-
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1690,55 +1687,16 @@ class TestUpload:
                 asset_manifest_version=ManifestVersion.v2023_03_03,
             )
 
-            # When
-            upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(asset_root),
-                input_paths=[input_not_exist, scene_file],
-                output_paths=[str(Path(asset_root).joinpath("outputs"))],
-                referenced_paths=[],
-            )
-            (
-                hash_summary_statistics,
-                asset_root_manifests,
-            ) = asset_manager.hash_assets_and_create_manifest(
-                asset_groups=upload_group.asset_groups,
-                total_input_files=upload_group.total_input_files,
-                total_input_bytes=upload_group.total_input_bytes,
-                hash_cache_dir=cache_dir,
-                on_preparing_to_submit=mock_on_preparing_to_submit,
-            )
-
-            (upload_summary_statistics, _) = asset_manager.upload_assets(
-                manifests=asset_root_manifests,
-                on_uploading_assets=mock_on_uploading_assets,
-                s3_check_cache_dir=cache_dir,
-            )
-
-            # Then
-            assert "Skipping uploading input as it doesn't exist: " in caplog.text
-
-            assert_progress_report_last_callback(
-                num_input_files=1,
-                expected_total_input_bytes=expected_total_input_bytes,
-                on_preparing_to_submit=mock_on_preparing_to_submit,
-                on_uploading_assets=mock_on_uploading_assets,
-            )
-
-            assert_progress_report_summary_statistics(
-                actual_summary_statistics=hash_summary_statistics,
-                processed_files=1,
-                processed_bytes=expected_total_input_bytes,
-                skipped_files=0,
-                skipped_bytes=0,
-            )
-
-            assert_progress_report_summary_statistics(
-                actual_summary_statistics=upload_summary_statistics,
-                processed_files=1,
-                processed_bytes=expected_total_input_bytes,
-                skipped_files=0,
-                skipped_bytes=0,
-            )
+            # WHEN / THEN
+            with pytest.raises(
+                MisconfiguredInputsError, match=f"{input_not_exist}|{directory_as_file}"
+            ):
+                asset_manager.prepare_paths_for_upload(
+                    job_bundle_path=str(asset_root),
+                    input_paths=[input_not_exist, directory_as_file, scene_file],
+                    output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                    referenced_paths=[],
+                )
 
     @mock_sts
     @pytest.mark.parametrize(

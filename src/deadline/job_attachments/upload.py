@@ -46,6 +46,7 @@ from .exceptions import (
     AssetSyncError,
     JobAttachmentS3BotoCoreError,
     JobAttachmentsS3ClientError,
+    MisconfiguredInputsError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
 )
@@ -838,17 +839,18 @@ class S3AssetManager:
           relative to one of the AssetRootGroup objects returned.
         """
         groupings: dict[str, AssetRootGroup] = {}
+        missing_input_paths = set()
+        misconfigured_directories = set()
 
         # Resolve full path, then cast to pure path to get top-level directory
-        # Note for inputs, we only upload individual files so user doesn't unintentionally upload the entire hard drive
         for _path in input_paths:
             # Need to use absolute to not resolve symlinks, but need normpath to get rid of relative paths, i.e. '..'
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
             if not abs_path.exists():
-                logger.warning(f"Skipping uploading input as it doesn't exist: {abs_path}")
+                missing_input_paths.add(abs_path)
                 continue
             if abs_path.is_dir():
-                logger.warning(f"Skipping uploading input as it is a directory: {abs_path}")
+                misconfigured_directories.add(abs_path)
                 continue
 
             # Skips the upload if the path is relative to any of the File System Location
@@ -865,6 +867,26 @@ class S3AssetManager:
             )
             matched_group = self._get_matched_group(matched_root, groupings)
             matched_group.inputs.add(abs_path)
+
+        if missing_input_paths or misconfigured_directories:
+            all_misconfigured_inputs = ""
+            misconfigured_inputs_msg = (
+                "Job submission contains missing input files or directories specified as files."
+                " All inputs must exist and be classified properly."
+            )
+            if missing_input_paths:
+                missing_inputs_list: list[str] = sorted([str(i) for i in missing_input_paths])
+                all_missing_inputs = "\n\t".join(missing_inputs_list)
+                all_misconfigured_inputs += f"\nMissing input files:\n\t{all_missing_inputs}"
+            if misconfigured_directories:
+                misconfigured_directories_list: list[str] = sorted(
+                    [str(d) for d in misconfigured_directories]
+                )
+                all_misconfigured_directories = "\n\t".join(misconfigured_directories_list)
+                all_misconfigured_inputs += (
+                    f"\nDirectories classified as files:\n\t{all_misconfigured_directories}"
+                )
+            raise MisconfiguredInputsError(misconfigured_inputs_msg + all_misconfigured_inputs)
 
         for _path in output_paths:
             abs_path = Path(os.path.normpath(Path(_path).absolute()))

@@ -32,6 +32,7 @@ from ..job_bundle.parameters import (
     JobParameter,
 )
 from ..job_bundle.submission import AssetReferences, split_parameter_args
+from ...job_attachments.exceptions import MisconfiguredInputsError
 from ...job_attachments.models import (
     JobAttachmentsFileSystem,
     AssetRootGroup,
@@ -210,12 +211,45 @@ def create_job_from_job_bundle(
     # Hash and upload job attachments if there are any
     if asset_references and "jobAttachmentSettings" in queue:
         # Extend input_filenames with all the files in the input_directories
+        missing_directories: set[str] = set()
+        empty_directories: set[str] = set()
         for directory in asset_references.input_directories:
+            if not os.path.isdir(directory):
+                missing_directories.add(directory)
+                continue
+
+            is_dir_empty = True
             for root, _, files in os.walk(directory):
+                if not files:
+                    continue
+                is_dir_empty = False
                 asset_references.input_filenames.update(
                     os.path.normpath(os.path.join(root, file)) for file in files
                 )
+            if is_dir_empty:
+                empty_directories.add(directory)
         asset_references.input_directories.clear()
+
+        misconfigured_directories = missing_directories or empty_directories
+        if misconfigured_directories:
+            all_misconfigured_inputs = ""
+            misconfigured_directories_msg = (
+                "Job submission contains misconfigured input directories and cannot be submitted."
+                " All input directories must exist and cannot be empty."
+            )
+
+            if missing_directories:
+                missing_directory_list = sorted(list(missing_directories))
+                all_missing_directories = "\n\t".join(missing_directory_list)
+                all_misconfigured_inputs += (
+                    f"\nNon-existent directories:\n\t{all_missing_directories}"
+                )
+            if empty_directories:
+                empty_directory_list = sorted(list(empty_directories))
+                all_empty_directories = "\n\t".join(empty_directory_list)
+                all_misconfigured_inputs += f"\nEmpty directories:\n\t{all_empty_directories}"
+
+            raise MisconfiguredInputsError(misconfigured_directories_msg + all_misconfigured_inputs)
 
         queue_role_session = api.get_queue_user_boto3_session(
             deadline=deadline,
