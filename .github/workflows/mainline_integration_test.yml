@@ -24,7 +24,7 @@ jobs:
       - name: Run CodeBuild
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: deadline-cloud-dev-IntegTest
+          project-name: deadline-cloud-mainline-IntegTest
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
             TEST_TYPE

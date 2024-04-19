@@ -137,7 +137,7 @@ jobs:
       - name: Run CodeBuild
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{ github.event.repository.name }}-Publish
+          project-name: ${{ github.event.repository.name }}-release-Publish
           hide-cloudwatch-logs: true
 
   PublishToRepository:
