@@ -428,7 +428,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                         queue_parameters,
                         asset_references,
                         requirements,
-                        purpose=JobBundlePurpose.SUBMISSION
+                        purpose=JobBundlePurpose.SUBMISSION,
                     )
 
                 self.on_create_job_bundle_callback(
@@ -449,7 +449,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                         settings,
                         queue_parameters,
                         asset_references,
-                        purpose=JobBundlePurpose.SUBMISSION
+                        purpose=JobBundlePurpose.SUBMISSION,
                     )
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
@@ -519,7 +519,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                     queue_parameters,
                     asset_references,
                     requirements,
-                    purpose=JobBundlePurpose.SUBMISSION
+                    purpose=JobBundlePurpose.SUBMISSION,
                 )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
