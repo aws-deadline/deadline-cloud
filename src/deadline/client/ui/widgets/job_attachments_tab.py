@@ -58,11 +58,19 @@ class JobAttachmentsWidget(QWidget):
     def _build_ui(self) -> None:
         tab_layout = QVBoxLayout(self)
 
+        # Create a group box for general settings
+        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        size_policy.setVerticalStretch(10)
+        self.general_group = QGroupBox("General Submission Settings", self)
+        tab_layout.addWidget(self.general_group)
+        self.general_group.setSizePolicy(size_policy)
+        general_layout = QVBoxLayout(self.general_group)
+
         # Create a group box for each type of attachment
         self.input_files_group = QGroupBox("Attach Input Files", self)
-        tab_layout.addWidget(self.input_files_group)
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         size_policy.setVerticalStretch(80)
+        tab_layout.addWidget(self.input_files_group)
         self.input_files_group.setSizePolicy(size_policy)
         input_files_layout = QVBoxLayout(self.input_files_group)
 
@@ -79,6 +87,10 @@ class JobAttachmentsWidget(QWidget):
         self.output_directories_group.setSizePolicy(size_policy)
         tab_layout.addWidget(self.output_directories_group)
         output_directories_layout = QVBoxLayout(self.output_directories_group)
+
+        # General settings
+        self.general_settings = JobAttachmentsGeneralWidget(self)
+        general_layout.addWidget(self.general_settings)
 
         # The "Attach Input Files" attachments
         self.input_files_controls = JobAttachmentsControlsWidget(self)
@@ -307,6 +319,27 @@ class JobAttachmentsWidget(QWidget):
         asset_references.json|yaml file in a Job Bundle.
         """
         return self.auto_detected_attachments.union(self.attachments)
+
+    def get_require_paths_exist(self) -> bool:
+        """
+        Returns the checkbox value of whether to allow empty paths or not.
+        """
+        return self.general_settings.require_paths_exist.isChecked()
+
+
+class JobAttachmentsGeneralWidget(QWidget):
+    """
+    A Widget that contains general settings for a specific submission.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent=parent)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.require_paths_exist = QCheckBox("Require all input paths exist", parent=self)
+        layout.addWidget(self.require_paths_exist)
 
 
 class JobAttachmentsControlsWidget(QWidget):

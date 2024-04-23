@@ -824,6 +824,7 @@ class S3AssetManager:
         referenced_paths: set[str],
         local_type_locations: dict[str, str] = {},
         shared_type_locations: dict[str, str] = {},
+        require_paths_exist: bool = False,
     ) -> list[AssetRootGroup]:
         """
         For the given input paths and output paths, a list of groups is returned, where paths sharing
@@ -847,7 +848,13 @@ class S3AssetManager:
             # Need to use absolute to not resolve symlinks, but need normpath to get rid of relative paths, i.e. '..'
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
             if not abs_path.exists():
-                missing_input_paths.add(abs_path)
+                if require_paths_exist:
+                    missing_input_paths.add(abs_path)
+                else:
+                    logger.warning(
+                        f"Input path '{_path}' resolving to '{abs_path}' does not exist. Adding to referenced paths."
+                    )
+                    referenced_paths.add(_path)
                 continue
             if abs_path.is_dir():
                 misconfigured_directories.add(abs_path)
@@ -1042,30 +1049,13 @@ class S3AssetManager:
                 shared_type_locations[fs_loc.path] = fs_loc.name
         return local_type_locations, shared_type_locations
 
-    def _get_deviated_file_count_by_root(
-        self, groups: list[AssetRootGroup], root_path: str
-    ) -> dict[str, int]:
-        """
-        Given a list of AssetRootGroups and a root directory, return a dict of root paths and file counts that
-        are outside of that root path, and aren't in any storage profile locations.
-        """
-        real_root_path = Path(root_path).resolve()
-        deviated_file_count_by_root: dict[str, int] = {}
-        for group in groups:
-            if (
-                not str(Path(group.root_path).resolve()).startswith(str(real_root_path))
-                and not group.file_system_location_name
-                and group.inputs
-            ):
-                deviated_file_count_by_root[group.root_path] = len(group.inputs)
-        return deviated_file_count_by_root
-
     def _group_asset_paths(
         self,
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
         storage_profile: Optional[StorageProfile] = None,
+        require_paths_exist: bool = False,
     ) -> list[AssetRootGroup]:
         """
         Resolves all of the paths that will be uploaded, sorting by storage profile location.
@@ -1085,17 +1075,18 @@ class S3AssetManager:
             {rf_path for rf_path in referenced_paths if rf_path},
             local_type_locations,
             shared_type_locations,
+            require_paths_exist,
         )
 
         return asset_groups
 
     def prepare_paths_for_upload(
         self,
-        job_bundle_path: str,
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
         storage_profile: Optional[StorageProfile] = None,
+        require_paths_exist: bool = False,
     ) -> AssetUploadGroup:
         """
         Processes all of the paths required for upload, grouping them by asset root and local storage profile locations.
@@ -1103,15 +1094,15 @@ class S3AssetManager:
         for files that were not under the root path or any local storage profile locations.
         """
         asset_groups = self._group_asset_paths(
-            input_paths, output_paths, referenced_paths, storage_profile
+            input_paths,
+            output_paths,
+            referenced_paths,
+            storage_profile,
+            require_paths_exist,
         )
         (input_file_count, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
-        num_outside_files_by_bundle_path = self._get_deviated_file_count_by_root(
-            asset_groups, job_bundle_path
-        )
         return AssetUploadGroup(
             asset_groups=asset_groups,
-            num_outside_files_by_root=num_outside_files_by_bundle_path,
             total_input_files=input_file_count,
             total_input_bytes=input_bytes,
         )

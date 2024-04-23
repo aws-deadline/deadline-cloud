@@ -13,13 +13,13 @@ from contextlib import ExitStack
 from botocore.exceptions import ClientError
 
 from deadline.client import api
-from deadline.client.config import set_setting
+from deadline.client.config import config_file, get_setting, set_setting
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
     AssetSyncCancelledError,
     MisconfiguredInputsError,
 )
-from deadline.job_attachments.models import JobAttachmentsFileSystem
+from deadline.job_attachments.models import AssetUploadGroup, JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 from deadline.job_attachments._utils import _human_readable_file_size
 
@@ -91,6 +91,11 @@ def validate_parameters(ctx, param, value):
     is_flag=True,
     help="Skip any confirmation prompts",
 )
+@click.option(
+    "--require-paths-exist",
+    is_flag=True,
+    help="Require all input paths to exist",
+)
 @click.argument("job_bundle_dir")
 @_handle_error
 def bundle_submit(
@@ -102,6 +107,7 @@ def bundle_submit(
     priority,
     max_failed_tasks_count,
     max_retries_per_task,
+    require_paths_exist,
     **args,
 ):
     """
@@ -116,36 +122,54 @@ def bundle_submit(
     def _check_create_job_wait_canceled() -> bool:
         return sigint_handler.continue_operation
 
-    def _decide_cancel_submission(
-        deviated_file_count_by_root: dict[str, int],
-        num_files: int,
-        upload_size: int,
-    ):
+    def _decide_cancel_submission(upload_group: AssetUploadGroup) -> bool:
+        """
+        Callback to decide if submission should be cancelled or not. Return 'True' to cancel.
+        Prints a warning that requires confirmation if paths are found outside of configured storage profile locations.
+        """
+        warning_message = ""
+        for group in upload_group.asset_groups:
+            if not group.file_system_location_name:
+                warning_message += f"\n\nUnder the directory '{group.root_path}':"
+                warning_message += (
+                    f"\n\t{len(group.inputs)} input file{'' if len(group.inputs) == 1 else 's'}"
+                    if len(group.inputs) > 0
+                    else ""
+                )
+                warning_message += (
+                    f"\n\t{len(group.outputs)} output director{'y' if len(group.outputs) == 1 else 'ies'}"
+                    if len(group.outputs) > 0
+                    else ""
+                )
+                warning_message += (
+                    f"\n\t{len(group.references)} referenced file{'' if len(group.references) == 1 else 's'} and/or director{'y' if len(group.outputs) == 1 else 'ies'}"
+                    if len(group.references) > 0
+                    else ""
+                )
+
+        # Exit early if there are no warnings and we've either set auto accept or there's no files to confirm
+        if not warning_message and (
+            yes
+            or config_file.str2bool(get_setting("settings.auto_accept", config=config))
+            or upload_group.total_input_files == 0
+        ):
+            return False
+
         message_text = (
-            f"Job submission contains {num_files} files totaling {_human_readable_file_size(upload_size)}. "
-            " All files will be uploaded to S3 if they are not already present in the job attachments bucket."
+            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}. "
+            " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
-        if deviated_file_count_by_root:
-            root_by_count_message = "\n\n".join(
-                [
-                    f"{file_count} files from: '{directory}'"
-                    for directory, file_count in deviated_file_count_by_root.items()
-                ]
-            )
+        if warning_message:
             message_text += (
-                f"\n\nFiles were found outside of the configured storage profile location(s). "
-                " Please confirm that you intend to upload files from the following directories:\n\n"
-                f"{root_by_count_message}\n\n"
-                "To permanently remove this warning you must only upload files located within a storage profile location."
+                f"\n\nFiles were specified outside of the configured storage profile location(s). "
+                " Please confirm that you intend to submit a job that uses files from the following directories:"
+                f"{warning_message}\n\n"
+                "To permanently remove this warning you must only use files located within a storage profile location."
             )
         message_text += "\n\nDo you wish to proceed?"
-        return (
-            not yes
-            and num_files > 0
-            and not click.confirm(
-                message_text,
-                default=not deviated_file_count_by_root,
-            )
+        return not click.confirm(
+            message_text,
+            default=not warning_message,
         )
 
     try:
@@ -163,6 +187,7 @@ def bundle_submit(
             create_job_result_callback=_check_create_job_wait_canceled,
             print_function_callback=click.echo,
             decide_cancel_submission_callback=_decide_cancel_submission,
+            require_paths_exist=require_paths_exist,
         )
 
         # Check Whether the CLI options are modifying any of the default settings that affect

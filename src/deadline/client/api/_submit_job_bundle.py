@@ -37,6 +37,7 @@ from ...job_attachments.models import (
     JobAttachmentsFileSystem,
     AssetRootGroup,
     AssetRootManifest,
+    AssetUploadGroup,
     JobAttachmentS3Settings,
 )
 from ...job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
@@ -58,11 +59,12 @@ def create_job_from_job_bundle(
     max_retries_per_task: Optional[int] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
     decide_cancel_submission_callback: Callable[
-        [dict[str, int], int, int], bool
-    ] = lambda paths, files, bytes: False,
+        [AssetUploadGroup], bool
+    ] = lambda upload_group: False,
     hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
+    require_paths_exist: bool = False,
 ) -> Union[str, None]:
     """
     Creates a job in the AWS Deadline Cloud farm/queue configured as default for the
@@ -212,10 +214,15 @@ def create_job_from_job_bundle(
     if asset_references and "jobAttachmentSettings" in queue:
         # Extend input_filenames with all the files in the input_directories
         missing_directories: set[str] = set()
-        empty_directories: set[str] = set()
         for directory in asset_references.input_directories:
             if not os.path.isdir(directory):
-                missing_directories.add(directory)
+                if require_paths_exist:
+                    missing_directories.add(directory)
+                else:
+                    logger.warning(
+                        f"Input path '{directory}' does not exist. Adding to referenced paths."
+                    )
+                    asset_references.referenced_paths.add(directory)
                 continue
 
             is_dir_empty = True
@@ -226,30 +233,21 @@ def create_job_from_job_bundle(
                 asset_references.input_filenames.update(
                     os.path.normpath(os.path.join(root, file)) for file in files
                 )
+            # Empty directories just become references since there's nothing to upload
             if is_dir_empty:
-                empty_directories.add(directory)
+                logger.info(f"Input directory '{directory}' is empty. Adding to referenced paths.")
+                asset_references.referenced_paths.add(directory)
         asset_references.input_directories.clear()
 
-        misconfigured_directories = missing_directories or empty_directories
-        if misconfigured_directories:
-            all_misconfigured_inputs = ""
+        if missing_directories:
+            all_missing_directories = "\n\t".join(sorted(list(missing_directories)))
             misconfigured_directories_msg = (
                 "Job submission contains misconfigured input directories and cannot be submitted."
-                " All input directories must exist and cannot be empty."
+                " All input directories must exist."
+                f"\nNon-existent directories:\n\t{all_missing_directories}"
             )
 
-            if missing_directories:
-                missing_directory_list = sorted(list(missing_directories))
-                all_missing_directories = "\n\t".join(missing_directory_list)
-                all_misconfigured_inputs += (
-                    f"\nNon-existent directories:\n\t{all_missing_directories}"
-                )
-            if empty_directories:
-                empty_directory_list = sorted(list(empty_directories))
-                all_empty_directories = "\n\t".join(empty_directory_list)
-                all_misconfigured_inputs += f"\nEmpty directories:\n\t{all_empty_directories}"
-
-            raise MisconfiguredInputsError(misconfigured_directories_msg + all_misconfigured_inputs)
+            raise MisconfiguredInputsError(misconfigured_directories_msg)
 
         queue_role_session = api.get_queue_user_boto3_session(
             deadline=deadline,
@@ -267,18 +265,14 @@ def create_job_from_job_bundle(
         )
 
         upload_group = asset_manager.prepare_paths_for_upload(
-            job_bundle_path=job_bundle_dir,
             input_paths=sorted(asset_references.input_filenames),
             output_paths=sorted(asset_references.output_directories),
             referenced_paths=sorted(asset_references.referenced_paths),
             storage_profile=storage_profile,
+            require_paths_exist=require_paths_exist,
         )
         if upload_group.asset_groups:
-            if decide_cancel_submission_callback(
-                upload_group.num_outside_files_by_root,
-                upload_group.total_input_files,
-                upload_group.total_input_bytes,
-            ):
+            if decide_cancel_submission_callback(upload_group):
                 print_function_callback("Job submission canceled.")
                 return None
 
