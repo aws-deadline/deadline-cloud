@@ -7,11 +7,7 @@ from functools import lru_cache
 from typing import Optional
 
 import boto3
-<<<<<<< HEAD
-from boto3.s3.transfer import create_crt_transfer_manager
-=======
 from boto3.s3.transfer import create_crt_transfer_manager, create_transfer_manager
->>>>>>> 203eff5 (feat: support AWS CRT for faster transfers)
 
 import botocore
 from botocore.client import BaseClient, Config
