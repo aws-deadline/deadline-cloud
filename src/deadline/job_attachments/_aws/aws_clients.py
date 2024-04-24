@@ -7,7 +7,11 @@ from functools import lru_cache
 from typing import Optional
 
 import boto3
+<<<<<<< HEAD
 from boto3.s3.transfer import create_crt_transfer_manager
+=======
+from boto3.s3.transfer import create_crt_transfer_manager, create_transfer_manager
+>>>>>>> 203eff5 (feat: support AWS CRT for faster transfers)
 
 import botocore
 from botocore.client import BaseClient, Config
@@ -105,7 +109,14 @@ def get_s3_max_pool_connections() -> int:
 @lru_cache(maxsize=MAX_SIZE_CACHE)
 def get_s3_transfer_manager(s3_client: BaseClient):
     transfer_config = boto3.s3.transfer.TransferConfig()
-    return create_crt_transfer_manager(client=s3_client, config=transfer_config)
+
+    crt_transfer_manager = create_crt_transfer_manager(client=s3_client, config=transfer_config)
+    if crt_transfer_manager:
+        return crt_transfer_manager
+
+    # Fallback to regular transfer manager if CRT transfer manager does not support the configuration, which can happen if the client
+    # and bucket are in different regions.
+    return create_transfer_manager(client=s3_client, config=transfer_config)
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)
