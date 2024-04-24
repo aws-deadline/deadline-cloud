@@ -7,8 +7,9 @@ from functools import lru_cache
 from typing import Optional
 
 import boto3
+from boto3.s3.transfer import create_crt_transfer_manager
+
 import botocore
-from boto3.s3.transfer import create_transfer_manager
 from botocore.client import BaseClient, Config
 
 from deadline.client.config import config_file
@@ -104,7 +105,7 @@ def get_s3_max_pool_connections() -> int:
 @lru_cache(maxsize=MAX_SIZE_CACHE)
 def get_s3_transfer_manager(s3_client: BaseClient):
     transfer_config = boto3.s3.transfer.TransferConfig()
-    return create_transfer_manager(client=s3_client, config=transfer_config)
+    return create_crt_transfer_manager(client=s3_client, config=transfer_config)
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)
