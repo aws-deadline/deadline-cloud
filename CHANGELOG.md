@@ -1,3 +1,11 @@
+## 0.48.0 (2024-04-25)
+
+### BREAKING CHANGES
+* always prompt user about misconfigured inputs (#309) ([`f8d5826`](https://github.com/aws-deadline/deadline-cloud/commit/f8d5826316cbaae1a41d11c2decad38a4ab5ca5d))
+* **job_attachments**: use correct profile for GetStorageProfileForQueue API (#296) ([`a8de5f6`](https://github.com/aws-deadline/deadline-cloud/commit/a8de5f679a7b7da53ce83ab1ba25cacded06773f))
+
+
+
 ## 0.47.3 (2024-04-16)
 
 
