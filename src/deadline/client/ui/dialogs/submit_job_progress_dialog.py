@@ -23,8 +23,8 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QGroupBox,
     QLabel,
     QMessageBox,
-    QProgressBar,
     QPushButton,
+    QProgressBar,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -52,8 +52,13 @@ from deadline.client.job_bundle.submission import (
     AssetReferences,
     split_parameter_args,
 )
-from deadline.job_attachments.exceptions import AssetSyncCancelledError
-from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest, StorageProfile
+from deadline.job_attachments.exceptions import AssetSyncCancelledError, MisconfiguredInputsError
+from deadline.job_attachments.models import (
+    AssetRootGroup,
+    AssetRootManifest,
+    AssetUploadGroup,
+    StorageProfile,
+)
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments._utils import _human_readable_file_size
@@ -106,6 +111,7 @@ class SubmitJobProgressDialog(QDialog):
         asset_manager: Optional[S3AssetManager],
         deadline_client: BaseClient,
         auto_accept: bool = False,
+        require_paths_exist: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Starts a submission. Returns the response from calling create job. If an error occurs
@@ -132,6 +138,7 @@ class SubmitJobProgressDialog(QDialog):
         self._asset_manager = asset_manager
         self._deadline_client = deadline_client
         self._auto_accept = auto_accept
+        self._require_paths_exist = require_paths_exist
 
         self._start_submission()
         return self.exec_()
@@ -240,30 +247,70 @@ class SubmitJobProgressDialog(QDialog):
             or self.asset_references.output_directories
         ):
             # Extend input_filenames with all the files in the input_directories
+            missing_directories: set[str] = set()
             for directory in self.asset_references.input_directories:
+                if not os.path.isdir(directory):
+                    if self._require_paths_exist:
+                        missing_directories.add(directory)
+                    else:
+                        logging.warning(
+                            f"Input directory '{directory}' does not exist. Adding to referenced paths."
+                        )
+                        self.asset_references.referenced_paths.add(directory)
+                    continue
+
+                is_dir_empty = True
                 for root, _, files in os.walk(directory):
+                    if not files:
+                        continue
+                    is_dir_empty = False
                     self.asset_references.input_filenames.update(
                         os.path.normpath(os.path.join(root, file)) for file in files
                     )
+                # Empty directories just become references since there's nothing to upload
+                if is_dir_empty:
+                    logging.info(
+                        f"Input directory '{directory}' is empty. Adding to referenced paths."
+                    )
+                    self.asset_references.referenced_paths.add(directory)
             self.asset_references.input_directories.clear()
 
+            if missing_directories:
+                sample_size = 3
+                misconfigured_directories_msg = (
+                    "Job submission contains misconfigured input directories and cannot be submitted."
+                    " All input directories must exist."
+                )
+
+                missing_directory_list = sorted(list(missing_directories))
+                sample_of_missing_directories = "\n\t".join(missing_directory_list[:sample_size])
+                sample_of_misconfigured_inputs = (
+                    f"\nNon-existent directories:\n\t{sample_of_missing_directories}\n"
+                )
+                all_missing_directories = "\n\t".join(missing_directory_list)
+                all_misconfigured_inputs = (
+                    f"\nNon-existent directories:\n\t{all_missing_directories}"
+                )
+
+                logging.error(misconfigured_directories_msg + all_misconfigured_inputs)
+                if len(missing_directories) > sample_size:
+                    misconfigured_directories_msg += (
+                        " Check logs for all occurrences, here's a sample:\n"
+                    )
+                misconfigured_directories_msg += f"{sample_of_misconfigured_inputs}"
+
+                raise MisconfiguredInputsError(misconfigured_directories_msg)
+
             upload_group = self._asset_manager.prepare_paths_for_upload(
-                job_bundle_path=self._job_bundle_dir,
                 input_paths=sorted(self.asset_references.input_filenames),
                 output_paths=sorted(self.asset_references.output_directories),
                 referenced_paths=sorted(self.asset_references.referenced_paths),
                 storage_profile=self._storage_profile,
+                require_paths_exist=self._require_paths_exist,
             )
             # If we find any Job Attachments, start a background thread
             if upload_group.asset_groups:
-                if (
-                    not self._auto_accept
-                    and not self._confirm_asset_references_outside_storage_profile(
-                        upload_group.num_outside_files_by_root,
-                        upload_group.total_input_files,
-                        upload_group.total_input_bytes,
-                    )
-                ):
+                if not self._confirm_asset_references_outside_storage_profile(upload_group):
                     raise UserInitiatedCancel("Submission canceled.")
 
                 self._start_hashing(
@@ -544,42 +591,67 @@ class SubmitJobProgressDialog(QDialog):
         logger.error(str(e))
 
     def _confirm_asset_references_outside_storage_profile(
-        self,
-        deviated_file_count_by_root: dict[str, int],
-        num_files: int,
-        upload_size: int,
+        self, upload_group: AssetUploadGroup
     ) -> bool:
         """
         Creates a dialog to prompt the user to confirm that they want to proceed
         with uploading when files were found outside of the configured storage profile locations.
         """
-        message_box = QMessageBox(self)
         message_text = (
-            f"Job submission contains {num_files} files totaling {_human_readable_file_size(upload_size)}. "
-            " All files will be uploaded to S3 if they are not already present in the job attachments bucket."
+            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}. "
+            " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
-        if deviated_file_count_by_root:
-            root_by_count_message = "\n\n".join(
-                [
-                    f"{file_count} files from : '{directory}'"
-                    for directory, file_count in deviated_file_count_by_root.items()
-                ]
-            )
+        warning_message = ""
+        for group in upload_group.asset_groups:
+            if not group.file_system_location_name:
+                warning_message += f"\n\nUnder the directory '{group.root_path}':"
+                warning_message += (
+                    f"\n\t{len(group.inputs)} input file{'' if len(group.inputs) == 1 else 's'}"
+                    if len(group.inputs) > 0
+                    else ""
+                )
+                warning_message += (
+                    f"\n\t{len(group.outputs)} output director{'y' if len(group.outputs) == 1 else 'ies'}"
+                    if len(group.outputs) > 0
+                    else ""
+                )
+                warning_message += (
+                    f"\n\t{len(group.references)} referenced file{'' if len(group.references) == 1 else 's'} and/or director{'y' if len(group.outputs) == 1 else 'ies'}"
+                    if len(group.references) > 0
+                    else ""
+                )
+
+        # Exit early if we've set auto accept and there are no warnings
+        if not warning_message and self._auto_accept:
+            return True
+
+        # Build the UI
+        message_box = QMessageBox(self)
+        if warning_message:
+            if self._storage_profile:
+                fs_locations_text = "\n\t".join(
+                    [fs_location.path for fs_location in self._storage_profile.fileSystemLocations]
+                )
+                message_text += f"\n\nFiles were specified outside of the configured storage profile location(s):\n{fs_locations_text}\n"
+            else:
+                message_text += "\n\nNo storage profile locations are configured for this queue."
             message_text += (
-                f"\n\nFiles were found outside of the configured storage profile location(s). "
-                " Please confirm that you intend to upload files from the following directories:\n\n"
-                f"{root_by_count_message}"
+                "\nPlease confirm that you intend to submit a job that uses files from the following directories:"
+                f"{warning_message}\n\n"
+                "To permanently remove this warning you must only use files located within a storage profile location."
             )
             message_box.setIcon(QMessageBox.Warning)
+
         message_box.setText(message_text)
         message_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         message_box.setDefaultButton(QMessageBox.Ok)
 
-        # Add the "Do not ask again" button that acts like 'OK' but sets the config
-        # setting to always auto-accept similar prompts in the future.
-        dont_ask_button = QPushButton("Do not ask again", self)
-        dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
-        message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
+        if not warning_message:
+            # If we don't have any warnings, add the "Do not ask again" button that acts like 'OK' but sets the config
+            # setting to always auto-accept similar prompts in the future.
+            dont_ask_button = QPushButton("Do not ask again", self)
+            dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
+            message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
 
         message_box.setWindowTitle("Job Attachments Valid Files Confirmation")
         selection = message_box.exec()

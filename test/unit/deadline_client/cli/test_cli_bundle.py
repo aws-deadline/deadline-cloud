@@ -18,6 +18,7 @@ from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
 from deadline.client.api import _submit_job_bundle
 from deadline.client.config.config_file import set_setting
+from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
@@ -326,6 +327,9 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
         }
         json.dump(data, f)
 
+    upload_group_mock = Mock()
+    upload_group_mock.asset_groups = [Mock()]
+    upload_group_mock.total_input_files = 0
     attachment_mock = Mock()
     attachment_mock.total_bytes = 0
     attachment_mock.total_files.return_value = 0
@@ -344,6 +348,8 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
         bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ), patch.object(
+        S3AssetManager, "prepare_paths_for_upload", return_value=upload_group_mock
     ):
         bundle_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         bundle_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE

@@ -475,6 +475,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 asset_manager,
                 deadline,
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
+                require_paths_exist=self.job_attachments.get_require_paths_exist(),
             )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
