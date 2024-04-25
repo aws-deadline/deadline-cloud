@@ -6,6 +6,8 @@ Tests the deadline.client.api functions for submitting Open Job Description job 
 
 import json
 import os
+from logging import INFO
+from pathlib import Path
 from typing import Any, Dict, Tuple
 from unittest.mock import ANY, patch, Mock
 from deadline.client import exceptions
@@ -15,6 +17,7 @@ import time
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
+from deadline.job_attachments.exceptions import MisconfiguredInputsError
 from deadline.job_attachments.models import (
     AssetRootGroup,
     AssetUploadGroup,
@@ -550,7 +553,6 @@ def test_create_job_from_job_bundle_job_attachments(
         )
 
         mock_prepare_paths.assert_called_once_with(
-            job_bundle_path=temp_job_bundle_dir,
             input_paths=sorted(
                 [
                     os.path.join(temp_assets_dir, "asset-1.txt"),
@@ -561,6 +563,7 @@ def test_create_job_from_job_bundle_job_attachments(
             output_paths=[os.path.join(temp_assets_dir, "somedir")],
             referenced_paths=[],
             storage_profile=MOCK_STORAGE_PROFILE,
+            require_paths_exist=False,
         )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,
@@ -668,7 +671,6 @@ def test_create_job_from_job_bundle_empty_job_attachments(
         )
 
         mock_prepare_paths.assert_called_once_with(
-            job_bundle_path=temp_job_bundle_dir,
             input_paths=sorted(
                 [
                     os.path.join(temp_assets_dir, "asset-1.txt"),
@@ -679,6 +681,7 @@ def test_create_job_from_job_bundle_empty_job_attachments(
             output_paths=[os.path.join(temp_assets_dir, "somedir")],
             referenced_paths=[],
             storage_profile=MOCK_STORAGE_PROFILE,
+            require_paths_exist=False,
         )
         mock_hash_attachments.assert_not_called()
         mock_upload_assets.assert_not_called()
@@ -745,6 +748,166 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             priority=50,
         )
+
+
+def test_create_job_from_job_bundle_partially_empty_directories(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """
+    Test a job bundle with an input directory that contains both empty directories and input files
+    does not throw a MisconfiguredInputsError and successfully submits
+    """
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
+    assets_directory: str = str(temp_bundle_dir_as_path / "assets")
+    empty_directory = str(temp_bundle_dir_as_path / "assets" / "empty_dir")
+    Path(empty_directory).mkdir(parents=True)
+    (temp_bundle_dir_as_path / "assets" / "input_file").touch()
+
+    with patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write the template to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        # Write an asset_references.json
+        asset_references: dict = {
+            "inputs": {"filenames": [], "directories": [assets_directory]},
+            "outputs": {"directories": []},
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
+
+        # WHEN
+        response = api.create_job_from_job_bundle(
+            job_bundle_dir=temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+        )
+
+        # THEN
+        # create_job_from_job_bundle did NOT throw MisconfiguredInputsError
+        assert response == MOCK_JOB_ID
+
+
+def test_create_job_from_job_bundle_misconfigured_directories(
+    fresh_deadline_config, temp_job_bundle_dir, caplog
+):
+    """
+    Test that a submitting a job with the `require_paths_exist` flag set to true
+    with a job bundle with input directories that do not exist throws an error.
+    Also confirms that empty directories as logged and added to referenced paths.
+    """
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
+    missing_directory = str(temp_bundle_dir_as_path / "does" / "not" / "exist" / "bad_path")
+    empty_directory = str(temp_bundle_dir_as_path / "empty_dir")
+    Path(empty_directory).mkdir()
+
+    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+        caplog.set_level(INFO)
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write the template to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        # Write an asset_references.json
+        asset_references: dict = {
+            "inputs": {"filenames": [], "directories": [missing_directory, empty_directory]},
+            "outputs": {"directories": []},
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
+
+        # WHEN / THEN
+        with pytest.raises(MisconfiguredInputsError) as execinfo:
+            api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+                require_paths_exist=True,
+            )
+
+        assert "bad_path" in str(execinfo)
+        assert "empty_dir" not in str(execinfo)
+        assert "empty_dir' is empty. Adding to referenced paths." in caplog.text
+
+
+def test_create_job_from_job_bundle_misconfigured_input_files(
+    fresh_deadline_config, temp_job_bundle_dir, caplog
+):
+    """
+    Test that a submitting a job without the `require_paths_exist` flag set,
+    with a job bundle with input directories that do not exist does not include those
+    directories in the warning message, but DOES incldue misconfigured directories that
+    were specified as files, which should result in an error.
+    """
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
+    missing_file = str(temp_bundle_dir_as_path / "does" / "not" / "exist.png")
+    directory_pretending_to_be_file = str(temp_bundle_dir_as_path / "sneaky_bad_not_file")
+    Path(directory_pretending_to_be_file).mkdir()
+
+    with patch.object(api._session, "get_boto3_session"), patch.object(
+        _submit_job_bundle.api, "get_boto3_client"
+    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+        caplog.set_level(INFO)
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Write the template to the job bundle
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        # Write an asset_references.json
+        asset_references: dict = {
+            "inputs": {
+                "filenames": [missing_file, directory_pretending_to_be_file],
+                "directories": [],
+            },
+            "outputs": {"directories": []},
+        }
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"), "w", encoding="utf8"
+        ) as f:
+            json.dump({"assetReferences": asset_references}, f)
+
+        # WHEN / THEN
+        with pytest.raises(MisconfiguredInputsError) as execinfo:
+            api.create_job_from_job_bundle(
+                job_bundle_dir=temp_job_bundle_dir,
+                queue_parameter_definitions=[],
+            )
+
+        assert "sneaky_bad_not_file" in str(execinfo)
+        assert "exist.png" not in str(execinfo)
+        assert "exist.png' does not exist. Adding to referenced paths." in caplog.text
 
 
 def test_create_job_from_job_bundle_with_single_asset_file(
@@ -840,11 +1003,11 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         )
 
         mock_prepare_paths.assert_called_once_with(
-            job_bundle_path=temp_job_bundle_dir,
             input_paths=[os.path.join(temp_assets_dir, "asset-1.txt")],
             output_paths=[],
             referenced_paths=[],
             storage_profile=MOCK_STORAGE_PROFILE,
+            require_paths_exist=False,
         )
         mock_hash_attachments.assert_called_once_with(
             asset_manager=ANY,

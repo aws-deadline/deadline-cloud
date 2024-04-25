@@ -147,7 +147,6 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
 
     # WHEN
     upload_group = asset_manager.prepare_paths_for_upload(
-        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
@@ -225,7 +224,6 @@ def upload_input_files_one_asset_in_cas(
 
     # WHEN
     upload_group = asset_manager.prepare_paths_for_upload(
-        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
@@ -321,7 +319,6 @@ def test_upload_input_files_all_assets_in_cas(
 
     # WHEN
     upload_group = asset_manager.prepare_paths_for_upload(
-        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=input_paths,
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
@@ -1153,7 +1150,6 @@ def upload_input_files_no_input_paths(
 
     # WHEN
     upload_group = asset_manager.prepare_paths_for_upload(
-        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[],
         output_paths=[str(job_attachment_test.OUTPUT_PATH)],
         referenced_paths=[],
@@ -1221,7 +1217,6 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
 
     # WHEN
     upload_group = asset_manager.prepare_paths_for_upload(
-        job_bundle_path=str(job_attachment_test.ASSET_ROOT),
         input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
         output_paths=[],
         referenced_paths=[],
@@ -1337,7 +1332,6 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
     ):
         # The attempt to upload the asset manifest should be blocked.
         upload_group = asset_manager.prepare_paths_for_upload(
-            job_bundle_path=str(job_attachment_test.ASSET_ROOT),
             input_paths=[str(job_attachment_test.SCENE_MA_PATH)],
             output_paths=[str(job_attachment_test.OUTPUT_PATH)],
             referenced_paths=[],

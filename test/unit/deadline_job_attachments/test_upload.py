@@ -9,7 +9,7 @@ import sys
 from copy import deepcopy
 from datetime import datetime
 from io import BytesIO
-from logging import DEBUG, WARNING
+from logging import DEBUG, INFO
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock, patch
@@ -33,6 +33,7 @@ from deadline.job_attachments.caches import HashCacheEntry, S3CheckCacheEntry
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
     JobAttachmentsS3ClientError,
+    MisconfiguredInputsError,
     MissingS3BucketError,
     MissingS3RootPrefixError,
 )
@@ -172,7 +173,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(asset_root),
                 input_paths=[
                     str(scene_file),
                     str(texture_file),
@@ -209,7 +209,6 @@ class TestUpload:
             )
 
             # Then
-            assert not upload_group.num_outside_files_by_root  # Shouldn't be any outside files
             expected_attachments = Attachments(
                 manifests=[
                     ManifestProperties(
@@ -335,6 +334,7 @@ class TestUpload:
         input_c = root_c.join("input.txt")
         input_c.write("a")
         os.utime(input_c, (1234, 1234))
+        root_d = r"D:\my\awesome"
         input_d = r"D:\my\awesome\input2.txt"  # doesn't exist, shouldn't get included
         output_d = r"D:\my\awesome\outputdir"
         cache_dir = tmpdir.mkdir("cache")
@@ -363,7 +363,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(root_c),
                 input_paths=[input_c, input_d],
                 output_paths=[output_d],
                 referenced_paths=[],
@@ -396,9 +395,9 @@ class TestUpload:
                         outputRelativeDirectories=[],
                     ),
                     ManifestProperties(
-                        rootPath=output_d,
+                        rootPath=root_d,
                         rootPathFormat=PathFormat.WINDOWS,
-                        outputRelativeDirectories=["."],
+                        outputRelativeDirectories=["outputdir"],
                     ),
                 ],
             )
@@ -415,10 +414,10 @@ class TestUpload:
                         "inputManifestHash": "manifesthash",
                     },
                     {
-                        "rootPath": f"{output_d}",
+                        "rootPath": f"{root_d}",
                         "rootPathFormat": PathFormat("windows").value,
                         "outputRelativeDirectories": [
-                            ".",
+                            "outputdir",
                         ],
                     },
                 ],
@@ -539,7 +538,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(asset_root),
                 input_paths=input_files,
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
                 referenced_paths=[],
@@ -696,7 +694,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(asset_root),
                 input_paths=input_files,
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
                 referenced_paths=[],
@@ -820,7 +817,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(tmpdir),
                 input_paths=[already_uploaded_file, not_yet_uploaded_file],
                 output_paths=[],
                 referenced_paths=[],
@@ -964,7 +960,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(tmpdir),
                 input_paths=input_files,
                 output_paths=[],
                 referenced_paths=[],
@@ -1074,7 +1069,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(tmpdir),
                 input_paths=[],
                 output_paths=[output_dir],
                 referenced_paths=[],
@@ -1265,7 +1259,6 @@ class TestUpload:
                 test_file = tmpdir.join("test.txt")
                 test_file.write("test")
                 upload_group = asset_manager.prepare_paths_for_upload(
-                    job_bundle_path=str(tmpdir),
                     input_paths=[test_file],
                     output_paths=[],
                     referenced_paths=[],
@@ -1656,14 +1649,51 @@ class TestUpload:
             hash_cache.put_entry.assert_not_called()
 
     @mock_sts
-    def test_asset_management_input_not_exists(self, farm_id, queue_id, tmpdir, caplog):
-        """Test the input paths that does not exist are properly skipped"""
+    def test_asset_management_misconfigured_inputs(self, farm_id, queue_id, tmpdir):
+        """
+        Ensure that when directories are classified as files the submission is prevented with a MisconfiguredInputsError.
+        """
         asset_root = str(tmpdir)
 
         # GIVEN
         scene_file = tmpdir.mkdir("scene").join("maya.ma")
         scene_file.write("a")
         input_not_exist = "/texture/that/doesnt/exist.anywhere"
+        directory_as_file = str(Path(scene_file).parent)
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            side_effect=["c", "manifesthash"],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
+        ):
+            asset_manager = S3AssetManager(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_attachment_settings=self.job_attachment_s3_settings,
+                asset_manifest_version=ManifestVersion.v2023_03_03,
+            )
+
+            # WHEN / THEN
+            with pytest.raises(MisconfiguredInputsError, match="scene"):
+                asset_manager.prepare_paths_for_upload(
+                    input_paths=[input_not_exist, directory_as_file, scene_file],
+                    output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                    referenced_paths=[],
+                )
+
+    @mock_sts
+    def test_asset_management_input_not_exists(self, farm_id, queue_id, tmpdir, caplog):
+        """Test that input paths that do not exist are added to referenced files."""
+        asset_root = str(tmpdir)
+
+        # GIVEN
+        scene_file = tmpdir.mkdir("scene").join("maya.ma")
+        scene_file.write("a")
+        input_not_exist = tmpdir.join("/texture/that/does/notexist.anywhere")
 
         cache_dir = tmpdir.mkdir("cache")
 
@@ -1678,7 +1708,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
         ):
-            caplog.set_level(WARNING)
+            caplog.set_level(INFO)
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
             mock_on_uploading_assets = MagicMock(return_value=True)
@@ -1692,7 +1722,6 @@ class TestUpload:
 
             # When
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(asset_root),
                 input_paths=[input_not_exist, scene_file],
                 output_paths=[str(Path(asset_root).joinpath("outputs"))],
                 referenced_paths=[],
@@ -1715,7 +1744,10 @@ class TestUpload:
             )
 
             # Then
-            assert "Skipping uploading input as it doesn't exist: " in caplog.text
+            assert "notexist.anywhere' does not exist. Adding to referenced paths." in caplog.text
+            assert len(upload_group.asset_groups) == 1
+            assert len(upload_group.asset_groups[0].references) == 1
+            assert Path(input_not_exist) in upload_group.asset_groups[0].references
 
             assert_progress_report_last_callback(
                 num_input_files=1,
@@ -1739,6 +1771,43 @@ class TestUpload:
                 skipped_files=0,
                 skipped_bytes=0,
             )
+
+    @mock_sts
+    def test_asset_management_input_not_exists_require_fails(self, farm_id, queue_id, tmpdir):
+        """Test that input paths that do not exist raise a MisconfiguredInputsError if the `require_paths_exist` flag is true."""
+        asset_root = str(tmpdir)
+
+        # GIVEN
+        scene_file = tmpdir.mkdir("scene").join("maya.ma")
+        scene_file.write("a")
+        input_not_exist = "/texture/that/does/notexist.anywhere"
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
+            return_value=PathFormat.POSIX,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_data",
+            side_effect=["c", "manifesthash"],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
+        ):
+            asset_manager = S3AssetManager(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_attachment_settings=self.job_attachment_s3_settings,
+                asset_manifest_version=ManifestVersion.v2023_03_03,
+            )
+
+            # When
+            with pytest.raises(MisconfiguredInputsError, match="Missing input files") as execinfo:
+                asset_manager.prepare_paths_for_upload(
+                    input_paths=[input_not_exist, scene_file],
+                    output_paths=[str(Path(asset_root).joinpath("outputs"))],
+                    referenced_paths=[],
+                    require_paths_exist=True,
+                )
+
+            assert "notexist.anywhere" in str(execinfo)
 
     @mock_sts
     @pytest.mark.parametrize(
@@ -1816,7 +1885,6 @@ class TestUpload:
             )
 
             upload_group = asset_manager.prepare_paths_for_upload(
-                job_bundle_path=str(tmpdir),
                 input_paths=[str(symlink_input_path)],
                 output_paths=[str(symlink_output_path)],
                 referenced_paths=[],

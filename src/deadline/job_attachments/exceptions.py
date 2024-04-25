@@ -92,6 +92,13 @@ class AssetOutsideOfRootError(JobAttachmentsError):
     """
 
 
+class MisconfiguredInputsError(JobAttachmentsError):
+    """
+    Exception for errors related to missing input directories, empty input directories,
+    missing input files, and input directories classified as files
+    """
+
+
 class ManifestDecodeValidationError(JobAttachmentsError):
     """
     Exception for errors related to asset manifest decoding.

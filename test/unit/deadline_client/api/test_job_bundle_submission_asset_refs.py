@@ -376,11 +376,11 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             ]
         )
         mock_prepare_paths.assert_called_once_with(
-            job_bundle_path=temp_job_bundle_dir,
             input_paths=input_paths,
             output_paths=output_paths,
             referenced_paths=referenced_paths,
             storage_profile=None,
+            require_paths_exist=False,
         )
         mock_hash_assets.assert_called_once_with(
             asset_groups=[AssetRootGroup()],

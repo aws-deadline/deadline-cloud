@@ -280,7 +280,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
-            group, layout, "settings.auto_accept", "Auto Accept Confirmation Prompts"
+            group, layout, "settings.auto_accept", "Auto Accept Prompt Defaults"
         )
         self.telemetry_opt_out = self._init_checkbox_setting(
             group, layout, "telemetry.opt_out", "Telemetry Opt Out"
