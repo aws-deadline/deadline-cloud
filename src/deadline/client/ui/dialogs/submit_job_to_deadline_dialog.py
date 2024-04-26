@@ -110,7 +110,8 @@ class SubmitJobToDeadlineDialog(QDialog):
             attachments,
         )
 
-        self._call_ui_hook(initial_job_settings)
+        if self.on_ui_callback:
+            self._call_ui_hook(initial_job_settings)
 
         self.gui_update_counter: Any = None
         self.refresh_deadline_settings()
@@ -137,6 +138,11 @@ class SubmitJobToDeadlineDialog(QDialog):
             # Refresh job specific settings
             if hasattr(self.job_settings, "refresh_ui"):
                 self.job_settings.refresh_ui(job_settings)
+
+    def _call_post_submit_hook(self, job_id: str):
+        self.on_post_submit_callback(
+            job_id=job_id
+        )
 
     def _call_ui_hook(self, initial_job_settings):
         host_requirements = None
@@ -515,6 +521,12 @@ class SubmitJobToDeadlineDialog(QDialog):
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
             )
+
+            # Execute any PostSubmission function defined.
+            if self.on_post_submit_callback:
+                self._call_post_submit_hook(
+                    job_id=self.create_job_response["jobId"],
+                )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
             QMessageBox.information(self, f"{settings.submitter_name} job submission", str(uic))
