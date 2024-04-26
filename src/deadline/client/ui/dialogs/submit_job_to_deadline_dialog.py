@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QFrame
 )
 
 from deadline.client.ui.dialogs.submit_job_progress_dialog import SubmitJobProgressDialog
@@ -82,6 +83,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
         on_create_job_bundle_callback,
+        on_ui_callback=None,
+        on_post_submit_callback=None,
         parent=None,
         f=Qt.WindowFlags(),
         show_host_requirements_tab=False,
@@ -93,6 +96,8 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         self.job_settings_type = type(initial_job_settings)
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
+        self.on_ui_callback = on_ui_callback
+        self.on_post_submit_callback = on_post_submit_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
@@ -104,6 +109,8 @@ class SubmitJobToDeadlineDialog(QDialog):
             auto_detected_attachments,
             attachments,
         )
+
+        self._call_ui_hook(initial_job_settings)
 
         self.gui_update_counter: Any = None
         self.refresh_deadline_settings()
@@ -130,6 +137,34 @@ class SubmitJobToDeadlineDialog(QDialog):
             # Refresh job specific settings
             if hasattr(self.job_settings, "refresh_ui"):
                 self.job_settings.refresh_ui(job_settings)
+
+    def _call_ui_hook(self, initial_job_settings):
+        host_requirements = None
+        if self.show_host_requirements_tab:
+            host_requirements = self.host_requirements.get_requirements()
+
+        ui_callback_response = self.on_ui_callback(
+            dialog=self,
+            settings=initial_job_settings,
+            queue_parameters=self.shared_job_settings.get_parameters(),
+            asset_references=self.job_attachments.get_asset_references(),
+            host_requirements=host_requirements
+        )
+        if ui_callback_response.settings:
+            self.shared_job_settings.update_settings(ui_callback_response.settings)
+        if ui_callback_response.queue_parameters:
+            self.shared_job_settings.set_parameters(ui_callback_response.queue_parameters)
+        if ui_callback_response.asset_references:
+            self.job_attachments.set_asset_references(ui_callback_response.asset_references)
+        if ui_callback_response.host_requirements and self.show_host_requirements_tab:
+            self.host_requirements.set_requirements(ui_callback_response.host_requirements)
+
+        if ui_callback_response.job_specific_ui:
+            self._line = QFrame(self)
+            self._line.setFrameShape(QFrame.HLine)
+            self._line.setFrameShadow(QFrame.Sunken)
+            self.job_settings_container.layout().addWidget(self._line)
+            self.job_settings_container.layout().addWidget(ui_callback_response.job_specific_ui)
 
     def _build_ui(
         self,
@@ -249,10 +284,13 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.tabs.addTab(self.job_settings_tab, "Job-specific settings")
         self.job_settings_tab.setWidgetResizable(True)
 
+        self.job_settings_container = QWidget(self.job_settings_tab)
+        self.job_settings_container.setLayout(QVBoxLayout())
         self.job_settings = job_setup_widget_type(
             initial_settings=initial_job_settings, parent=self
         )
-        self.job_settings_tab.setWidget(self.job_settings)
+        self.job_settings_container.layout().addWidget(self.job_settings)
+        self.job_settings_tab.setWidget(self.job_settings_container)
         if hasattr(self.job_settings, "parameter_changed"):
             self.job_settings.parameter_changed.connect(self.on_job_template_parameter_changed)
 

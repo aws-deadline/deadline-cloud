@@ -320,6 +320,9 @@ class JobAttachmentsWidget(QWidget):
         """
         return self.auto_detected_attachments.union(self.attachments)
 
+    def set_asset_references(self, references: AssetReferences):
+        self.attachments = self.attachments.union(references)
+
     def get_require_paths_exist(self) -> bool:
         """
         Returns the checkbox value of whether to allow empty paths or not.
