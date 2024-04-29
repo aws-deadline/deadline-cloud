@@ -18,7 +18,7 @@ from deadline.client.cli import main
 
 def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
     """
-    Confirm that the CLI login/logout command invokes Deadline Cloud Monitor as expected
+    Confirm that the CLI login/logout command invokes Deadline Cloud monitor as expected
     """
     scoped_config = {
         "credential_process": "/bin/DeadlineCloudMonitor get-credentials --profile sandbox-us-west-2",
@@ -65,7 +65,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         assert result.exit_code == 0
 
         assert (
-            "Successfully logged in: Deadline Cloud Monitor Profile: sandbox-us-west-2"
+            "Successfully logged in: Deadline Cloud monitor Profile: sandbox-us-west-2"
             in result.output
         )
         assert result.exit_code == 0

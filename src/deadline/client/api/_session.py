@@ -115,7 +115,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
 
 def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
     """
-    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud Monitor wrote the credentials, HOST_PROVIDED otherwise.
+    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials, HOST_PROVIDED otherwise.
 
     Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
@@ -127,7 +127,7 @@ def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredenti
     except ProfileNotFound:
         return AwsCredentialsSource.NOT_VALID
     if "monitor_id" in profile_config:
-        # Deadline Cloud Monitor Desktop adds the "monitor_id" key
+        # Deadline Cloud monitor Desktop adds the "monitor_id" key
         return AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
     else:
         return AwsCredentialsSource.HOST_PROVIDED
@@ -137,7 +137,7 @@ def get_user_and_identity_store_id(
     config: Optional[ConfigParser] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
-    If logged in with Deadline Cloud Monitor Desktop, returns a tuple
+    If logged in with Deadline Cloud monitor Desktop, returns a tuple
     (user_id, identity_store_id), otherwise returns None.
     """
     session = get_boto3_session(config=config)
@@ -265,7 +265,7 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
     Returns AwsAuthenticationStatus enum value:
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
-      - NEEDS_LOGIN if a Deadline Cloud Monitor login is required.
+      - NEEDS_LOGIN if a Deadline Cloud monitor login is required.
     """
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
@@ -273,7 +273,7 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
             get_boto3_session(config=config).client("sts").get_caller_identity()
             return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
-            # We assume that the presence of a Deadline Cloud Monitor profile
+            # We assume that the presence of a Deadline Cloud monitor profile
             # means we will know everything necessary to start it and login.
 
             if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:

@@ -113,7 +113,7 @@ def cli_handle_web_url(
             step_id = url_queries.pop("step_id", None)
             task_id = url_queries.pop("task_id", None)
 
-            # Add the standard option "profile", using the one provided by the url (set by Deadline Cloud Monitor)
+            # Add the standard option "profile", using the one provided by the url (set by Deadline Cloud monitor)
             # or choosing a best guess based on farm and queue IDs
             aws_profile_name = url_queries.pop(
                 "profile",

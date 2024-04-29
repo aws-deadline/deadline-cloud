@@ -23,11 +23,11 @@ JSON_FIELD_AUTH_API_AVAILABLE = "api_availability"
 
 def _cli_on_pending_authorization(**kwargs):
     """
-    Callback for `login`, to tell the user that Deadline Cloud Monitor is opening
+    Callback for `login`, to tell the user that Deadline Cloud monitor is opening
     """
 
     if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
-        click.echo("Opening Deadline Cloud Monitor. Please log in and then return here.")
+        click.echo("Opening Deadline Cloud monitor. Please log in and then return here.")
 
 
 @click.group(name="auth")
@@ -45,7 +45,7 @@ def auth_login():
     Logs in to the AWS Deadline Cloud configured AWS profile.
 
     This is for any profile type that AWS Deadline Cloud knows how to login to
-    Currently only supports Deadline Cloud Monitor
+    Currently only supports Deadline Cloud monitor
     """
     click.echo(
         f"Logging into AWS Profile {config_file.get_setting('defaults.aws_profile_name')!r} for AWS Deadline Cloud"
@@ -62,11 +62,11 @@ def auth_login():
 @_handle_error
 def auth_logout():
     """
-    Logs out of the Deadline Cloud Monitor configured AWS profile.
+    Logs out of the Deadline Cloud monitor configured AWS profile.
     """
     api.logout()
 
-    click.echo("Successfully logged out of all Deadline Cloud Monitor AWS profiles")
+    click.echo("Successfully logged out of all Deadline Cloud monitor AWS profiles")
 
 
 @cli_auth.command(name="status")
