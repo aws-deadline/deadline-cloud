@@ -79,7 +79,7 @@ class DevMainWindow(QMainWindow):
         if DeadlineLoginDialog.login(parent=self):
             logger.info("Logged in successfully")
         else:
-            logger.info("Failed to login")
+            logger.info("Failed to log in")
 
     def logout(self):
         api.logout()
