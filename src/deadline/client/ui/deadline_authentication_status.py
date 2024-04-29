@@ -79,13 +79,11 @@ class DeadlineAuthenticationStatus(QObject):
         self.config = ConfigParser()
         self.config.read_dict(config_file.read_config())
 
-        # Watch the ~/.aws path for any changes to config or credentials,
-        # the ~/.aws/sso/cache to capture "aws sso login/logout", and
+        # Watch the ~/.aws path for any changes to config or credentials, and
         # the ~/.deadline path for any changes to the AWS Deadline Cloud config.
         self.aws_creds_file_watcher = QFileSystemWatcher()
         self.aws_creds_paths = [
             os.path.expanduser(os.path.join("~", ".aws")),
-            os.path.expanduser(os.path.join("~", ".aws", "sso", "cache")),
         ]
         self.deadline_config_paths = [
             os.path.expanduser(os.path.join("~", ".deadline")),
