@@ -59,7 +59,7 @@ __config_mtime = None
 SETTINGS: Dict[str, Dict[str, Any]] = {
     "deadline-cloud-monitor.path": {
         "default": "",
-        "description": "The filesystem path to Deadline Cloud Monitor, set during login process.",
+        "description": "The filesystem path to Deadline Cloud monitor, set during login process.",
     },
     "defaults.aws_profile_name": {
         "default": "(default)",

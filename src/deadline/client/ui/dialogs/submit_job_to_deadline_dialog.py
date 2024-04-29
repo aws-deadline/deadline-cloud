@@ -204,7 +204,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def refresh_deadline_settings(self):
         # Enable/disable the Login and Logout buttons based on whether
-        # the configured profile is for Deadline Cloud Monitor
+        # the configured profile is for Deadline Cloud monitor
         self.login_button.setEnabled(
             self.deadline_authentication_status.creds_source
             == api.AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN

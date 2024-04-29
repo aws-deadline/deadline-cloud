@@ -110,7 +110,7 @@ class DeadlineLoginDialog(QMessageBox):
                     == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
                 ):
                     self.login_thread_message.emit(
-                        "Opening Deadline Cloud Monitor. Please log in before returning here."
+                        "Opening Deadline Cloud monitor. Please log in before returning here."
                     )
 
             def on_cancellation_check():
