@@ -27,7 +27,7 @@ def _cli_on_pending_authorization(**kwargs):
     """
 
     if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
-        click.echo("Opening Deadline Cloud Monitor. Please login and then return here.")
+        click.echo("Opening Deadline Cloud Monitor. Please log in and then return here.")
 
 
 @click.group(name="auth")
