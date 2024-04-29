@@ -58,7 +58,8 @@ def _login_deadline_cloud_monitor(
             time.sleep(0.5)
     except FileNotFoundError:
         raise DeadlineOperationError(
-            f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
+            f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}."
+            f"Please ensure Deadline Cloud Monitor is installed correctly and set up the {profile_name} profile again."
         )
     if on_pending_authorization:
         on_pending_authorization(
@@ -136,11 +137,13 @@ def logout(config: Optional[ConfigParser] = None) -> str:
             output = subprocess.check_output(args)
         except FileNotFoundError:
             raise DeadlineOperationError(
-                f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}. Please ensure Deadline Cloud Monitor is installed correctly and setup the {profile_name} profile again."
+                f"Could not find Deadline Cloud Monitor at {deadline_cloud_monitor_path}."
+                f"Please ensure Deadline Cloud Monitor is installed correctly and set up the {profile_name} profile again."
             )
         except subprocess.CalledProcessError as e:
             raise DeadlineOperationError(
-                f"Deadline Cloud Monitor was unable to logout the profile {profile_name}. Return code {e.returncode}: {e.output}"
+                f"Deadline Cloud Monitor was unable to log out the profile {profile_name}."
+                f"Return code {e.returncode}: {e.output}"
             )
 
         # Force a refresh of the cached boto3 Session
