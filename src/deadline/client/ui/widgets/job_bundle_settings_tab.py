@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-UI widgets for the Scene Settings tab.
+UI widgets for the scene settings tab.
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ class JobBundleSettingsWidget(QWidget):
         # Open the file picker dialog
         bundle_path = os.path.expanduser(config_file.get_setting("settings.job_history_dir"))
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Job Bundle Directory", bundle_path
+            self, "Choose job bundle directory", bundle_path
         )
         if not input_job_bundle_dir:
             return
@@ -109,16 +109,16 @@ class JobBundleSettingsWidget(QWidget):
             # Load the template to get the bundle name
             template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
             name = (
-                template.get("name", "Job Bundle Submission")
+                template.get("name", "Job bundle submission")
                 if template
-                else "Job Bundle Submission"
+                else "Job bundle submission"
             )
             job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
             job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
 
         except Exception as e:
             msg = str(e)
-            QMessageBox.warning(self, "Could not Load Job Bundle", msg)
+            QMessageBox.warning(self, "Could not load job bundle", msg)
             logger.warning(msg)
             return
 

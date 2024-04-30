@@ -1,20 +1,20 @@
 specificationVersion: 'jobtemplate-2023-09'
-name: Job Template GUI Control Showcase
+name: Job template GUI control showcase
 parameterDefinitions:
   - name: LineEditControl
     type: STRING
     userInterface:
       control: LINE_EDIT
-      label: Line Edit Control
-      groupLabel: Text Controls
+      label: Line edit control
+      groupLabel: Text controls
     description: "Unrestricted line of text!"
     default: Default line edit value.
   - name: MultiLineEditControl
     type: STRING
     userInterface:
       control: MULTILINE_EDIT
-      label: Multi-line Edit Control
-      groupLabel: Text Controls
+      label: Multi-line edit control
+      groupLabel: Text controls
     description: "Unrestricted text file"
     default: |
       This is a
@@ -24,16 +24,16 @@ parameterDefinitions:
     type: INT
     userInterface:
       control: SPIN_BOX
-      label: Default Int Spinner
-      groupLabel: Int Spinners
+      label: Default int spinner
+      groupLabel: Int spinners
     description: A default integer spinner.
     default: 42
   - name: BigStepIntSpinner
     type: INT
     userInterface:
       control: SPIN_BOX
-      label: Big Step Int Spinner
-      groupLabel: Int Spinners
+      label: Big step int spinner
+      groupLabel: Int spinners
       singleStepDelta: 30
     description: A default integer spinner.
     default: 123
@@ -41,8 +41,8 @@ parameterDefinitions:
     type: INT
     userInterface:
       control: SPIN_BOX
-      label: Bounded Int Spinner
-      groupLabel: Int Spinners
+      label: Bounded int spinner
+      groupLabel: Int spinners
     description: A bounded integer spin box.
     minValue: -100
     maxValue: 100
@@ -51,16 +51,16 @@ parameterDefinitions:
     type: FLOAT
     userInterface:
       control: SPIN_BOX
-      label: Default Float Spinner
-      groupLabel: Float Spinners
+      label: Default float spinner
+      groupLabel: Float spinners
     description: A default float spinner.
     default: 1234.56789
   - name: FloatSpinnerOneDecimal
     type: FLOAT
     userInterface:
       control: SPIN_BOX
-      label: Float Spinner One Decimal
-      groupLabel: Float Spinners
+      label: Float spinner one decimal
+      groupLabel: Float spinners
       decimals: 1
     description: A float spinner with one decimal of precision.
     default: 100000.01
@@ -68,8 +68,8 @@ parameterDefinitions:
     type: FLOAT
     userInterface:
       control: SPIN_BOX
-      label: Float Spinner Fixed Step
-      groupLabel: Float Spinners
+      label: Float spinner fixed step
+      groupLabel: Float spinners
       singleStepDelta: 0.875
     default: 0.0
     description: A float spinner with a fixed step of .875
@@ -77,8 +77,8 @@ parameterDefinitions:
     type: STRING
     userInterface:
       control: DROPDOWN_LIST
-      label: String Dropdown
-      groupLabel: Dropdown Controls
+      label: String dropdown
+      groupLabel: Dropdown controls
     description: A dropdown with string values.
     default: WEDNESDAY
     allowedValues: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
@@ -86,8 +86,8 @@ parameterDefinitions:
     type: INT
     userInterface:
       control: DROPDOWN_LIST
-      label: Int Dropdown
-      groupLabel: Dropdown Controls
+      label: Int dropdown
+      groupLabel: Dropdown controls
     description: A dropdown with integer values.
     default: 7
     allowedValues: [3, 8, 7, 2, 9, 1]
@@ -101,8 +101,8 @@ parameterDefinitions:
     type: FLOAT
     userInterface:
       control: DROPDOWN_LIST
-      label: Float Dropdown
-      groupLabel: Dropdown Controls
+      label: Float dropdown
+      groupLabel: Dropdown controls
     description: A dropdown with floating point values.
     default: 3.26
     allowedValues: [1.23, 3.26, 9.9, 1.2345]
@@ -112,12 +112,12 @@ parameterDefinitions:
     dataFlow: IN
     userInterface:
       control: CHOOSE_INPUT_FILE
-      label: Input File Picker
-      groupLabel: Picker Controls
+      label: Input file picker
+      groupLabel: Picker controls
       fileFilters:
-      - label: Scene Files
+      - label: Scene files
         patterns: ["*.blend", "*.mb", "*.ma", "*.nk"]
-      - label: Any Files
+      - label: Any files
         patterns: ["*"]
     description: Choose the input scene file.
   - name: OutputFilePicker
@@ -126,16 +126,16 @@ parameterDefinitions:
     dataFlow: OUT
     userInterface:
       control: CHOOSE_OUTPUT_FILE
-      label: Output File Picker
-      groupLabel: Picker Controls
+      label: Output file picker
+      groupLabel: Picker controls
       fileFilters:
-      - label: EXR Files
+      - label: EXR files
         patterns: ["*.exr"]
-      - label: JPEG Files
+      - label: JPEG files
         patterns: ["*.jpg", "*.jpeg"]
-      - label: PNG Files
+      - label: PNG files
         patterns: ["*.png"]
-      - label: All Files
+      - label: All files
         patterns: ["*"]
     description: Choose the output image file.
   - name: DirectoryPicker
@@ -144,14 +144,14 @@ parameterDefinitions:
     dataFlow: INOUT
     userInterface:
       control: CHOOSE_DIRECTORY
-      label: Directory Picker
-      groupLabel: Picker Controls
+      label: Directory picker
+      groupLabel: Picker controls
     description: Choose a directory.
   - name: CheckBox
     type: STRING
     userInterface:
       control: CHECK_BOX
-      label: Check Box "Boolean"
+      label: Check box "boolean"
     default: "True"
     allowedValues: ["True", "False"]
     description: Set a true/false value.

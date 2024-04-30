@@ -154,10 +154,10 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label = QLabel("Preparing files...")
         self.status_label.setMargin(5)
         self.hashing_progress = JobAttachmentsProgressWidget(
-            initial_message="Preparing for hashing...", title="Hashing Progress", parent=self
+            initial_message="Preparing for hashing...", title="Hashing progress", parent=self
         )
         self.upload_progress = JobAttachmentsProgressWidget(
-            initial_message="Preparing for upload...", title="Upload Progress", parent=self
+            initial_message="Preparing for upload...", title="Upload progress", parent=self
         )
         self.summary_edit = QTextEdit()
         self.summary_edit.setVisible(False)
@@ -172,7 +172,7 @@ class SubmitJobProgressDialog(QDialog):
         self.lyt.addWidget(self.summary_edit)
         self.lyt.addWidget(self.button_box)
 
-        self.setWindowTitle("AWS Deadline Cloud Submission")
+        self.setWindowTitle("AWS Deadline Cloud submission")
 
         self.hashing_thread_progress_report.connect(self.handle_hashing_thread_progress_report)
         self.hashing_thread_succeeded.connect(self.handle_hashing_thread_succeeded)
@@ -411,7 +411,7 @@ class SubmitJobProgressDialog(QDialog):
             def _continue_create_job_wait() -> bool:
                 return self._continue_submission
 
-            logger.info("Waiting for Job to be created...")
+            logger.info("Waiting for job to be created...")
 
             success = False
 
@@ -434,7 +434,7 @@ class SubmitJobProgressDialog(QDialog):
                 )
                 message += f"\n{job_id}\n"
             else:
-                message = "CreateJob response was empty, or did not contain a Job ID."
+                message = "CreateJob response was empty, or did not contain a job ID."
             if success:
                 self.create_job_thread_succeeded.emit(success, message)
             else:
@@ -461,7 +461,7 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label.setText("Hashing job attachments...")
         self.__hashing_thread = threading.Thread(
             target=self._hashing_background_thread,
-            name="AWS Deadline Cloud Hashing Background Thread",
+            name="AWS Deadline Cloud hashing background thread",
             args=(asset_groups, total_input_files, total_input_bytes),
         )
         self.__hashing_thread.start()
@@ -473,7 +473,7 @@ class SubmitJobProgressDialog(QDialog):
         self.status_label.setText("Uploading job attachments...")
         self.__upload_thread = threading.Thread(
             target=self._upload_background_thread,
-            name="AWS Deadline Cloud Upload Background Thread",
+            name="AWS Deadline Cloud upload background thread",
             args=(asset_manifests,),
         )
         self.__upload_thread.start()
@@ -482,10 +482,10 @@ class SubmitJobProgressDialog(QDialog):
         """
         Starts the background thread to call CreateJob.
         """
-        self.status_label.setText("Waiting for Job to be created...")
+        self.status_label.setText("Waiting for job to be created...")
         self.__create_job_thread = threading.Thread(
             target=self._create_job_background_thread,
-            name="AWS Deadline Cloud CreateJob Background Thread",
+            name="AWS Deadline Cloud CreateJob background thread",
         )
         self.__create_job_thread.start()
 
@@ -524,7 +524,7 @@ class SubmitJobProgressDialog(QDialog):
             hashing_summary, from_gui=True
         )
         self.summary_edit.setText(
-            f"\nHashing Summary:\n{textwrap.indent(str(hashing_summary), '    ')}"
+            f"\nHashing summary:\n{textwrap.indent(str(hashing_summary), '    ')}"
         )
         self._start_upload(asset_manifests)
 
@@ -546,7 +546,7 @@ class SubmitJobProgressDialog(QDialog):
         )
         self.summary_edit.setText(
             f"{self.summary_edit.toPlainText()}"
-            + f"\nUpload Summary:\n{textwrap.indent(str(upload_summary), '    ')}"
+            + f"\nUpload summary:\n{textwrap.indent(str(upload_summary), '    ')}"
         )
 
         self._start_create_job()
@@ -564,11 +564,11 @@ class SubmitJobProgressDialog(QDialog):
 
         if success:
             self._submission_complete = True
-            self.status_label.setText("Submission Complete")
+            self.status_label.setText("Submission complete")
             self.button_box.setStandardButtons(QDialogButtonBox.Ok)
             self.button_box.button(QDialogButtonBox.Ok).setDefault(True)
         else:
-            self.status_label.setText("Submission Error")
+            self.status_label.setText("Submission error")
             self.button_box.setStandardButtons(QDialogButtonBox.Close)
             self.button_box.button(QDialogButtonBox.Close).setDefault(True)
 
@@ -585,7 +585,7 @@ class SubmitJobProgressDialog(QDialog):
         self.upload_progress.setVisible(False)
         self.status_label.setVisible(False)
         self.button_box.setStandardButtons(QDialogButtonBox.Close)
-        self.summary_edit.setText(f"Error Occurred: {str(e)}")
+        self.summary_edit.setText(f"Error occurred: {str(e)}")
         self.summary_edit.setVisible(True)
         self.adjustSize()
         logger.error(str(e))
@@ -653,7 +653,7 @@ class SubmitJobProgressDialog(QDialog):
             dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
             message_box.addButton(dont_ask_button, QMessageBox.ActionRole)
 
-        message_box.setWindowTitle("Job Attachments Valid Files Confirmation")
+        message_box.setWindowTitle("Job attachments valid files confirmation")
         selection = message_box.exec()
 
         return selection != QMessageBox.Cancel

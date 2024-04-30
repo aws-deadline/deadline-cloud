@@ -65,7 +65,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         assert result.exit_code == 0
 
         assert (
-            "Successfully logged in: Deadline Cloud monitor Profile: sandbox-us-west-2"
+            "Successfully logged in: Deadline Cloud monitor profile: sandbox-us-west-2"
             in result.output
         )
         assert result.exit_code == 0
