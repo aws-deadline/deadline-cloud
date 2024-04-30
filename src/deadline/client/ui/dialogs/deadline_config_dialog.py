@@ -77,7 +77,7 @@ class DeadlineConfigDialog(QDialog):
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
-        self.setWindowTitle("AWS Deadline Cloud Workstation Configuration")
+        self.setWindowTitle("AWS Deadline Cloud workstation configuration")
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
 
@@ -191,25 +191,25 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._refresh_callbacks: List[Callable] = []
 
         # Global settings
-        self.global_settings_group = QGroupBox(parent=self, title="Global Settings")
+        self.global_settings_group = QGroupBox(parent=self, title="Global settings")
         self.layout.addWidget(self.global_settings_group)
         global_settings_layout = QFormLayout(self.global_settings_group)
         self._build_global_settings_ui(self.global_settings_group, global_settings_layout)
 
         # AWS Profile-specific settings
-        self.profile_settings_group = QGroupBox(parent=self, title="Profile Settings")
+        self.profile_settings_group = QGroupBox(parent=self, title="Profile settings")
         self.layout.addWidget(self.profile_settings_group)
         profile_settings_layout = QFormLayout(self.profile_settings_group)
         self._build_profile_settings_ui(self.profile_settings_group, profile_settings_layout)
 
         # Farm-specific settings
-        self.farm_settings_group = QGroupBox(parent=self, title="Farm Settings")
+        self.farm_settings_group = QGroupBox(parent=self, title="Farm settings")
         self.layout.addWidget(self.farm_settings_group)
         farm_settings_layout = QFormLayout(self.farm_settings_group)
         self._build_farm_settings_ui(self.farm_settings_group, farm_settings_layout)
 
         # General settings
-        self.general_settings_group = QGroupBox(parent=self, title="General Settings")
+        self.general_settings_group = QGroupBox(parent=self, title="General settings")
         self.layout.addWidget(self.general_settings_group)
         general_settings_layout = QFormLayout(self.general_settings_group)
         self._build_general_settings_ui(self.general_settings_group, general_settings_layout)
@@ -218,37 +218,39 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def _build_global_settings_ui(self, group, layout):
         self.aws_profiles_box = QComboBox(parent=group)
-        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel("AWS Profile")
+        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel("AWS profile")
         layout.addRow(aws_profile_label, self.aws_profiles_box)
         self.aws_profiles_box.currentTextChanged.connect(self.aws_profile_changed)
 
     def _build_profile_settings_ui(self, group, layout):
         self.job_history_dir_edit = DirectoryPickerWidget(
             initial_directory="",
-            directory_label="Job History Dir",
+            directory_label="Job history directory",
             parent=group,
             collapse_user_dir=True,
         )
-        job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel("Job History Dir")
+        job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel(
+            "Job history directory"
+        )
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
         self.default_farm_box = DeadlineFarmListComboBox(parent=group)
-        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel("Default Farm")
+        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel("Default farm")
         self.default_farm_box.box.currentIndexChanged.connect(self.default_farm_changed)
         self.default_farm_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_farm_box_label, self.default_farm_box)
 
     def _build_farm_settings_ui(self, group, layout):
         self.default_queue_box = DeadlineQueueListComboBox(parent=group)
-        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default Queue")
+        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default queue")
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
         self.default_queue_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_queue_box_label, self.default_queue_box)
 
         self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
         default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
-            "Default Storage Profile"
+            "Default storage profile"
         )
         self.default_storage_profile_box.box.currentIndexChanged.connect(
             self.default_storage_profile_name_changed
@@ -273,17 +275,17 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group=group,
             layout=layout,
             setting_name="defaults.job_attachments_file_system",
-            label_text="Job Attachments FileSystem Options",
+            label_text="Job attachments filesystem options",
             label_tooltip=job_attachments_file_system_tooltip,
             values_with_tooltips=values_with_tooltips,
         )
 
     def _build_general_settings_ui(self, group, layout):
         self.auto_accept = self._init_checkbox_setting(
-            group, layout, "settings.auto_accept", "Auto Accept Prompt Defaults"
+            group, layout, "settings.auto_accept", "Auto accept prompt defaults"
         )
         self.telemetry_opt_out = self._init_checkbox_setting(
-            group, layout, "telemetry.opt_out", "Telemetry Opt Out"
+            group, layout, "telemetry.opt_out", "Telemetry opt out"
         )
 
         self._conflict_resolution_options = [option.name for option in FileConflictResolution]
@@ -291,7 +293,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group,
             layout,
             "settings.conflict_resolution",
-            "Conflict Resolution Option",
+            "Conflict resolution option",
             self._conflict_resolution_options,
         )
 
@@ -300,7 +302,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group,
             layout,
             "settings.log_level",
-            "Current Logging Level",
+            "Current logging level",
             self._log_levels,
         )
 
@@ -554,7 +556,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             if value.startswith(NOT_VALID_MARKER):
                 QMessageBox.warning(
                     self,
-                    "Apply Changes",
+                    "Apply changes",
                     f"Cannot apply changes, {value} is not valid for setting {setting_name}",
                 )
                 return False
@@ -695,7 +697,7 @@ class _DeadlineResourceListComboBox(QWidget):
         self.__refresh_id += 1
         self.__refresh_thread = threading.Thread(
             target=self._refresh_thread_function,
-            name=f"AWS Deadline Cloud Refresh {self.resource_name} Thread",
+            name=f"AWS Deadline Cloud refresh {self.resource_name} thread",
             args=(self.__refresh_id, config),
         )
         self.__refresh_thread.start()
@@ -738,7 +740,7 @@ class _DeadlineResourceListComboBox(QWidget):
                 self._list_update.emit(refresh_id, resources)
         except BaseException as e:
             if not self.canceled and refresh_id == self.__refresh_id:
-                self.background_exception.emit(f"Refresh {self.resource_name}s List", e)
+                self.background_exception.emit(f"Refresh {self.resource_name}s list", e)
 
 
 class DeadlineFarmListComboBox(_DeadlineResourceListComboBox):
@@ -776,7 +778,7 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
 
     def __init__(self, parent=None):
         super().__init__(
-            resource_name="Storage Profile",
+            resource_name="Storage profile",
             setting_name="settings.storage_profile_id",
             parent=parent,
         )
