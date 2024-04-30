@@ -34,10 +34,10 @@ class DeadlineAuthenticationStatusWidget(QWidget):
 
         layout = QHBoxLayout(self)
 
-        self.creds_source_group = AuthenticationStatusGroup(title="Credential Source", parent=self)
+        self.creds_source_group = AuthenticationStatusGroup(title="Credential source", parent=self)
         layout.addWidget(self.creds_source_group)
         self.auth_status_group = AuthenticationStatusGroup(
-            title="Authentication Status", parent=self
+            title="Authentication status", parent=self
         )
         layout.addWidget(self.auth_status_group)
         self.deadline_authorized_group = AuthenticationStatusGroup(

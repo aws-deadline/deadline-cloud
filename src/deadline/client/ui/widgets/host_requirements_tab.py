@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-UI widgets for the Host Requirements tab.
+UI widgets for the host requirements tab.
 """
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
@@ -205,8 +205,8 @@ class OSRequirementsWidget(QGroupBox):
         self._build_ui()
 
     def _build_ui(self):
-        self.os_row = OSRequirementRowWidget("Operating System", ["linux", "macos", "windows"])
-        self.cpu_row = OSRequirementRowWidget("CPU Architecture", ["x86_64", "arm64"])
+        self.os_row = OSRequirementRowWidget("Operating system", ["linux", "macos", "windows"])
+        self.cpu_row = OSRequirementRowWidget("CPU architecture", ["x86_64", "arm64"])
 
         self.layout.addWidget(self.os_row)
         self.layout.addWidget(self.cpu_row)
@@ -258,8 +258,8 @@ class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         self.cpu_row = HardwareRequirementsRowWidget("vCPUs", self)
         self.memory_row = HardwareRequirementsRowWidget("Memory (GiB)", self)
         self.gpu_row = HardwareRequirementsRowWidget("GPUs", self)
-        self.gpu_memory_row = HardwareRequirementsRowWidget("GPU Memory (GiB)", self)
-        self.scratch_space_row = HardwareRequirementsRowWidget("Scratch Space", self)
+        self.gpu_memory_row = HardwareRequirementsRowWidget("GPU memory (GiB)", self)
+        self.scratch_space_row = HardwareRequirementsRowWidget("Scratch space", self)
 
         # Add all rows to layout
         self.layout.addWidget(self.cpu_row)
@@ -482,7 +482,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value
-        self.name_label = QLabel("Amount Name")
+        self.name_label = QLabel("Amount name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
@@ -576,7 +576,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value / All / Any
-        self.name_label = QLabel("Attribute Name")
+        self.name_label = QLabel("Attribute name")
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_label = QLabel("Value(s)")
         self.all_of_button = QRadioButton("All")

@@ -59,7 +59,7 @@ def show_job_bundle_submitter(
 
     if not input_job_bundle_dir:
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            parent, "Choose Job Bundle Directory", input_job_bundle_dir
+            parent, "Choose job bundle directory", input_job_bundle_dir
         )
         if not input_job_bundle_dir:
             return None
@@ -151,7 +151,7 @@ def show_job_bundle_submitter(
     )
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
-    name = "Job Bundle Submission"
+    name = "Job bundle submission"
     if template:
         name = template.get("name", name)
 

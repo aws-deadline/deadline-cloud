@@ -1,11 +1,11 @@
 specificationVersion: 'jobtemplate-2023-09'
-name: Job Bundle - CLI Job Example
+name: Job bundle - CLI job example
 parameterDefinitions:
   - name: BashScript
     type: STRING
     userInterface:
       control: MULTILINE_EDIT
-      label: Bash Script
+      label: Bash script
     description: "Write your bash script code here."
     default: |
       echo "The file contents attached to this job:"
@@ -19,7 +19,7 @@ parameterDefinitions:
     dataFlow: INOUT
     userInterface:
       control: CHOOSE_DIRECTORY
-      label: Input/Output Data Directory
+      label: Input/Output data directory
     description: |
       This is a directory for your input files. Any output files
       that the script writes will download back to the same

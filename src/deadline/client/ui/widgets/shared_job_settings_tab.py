@@ -149,7 +149,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             self.canceled.set_canceled()
             self.__refresh_queue_parameters_thread.join()
         self.queue_parameters_box.rebuild_ui(
-            async_loading_state="Error Loading Queue Environments: {}\n\nError Traceback: {}".format(
+            async_loading_state="Error loading queue environments: {}\n\nError traceback: {}".format(
                 title, error
             )
         )
@@ -168,7 +168,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.canceled = CancelationFlag()
         self.__refresh_queue_parameters_thread = threading.Thread(
             target=self._load_queue_parameters_thread_function,
-            name="AWS Deadline Cloud Load Queue Parameters Thread",
+            name="AWS Deadline Cloud load queue parameters thread",
             args=(self.__refresh_queue_parameters_id, farm_id, queue_id),
         )
         self.__refresh_queue_parameters_thread.start()
@@ -197,7 +197,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
                 self._queue_parameters_update.emit(refresh_id, queue_parameters)
         except BaseException as e:
             if not self.canceled:
-                self._background_exception.emit("Invalid Queue Parameters", e)
+                self._background_exception.emit("Invalid queue parameters", e)
 
     def update_settings(self, settings):
         self.shared_job_properties_box.update_settings(settings)
@@ -255,22 +255,22 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.priority_box = QSpinBox(parent=self)
         self.layout.addRow(self.priority_box_label, self.priority_box)
 
-        self.initial_status_box_label = QLabel("Initial State")
+        self.initial_status_box_label = QLabel("Initial state")
         self.initial_status_box = QComboBox(parent=self)
         self.initial_status_box.addItems(["READY", "SUSPENDED"])
         self.layout.addRow(self.initial_status_box_label, self.initial_status_box)
 
-        self.max_failed_tasks_count_box_label = QLabel("Maximum Failed Tasks Count")
+        self.max_failed_tasks_count_box_label = QLabel("Maximum failed tasks count")
         self.max_failed_tasks_count_box_label.setToolTip(
-            "Maximum number of Tasks that can fail before the Job will be marked as failed."
+            "Maximum number of tasks that can fail before the job will be marked as failed."
         )
         self.max_failed_tasks_count_box = QSpinBox(parent=self)
         self.max_failed_tasks_count_box.setRange(0, 2147483647)
         self.layout.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
 
-        self.max_retries_per_task_box_label = QLabel("Maximum Retries Per Task")
+        self.max_retries_per_task_box_label = QLabel("Maximum retries per task")
         self.max_retries_per_task_box_label.setToolTip(
-            "Maximum number of times that a Task will retry before it's marked as failed."
+            "Maximum number of times that a task will retry before it's marked as failed."
         )
         self.max_retries_per_task_box = QSpinBox(parent=self)
         self.max_retries_per_task_box.setRange(0, 2147483647)
@@ -314,7 +314,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
                 "type": "STRING",
                 "userInterface": {
                     "control": "DROPDOWN_LIST",
-                    "label": "Initial State",
+                    "label": "Initial state",
                 },
                 "allowedValues": ["READY", "SUSPENDED"],
                 "value": self.initial_status_box.currentText(),
@@ -325,18 +325,18 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
                 "type": "INT",
                 "userInterface": {
                     "control": "SPIN_BOX",
-                    "label": "Maximum Failed Tasks Count",
+                    "label": "Maximum failed tasks count",
                 },
                 "minValue": 0,
                 "value": self.max_failed_tasks_count_box.value(),
             },
             {
                 "name": "deadline:maxRetriesPerTask",
-                "description": "Maximum number of times that a Task will retry before it's marked as failed.",
+                "description": "Maximum number of times that a task will retry before it's marked as failed.",
                 "type": "INT",
                 "userInterface": {
                     "control": "SPIN_BOX",
-                    "label": "Maximum Retries Per Task",
+                    "label": "Maximum retries per task",
                 },
                 "minValue": 0,
                 "value": self.max_retries_per_task_box.value(),
@@ -354,11 +354,11 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
 class DeadlineCloudSettingsWidget(QGroupBox):
     """
-    UI component for the Deadline Render Manager.
+    UI component for the Deadline Cloud settings.
     """
 
     def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__("Deadline Cloud Settings", parent=parent)
+        super().__init__("Deadline Cloud settings", parent=parent)
         self.deadline_settings: Dict[str, Any] = {"counter": -1}
         self.layout = QFormLayout(self)
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -366,7 +366,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self._build_ui()
 
     def _set_enabled_with_label(self, prop_name: str, enabled: bool):
-        """Enable/disable a control w/ its label"""
+        """Sets the enabled status of a control and its label"""
         getattr(self, prop_name).setEnabled(enabled)
         getattr(self, prop_name + "_label").setEnabled(enabled)
 
@@ -472,7 +472,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
                 self.__refresh_id += 1
                 self.__refresh_thread = threading.Thread(
                     target=self._refresh_thread_function,
-                    name=f"AWS Deadline Cloud Refresh {self.resource_name} Item Thread",
+                    name=f"AWS Deadline Cloud refresh {self.resource_name} item thread",
                     args=(self.__refresh_id,),
                 )
                 self.__refresh_thread.start()
@@ -501,7 +501,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
                 self._item_update.emit(refresh_id, *item)
         except BaseException as e:
             if not self.canceled:
-                self.background_exception.emit(f"Refresh {self.resource_name} Item", e)
+                self.background_exception.emit(f"Refresh {self.resource_name} item", e)
 
 
 class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
@@ -540,7 +540,7 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
 
     def __init__(self, *, parent=None):
         super().__init__(
-            resource_name="Storage Profile Name",
+            resource_name="Storage profile name",
             setting_name="settings.storage_profile_id",
             parent=parent,
         )

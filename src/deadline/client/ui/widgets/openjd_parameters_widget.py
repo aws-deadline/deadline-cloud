@@ -486,7 +486,7 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
                     min_value = float(min_value)
                 except ValueError:
                     raise RuntimeError(
-                        f"Job Template parameter {parameter['name']} with FLOAT type has non-numeric 'minValue' of {min_value!r}"
+                        f"Job template parameter {parameter['name']} with FLOAT type has non-numeric 'minValue' of {min_value!r}"
                     )
             self.edit_control.setMinimum(min_value)
 
@@ -497,7 +497,7 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
                     max_value = float(max_value)
                 except ValueError:
                     raise RuntimeError(
-                        f"Job Template parameter {parameter['name']} with FLOAT type has non-numeric 'maxValue' of {max_value!r}"
+                        f"Job template parameter {parameter['name']} with FLOAT type has non-numeric 'maxValue' of {max_value!r}"
                     )
             self.edit_control.setMaximum(max_value)
 
@@ -606,7 +606,7 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
 
     def _build_ui(self, parameter):
         # Get the filters
-        filetype_filter = "Any Files (*)"
+        filetype_filter = "Any files (*)"
         selected_filter = ""
         if "userInterface" in parameter:
             file_filter_list = parameter["userInterface"].get("fileFilters")
@@ -744,7 +744,7 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
         allowed_values_set = set(v.upper() for v in allowed_values)
         if allowed_values_set not in [set(allowed) for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]:
             raise RuntimeError(
-                f"Job Template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
+                f"Job template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
                 + f"one of {ALLOWED_VALUES_FOR_CHECK_BOX} (case and order insensitive)"
             )
 

@@ -24,10 +24,14 @@ parameterDefinitions:
     description: Choose the file format to render as.
     default: PNG
     allowedValues: [TGA, RAWTGA, JPEG, IRIS, IRIZ, PNG, HDR, TIFF, OPEN_EXR, OPEN_EXR_MULTILAYER, CINEON, DPX, DDS, JP2, WEBP]
+  - name: CondaPackages
+    type: STRING
+    default: "blender"
+    description: List the conda packages to use, separated by spaces. Needs a queue environment to consume it.
   - name: RezPackages
     type: STRING
     default: "blender"
-    description: List the rez packages to use, separated by spaces. Needs a Queue Environment to consume it.
+    description: List the rez packages to use, separated by spaces. Needs a queue environment to consume it.
 steps:
 - name: RenderBlender
   parameterSpace:

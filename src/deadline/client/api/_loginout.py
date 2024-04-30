@@ -70,7 +70,7 @@ def _login_deadline_cloud_monitor(
         # Deadline Cloud monitor is a GUI app that will keep on running
         # So we sit here and test that profile for validity until it works
         if check_authentication_status(config) == AwsAuthenticationStatus.AUTHENTICATED:
-            return f"Deadline Cloud monitor Profile: {profile_name}"
+            return f"Deadline Cloud monitor profile: {profile_name}"
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
@@ -81,10 +81,10 @@ def _login_deadline_cloud_monitor(
             # but let's be specific about Deadline Cloud monitor failing incase the error is non-obvious
             # and let's tack on stdout incase it helps
             err_prefix = (
-                f"Deadline Cloud monitor was not able to log into the {profile_name} profile: "
+                f"Deadline Cloud monitor was not able to log into the {profile_name} profile:"
             )
             out = p.stdout.read().decode("utf-8") if p.stdout else ""
-            raise DeadlineOperationError(f"{err_prefix}:\n{out}")
+            raise DeadlineOperationError(f"{err_prefix}\n{out}")
 
         time.sleep(0.5)
 

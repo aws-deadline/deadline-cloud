@@ -7,7 +7,7 @@ Example code:
     if DeadlineLoginDialog.login(parent=self):
         print("Logged in successfully.")
     else:
-        print("Failed to login.")
+        print("Failed to log in.")
 """
 
 __all__ = ["DeadlineLoginDialog"]
@@ -37,7 +37,7 @@ class DeadlineLoginDialog(QMessageBox):
         if DeadlineLoginDialog.login(parent=self):
             print("Logged in successfully.")
         else:
-            print("Failed to login.")
+            print("Failed to log in.")
     """
 
     # This signal is sent when the background login thread raises an exception.
@@ -132,7 +132,7 @@ class DeadlineLoginDialog(QMessageBox):
         """
 
         self.__login_thread = threading.Thread(
-            target=self._login_background_thread, name="AWS Deadline Cloud Login Thread"
+            target=self._login_background_thread, name="AWS Deadline Cloud login thread"
         )
         self.__login_thread.start()
 

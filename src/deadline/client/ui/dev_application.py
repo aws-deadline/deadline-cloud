@@ -42,11 +42,11 @@ class DevMainWindow(QMainWindow):
         )
 
     def setup_ui(self):
-        submit = self.menuBar().addMenu("&Submit Job")
-        submit.addAction("Submit Job Bundle...", self.submit_job_bundle)
-        submit.addAction("Submit CLI Job...", self.submit_cli_job)
+        submit = self.menuBar().addMenu("&Submit job")
+        submit.addAction("Submit job bundle...", self.submit_job_bundle)
+        submit.addAction("Submit CLI job...", self.submit_cli_job)
         account = self.menuBar().addMenu("&Account")
-        account.addAction("AWS Deadline Cloud Workstation Configuration...", self.configure)
+        account.addAction("AWS Deadline Cloud workstation configuration...", self.configure)
         account.addAction("Log in to AWS Deadline Cloud...", self.login)
         account.addAction("Log out of AWS Deadline Cloud...", self.logout)
 
@@ -59,7 +59,7 @@ class DevMainWindow(QMainWindow):
             os.path.join(__file__, "../resources/cli_job_bundle")
         )
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Job Bundle Directory", input_job_bundle_dir
+            self, "Choose job bundle directory", input_job_bundle_dir
         )
         if input_job_bundle_dir:
             show_job_bundle_submitter(
@@ -95,7 +95,7 @@ def app() -> None:
     app.setStyle(QStyleFactory.create("fusion"))
 
     # Set the application info.
-    app.setApplicationName("AWS Deadline Cloud Client Test GUI")
+    app.setApplicationName("AWS Deadline Cloud client test GUI")
     app.setOrganizationName("AWS")
     app.setOrganizationDomain("https://aws.amazon.com/")
     icon = QIcon(str(Path(__file__).parent / "resources" / "deadline_logo.svg"))

@@ -177,7 +177,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button = QPushButton("Submit")
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
-        self.export_bundle_button = QPushButton("Export Bundle")
+        self.export_bundle_button = QPushButton("Export bundle")
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
@@ -197,7 +197,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         if not enable:
             self.submit_button.setToolTip(
-                "Cannot submit job to deadline cloud. Nonvalid credentials or queue parameters."
+                "Cannot submit job to Deadline Cloud. Nonvalid credentials or queue parameters."
             )
         else:
             self.submit_button.setToolTip("")
@@ -233,7 +233,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def _build_shared_job_settings_tab(self, initial_job_settings, initial_shared_parameter_values):
         self.shared_job_settings_tab = QScrollArea()
-        self.tabs.addTab(self.shared_job_settings_tab, "Shared Job Settings")
+        self.tabs.addTab(self.shared_job_settings_tab, "Shared job settings")
         self.shared_job_settings = SharedJobSettingsWidget(
             initial_settings=initial_job_settings,
             initial_shared_parameter_values=initial_shared_parameter_values,
@@ -246,7 +246,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def _build_job_settings_tab(self, job_setup_widget_type, initial_job_settings):
         self.job_settings_tab = QScrollArea()
-        self.tabs.addTab(self.job_settings_tab, "Job-Specific Settings")
+        self.tabs.addTab(self.job_settings_tab, "Job-specific settings")
         self.job_settings_tab.setWidgetResizable(True)
 
         self.job_settings = job_setup_widget_type(
@@ -260,7 +260,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self, auto_detected_attachments: AssetReferences, attachments: AssetReferences
     ):
         self.job_attachments_tab = QScrollArea()
-        self.tabs.addTab(self.job_attachments_tab, "Job Attachments")
+        self.tabs.addTab(self.job_attachments_tab, "Job attachments")
         self.job_attachments = JobAttachmentsWidget(
             auto_detected_attachments, attachments, parent=self
         )
@@ -270,7 +270,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     def _build_host_requirements_tab(self):
         self.host_requirements = HostRequirementsWidget()
         self.host_requirements_tab = QScrollArea()
-        self.tabs.addTab(self.host_requirements_tab, "Host Requirements")
+        self.tabs.addTab(self.host_requirements_tab, "Host requirements")
         self.host_requirements_tab.setWidget(self.host_requirements)
         self.host_requirements_tab.setWidgetResizable(True)
 
@@ -371,7 +371,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 os.startfile(job_history_bundle_dir)
             QMessageBox.information(
                 self,
-                f"{settings.submitter_name} Job Submission",
+                f"{settings.submitter_name} job submission",
                 f"Saved the submission as a job bundle:\n{job_history_bundle_dir}",
             )
             # Close the submitter window to signal the submission is done
@@ -379,7 +379,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         except Exception as exc:
             logger.exception("Error saving bundle")
             message = str(exc)
-            QMessageBox.warning(self, f"{settings.submitter_name} Job Submission", message)
+            QMessageBox.warning(self, f"{settings.submitter_name} job submission", message)
 
     def on_submit(self):
         """
@@ -479,7 +479,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
-            QMessageBox.information(self, f"{settings.submitter_name} Job Submission", str(uic))
+            QMessageBox.information(self, f"{settings.submitter_name} job submission", str(uic))
             job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
@@ -488,7 +488,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
                 from_gui=True,
             )
-            QMessageBox.warning(self, f"{settings.submitter_name} Job Submission", str(exc))
+            QMessageBox.warning(self, f"{settings.submitter_name} job submission", str(exc))
             job_progress_dialog.close()
 
         if self.create_job_response:

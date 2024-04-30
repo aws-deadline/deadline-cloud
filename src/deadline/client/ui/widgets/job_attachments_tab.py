@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-UI widgets for the Job Attachments tab.
+UI widgets for the job attachments tab.
 """
 from __future__ import annotations
 import os
@@ -61,27 +61,27 @@ class JobAttachmentsWidget(QWidget):
         # Create a group box for general settings
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         size_policy.setVerticalStretch(10)
-        self.general_group = QGroupBox("General Submission Settings", self)
+        self.general_group = QGroupBox("General submission settings", self)
         tab_layout.addWidget(self.general_group)
         self.general_group.setSizePolicy(size_policy)
         general_layout = QVBoxLayout(self.general_group)
 
         # Create a group box for each type of attachment
-        self.input_files_group = QGroupBox("Attach Input Files", self)
+        self.input_files_group = QGroupBox("Attach input files", self)
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         size_policy.setVerticalStretch(80)
         tab_layout.addWidget(self.input_files_group)
         self.input_files_group.setSizePolicy(size_policy)
         input_files_layout = QVBoxLayout(self.input_files_group)
 
-        self.input_directories_group = QGroupBox("Attach Input Directories", self)
+        self.input_directories_group = QGroupBox("Attach input directories", self)
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         size_policy.setVerticalStretch(10)
         self.input_directories_group.setSizePolicy(size_policy)
         tab_layout.addWidget(self.input_directories_group)
         input_directories_layout = QVBoxLayout(self.input_directories_group)
 
-        self.output_directories_group = QGroupBox("Specify Output Directories", self)
+        self.output_directories_group = QGroupBox("Specify output directories", self)
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         size_policy.setVerticalStretch(10)
         self.output_directories_group.setSizePolicy(size_policy)
@@ -108,7 +108,7 @@ class JobAttachmentsWidget(QWidget):
         input_files_layout.addWidget(self.input_files_controls)
         input_files_layout.addWidget(self.input_files)
 
-        # The "Attach Input Directories" attachments
+        # The "Attach input directories" attachments
         self.input_directories_controls = JobAttachmentsControlsWidget(self)
         self.input_directories_controls.show_auto_detected.stateChanged.connect(
             self.show_auto_detected_change
@@ -126,7 +126,7 @@ class JobAttachmentsWidget(QWidget):
         input_directories_layout.addWidget(self.input_directories_controls)
         input_directories_layout.addWidget(self.input_directories)
 
-        # The "Specify Output Directories" attachments
+        # The "Specify output directories" attachments
         self.output_directories_controls = JobAttachmentsControlsWidget(self)
         self.output_directories_controls.show_auto_detected.stateChanged.connect(
             self.show_auto_detected_change
@@ -232,7 +232,7 @@ class JobAttachmentsWidget(QWidget):
 
     def _add_input_files(self) -> None:
         new_files, _ = QFileDialog.getOpenFileNames(
-            self, "Select Input Files To Attach To Your Job"
+            self, "Select input files to attach to your job"
         )
 
         if new_files:
@@ -260,7 +260,7 @@ class JobAttachmentsWidget(QWidget):
             )
 
     def _add_input_directory(self) -> None:
-        new_dir = QFileDialog.getExistingDirectory(self, "Select a Directory To Attach To Your Job")
+        new_dir = QFileDialog.getExistingDirectory(self, "Select a directory to attach to your job")
 
         if new_dir:
             # Normalize the path
@@ -287,7 +287,7 @@ class JobAttachmentsWidget(QWidget):
             )
 
     def _add_output_directory(self) -> None:
-        new_dir = QFileDialog.getExistingDirectory(self, "Select an Output Directory of Your Job")
+        new_dir = QFileDialog.getExistingDirectory(self, "Select an output directory of your job")
 
         if new_dir:
             # Normalize the path
@@ -357,13 +357,13 @@ class JobAttachmentsControlsWidget(QWidget):
         self.add = QPushButton("Add...", parent=self)
         layout.addWidget(self.add)
 
-        self.remove_selected = QPushButton("Remove Selected", parent=self)
+        self.remove_selected = QPushButton("Remove selected", parent=self)
         layout.addWidget(self.remove_selected)
 
         self.status_message = QLabel("0 total")
         self.status_message.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         layout.addWidget(self.status_message)
 
-        self.show_auto_detected = QCheckBox("Show Auto-Detected", parent=self)
+        self.show_auto_detected = QCheckBox("Show auto-detected", parent=self)
         self.show_auto_detected.setChecked(True)
         layout.addWidget(self.show_auto_detected)
