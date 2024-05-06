@@ -1,3 +1,12 @@
+## 0.48.1 (2024-05-06)
+
+
+
+### Bug Fixes
+* remove deprecated .aws/sso/cache watcher (#322) ([`72d6c26`](https://github.com/aws-deadline/deadline-cloud/commit/72d6c26b768c09c1caa4301bebc4db61bdbb7861))
+* fix Deadline Cloud Monitor to be lower cased monitor ([`a3f924e`](https://github.com/aws-deadline/deadline-cloud/commit/a3f924e1514c0a51e68b498e8a48900a7b1e1c9b))
+* Fix typos in error messages ([`1ab3ccc`](https://github.com/aws-deadline/deadline-cloud/commit/1ab3ccc32c6fd53bc558d0fea54dd241735a6e88))
+
 ## 0.48.0 (2024-04-25)
 
 ### BREAKING CHANGES
