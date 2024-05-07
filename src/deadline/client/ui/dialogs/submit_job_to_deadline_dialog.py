@@ -126,6 +126,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         auto_detected_attachments: Optional[AssetReferences] = None,
         attachments: Optional[AssetReferences] = None,
     ):
+        if self.on_ui_callback and job_settings is not None:
+            self._call_ui_hook(job_settings)
         # Refresh the UI components
         self.refresh_deadline_settings()
         if (auto_detected_attachments is not None) or (attachments is not None):
