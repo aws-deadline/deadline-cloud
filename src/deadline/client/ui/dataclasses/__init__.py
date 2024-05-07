@@ -21,7 +21,7 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
     submitter_name: str = field(default="JobBundle")
 
     # Shared settings
-    name: str = field(default="Job Bundle")
+    name: str = field(default="Job bundle")
     description: str = field(default="")
 
     # Job Bundle settings
@@ -42,7 +42,7 @@ class CliJobSettings:  # pylint: disable=too-many-instance-attributes
     submitter_name: str = field(default="CLI")
 
     # Shared settings
-    name: str = field(default="CLI Job")
+    name: str = field(default="CLI job")
     description: str = field(default="")
 
     # CLI job settings

@@ -37,7 +37,7 @@ class CliJobSettingsWidget(QWidget):
         self._load_initial_settings(initial_settings)
 
     def _set_enabled_with_label(self, prop_name: str, enabled: bool):
-        """Enable/disable a control w/ its label"""
+        """Set the enabled status of a control and its label"""
         getattr(self, prop_name).setEnabled(enabled)
         getattr(self, prop_name + "_label").setEnabled(enabled)
 
@@ -61,27 +61,27 @@ class CliJobSettingsWidget(QWidget):
 
         layout.addWidget(self.bash_script, 0, 0, 1, 2)
 
-        self.use_array_parameter_chck = QCheckBox("Use Array Parameter", self)
+        self.use_array_parameter_chck = QCheckBox("Use array parameter", self)
         self.array_parameter_name = QLineEdit(self)
         layout.addWidget(self.use_array_parameter_chck, 1, 0)
         layout.addWidget(self.array_parameter_name, 1, 1)
         self.use_array_parameter_chck.stateChanged.connect(self.use_array_parameter_changed)
 
-        self.array_parameter_values_label = QLabel("Array Parameter Values")
+        self.array_parameter_values_label = QLabel("Array parameter values")
         layout.addWidget(self.array_parameter_values_label, 2, 0)
         self.array_parameter_values = QLineEdit(self)
         layout.addWidget(self.array_parameter_values, 2, 1)
 
-        self.data_dir_label = QLabel("Data Dir")
+        self.data_dir_label = QLabel("Data directory")
         self.data_dir_edit = DirectoryPickerWidget(
             initial_directory=os.path.expanduser(os.path.join("~", "CLIJobData")),
-            directory_label="Data Dir",
+            directory_label="Data directory",
             parent=self,
         )
         layout.addWidget(self.data_dir_label, 3, 0)
         layout.addWidget(self.data_dir_edit, 3, 1)
 
-        self.file_format_label = QLabel("Template File Format")
+        self.file_format_label = QLabel("Template file format")
         self.file_format_box = QComboBox(parent=self)
         self.file_format_box.addItems(["YAML", "JSON"])
         layout.addWidget(self.file_format_label, 4, 0)
