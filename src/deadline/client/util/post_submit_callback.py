@@ -32,3 +32,4 @@ def load_post_submit_callback(module_path, module_name="post_submit_callback"):
                 signature=CALLBACK_REFERENCE_SIGNATURE,
             )
         )
+    return callback

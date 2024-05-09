@@ -63,3 +63,4 @@ def load_ui_callback(module_path, module_name="ui_callback"):
                 signature=CALLBACK_REFERENCE_SIGNATURE,
             )
         )
+    return callback
