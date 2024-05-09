@@ -23,15 +23,15 @@ from .callback_loader import import_module_function, validate_function_signature
 class UICallbackResponse:
     """Holds the resulting data from a UI Callback."""
 
-    settings: object = dataclasses.field(default_factory=object)
+    settings: object = dataclasses.field(default=None)
     """Settings that the submitter UI will use."""
-    queue_parameters: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    queue_parameters: list[dict[str, Any]] = dataclasses.field(default=None)
     """A list of OpenJD parameter definition dicts with a "value" key filled from the widget."""
-    asset_references: AssetReferences = dataclasses.field(default_factory=AssetReferences)
+    asset_references: AssetReferences = dataclasses.field(default=None)
     """An asset_references object that can be saved as the asset_references.json|yaml file in a Job Bundle."""
-    host_requirements: Optional[dict[str, Any]] = dataclasses.field(default_factory=dict)
+    host_requirements: Optional[dict[str, Any]] = dataclasses.field(default=None)
     """Returns a list of OpenJD parameter definition dicts with values filled from the widget or None."""
-    job_specific_ui: QWidget = dataclasses.field(default_factory=QWidget)
+    job_specific_ui: QWidget = dataclasses.field(default=None)
     """An instantiated QWidget container that will be displayed in the Job-Specific Settings page"""
 
 
