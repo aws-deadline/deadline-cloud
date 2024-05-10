@@ -385,6 +385,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         """
         Perform a submission when the submit button is pressed
         """
+        # Unset any cached response
+        self.create_job_response = None
+
         # Retrieve all the settings into the dataclass
         settings = self.job_settings_type()
         self.shared_job_settings.update_settings(settings)
