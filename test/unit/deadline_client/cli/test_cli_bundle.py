@@ -487,6 +487,51 @@ def test_cli_bundle_empty_job_parameter_from_cli(fresh_deadline_config):
         assert result.exit_code == 0
 
 
+def test_cli_bundle_job_parameter_with_equals_from_cli(fresh_deadline_config):
+    """
+    Verify that a job parameter value with an '=' in it is passed correctly to the CreateJob call
+    """
+    # Use a temporary directory for the job bundle
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
+
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--parameter",
+                "sceneFile=this=is=a=test",
+            ],
+        )
+
+        print(result.output)
+        session_mock().client().create_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID,
+            queueId=MOCK_QUEUE_ID,
+            template=ANY,
+            templateType="JSON",
+            parameters={
+                "sceneFile": {"string": "this=is=a=test"},
+            },
+            priority=50,
+        )
+
+        assert result.exit_code == 0
+
+
 def test_cli_bundle_invalid_job_paramter(fresh_deadline_config):
     """
     Verify that a badly formatted parameter value (without "Key=Value") throws an error
@@ -517,7 +562,44 @@ def test_cli_bundle_invalid_job_paramter(fresh_deadline_config):
             ],
         )
 
-        assert 'Parameters must be provided in the format "Key=Value"' in result.output
+        assert 'Parameters must be provided in the format "ParamName=Value"' in result.output
+        assert result.exit_code == 2
+
+
+def test_cli_bundle_invalid_job_paramter_name(fresh_deadline_config):
+    """
+    Verify that a non-identifier parameter name raises an error.
+    """
+    # Use a temporary directory for the job bundle
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
+
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                tmpdir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--parameter",
+                "Param*Name=Value",
+            ],
+        )
+
+        assert (
+            "Parameter names must be alphanumeric Open Job Description identifiers."
+            in result.output
+        )
         assert result.exit_code == 2
 
 
