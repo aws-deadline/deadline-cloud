@@ -41,18 +41,27 @@ def cli_bundle():
     """
 
 
+# Latin alphanumeric, starting with a letter
+_openjd_identifier_regex = r"(?-m:^[A-Za-z_][A-Za-z0-9_]*\Z)"
+
+
 def validate_parameters(ctx, param, value):
     """
-    Validate provided --parameter values, ensuring that they are in the format "Key=Value", and convert them to a dict with the
+    Validate provided --parameter values, ensuring that they are in the format "ParamName=Value", and convert them to a dict with the
     following format:
         [{"name": "<name>", "value": "<value>"}, ...]
     """
     parameters_split = []
     for parameter in value:
-        regex_match = re.match("(.+)=(.*)", parameter)
+        regex_match = re.match("([^=]+)=(.*)", parameter)
         if not regex_match:
             raise click.BadParameter(
-                f'Parameters must be provided in the format "Key=Value". Invalid Parameter: {parameter}'
+                f'Parameters must be provided in the format "ParamName=Value". Invalid parameter: {parameter}'
+            )
+
+        if not re.match(_openjd_identifier_regex, regex_match[1]):
+            raise click.BadParameter(
+                f"Parameter names must be alphanumeric Open Job Description identifiers. Invalid parameter name: {regex_match[1]}"
             )
 
         parameters_split.append({"name": regex_match[1], "value": regex_match[2]})
