@@ -527,7 +527,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             # Execute any PostSubmission function defined.
             if self.on_post_submit_callback:
                 self._call_post_submit_hook(
-                    job_id=self.create_job_response["jobId"],
+                    job_id=self.create_job_response.get("jobId"),
                 )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
