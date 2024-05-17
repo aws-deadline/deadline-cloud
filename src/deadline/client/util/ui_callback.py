@@ -25,8 +25,6 @@ class UICallbackResponse:
 
     settings: object = dataclasses.field(default=None)
     """Settings that the submitter UI will use."""
-    queue_parameters: list[dict[str, Any]] = dataclasses.field(default=None)
-    """A list of OpenJD parameter definition dicts with a "value" key filled from the widget."""
     asset_references: AssetReferences = dataclasses.field(default=None)
     """An asset_references object that can be saved as the asset_references.json|yaml file in a Job Bundle."""
     host_requirements: Optional[dict[str, Any]] = dataclasses.field(default=None)
@@ -38,7 +36,6 @@ class UICallbackResponse:
 def _reference_ui_callback_type(
     dialog: SubmitJobToDeadlineDialog,
     settings: object,
-    queue_parameters: list[dict[str, Any]],
     asset_references: AssetReferences,
     host_requirements: Optional[dict[str, Any]] = None,
 ) -> UICallbackResponse:
