@@ -1,3 +1,14 @@
+## 0.48.2 (2024-05-22)
+
+
+### Features
+* use AWS CRT for faster transfers (#319) ([`52da0ea`](https://github.com/aws-deadline/deadline-cloud/commit/52da0ea8816df2f39ec24fd35646b27f978a0891))
+
+### Bug Fixes
+* bundle submit parameter processing splits name/value at right-most = (#331) ([`09bead0`](https://github.com/aws-deadline/deadline-cloud/commit/09bead08be81f016e84408aead589fd31d2a6f01))
+* Prevent submission dialog sometimes closing on exceptions (#329) ([`3e369f9`](https://github.com/aws-deadline/deadline-cloud/commit/3e369f9a9f288f159f84eda1afc31a01f3305779))
+* Install boto3 CRT extra feature always (#328) ([`dffc71e`](https://github.com/aws-deadline/deadline-cloud/commit/dffc71e0c113437cfe3da5c934360db3573ad77c))
+
 ## 0.48.1 (2024-05-06)
 
 
