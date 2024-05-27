@@ -1,3 +1,10 @@
+## 0.48.3 (2024-05-27)
+
+
+
+### Bug Fixes
+* reverts using AWS CRT for faster transfers (#333) ([`2798190`](https://github.com/aws-deadline/deadline-cloud/commit/2798190c594610131855ea7d1bbb1c2adf7d8fb0))
+
 ## 0.48.2 (2024-05-22)
 
 
