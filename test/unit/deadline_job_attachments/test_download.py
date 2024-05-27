@@ -566,10 +566,6 @@ def assert_get_job_input_output_paths_by_asset_root(
 
 @pytest.mark.docker
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
-@patch(
-    f"{deadline.__package__}.job_attachments._aws.aws_clients.create_crt_transfer_manager",
-    MagicMock(return_value=None),
-)
 class TestFullDownload:
     """
     Tests for downloads from cas.
@@ -1969,10 +1965,6 @@ class TestFullDownload:
 
 
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
-@patch(
-    f"{deadline.__package__}.job_attachments._aws.aws_clients.create_crt_transfer_manager",
-    MagicMock(return_value=None),
-)
 class TestFullDownloadPrefixesWithSlashes:
     """
     Tests for downloads from cas when the queue prefixes are created.
