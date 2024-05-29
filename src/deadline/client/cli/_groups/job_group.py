@@ -365,9 +365,7 @@ def _download_job_output(
             )
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
-                job_output_downloader.set_root_path(
-                    asset_roots[index], str(Path(confirmed_root))
-                )
+                job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
             output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
     # If the conflict resolution option was not specified, auto-accept is false, and
@@ -951,4 +949,3 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     if trace_file:
         with open(trace_file, "w", encoding="utf8") as f:
             json.dump(tracing_data, f, indent=1)
-
