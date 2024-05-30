@@ -330,8 +330,7 @@ def _download_job_output(
                     _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
                 )
                 asset_roots = list(output_paths_by_root.keys())
-                asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
-                click.echo(_get_roots_list_message(asset_roots_resolved, is_json_format))
+                click.echo(_get_roots_list_message(asset_roots, is_json_format))
                 user_choice = click.prompt(
                     "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
                     type=click.Choice(
@@ -348,10 +347,10 @@ def _download_job_output(
                     new_root = click.prompt(
                         "> Please enter the new root directory path, or press Enter to keep it unchanged",
                         type=click.Path(exists=False),
-                        default=asset_roots_resolved[index_to_change],
+                        default=asset_roots[index_to_change],
                     )
                     job_output_downloader.set_root_path(
-                        asset_roots[index_to_change], str(Path(new_root).resolve())
+                        asset_roots[index_to_change], str(Path(new_root))
                     )
                     output_paths_by_root = job_output_downloader.get_output_paths_by_root()
         else:
@@ -359,17 +358,14 @@ def _download_job_output(
                 _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
             )
             asset_roots = list(output_paths_by_root.keys())
-            asset_roots_resolved = [f"{str(Path(root).resolve())}" for root in asset_roots]
-            click.echo(_get_roots_list_message(asset_roots_resolved, is_json_format))
+            click.echo(_get_roots_list_message(asset_roots, is_json_format))
             json_string = click.prompt("", prompt_suffix="", type=str)
             confirmed_asset_roots = _get_value_from_json_line(
                 json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
             )
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
-                job_output_downloader.set_root_path(
-                    asset_roots[index], str(Path(confirmed_root).resolve())
-                )
+                job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
             output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
     # If the conflict resolution option was not specified, auto-accept is false, and
@@ -645,7 +641,7 @@ def job_download_output(step_id, task_id, output, **args):
     except Exception as e:
         if is_json_format:
             error_one_liner = str(e).replace("\n", ". ")
-            click.echo(_get_json_line("error", error_one_liner))
+            click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
             sys.exit(1)
         else:
             raise DeadlineOperationError(f"Failed to download output:\n{e}") from e
