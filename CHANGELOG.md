@@ -1,3 +1,10 @@
+## 0.48.4 (2024-06-03)
+
+
+
+### Bug Fixes
+* **cli**: correct download-output command displaying resolved UNC path (#337) ([`6bcd9a2`](https://github.com/aws-deadline/deadline-cloud/commit/6bcd9a2285999d4b2fe0ba72d28f04fa0c6e6db4))
+
 ## 0.48.3 (2024-05-27)
 
 
