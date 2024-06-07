@@ -125,7 +125,7 @@ def save_yaml_or_json_to_file(
     filename: str,
     file_type: str,
     data: Any,
-) -> Optional[Dict[str, Any]]:
+) -> None:
     with open(
         os.path.join(bundle_dir, f"{filename}.{file_type.lower()}"), "w", encoding="utf8"
     ) as f:
