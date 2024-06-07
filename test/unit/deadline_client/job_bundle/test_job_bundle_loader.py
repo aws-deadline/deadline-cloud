@@ -9,14 +9,17 @@ relative default paths into absolute paths rooted in the job bundle.
 import json
 import os
 import sys
+import tempfile
 
 import pytest
 import yaml
+from pathlib import Path
 
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle.loader import (
     parse_yaml_or_json_content,
     validate_directory_symlink_containment,
+    save_yaml_or_json_to_file,
 )
 from deadline.client.job_bundle.parameters import read_job_bundle_parameters
 from ...conftest import is_windows_non_admin
@@ -237,3 +240,23 @@ def test_validate_directory_symlink_containment_fail(tmpdir):
     os.symlink(target_file, test_root.join("symlink_file.txt"))
     with pytest.raises(DeadlineOperationError):
         validate_directory_symlink_containment(str(test_root))
+
+
+def test_save_yaml_or_json_to_file():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_yaml_or_json_to_file(
+            bundle_dir=temp_dir, filename="test", data={"test": "test"}, file_type="YAML"
+        )
+        assert Path(os.path.join(temp_dir, "test.yaml")).read_text() == "test: test\n"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_yaml_or_json_to_file(
+            bundle_dir=temp_dir, filename="test", data={"test": "test"}, file_type="JSON"
+        )
+        assert Path(os.path.join(temp_dir, "test.json")).read_text() == '{\n  "test": "test"\n}'
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with pytest.raises(RuntimeError):
+            save_yaml_or_json_to_file(
+                bundle_dir=temp_dir, filename="test", data={"test": "test"}, file_type="NOT_VALID"
+            )

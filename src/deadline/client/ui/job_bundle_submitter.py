@@ -1,7 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 import copy
-import json
 import os
 from logging import getLogger
 from typing import Any, Optional, Dict
@@ -14,11 +13,11 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ..exceptions import DeadlineOperationError
-from ..job_bundle import deadline_yaml_dump
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
     read_yaml_or_json_object,
+    save_yaml_or_json_to_file,
     validate_directory_symlink_containment,
 )
 from ..job_bundle.parameters import (
@@ -99,20 +98,6 @@ def show_job_bundle_submitter(
             for step in template["steps"]:
                 step["hostRequirements"] = copy.deepcopy(host_requirements)
 
-        with open(
-            os.path.join(job_bundle_dir, f"template.{file_type.lower()}"), "w", encoding="utf8"
-        ) as f:
-            if file_type == "YAML":
-                deadline_yaml_dump(template, f)
-            elif file_type == "JSON":
-                json.dump(template, f, indent=1)
-
-        if asset_references:
-            with open(
-                os.path.join(job_bundle_dir, "asset_references.yaml"), "w", encoding="utf8"
-            ) as f:
-                deadline_yaml_dump(asset_references.to_dict(), f)
-
         # First filter the queue parameters to exclude any from the job template,
         # then extend it with the job template parameters.
         job_parameter_names = {param["name"] for param in settings.parameters}
@@ -137,8 +122,21 @@ def show_job_bundle_submitter(
             AssetReferences(),
         )
 
-        with open(os.path.join(job_bundle_dir, "parameter_values.yaml"), "w", encoding="utf8") as f:
-            deadline_yaml_dump({"parameterValues": parameters_values}, f)
+        save_yaml_or_json_to_file(
+            bundle_dir=job_bundle_dir, filename="template", file_type=file_type, data=template
+        )
+        save_yaml_or_json_to_file(
+            bundle_dir=job_bundle_dir,
+            filename="asset_references",
+            file_type=file_type,
+            data=asset_references.to_dict(),
+        )
+        save_yaml_or_json_to_file(
+            bundle_dir=job_bundle_dir,
+            filename="parameter_values",
+            file_type=file_type,
+            data={"parameterValues": parameters_values},
+        )
 
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(input_job_bundle_dir)

@@ -7,6 +7,7 @@ __all__ = [
     "read_yaml_or_json_object",
     "parse_yaml_or_json_content",
     "validate_directory_symlink_containment",
+    "save_yaml_or_json_to_file",
 ]
 
 import json
@@ -17,6 +18,7 @@ from typing import Any, Dict, Optional, Tuple
 import yaml
 
 from ..exceptions import DeadlineOperationError
+from ..job_bundle import deadline_yaml_dump
 
 
 def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
@@ -116,3 +118,20 @@ def read_yaml_or_json_object(
         return parse_yaml_or_json_content(file_contents, file_type, bundle_dir, filename)
     else:
         return None
+
+
+def save_yaml_or_json_to_file(
+    bundle_dir: str,
+    filename: str,
+    file_type: str,
+    data: Any,
+) -> Optional[Dict[str, Any]]:
+    with open(
+        os.path.join(bundle_dir, f"{filename}.{file_type.lower()}"), "w", encoding="utf8"
+    ) as f:
+        if file_type == "YAML":
+            deadline_yaml_dump(data, f)
+        elif file_type == "JSON":
+            json.dump(data, f, indent=2)
+        else:
+            raise RuntimeError(f"Unexpected file type '{file_type}' in job bundle:\n{bundle_dir}")
