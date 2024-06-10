@@ -17,9 +17,9 @@ from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
     read_yaml_or_json_object,
-    save_yaml_or_json_to_file,
     validate_directory_symlink_containment,
 )
+from ..job_bundle._utils import save_yaml_or_json_to_file
 from ..job_bundle.parameters import (
     JobParameter,
     apply_job_parameters,
