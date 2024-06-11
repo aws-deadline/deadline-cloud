@@ -65,7 +65,7 @@ At minimum a job bundle is a folder that contains an [OpenJD][openjd] template a
 2. a `parameter_values.yaml` - contains the selected values for the job template's parameters,
 3. and any number of additional files required for the job.
 
-For example job bundles, visit the [samples repository][deadline-cloud-samples].
+For example on job bundles, visit the [samples repository][deadline-cloud-samples].
 
 To submit a job bundle, you can run
 ```sh
