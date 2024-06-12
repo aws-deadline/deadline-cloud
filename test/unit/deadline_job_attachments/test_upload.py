@@ -29,7 +29,7 @@ from deadline.job_attachments.asset_manifests import (
     HashAlgorithm,
     ManifestVersion,
 )
-from deadline.job_attachments.caches import HashCacheEntry, S3CheckCacheEntry
+from deadline.job_attachments.caches import HashCacheEntry, S3CheckCache, S3CheckCacheEntry
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
     JobAttachmentsS3ClientError,
@@ -2493,6 +2493,26 @@ class TestUpload:
             size_threshold=size_threshold,
         )
         assert actual_queues == expected_queues
+
+    def test_reset_s3_check_cache(self, tmpdir):
+        # Create a test cache file in mock_dir
+        cache_dir: str = "mock_dir"
+        tmpdir.mkdir(cache_dir)
+        entry: S3CheckCacheEntry = S3CheckCacheEntry(
+            s3_key="bucket/Data/somehash",
+            last_seen_time=str(datetime.now().timestamp()),
+        )
+        with S3CheckCache(cache_dir) as s3c:
+            s3c.put_entry(entry)
+
+        # Execute reset_s3_check_cache where the cached hash does not exist in S3
+        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader._check_hash_exist_in_s3 = MagicMock(return_value=False)
+        s3_asset_uploader.reset_s3_check_cache(cache_dir)
+
+        # Verify that the cache file is deleted
+        s3_asset_uploader._check_hash_exist_in_s3.assert_called_once()
+        assert not os.path.exists(os.path.join(cache_dir, "s3_check_cache.db"))
 
     @mock_sts
     @pytest.mark.parametrize(

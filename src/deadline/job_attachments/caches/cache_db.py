@@ -94,3 +94,13 @@ class CacheDB(ABC):
         if default_path:
             default_path = os.path.join(default_path, CONFIG_ROOT, COMPONENT_NAME)
         return default_path
+
+    def remove_cache(self) -> None:
+        if self.enabled:
+            self.db_connection.close()
+
+        logger.debug(f"The cache {self.cache_dir} will be removed")
+        try:
+            os.remove(self.cache_dir)
+        except Exception as e:
+            logger.info(f"Error occurred while removing the cache file {self.cache_dir}: {e}")

@@ -5,9 +5,10 @@ Module for accessing the local 'last seen on S3' cache.
 """
 
 import logging
+import random
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .cache_db import CacheDB
 
@@ -92,3 +93,25 @@ class S3CheckCache(CacheDB):
                     f"INSERT OR REPLACE INTO {self.table_name} VALUES(:s3_key, :last_seen_time)",
                     entry.to_dict(),
                 )
+
+    def get_sampled_hash_from_cache(self, limit: int = 30) -> Optional[List[S3CheckCacheEntry]]:
+        """Checks if hashes exist in s3 bucket and match the LastModified time of cached files."""
+        logger.debug(f"Get sampled hash from cache with limit {limit}")
+
+        if not self.enabled:
+            return None
+
+        with self.db_lock, self.db_connection:
+            # Retrieve all entries from cache
+            logger.debug("Retrieve all entries from cache")
+            cache_entries: List[S3CheckCacheEntry] = self.db_connection.execute(
+                f"SELECT * FROM {self.table_name}"
+            ).fetchall()
+
+            # Determine the number of entries to sample
+            sampled_count: int = min(len(cache_entries), limit)
+            logger.debug(f"Retrieved all entries from cache: {cache_entries}")
+
+            # Shuffle entries to randomize the checking order
+            random.shuffle(cache_entries)
+            return cache_entries[:sampled_count]

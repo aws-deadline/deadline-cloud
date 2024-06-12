@@ -16,7 +16,7 @@ from datetime import datetime
 from io import BufferedReader, BytesIO
 from math import trunc
 from pathlib import Path, PurePath
-from typing import Any, Callable, Generator, Optional, Tuple, Type, Union
+from typing import Any, Callable, Generator, List, Optional, Tuple, Type, Union
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
@@ -163,6 +163,8 @@ class S3AssetUploader:
             A tuple of (the partial key for the manifest on S3, the hash of input manifest).
         """
 
+        logger.debug("S3AssetUploader.upload_assets")
+
         # Upload asset manifest
         hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
@@ -190,6 +192,9 @@ class S3AssetUploader:
             bucket=job_attachment_settings.s3BucketName,
             key=full_manifest_key,
         )
+
+        # Reset if there is mismatch between cache and actual in S3
+        self.reset_s3_check_cache(s3_check_cache_dir)
 
         # Upload assets
         self.upload_input_files(
@@ -298,6 +303,49 @@ class S3AssetUploader:
                 raise AssetSyncCancelledError(
                     "File upload cancelled.", progress_tracker.get_summary_statistics()
                 )
+
+    def reset_s3_check_cache(self, s3_check_cache_dir: str) -> None:
+        """
+        Resets the S3 check cache if there are any mismatches between the cache entries and the actual hashes in S3
+        """
+        logger.debug("Reset s3 check cache if mismatch found")
+        with S3CheckCache(s3_check_cache_dir) as s3_check_cache:
+            # Get the sampled hash from the cache
+            cached_hash_entries: Optional[List[S3CheckCacheEntry]] = s3_check_cache.get_sampled_hash_from_cache()
+            logger.debug(f"cached_hash_entries in {s3_check_cache_dir}: {cached_hash_entries}")
+
+            # remove the cache file if cache entries do not match hashes uploaded to S3
+            if cached_hash_entries and self._check_hash_exist_in_s3(cached_hash_entries) is False:
+                logger.debug(f"The s3_check_cache.db file in {s3_check_cache_dir} will be deleted, "
+                             f"as a mismatch between the cache and the actual hash in S3 was found")
+
+                # Remove the cache file
+                s3_check_cache.remove_cache()
+
+    def _check_hash_exist_in_s3(self, cache_entries: List[S3CheckCacheEntry]) -> bool:
+        """
+        checks if the hashes in the cache entries exist in S3
+        """
+        count: int = 0
+        for cache_entry in cache_entries:
+            try:
+                # Split the S3 key into bucket and key parts
+                bucket, key = cache_entry[0].split("/", 1)
+
+                # Check if the object is already uploaded and exist in S3 bucket
+                if self.file_already_uploaded(bucket=bucket, key=key):
+                    logger.debug(f"cache_entry: {cache_entry} exist in S3")
+                    count += 1
+                # If a mismatch found, return False to reset the cache immediately. There's no need to check the rest.
+                else:
+                    return False
+            except Exception as e:
+                # If error occurs, log warning and return False to indicate cache reset required
+                logger.warning(f"Error occurred while checking {cache_entry}. Exception: {e}")
+                return False
+
+        # If all sampled objects match, return True, otherwise False
+        return count == len(cache_entries)
 
     def _separate_files_by_size(
         self,
@@ -606,6 +654,7 @@ class S3AssetUploader:
             )
             return True
         except ClientError as exc:
+            logger.debug(f"file_already_uploaded - ClientError: {exc}")
             error_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
             if error_code == 403:
                 message = (
@@ -1182,6 +1231,8 @@ class S3AssetManager:
             a tuple with (1) the summary statistics of the upload operation, and
             (2) the S3 path to the asset manifest file.
         """
+        logger.debug("S3AssetManager.upload_assets")
+
         # Sets up progress tracker to report upload progress back to the caller.
         (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
         progress_tracker = ProgressTracker(
