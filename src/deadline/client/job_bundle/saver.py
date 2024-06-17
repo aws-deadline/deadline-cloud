@@ -3,7 +3,7 @@
 import json
 import os
 from typing import Any
-from ._utils import deadline_yaml_dump
+from ._yaml import deadline_yaml_dump
 
 
 def save_yaml_or_json_to_file(

@@ -13,7 +13,7 @@ import glob
 import os
 
 from ..config import get_setting
-from ._utils import deadline_yaml_dump
+from ._yaml import deadline_yaml_dump
 from .parameters import apply_job_parameters, read_job_bundle_parameters
 
 
