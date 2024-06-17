@@ -285,7 +285,7 @@ def create_job_from_job_bundle(
                 hashing_progress_callback=hashing_progress_callback,
             )
 
-            attachment_settings = _upload_attachments(
+            attachment_settings = upload_attachments(
                 asset_manager, asset_manifests, print_function_callback, upload_progress_callback
             )
             attachment_settings["fileSystem"] = JobAttachmentsFileSystem(
@@ -432,7 +432,7 @@ def hash_attachments(
     return hashing_summary, manifests
 
 
-def _upload_attachments(
+def upload_attachments(
     asset_manager: S3AssetManager,
     manifests: List[AssetRootManifest],
     print_function_callback: Callable = lambda msg: None,
