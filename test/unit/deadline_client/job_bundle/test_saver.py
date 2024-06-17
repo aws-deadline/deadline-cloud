@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import pytest
-from deadline.client.job_bundle._utils import save_yaml_or_json_to_file
+from deadline.client.job_bundle.saver import save_yaml_or_json_to_file
 
 
 def test_save_yaml_or_json_to_file():
