@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import click
 from contextlib import ExitStack
@@ -296,21 +296,29 @@ def bundle_gui_submit(job_bundle_dir, browse, output, **args):
             submitted=True if response else False,
             job_bundle_dir=job_bundle_dir,
             job_id=response["jobId"] if response else None,
+            parameter_values=submitter.parameter_values,
+            asset_references=submitter.job_attachments.get_asset_references().to_dict(),
         )
 
 
-def _print_response(output: str, submitted: bool, job_bundle_dir: str, job_id: Optional[str]):
+def _print_response(
+    output: str,
+    submitted: bool,
+    job_bundle_dir: str,
+    job_id: Optional[str],
+    parameter_values: Optional[list[Dict[str, Any]]],
+    asset_references: Dict[str, Any],
+):
     if output == "json":
         if submitted:
-            click.echo(
-                json.dumps(
-                    {
-                        "status": "SUBMITTED",
-                        "jobId": job_id,
-                        "jobBundleDirectory": job_bundle_dir,
-                    }
-                )
-            )
+            response = {
+                "status": "SUBMITTED",
+                "jobId": job_id,
+                "jobBundleDirectory": job_bundle_dir,
+                "parameterValues": parameter_values,
+                "assetReferences": asset_references,
+            }
+            click.echo(json.dumps(response))
         else:
             click.echo(json.dumps({"status": "CANCELED"}))
     else:

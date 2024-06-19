@@ -759,20 +759,44 @@ def test_cli_bundle_gui_submit_format_output():
     Verify that the GUI submitter returns responses correctly.
     """
     with mock.patch("deadline.client.cli._groups.bundle_group.click") as mock_click:
-        _print_response(output="json", submitted=False, job_bundle_dir="./test", job_id="job-1234")
+        _print_response(
+            output="json",
+            submitted=False,
+            job_bundle_dir="./test",
+            job_id="job-1234",
+            parameter_values=[],
+            asset_references={},
+        )
         mock_click.echo.assert_called_with('{"status": "CANCELED"}')
 
-        _print_response(output="json", submitted=True, job_bundle_dir="./test", job_id="job-1234")
+        _print_response(
+            output="json",
+            submitted=True,
+            job_bundle_dir="./test",
+            job_id="job-1234",
+            parameter_values=[{"name": "Frames", "value": "1-4"}],
+            asset_references={"inputs": {"filenames:": ["test.file"]}},
+        )
         mock_click.echo.assert_called_with(
-            '{"status": "SUBMITTED", "jobId": "job-1234", "jobBundleDirectory": "./test"}'
+            '{"status": "SUBMITTED", "jobId": "job-1234", "jobBundleDirectory": "./test", "parameterValues": [{"name": "Frames", "value": "1-4"}], "assetReferences": {"inputs": {"filenames:": ["test.file"]}}}'
         )
 
         _print_response(
-            output="verbose", submitted=False, job_bundle_dir="./test", job_id="job-1234"
+            output="verbose",
+            submitted=False,
+            job_bundle_dir="./test",
+            job_id="job-1234",
+            parameter_values=[],
+            asset_references={},
         )
         mock_click.echo.assert_called_with("Job submission canceled.")
 
         _print_response(
-            output="verbose", submitted=True, job_bundle_dir="./test", job_id="job-1234"
+            output="verbose",
+            submitted=True,
+            job_bundle_dir="./test",
+            job_id="job-1234",
+            parameter_values=[],
+            asset_references={},
         )
         mock_click.echo.assert_any_call("Submitted job bundle:")
