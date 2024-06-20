@@ -15,3 +15,4 @@ jobs:
       repository: ${{ github.event.repository.name }}
       branch: mainline
       environment: mainline
+      os: linux
