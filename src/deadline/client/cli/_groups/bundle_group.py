@@ -325,7 +325,7 @@ def _print_response(
 ):
     if output == "json":
         if submitted:
-            response = {
+            response: dict[str, Any] = {
                 "status": "SUBMITTED",
                 "jobId": job_id,
             }
