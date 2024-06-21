@@ -328,11 +328,11 @@ def _print_response(
             response: dict[str, Any] = {
                 "status": "SUBMITTED",
                 "jobId": job_id,
+                "jobBundleDirectory": job_bundle_dir,
             }
             if extra_info:
                 response.update(
                     {
-                        "jobBundleDirectory": job_bundle_dir,
                         "parameterValues": parameter_values,
                         "assetReferences": asset_references,
                     }
