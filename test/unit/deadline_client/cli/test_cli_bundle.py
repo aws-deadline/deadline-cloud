@@ -761,6 +761,7 @@ def test_cli_bundle_gui_submit_format_output():
     with mock.patch("deadline.client.cli._groups.bundle_group.click") as mock_click:
         _print_response(
             output="json",
+            extra_info=True,
             submitted=False,
             job_bundle_dir="./test",
             job_id="job-1234",
@@ -771,6 +772,20 @@ def test_cli_bundle_gui_submit_format_output():
 
         _print_response(
             output="json",
+            extra_info=False,
+            submitted=True,
+            job_bundle_dir="./test",
+            job_id="job-1234",
+            parameter_values=[{"name": "Frames", "value": "1-4"}],
+            asset_references={"inputs": {"filenames:": ["test.file"]}},
+        )
+        mock_click.echo.assert_called_with(
+            '{"status": "SUBMITTED", "jobId": "job-1234"}'
+        )
+
+        _print_response(
+            output="json",
+            extra_info=True,
             submitted=True,
             job_bundle_dir="./test",
             job_id="job-1234",
@@ -783,6 +798,7 @@ def test_cli_bundle_gui_submit_format_output():
 
         _print_response(
             output="verbose",
+            extra_info=False,
             submitted=False,
             job_bundle_dir="./test",
             job_id="job-1234",
@@ -793,6 +809,7 @@ def test_cli_bundle_gui_submit_format_output():
 
         _print_response(
             output="verbose",
+            extra_info=False,
             submitted=True,
             job_bundle_dir="./test",
             job_id="job-1234",

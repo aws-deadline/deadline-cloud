@@ -263,8 +263,13 @@ def bundle_submit(
     "JSON: Displays messages in JSON line format, so that the info can be easily "
     "parsed/consumed by custom scripts.",
 )
+@click.option(
+    "--extra-info",
+    is_flag=True,
+    help="Returns additional information about the submitted job. Only valid with JSON output.",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, output, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, extra_info, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
@@ -276,6 +281,11 @@ def bundle_gui_submit(job_bundle_dir, browse, output, **args):
         if not job_bundle_dir and not browse:
             raise DeadlineOperationError(
                 "Specify a job bundle directory or run the bundle command with the --browse flag"
+            )
+        output = output.lower()
+        if output != "json" and extra_info:
+            raise DeadlineOperationError(
+                "--extra-info is only availalbe with JSON output. Add the --output JSON option."
             )
 
         submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
@@ -293,6 +303,7 @@ def bundle_gui_submit(job_bundle_dir, browse, output, **args):
 
         _print_response(
             output=output,
+            extra_info=extra_info,
             submitted=True if response else False,
             job_bundle_dir=job_bundle_dir,
             job_id=response["jobId"] if response else None,
@@ -303,6 +314,7 @@ def bundle_gui_submit(job_bundle_dir, browse, output, **args):
 
 def _print_response(
     output: str,
+    extra_info: bool,
     submitted: bool,
     job_bundle_dir: str,
     job_id: Optional[str],
@@ -314,10 +326,13 @@ def _print_response(
             response = {
                 "status": "SUBMITTED",
                 "jobId": job_id,
-                "jobBundleDirectory": job_bundle_dir,
-                "parameterValues": parameter_values,
-                "assetReferences": asset_references,
             }
+            if extra_info:
+                response.update({
+                    "jobBundleDirectory": job_bundle_dir,
+                    "parameterValues": parameter_values,
+                    "assetReferences": asset_references,
+                })
             click.echo(json.dumps(response))
         else:
             click.echo(json.dumps({"status": "CANCELED"}))
