@@ -130,6 +130,13 @@ class OpenJDParametersWidget(QWidget):
             if ":" in parameter["name"]:
                 continue
 
+            # Skip any parameters that do not have a type defined.
+            # This can happen when a queue environment parameter was
+            # saved to the bundle, but the template itself does not contain
+            # that parameter.
+            if "type" not in parameter:
+                continue
+
             control_type_name = get_ui_control_for_parameter_definition(parameter)
 
             if parameter["type"] == "INT" and control_type_name == "SPIN_BOX":
