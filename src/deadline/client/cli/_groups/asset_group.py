@@ -27,7 +27,14 @@ def cli_asset():
 
 @cli_asset.command(name="snapshot")
 @click.option("--root-dir", help="The root directory to snapshot. ")
-@click.option("--r", help="Flag to recursively snapshot subdirectories. ", is_flag=True, show_default=True, default=False)
+@click.option("--manifest-out-dir", help="Path to directory for manifest output. ")
+@click.option(
+    "--r",
+    help="Flag to recursively snapshot subdirectories. ",
+    is_flag=True,
+    show_default=True,
+    default=False,
+)
 @_handle_error
 def asset_snapshot(r, **args):
     """
@@ -98,16 +105,29 @@ def asset_snapshot(r, **args):
 
 @cli_asset.command(name="upload")
 @click.option("--manifest", help="The manifest of files to be uploaded. ")
-@_handle_error
-def asset_upload(**args):
-    """
-    Uploads the assets in the provided manifest file to S3.
-    """
-    click.echo("upload done")
+@cli_asset.command(name="upload")
+@click.option("--manifest", help="The path to manifest folder of directory specified for upload. ")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
+@click.option(
+    "--update",
+    help="Flag to update manifest before upload. ",
+    is_flag=True,
+    show_default=True,
+    default=False,
+)
 
 
 @cli_asset.command(name="diff")
-@click.option("--manifest", help="The manifest of working directory to show changes of. ")
+@click.option("--root-dir", help="The root directory to compare changes to. ")
+@click.option("--manifest", help="The path to manifest of working directory to show changes of. ")
+@click.option(
+    "--print",
+    help="Pretty prints diff information. ",
+    is_flag=True,
+    show_default=True,
+    default=False,
+)
 @_handle_error
 def asset_diff(**args):
     """
@@ -119,7 +139,9 @@ def asset_diff(**args):
 
 
 @cli_asset.command(name="download")
-@click.option("--job-id", help="The job ID chosen to download input manifest from. ")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to get. ")
 @_handle_error
 def asset_download(**args):
     """
