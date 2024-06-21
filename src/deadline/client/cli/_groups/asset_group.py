@@ -25,9 +25,10 @@ def cli_asset():
     Commands to work with AWS Deadline Cloud Job Attachments.
     """
 
+
 @cli_asset.command(name="snapshot")
 @click.option("--root-dir", help="The root directory to snapshot. ")
-@click.option("--manifest-out-dir", help="Path to directory for manifest output. ")
+@click.option("--manifest-out-dir", help="Destination path to directory for created manifest. ")
 @click.option(
     "--r",
     help="Flag to recursively snapshot subdirectories. ",
