@@ -779,9 +779,7 @@ def test_cli_bundle_gui_submit_format_output():
             parameter_values=[{"name": "Frames", "value": "1-4"}],
             asset_references={"inputs": {"filenames:": ["test.file"]}},
         )
-        mock_click.echo.assert_called_with(
-            '{"status": "SUBMITTED", "jobId": "job-1234"}'
-        )
+        mock_click.echo.assert_called_with('{"status": "SUBMITTED", "jobId": "job-1234"}')
 
         _print_response(
             output="json",

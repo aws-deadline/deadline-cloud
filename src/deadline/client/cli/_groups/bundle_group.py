@@ -328,11 +328,13 @@ def _print_response(
                 "jobId": job_id,
             }
             if extra_info:
-                response.update({
-                    "jobBundleDirectory": job_bundle_dir,
-                    "parameterValues": parameter_values,
-                    "assetReferences": asset_references,
-                })
+                response.update(
+                    {
+                        "jobBundleDirectory": job_bundle_dir,
+                        "parameterValues": parameter_values,
+                        "assetReferences": asset_references,
+                    }
+                )
             click.echo(json.dumps(response))
         else:
             click.echo(json.dumps({"status": "CANCELED"}))
