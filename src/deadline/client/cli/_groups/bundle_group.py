@@ -308,7 +308,9 @@ def bundle_gui_submit(job_bundle_dir, browse, output, extra_info, **args):
             job_bundle_dir=job_bundle_dir,
             job_id=response["jobId"] if response else None,
             parameter_values=submitter.parameter_values,
-            asset_references=submitter.job_attachments.get_asset_references().to_dict()["assetReferences"],
+            asset_references=submitter.job_attachments.get_asset_references().to_dict()[
+                "assetReferences"
+            ],
         )
 
 
