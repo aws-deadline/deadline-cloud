@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import gui_helpers
-import test
 
 profileName = "deadlinecloud\\_squish"
 jobHistDir = "~/.deadline/job_history/deadlinecloud_squish"
@@ -14,6 +13,7 @@ loggingLevel = "WARNING"
 
 
 def main():
+    import test
     gui_helpers.launchDeadlineConfigGUI()
     gui_helpers.setGlobalSettings(profileName, jobHistDir)
     gui_helpers.setProfileSettings(farmName)

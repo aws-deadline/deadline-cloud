@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*
+
+import test
 import gui_locators
 import squish
-import test
 
 snoozeTimeout = 3  # seconds
 
