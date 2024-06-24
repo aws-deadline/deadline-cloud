@@ -16,7 +16,7 @@ from deadline.client import api
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
-from .._common import _handle_error, _ProgressBarCallbackManager
+from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
 from ...exceptions import NonValidInputError
 
 IGNORE_FILE: str = "manifests"
@@ -32,34 +32,33 @@ def cli_asset():
 
 @cli_asset.command(name="snapshot")
 @click.option("--root-dir", required=True, help="The root directory to snapshot. ")
-@click.option("--manifest-out-dir", help="Destination path to directory for created manifest. ")
+@click.option("--manifest-out", help="Destination path to directory for created manifest. ")
 @click.option(
-    "--r",
+    "--recursive",
+    "-r",
     help="Flag to recursively snapshot subdirectories. ",
     is_flag=True,
     show_default=True,
     default=False,
 )
 @_handle_error
-def asset_snapshot(r, **args):
+def asset_snapshot(root_dir, manifest_out, recursive, **args):
     """
     Creates manifest of files specified root directory.
     """
-    root_dir = args.pop("root_dir")
     root_dir_basename = os.path.basename(root_dir) + "_"
-    out_dir = args.pop("manifest_out_dir")
 
     if not os.path.isdir(root_dir):
         misconfigured_directories_msg = f"Specified root directory {root_dir} does not exist. "
         raise NonValidInputError(misconfigured_directories_msg)
 
-    if out_dir and not os.path.isdir(out_dir):
+    if manifest_out and not os.path.isdir(manifest_out):
         misconfigured_directories_msg = (
-            f"Specified destination directory {out_dir} does not exist. "
+            f"Specified destination directory {manifest_out} does not exist. "
         )
         raise NonValidInputError(misconfigured_directories_msg)
-    elif out_dir is None:
-        out_dir = root_dir
+    elif manifest_out is None:
+        manifest_out = root_dir
 
     inputs = []
     for root, dirs, files in os.walk(root_dir):
@@ -68,7 +67,7 @@ def asset_snapshot(r, **args):
         for file in files:
             file_full_path = str(os.path.join(root, file))
             inputs.append(file_full_path)
-        if not r:
+        if not recursive:
             break
 
     # Placeholder Asset Manager
@@ -91,7 +90,7 @@ def asset_snapshot(r, **args):
             hashing_progress_callback=hash_callback_manager.callback,
         )
 
-    # Write created manifest into local file, at the specified location at out_dir
+    # Write created manifest into local file, at the specified location at manifest_out
     for asset_root_manifests in manifests:
         if asset_root_manifests.asset_manifest is None:
             continue
@@ -101,12 +100,12 @@ def asset_snapshot(r, **args):
             asset_root_manifests.asset_manifest, source_root, file_system_location_name
         )
         asset_uploader._write_local_input_manifest(
-            out_dir, manifest_name, asset_root_manifests.asset_manifest, root_dir_basename
+            manifest_out, manifest_name, asset_root_manifests.asset_manifest, root_dir_basename
         )
 
 
 @cli_asset.command(name="upload")
-@click.option("--manifest", help="The path to manifest folder of directory specified for upload. ")
+@click.option("--manifest", required=True, help="The path to manifest folder of directory specified for upload. ")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
@@ -126,7 +125,7 @@ def asset_upload(**args):
 
 @cli_asset.command(name="diff")
 @click.option("--root-dir", help="The root directory to compare changes to. ")
-@click.option("--manifest", help="The path to manifest of working directory to show changes of. ")
+@click.option("--manifest", help="The path to manifest folder of directory to show changes of. ")
 @click.option(
     "--print",
     help="Pretty prints diff information. ",

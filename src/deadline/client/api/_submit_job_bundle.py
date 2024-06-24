@@ -215,7 +215,6 @@ def create_job_from_job_bundle(
         # Extend input_filenames with all the files in the input_directories
         missing_directories: set[str] = set()
         for directory in asset_references.input_directories:
-
             if not os.path.isdir(directory):
                 if require_paths_exist:
                     missing_directories.add(directory)
@@ -354,12 +353,6 @@ def create_job_from_job_bundle(
         return job_id
     else:
         raise DeadlineOperationError("CreateJob response was empty, or did not contain a Job ID.")
-
-
-def get_input_paths(root_directory: str, missing_directories: set, require_paths_exist: bool):
-    """
-    Collect all input paths from specified directory
-    """
 
 
 def wait_for_create_job_to_complete(

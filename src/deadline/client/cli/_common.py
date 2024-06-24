@@ -17,7 +17,6 @@ from typing import Any, Callable, Optional, Set
 
 import click
 from contextlib import ExitStack
-
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
 from ..config import config_file

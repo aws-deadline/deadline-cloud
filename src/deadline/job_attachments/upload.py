@@ -179,7 +179,7 @@ class S3AssetUploader:
 
         if manifest_write_dir:
             self._write_local_manifest(
-                manifest_write_dir, manifest_name, full_manifest_key, manifest
+                manifest_write_dir, manifest_name, full_manifest_key, manifest, None
             )
 
         self.upload_bytes_to_s3(
@@ -224,22 +224,14 @@ class S3AssetUploader:
         manifest_name: str,
         full_manifest_key: str,
         manifest: BaseAssetManifest,
+        root_dir_name: Optional[str],
     ) -> None:
         """
         Writes a manifest file locally in a 'manifests' sub-directory.
         Also creates/appends to a file mapping the local manifest name to the full S3 key in the same directory.
         """
-        # local_manifest_file = Path(manifest_write_dir, "manifests", manifest_name)
-        # logger.info(f"Creating local manifest file: {local_manifest_file}\n")
-        # local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
-        # with open(local_manifest_file, "w") as file:
-        #     file.write(manifest.encode())
-        self._write_local_input_manifest(manifest_write_dir, manifest_name, manifest)
+        self._write_local_input_manifest(manifest_write_dir, manifest_name, manifest, root_dir_name)
 
-        # manifest_map_file = Path(manifest_write_dir, "manifests", "manifest_s3_mapping")
-        # mapping = {"local_file": manifest_name, "s3_key": full_manifest_key}
-        # with open(manifest_map_file, "a") as mapping_file:
-        #     mapping_file.write(f"{mapping}\n")
         self._write_local_manifest_s3_mapping(manifest_write_dir, manifest_name, full_manifest_key)
 
     def _write_local_input_manifest(
@@ -247,12 +239,16 @@ class S3AssetUploader:
         manifest_write_dir: str,
         manifest_name: str,
         manifest: BaseAssetManifest,
-        root_dir_name: Optional[str]
+        root_dir_name: Optional[str],
     ):
         """
         Creates 'manifests' sub-directory and writes a local input manifest file
         """
-        local_manifest_file = Path(manifest_write_dir, root_dir_name + "manifests", manifest_name)
+        input_manifest_folder_name = "manifests"
+        if root_dir_name is not None:
+            input_manifest_folder_name = root_dir_name + input_manifest_folder_name
+
+        local_manifest_file = Path(manifest_write_dir, input_manifest_folder_name, manifest_name)
         logger.info(f"Creating local manifest file: {local_manifest_file}\n")
         local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(local_manifest_file, "w") as file:
