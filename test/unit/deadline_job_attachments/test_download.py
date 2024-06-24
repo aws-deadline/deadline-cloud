@@ -14,7 +14,7 @@ from pathlib import Path
 import sys
 import tempfile
 from typing import Any, Callable, List
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call, patch, ANY
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
@@ -36,6 +36,7 @@ from deadline.job_attachments.asset_manifests.versions import ManifestVersion
 from deadline.job_attachments.download import (
     OutputDownloader,
     download_file,
+    download_file_with_s3_key,
     download_files_from_manifests,
     download_files_in_directory,
     get_job_input_output_paths_by_asset_root,
@@ -2580,3 +2581,58 @@ def test_mount_vfs_from_manifests(
         mock_vfs_start.assert_has_calls(
             [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
         )
+
+
+@pytest.mark.parametrize(
+    "file_conflict_resolution",
+    [
+        FileConflictResolution.OVERWRITE,
+        FileConflictResolution.CREATE_COPY,
+        FileConflictResolution.SKIP,
+    ],
+)
+def test_download_file_with_s3_key(tmp_path, file_conflict_resolution):
+    s3_bucket = "test-bucket"
+    s3_key = "test-key"
+    local_file_path = tmp_path / "test-file.txt"
+    file_bytes = 1024
+
+    mock_transfer_manager = MagicMock()
+
+    if file_conflict_resolution == FileConflictResolution.SKIP:
+        local_file_path.touch()
+        mock_transfer_manager.download.return_value = None
+    else:
+        mock_future = MagicMock()
+        mock_transfer_manager.download.return_value = mock_future
+
+    with patch(
+        "deadline.job_attachments.download.get_account_id", return_value="YOUR_AWS_ACCOUNT_ID"
+    ):
+        future = download_file_with_s3_key(
+            s3_bucket=s3_bucket,
+            s3_key=s3_key,
+            transfer_manager=mock_transfer_manager,
+            local_file_name=local_file_path,
+            file_bytes=file_bytes,
+            file_conflict_resolution=file_conflict_resolution,
+        )
+
+        # Make sure download funciton isn't called and returns None when SKIP
+        if file_conflict_resolution == FileConflictResolution.SKIP:
+            assert future is None
+            mock_transfer_manager.download.assert_not_called()
+        else:
+            assert future is mock_future
+            mock_transfer_manager.download.assert_called_once_with(
+                bucket=s3_bucket,
+                key=s3_key,
+                fileobj=str(local_file_path),
+                extra_args={"ExpectedBucketOwner": "YOUR_AWS_ACCOUNT_ID"},
+                subscribers=[ANY],
+            )
+
+            # Check if the file name is modified for CREATE_COPY resolution
+            if file_conflict_resolution == FileConflictResolution.CREATE_COPY:
+                assert local_file_path.name.startswith("test-file")
+                assert local_file_path.name.endswith(".txt")

@@ -21,6 +21,7 @@ from ._groups.handle_web_url_command import cli_handle_web_url
 from ._groups.job_group import cli_job
 from ._groups.queue_group import cli_queue
 from ._groups.worker_group import cli_worker
+from ._groups.manifest_group import cli_manifest
 
 logger = getLogger(__name__)
 
@@ -76,3 +77,4 @@ main.add_command(cli_handle_web_url)
 main.add_command(cli_job)
 main.add_command(cli_queue)
 main.add_command(cli_worker)
+main.add_command(cli_manifest)
