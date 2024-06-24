@@ -285,7 +285,7 @@ def bundle_gui_submit(job_bundle_dir, browse, output, extra_info, **args):
         output = output.lower()
         if output != "json" and extra_info:
             raise DeadlineOperationError(
-                "--extra-info is only availalbe with JSON output. Add the --output JSON option."
+                "--extra-info is only available with JSON output. Add the --output JSON option."
             )
 
         submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
