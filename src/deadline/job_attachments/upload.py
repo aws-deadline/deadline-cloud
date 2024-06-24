@@ -164,12 +164,9 @@ class S3AssetUploader:
         """
 
         # Upload asset manifest
-        hash_alg = manifest.get_default_hash_alg()
-        manifest_bytes = manifest.encode().encode("utf-8")
-        manifest_name_prefix = hash_data(
-            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
+        (hash_alg, manifest_bytes, manifest_name) = self._gather_upload_metadata(
+            manifest, source_root, file_system_location_name
         )
-        manifest_name = f"{manifest_name_prefix}_input"
 
         if partial_manifest_prefix:
             partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -203,6 +200,24 @@ class S3AssetUploader:
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
 
+    def _gather_upload_metadata(
+        self,
+        manifest: BaseAssetManifest,
+        source_root: Path,
+        file_system_location_name: Optional[str] = None,
+    ) -> tuple[HashAlgorithm, bytes, str]:
+        """
+        Gathers metadata information of manifest to be used for writing the local manifest
+        """
+        hash_alg = manifest.get_default_hash_alg()
+        manifest_bytes = manifest.encode().encode("utf-8")
+        manifest_name_prefix = hash_data(
+            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
+        )
+        manifest_name = f"{manifest_name_prefix}_input"
+
+        return (hash_alg, manifest_bytes, manifest_name)
+
     def _write_local_manifest(
         self,
         manifest_write_dir: str,
@@ -214,14 +229,45 @@ class S3AssetUploader:
         Writes a manifest file locally in a 'manifests' sub-directory.
         Also creates/appends to a file mapping the local manifest name to the full S3 key in the same directory.
         """
-        local_manifest_file = Path(manifest_write_dir, "manifests", manifest_name)
+        # local_manifest_file = Path(manifest_write_dir, "manifests", manifest_name)
+        # logger.info(f"Creating local manifest file: {local_manifest_file}\n")
+        # local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
+        # with open(local_manifest_file, "w") as file:
+        #     file.write(manifest.encode())
+        self._write_local_input_manifest(manifest_write_dir, manifest_name, manifest)
+
+        # manifest_map_file = Path(manifest_write_dir, "manifests", "manifest_s3_mapping")
+        # mapping = {"local_file": manifest_name, "s3_key": full_manifest_key}
+        # with open(manifest_map_file, "a") as mapping_file:
+        #     mapping_file.write(f"{mapping}\n")
+        self._write_local_manifest_s3_mapping(manifest_write_dir, manifest_name, full_manifest_key)
+
+    def _write_local_input_manifest(
+        self,
+        manifest_write_dir: str,
+        manifest_name: str,
+        manifest: BaseAssetManifest,
+        root_dir_name: Optional[str]
+    ):
+        """
+        Creates 'manifests' sub-directory and writes a local input manifest file
+        """
+        local_manifest_file = Path(manifest_write_dir, root_dir_name + "manifests", manifest_name)
         logger.info(f"Creating local manifest file: {local_manifest_file}\n")
         local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(local_manifest_file, "w") as file:
             file.write(manifest.encode())
 
-        # Create or append to an existing mapping file. We use this since path lengths can go beyond the
-        # file name length limit on Windows if we were to create the full S3 key path locally.
+    def _write_local_manifest_s3_mapping(
+        self,
+        manifest_write_dir: str,
+        manifest_name: str,
+        full_manifest_key: str,
+    ):
+        """
+        Create or append to an existing mapping file. We use this since path lengths can go beyond the
+        file name length limit on Windows if we were to create the full S3 key path locally.
+        """
         manifest_map_file = Path(manifest_write_dir, "manifests", "manifest_s3_mapping")
         mapping = {"local_file": manifest_name, "s3_key": full_manifest_key}
         with open(manifest_map_file, "a") as mapping_file:

@@ -7,16 +7,20 @@ All the `deadline asset` commands:
     * diff
     * download
 """
-
-import click
 import os
 from pathlib import Path
 
-from .._common import _handle_error
-from ...exceptions import NonValidInputError
-from deadline.job_attachments.asset_manifests import hash_data
+import click
+
+from deadline.client import api
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 from deadline.job_attachments.models import JobAttachmentS3Settings
+
+from .._common import _handle_error, _ProgressBarCallbackManager
+from ...exceptions import NonValidInputError
+
+IGNORE_FILE: str = "manifests"
+
 
 @click.group(name="asset")
 @_handle_error
@@ -27,7 +31,7 @@ def cli_asset():
 
 
 @cli_asset.command(name="snapshot")
-@click.option("--root-dir", help="The root directory to snapshot. ")
+@click.option("--root-dir", required=True, help="The root directory to snapshot. ")
 @click.option("--manifest-out-dir", help="Destination path to directory for created manifest. ")
 @click.option(
     "--r",
@@ -42,70 +46,65 @@ def asset_snapshot(r, **args):
     Creates manifest of files specified root directory.
     """
     root_dir = args.pop("root_dir")
+    root_dir_basename = os.path.basename(root_dir) + "_"
+    out_dir = args.pop("manifest_out_dir")
 
-    # refactor
-    if os.path.isdir(root_dir):
-        inputs = []
-        for root, dirs, files in os.walk(root_dir):
-            print("root: ", root)
-            
-            if os.path.basename(root) == "manifests":
-                continue
-
-            #hashing attachments progress callback?
-                #hashing_progress_callback
-
-            for file in files:
-                file_full_path = str(os.path.join(root, file))
-                if _is_hidden_file(file_full_path):
-                    continue
-                print("file: ", file)
-                inputs.append(file_full_path)
-
-            if not r:
-                break
-
-        # Placeholder Asset Manager
-        asset_manager = S3AssetManager(
-            farm_id=" ",
-            queue_id=" ",
-            job_attachment_settings=JobAttachmentS3Settings(" "," ")
-        )
-
-        upload_group = asset_manager.prepare_paths_for_upload(inputs, [root_dir], [])
-        (_, manifests) = asset_manager.hash_assets_and_create_manifest(
-        upload_group.asset_groups, upload_group.total_input_files, upload_group.total_input_bytes
-        )
-
-        # Write created manifest into local file, at the specified location root_dir
-        for asset_root_manifests in manifests:
-            # refactor
-            hash_alg = asset_root_manifests.asset_manifest.get_default_hash_alg()
-            source_root = Path(asset_root_manifests.root_path)
-            file_system_location_name = asset_root_manifests.file_system_location_name
-
-            #refactor
-            manifest_name_prefix = hash_data(
-                f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
-            )
-            manifest_name = f"{manifest_name_prefix}_input"
-
-            local_manifest_file = Path(root_dir, "manifests", manifest_name)
-
-            local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(local_manifest_file, "w") as file:
-                file.write(asset_root_manifests.asset_manifest.encode())
-
-    else:
-        misconfigured_directories_msg = (f"Specified root directory {root_dir} does not exist. ")
+    if not os.path.isdir(root_dir):
+        misconfigured_directories_msg = f"Specified root directory {root_dir} does not exist. "
         raise NonValidInputError(misconfigured_directories_msg)
 
+    if out_dir and not os.path.isdir(out_dir):
+        misconfigured_directories_msg = (
+            f"Specified destination directory {out_dir} does not exist. "
+        )
+        raise NonValidInputError(misconfigured_directories_msg)
+    elif out_dir is None:
+        out_dir = root_dir
 
-    #click.echo(manifests)
+    inputs = []
+    for root, dirs, files in os.walk(root_dir):
+        if os.path.basename(root).endswith("_manifests"):
+            continue
+        for file in files:
+            file_full_path = str(os.path.join(root, file))
+            inputs.append(file_full_path)
+        if not r:
+            break
+
+    # Placeholder Asset Manager
+    asset_manager = S3AssetManager(
+        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
+    )
+    asset_uploader = S3AssetUploader()
+    hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
+
+    upload_group = asset_manager.prepare_paths_for_upload(
+        input_paths=inputs, output_paths=[root_dir], referenced_paths=[]
+    )
+    if upload_group.asset_groups:
+        _, manifests = api.hash_attachments(
+            asset_manager=asset_manager,
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
+            print_function_callback=click.echo,
+            hashing_progress_callback=hash_callback_manager.callback,
+        )
+
+    # Write created manifest into local file, at the specified location at out_dir
+    for asset_root_manifests in manifests:
+        if asset_root_manifests.asset_manifest is None:
+            continue
+        source_root = Path(asset_root_manifests.root_path)
+        file_system_location_name = asset_root_manifests.file_system_location_name
+        (_, _, manifest_name) = asset_uploader._gather_upload_metadata(
+            asset_root_manifests.asset_manifest, source_root, file_system_location_name
+        )
+        asset_uploader._write_local_input_manifest(
+            out_dir, manifest_name, asset_root_manifests.asset_manifest, root_dir_basename
+        )
 
 
-@cli_asset.command(name="upload")
-@click.option("--manifest", help="The manifest of files to be uploaded. ")
 @cli_asset.command(name="upload")
 @click.option("--manifest", help="The path to manifest folder of directory specified for upload. ")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
@@ -117,6 +116,12 @@ def asset_snapshot(r, **args):
     show_default=True,
     default=False,
 )
+@_handle_error
+def asset_upload(**args):
+    """
+    Uploads the assets in the provided manifest file to S3.
+    """
+    click.echo("upload done")
 
 
 @cli_asset.command(name="diff")
@@ -149,13 +154,3 @@ def asset_download(**args):
     Downloads input manifest of previously submitted job.
     """
     click.echo("download complete")
-
-
-def _is_hidden_file(filepath):
-    """
-    Checks for hidden files in directory, depending on OS
-    """
-    if os.name == 'nt':  # Windows
-        return os.stat(filepath).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN
-    else:  # Unix-based
-        return os.path.basename(filepath).startswith('.')

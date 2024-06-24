@@ -215,6 +215,7 @@ def create_job_from_job_bundle(
         # Extend input_filenames with all the files in the input_directories
         missing_directories: set[str] = set()
         for directory in asset_references.input_directories:
+
             if not os.path.isdir(directory):
                 if require_paths_exist:
                     missing_directories.add(directory)
@@ -276,7 +277,7 @@ def create_job_from_job_bundle(
                 print_function_callback("Job submission canceled.")
                 return None
 
-            _, asset_manifests = _hash_attachments(
+            _, asset_manifests = hash_attachments(
                 asset_manager=asset_manager,
                 asset_groups=upload_group.asset_groups,
                 total_input_files=upload_group.total_input_files,
@@ -355,6 +356,12 @@ def create_job_from_job_bundle(
         raise DeadlineOperationError("CreateJob response was empty, or did not contain a Job ID.")
 
 
+def get_input_paths(root_directory: str, missing_directories: set, require_paths_exist: bool):
+    """
+    Collect all input paths from specified directory
+    """
+
+
 def wait_for_create_job_to_complete(
     farm_id: str,
     queue_id: str,
@@ -396,7 +403,7 @@ def wait_for_create_job_to_complete(
     )
 
 
-def _hash_attachments(
+def hash_attachments(
     asset_manager: S3AssetManager,
     asset_groups: list[AssetRootGroup],
     total_input_files: int,

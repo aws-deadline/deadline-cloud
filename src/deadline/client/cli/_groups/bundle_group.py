@@ -9,7 +9,6 @@ import logging
 import re
 
 import click
-from contextlib import ExitStack
 from botocore.exceptions import ClientError
 
 from deadline.client import api
@@ -20,11 +19,10 @@ from deadline.job_attachments.exceptions import (
     MisconfiguredInputsError,
 )
 from deadline.job_attachments.models import AssetUploadGroup, JobAttachmentsFileSystem
-from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 from deadline.job_attachments._utils import _human_readable_file_size
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from .._common import _apply_cli_options_to_config, _handle_error
+from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
 from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger(__name__)
@@ -284,40 +282,40 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
             click.echo("Job submission canceled.")
 
 
-class _ProgressBarCallbackManager:
-    """
-    Manages creation, update, and deletion of a progress bar. On first call of the callback, the progress bar is created. The progress bar is closed
-    on the final call (100% completion)
-    """
+# class _ProgressBarCallbackManager:
+#     """
+#     Manages creation, update, and deletion of a progress bar. On first call of the callback, the progress bar is created. The progress bar is closed
+#     on the final call (100% completion)
+#     """
 
-    BAR_NOT_CREATED = 0
-    BAR_CREATED = 1
-    BAR_CLOSED = 2
+#     BAR_NOT_CREATED = 0
+#     BAR_CREATED = 1
+#     BAR_CLOSED = 2
 
-    def __init__(self, length: int, label: str):
-        self._length = length
-        self._label = label
-        self._bar_status = self.BAR_NOT_CREATED
-        self._exit_stack = ExitStack()
+#     def __init__(self, length: int, label: str):
+#         self._length = length
+#         self._label = label
+#         self._bar_status = self.BAR_NOT_CREATED
+#         self._exit_stack = ExitStack()
 
-    def callback(self, upload_metadata: ProgressReportMetadata) -> bool:
-        if self._bar_status == self.BAR_CLOSED:
-            # from multithreaded execution this can be called after completion somtimes.
-            return sigint_handler.continue_operation
-        elif self._bar_status == self.BAR_NOT_CREATED:
-            # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
-            # not annotating the type of hashing_progress.
-            self._upload_progress = click.progressbar(length=self._length, label=self._label)  # type: ignore[var-annotated]
-            self._exit_stack.enter_context(self._upload_progress)
-            self._bar_status = self.BAR_CREATED
+#     def callback(self, upload_metadata: ProgressReportMetadata) -> bool:
+#         if self._bar_status == self.BAR_CLOSED:
+#             # from multithreaded execution this can be called after completion somtimes.
+#             return sigint_handler.continue_operation
+#         elif self._bar_status == self.BAR_NOT_CREATED:
+#             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
+#             # not annotating the type of hashing_progress.
+#             self._upload_progress = click.progressbar(length=self._length, label=self._label)  # type: ignore[var-annotated]
+#             self._exit_stack.enter_context(self._upload_progress)
+#             self._bar_status = self.BAR_CREATED
 
-        total_progress = int(upload_metadata.progress)
-        new_progress = total_progress - self._upload_progress.pos
-        if new_progress > 0:
-            self._upload_progress.update(new_progress)
+#         total_progress = int(upload_metadata.progress)
+#         new_progress = total_progress - self._upload_progress.pos
+#         if new_progress > 0:
+#             self._upload_progress.update(new_progress)
 
-        if total_progress == self._length or not sigint_handler.continue_operation:
-            self._bar_status = self.BAR_CLOSED
-            self._exit_stack.close()
+#         if total_progress == self._length or not sigint_handler.continue_operation:
+#             self._bar_status = self.BAR_CLOSED
+#             self._exit_stack.close()
 
-        return sigint_handler.continue_operation
+#         return sigint_handler.continue_operation
