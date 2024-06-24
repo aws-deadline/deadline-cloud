@@ -212,6 +212,10 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
         return queue_parameters + deadline_shared_job_parameters
 
+    def set_parameters(self, parameters):
+        for parameter in parameters:
+            self.set_parameter_value(parameter)
+
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
         Given an OpenJD parameter definition with a "value" key,

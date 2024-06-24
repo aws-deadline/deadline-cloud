@@ -320,6 +320,79 @@ class JobAttachmentsWidget(QWidget):
         """
         return self.auto_detected_attachments.union(self.attachments)
 
+    def set_asset_references(self, references: AssetReferences):
+        for filename in references.input_filenames:
+            if filename not in self.auto_detected_attachments.input_filenames:
+                self.attachments.input_filenames.add(filename)
+        for removed in self.auto_detected_attachments.input_filenames.difference(references.input_filenames):
+            self.remove_input_file(removed)
+
+        for filename in references.input_directories:
+            if filename not in self.auto_detected_attachments.input_directories:
+                self.attachments.input_directories.add(filename)
+        for removed in self.auto_detected_attachments.input_directories.difference(references.input_directories):
+            self.remove_input_directory(removed)
+
+        for filename in references.output_directories:
+            if filename not in self.auto_detected_attachments.output_directories:
+                self.attachments.output_directories.add(filename)
+        for removed in self.auto_detected_attachments.output_directories.difference(references.output_directories):
+            self.remove_output_directory(removed)
+
+    def add_input_file(self, filepath: str):
+        # Normalize the paths
+        paths = set()
+        paths.add(os.path.normpath(filepath))
+        # Remove any that are from the auto-detected set
+        paths.difference_update(self.auto_detected_attachments.input_filenames)
+        # Add them to the attachments
+        self.attachments.input_filenames.update(paths)
+        self._populate_attachment_lists()
+
+    def remove_input_file(self, filepath: str):
+        normpath = os.path.normpath(filepath)
+        if normpath in self.auto_detected_attachments.input_filenames:
+            self.auto_detected_attachments.input_filenames.remove(normpath)
+        elif normpath in self.attachments.input_filenames:
+            self.attachments.input_filenames.remove(normpath)
+        return self._populate_attachment_lists()
+
+    def add_input_directory(self, dirpath: str):
+        # Normalize the paths
+        paths = set()
+        paths.add(os.path.normpath(dirpath))
+        # Remove any that are from the auto-detected set
+        paths.difference_update(self.auto_detected_attachments.input_directories)
+        # Add them to the attachments
+        self.attachments.input_directories.update(paths)
+        self._populate_attachment_lists()
+
+    def remove_input_directory(self, filepath: str):
+        normpath = os.path.normpath(filepath)
+        if normpath in self.auto_detected_attachments.input_directories:
+            self.auto_detected_attachments.input_directories.remove(normpath)
+        elif normpath in self.attachments.input_directories:
+            self.attachments.input_directories.remove(normpath)
+        return self._populate_attachment_lists()
+
+    def add_output_directory(self, dirpath: str):
+        # Normalize the paths
+        paths = set()
+        paths.add(os.path.normpath(dirpath))
+        # Remove any that are from the auto-detected set
+        paths.difference_update(self.auto_detected_attachments.output_directories)
+        # Add them to the attachments
+        self.attachments.output_directories.update(paths)
+        self._populate_attachment_lists()
+
+    def remove_output_directory(self, filepath: str):
+        normpath = os.path.normpath(filepath)
+        if normpath in self.auto_detected_attachments.output_directories:
+            self.auto_detected_attachments.output_directories.remove(normpath)
+        elif normpath in self.attachments.output_directories:
+            self.attachments.output_directories.remove(normpath)
+        return self._populate_attachment_lists()
+
     def get_require_paths_exist(self) -> bool:
         """
         Returns the checkbox value of whether to allow empty paths or not.

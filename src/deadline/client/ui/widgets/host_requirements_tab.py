@@ -146,6 +146,42 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
 
         return requirements
 
+    def set_requirements(self, requirements: Dict[str, Any]):
+        custom_requirements = {
+            "attributes": [],
+            "amounts": [],
+        }
+        removed_requirements = {
+            "attributes": [],
+            "amounts": [],
+        }
+        os_requirements = self.os_requirements_box.get_requirements()
+        hardware_requirements = self.hardware_requirements_box.get_requirements()
+
+        if requirements.get("attributes"):
+            for requirement in requirements.get("attributes"):
+                if requirement not in os_requirements:
+                    custom_requirements.get("attributes").append(requirement)
+            for existing_requirement in os_requirements:
+                if existing_requirement not in requirements.get("attributes"):
+                    removed_requirements.get("attributes").append(existing_requirement)
+            for requirement in removed_requirements.get("attributes"):
+                os_requirements.remove(requirement)
+
+        if requirements.get("amounts"):
+            for requirement in requirements.get("amounts"):
+                if requirement not in hardware_requirements:
+                    custom_requirements.get("amounts").append(requirement)
+            for existing_requirement in hardware_requirements:
+                if existing_requirement not in requirements.get("amounts"):
+                    removed_requirements.get("amounts").append(existing_requirement)
+            for requirement in removed_requirements.get("amounts"):
+                hardware_requirements.remove(requirement)
+
+        self.custom_requirements_box.set_requirements(custom_requirements)
+        self.os_requirements_box.set_requirements(os_requirements)
+        self.hardware_requirements_box.set_requirements(hardware_requirements)
+
 
 class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
     """
@@ -198,6 +234,8 @@ class OSRequirementsWidget(QGroupBox):
     Args:
         parent: The parent Qt Widget.
     """
+    OS_ROW_OPTIONS = ["linux", "macos", "windows"]
+    CPU_ROW_OPTIONS = ["x86_64", "arm64"]
 
     def __init__(self, parent=None):
         super().__init__("", parent=parent)
@@ -205,8 +243,8 @@ class OSRequirementsWidget(QGroupBox):
         self._build_ui()
 
     def _build_ui(self):
-        self.os_row = OSRequirementRowWidget("Operating system", ["linux", "macos", "windows"])
-        self.cpu_row = OSRequirementRowWidget("CPU architecture", ["x86_64", "arm64"])
+        self.os_row = OSRequirementRowWidget("Operating system", self.OS_ROW_OPTIONS)
+        self.cpu_row = OSRequirementRowWidget("CPU architecture", self.CPU_ROW_OPTIONS)
 
         self.layout.addWidget(self.os_row)
         self.layout.addWidget(self.cpu_row)
@@ -238,6 +276,23 @@ class OSRequirementsWidget(QGroupBox):
                 }
             )
         return requirements
+
+    def set_requirements(self, requirements: List[Dict[str, Any]]):
+        for requirement in requirements:
+            if requirement.get("name") == "attr.worker.os.family":
+                if requirement.get("anyOf") not in self.OS_ROW_OPTIONS:
+                    raise ValueError(
+                        "Invalid value {} for option attr.worker.os.family".format(requirement.get("anyOf"))
+                    )
+                self.os_row.combo_box.setCurrentText(requirement.get("anyOf"))
+            if requirement.get("name") == "attr.worker.cpu.arch":
+                if requirement.get("anyOf") not in self.CPU_ROW_OPTIONS:
+                    raise ValueError(
+                        "Invalid value {} for option attr.worker.cpu.arch".format(requirement.get("anyOf"))
+                    )
+                self.os_row.combo_box.setCurrentText(requirement.get("anyOf"))
+            else:
+                raise ValueError("Unknown OS Requirement option of {}".format(requirement.get("name")))
 
 
 class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
@@ -290,6 +345,26 @@ class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         # Disk Scratch capability has unit in GiB
         self.scratch_space_row.add_requirement(requirements, "amount.worker.disk.scratch")
         return requirements
+
+    def set_requirements(self, requirements: List[Dict[str, Any]]):
+        for requirement in requirements:
+            if requirement.get("name") == "amount.worker.vcpu":
+                self.cpu_row.update_requirement(requirement)
+
+            elif requirement.get("name") == "amount.worker.memory":
+                self.memory_row.update_requirement(requirement, scaling_factor=1024)
+
+            elif requirement.get("name") == "amount.worker.gpu":
+                self.gpu_row.update_requirement(requirement)
+
+            elif requirement.get("name") == "amount.worker.gpu.memory":
+                self.gpu_memory_row.update_requirement(requirement, scaling_factor=1024)
+
+            elif requirement.get("name") == "amount.worker.disk.scratch":
+                self.scratch_space_row.update_requirement(requirement)
+
+            else:
+                raise ValueError("Unknown Hardware Requirement option of {}".format(requirement.get("name")))
 
 
 class CustomRequirementsWidget(QGroupBox):
@@ -431,6 +506,39 @@ class CustomRequirementsWidget(QGroupBox):
 
         return requirements
 
+    def set_requirements(self, requirements: Dict[str, List]):
+        amount_widgets = {}
+        attribute_widgets = {}
+        for i in range(self.list_widget.count()):
+            widget = self.list_widget.itemWidget(self.list_widget.item(i))
+            widget_requirement = widget.get_requirement()
+            if widget_requirement:
+                if isinstance(widget, CustomAmountWidget):
+                    amount_widgets[widget_requirement.get("name")] = widget
+                elif isinstance(widget, CustomAttributeWidget):
+                    attribute_widgets[widget_requirement.get("name")] = widget
+                else:
+                    logger.warning(
+                        f"Widget requirement is not a valid expected type: {type(widget)}"
+                    )
+
+        for requirement in requirements.get("amounts"):
+            if requirement.get("name") not in amount_widgets:
+                logger.warning(
+                    "Amount requirement is not tied to a widget: {}".format(requirement.get("name"))
+                )
+            else:
+                widget = amount_widgets.get(requirement.get("name"))
+                widget.set_requirement(requirement)
+        for requirement in requirements.get("attributes"):
+            if requirement.get("name") not in attribute_widgets:
+                logger.warning(
+                    "Attribute requirement is not tied to a widget: {}".format(requirement.get("name"))
+                )
+            else:
+                widget = attribute_widgets.get(requirement.get("name"))
+                widget.set_requirement(requirement)
+
 
 class CustomCapabilityWidget(QGroupBox):
     """
@@ -561,6 +669,12 @@ class CustomAmountWidget(CustomCapabilityWidget):
                 "Please fill out all custom amount names in the custom host requirement options!"
             )
         return requirement
+
+    def set_requirement(self, requirement: Dict[str, Any]):
+        if requirement.get("min"):
+            self.min_spin_box.setValue(requirement.get("min"))
+        if requirement.get("max"):
+            self.max_spin_box.setValue(requirement.get("max"))
 
 
 class CustomAttributeWidget(CustomCapabilityWidget):
@@ -726,6 +840,31 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             )
         return requirement
 
+    def set_requirement(self, requirement: Dict[str, Any]):
+        option = ""
+        if requirement.get("anyOf") and not self.any_of_button.isChecked():
+            self.any_of_button.setChecked(True)
+            option = "anyOf"
+        elif requirement.get("allOf") and self.any_of_button.isChecked():
+            self.any_of_button.setChecked(False)
+            option = "allOf"
+
+        values = requirement.get(option)
+        if len(values) > self.value_list_widget.count():
+            # Added additional values:
+            for _ in range(len(values) - self.value_list_widget.count()):
+                self._add_value()
+        elif len(values) < self.value_list_widget.count():
+            # Removed values:
+            for i in range(self.value_list_widget.count() - len(values)):
+                value = self.value_list_widget.itemWidget(self.value_list_widget.item(i + len(values)))
+                self.remove_value_item(value.value_list_item)
+
+        # We now have the correct number of value widgets. Let us just go fill all the values in.
+        for i in range(self.value_list_widget.count()):
+            value = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
+            value.line_edit.setText(values[i])
+
 
 class CustomAttributeValueWidget(QWidget):
     """
@@ -842,6 +981,12 @@ class HardwareRequirementsRowWidget(QWidget):
             if self.max_spin_box.has_input():
                 requirement["max"] = self.max_spin_box.value() * scaling_factor
             requirements.append(requirement)
+
+    def update_requirement(self, requirement: Dict[str, Any], scaling_factor: int = 1):
+        if requirement.get("min"):
+            self.min_spin_box.setValue(requirement.get("min") / scaling_factor)
+        if requirement.get("max"):
+            self.max_spin_box.setValue(requirement.get("max") / scaling_factor)
 
 
 class OptionalComboBox(QComboBox):
