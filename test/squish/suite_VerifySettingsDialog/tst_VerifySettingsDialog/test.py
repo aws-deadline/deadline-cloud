@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import gui_helpers
-import squish
+import test
 
 profileName = "deadlinecloud\\_squish"
 jobHistDir = "~/.deadline/job_history/deadlinecloud_squish"
@@ -11,6 +11,7 @@ jobAttachments = "COPIED"
 storageProfile = "Squish Storage Profile"
 conflictResOption = "NOT\\_SELECTED"
 loggingLevel = "WARNING"
+
 
 def main():
     gui_helpers.launchDeadlineConfigGUI()
