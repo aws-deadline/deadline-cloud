@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*
+# mypy: disable-error-code="attr-defined"
 
-import test
 import gui_locators
 import squish
+import test
 
 snoozeTimeout = 3  # seconds
 
