@@ -9,6 +9,7 @@ __all__ = [
     "_handle_error",
     "_apply_cli_options_to_config",
     "_cli_object_repr",
+    "_ProgressBarCallbackManager",
 ]
 
 import sys
