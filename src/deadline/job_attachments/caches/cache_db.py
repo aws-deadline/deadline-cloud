@@ -96,6 +96,9 @@ class CacheDB(ABC):
         return default_path
 
     def remove_cache(self) -> None:
+        """
+        Removes the underlying cache contents from the file system.
+        """
         if self.enabled:
             self.db_connection.close()
 
