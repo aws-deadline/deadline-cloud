@@ -7,6 +7,7 @@ All the `deadline asset` commands:
     * diff
     * download
 """
+
 import os
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def cli_asset():
 
 @cli_asset.command(name="snapshot")
 @click.option("--root-dir", required=True, help="The root directory to snapshot. ")
-@click.option("--manifest-out", help="Destination path to directory for created manifest. ")
+@click.option("--manifest-out", help="Destination path to directory where manifest is created. ")
 @click.option(
     "--recursive",
     "-r",
@@ -105,7 +106,10 @@ def asset_snapshot(root_dir, manifest_out, recursive, **args):
 
 
 @cli_asset.command(name="upload")
-@click.option("--manifest", required=True, help="The path to manifest folder of directory specified for upload. ")
+@click.option(
+    "--manifest", help="The path to manifest folder of the directory specified for upload. "
+)
+
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
@@ -125,10 +129,12 @@ def asset_upload(**args):
 
 @cli_asset.command(name="diff")
 @click.option("--root-dir", help="The root directory to compare changes to. ")
-@click.option("--manifest", help="The path to manifest folder of directory to show changes of. ")
 @click.option(
-    "--print",
-    help="Pretty prints diff information. ",
+    "--manifest", help="The path to manifest folder of the directory to show changes of. "
+)
+@click.option(
+    "--format",
+    help="Pretty prints diff information with easy to read formatting. ",
     is_flag=True,
     show_default=True,
     default=False,
