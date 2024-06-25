@@ -69,6 +69,7 @@ class TestCacheDB:
         with pytest.raises(JobAttachmentsError):
             CacheDB(cache_name, table_name, create_query)
 
+
 class TestHashCache:
     """
     Tests for the local Hash Cache

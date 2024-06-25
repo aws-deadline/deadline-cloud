@@ -96,6 +96,9 @@ class CacheDB(ABC):
         return default_path
 
     def remove_cache(self) -> None:
+        """
+        Removes the underlying cache contents from the file system.
+        """
         if self.enabled:
             self.db_connection.close()
 
@@ -103,4 +106,5 @@ class CacheDB(ABC):
         try:
             os.remove(self.cache_dir)
         except Exception as e:
-            logger.info(f"Error occurred while removing the cache file {self.cache_dir}: {e}")
+            logger.error(f"Error occurred while removing the cache file {self.cache_dir}: {e}")
+            raise e

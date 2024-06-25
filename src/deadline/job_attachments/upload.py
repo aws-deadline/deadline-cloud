@@ -7,6 +7,7 @@ Classes for handling uploading of assets.
 from __future__ import annotations
 
 import concurrent.futures
+import random
 from contextlib import contextmanager
 import errno
 import logging
@@ -174,8 +175,6 @@ class S3AssetUploader:
             A tuple of (the partial key for the manifest on S3, the hash of input manifest).
         """
 
-        logger.debug("S3AssetUploader.upload_assets")
-
         # Upload asset manifest
         (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
             manifest=manifest,
@@ -210,8 +209,14 @@ class S3AssetUploader:
                 extra_args=manifest_metadata,
             )
 
-        # Reset if there is mismatch between cache and actual in S3
-        self.reset_s3_check_cache(s3_check_cache_dir)
+        # Verify S3 hash cache integrity, and reset cache if cached files are missing
+        if not self.verify_hash_cache_integrity(
+            s3_check_cache_dir,
+            manifest,
+            job_attachment_settings.full_cas_prefix(),
+            job_attachment_settings.s3BucketName,
+        ):
+            self.reset_s3_check_cache(s3_check_cache_dir)
 
         # Upload assets
         self.upload_input_files(
@@ -387,38 +392,31 @@ class S3AssetUploader:
                     "File upload cancelled.", progress_tracker.get_summary_statistics()
                 )
 
-    def reset_s3_check_cache(self, s3_check_cache_dir: str) -> None:
+    def reset_s3_check_cache(self, s3_check_cache_dir: Optional[str]) -> None:
         """
-        Resets the S3 check cache if there are any mismatches between the cache entries and the actual hashes in S3
+        Resets the S3 check cache by removing the cache altogether.
         """
-        logger.debug("Reset s3 check cache if mismatch found")
         with S3CheckCache(s3_check_cache_dir) as s3_check_cache:
-            # Get the sampled hash from the cache
-            cached_hash_entries: Optional[List[S3CheckCacheEntry]] = s3_check_cache.get_sampled_hash_from_cache()
-            logger.debug(f"cached_hash_entries in {s3_check_cache_dir}: {cached_hash_entries}")
+            logger.debug(
+                f"The s3_check_cache.db file in {s3_check_cache_dir} will be deleted, "
+                f"as a mismatch between the cache and the actual hash in S3 was found"
+            )
+            # Remove the cache file
+            s3_check_cache.remove_cache()
 
-            # remove the cache file if cache entries do not match hashes uploaded to S3
-            if cached_hash_entries and self._check_hash_exist_in_s3(cached_hash_entries) is False:
-                logger.debug(f"The s3_check_cache.db file in {s3_check_cache_dir} will be deleted, "
-                             f"as a mismatch between the cache and the actual hash in S3 was found")
-
-                # Remove the cache file
-                s3_check_cache.remove_cache()
-
-    def _check_hash_exist_in_s3(self, cache_entries: List[S3CheckCacheEntry]) -> bool:
+    def _check_hashes_exist_in_s3(self, cache_entries: List[S3CheckCacheEntry]) -> bool:
         """
         checks if the hashes in the cache entries exist in S3
         """
-        count: int = 0
         for cache_entry in cache_entries:
             try:
                 # Split the S3 key into bucket and key parts
-                bucket, key = cache_entry[0].split("/", 1)
+                bucket, key = cache_entry.s3_key.split("/", 1)
 
                 # Check if the object is already uploaded and exist in S3 bucket
                 if self.file_already_uploaded(bucket=bucket, key=key):
                     logger.debug(f"cache_entry: {cache_entry} exist in S3")
-                    count += 1
+
                 # If a mismatch found, return False to reset the cache immediately. There's no need to check the rest.
                 else:
                     return False
@@ -427,8 +425,44 @@ class S3AssetUploader:
                 logger.warning(f"Error occurred while checking {cache_entry}. Exception: {e}")
                 return False
 
-        # If all sampled objects match, return True, otherwise False
-        return count == len(cache_entries)
+        # Otherwise all hashes exist in S3
+        return True
+
+    def _sample_cache_entries_with_limit(
+        self, cache_entries: List[S3CheckCacheEntry], limit: int = 30
+    ):
+        sampled_count: int = min(len(cache_entries), limit)
+        random.shuffle(cache_entries)
+        return cache_entries[:sampled_count]
+
+    def verify_hash_cache_integrity(
+        self,
+        s3_check_cache_dir: Optional[str],
+        manifest: BaseAssetManifest,
+        s3_cas_prefix: str,
+        s3_bucket: str,
+    ) -> bool:
+        """
+        Inspects a sampling of the assets provided in manifest that are present in the S3 check cache and
+        verifies if the cached assets exist in S3. Returns True if all sampled cached assets exist in S3, False
+        otherwise.
+        """
+
+        # Find the list of s3 upload keys that have been cached
+        s3_upload_keys: List[str] = [
+            self._generate_s3_upload_key(file, manifest.hashAlg, s3_cas_prefix)
+            for file in manifest.paths
+        ]
+        with S3CheckCache(s3_check_cache_dir) as s3_cache:
+            cache_entries = [
+                s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}")
+                for upload_key in s3_upload_keys
+                if s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}") is not None
+            ]
+
+            # verify that a sample of the cached entries still exist in S3
+            sampled_cache_entries = self._sample_cache_entries_with_limit(cache_entries)
+            return self._check_hashes_exist_in_s3(sampled_cache_entries)
 
     def _separate_files_by_size(
         self,
@@ -450,6 +484,17 @@ class S3AssetUploader:
     def _get_current_timestamp(self) -> str:
         return str(datetime.now().timestamp())
 
+    def _generate_s3_upload_key(
+        self,
+        file: base_manifest.BaseManifestPath,
+        hash_algorithm: HashAlgorithm,
+        s3_cas_prefix: str,
+    ) -> str:
+        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
+        if s3_cas_prefix:
+            s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
+        return s3_upload_key
+
     def upload_object_to_cas(
         self,
         file: base_manifest.BaseManifestPath,
@@ -466,9 +511,7 @@ class S3AssetUploader:
         Returns a tuple (whether it has been uploaded, the file size).
         """
         local_path = source_root.joinpath(file.path)
-        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
-        if s3_cas_prefix:
-            s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
+        s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, s3_cas_prefix)
         is_uploaded = False
         file_size = local_path.resolve().stat().st_size
 
@@ -737,7 +780,6 @@ class S3AssetUploader:
             )
             return True
         except ClientError as exc:
-            logger.debug(f"file_already_uploaded - ClientError: {exc}")
             error_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
             if error_code == 403:
                 message = (
@@ -1316,8 +1358,6 @@ class S3AssetManager:
             a tuple with (1) the summary statistics of the upload operation, and
             (2) the S3 path to the asset manifest file.
         """
-        logger.debug("S3AssetManager.upload_assets")
-
         # This is a programming error if the user did not construct the object with Farm and Queue IDs.
         if not self.farm_id or not self.queue_id:
             logger.error("upload_assets: Farm or Fleet ID is missing.")
