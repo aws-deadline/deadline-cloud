@@ -179,7 +179,7 @@ class S3AssetUploader:
 
         if manifest_write_dir:
             self._write_local_manifest(
-                manifest_write_dir, manifest_name, full_manifest_key, manifest, None
+                manifest_write_dir, manifest_name, full_manifest_key, manifest
             )
 
         self.upload_bytes_to_s3(
@@ -224,7 +224,7 @@ class S3AssetUploader:
         manifest_name: str,
         full_manifest_key: str,
         manifest: BaseAssetManifest,
-        root_dir_name: Optional[str],
+        root_dir_name: Optional[str] = None,
     ) -> None:
         """
         Writes a manifest file locally in a 'manifests' sub-directory.
@@ -246,7 +246,7 @@ class S3AssetUploader:
         """
         input_manifest_folder_name = "manifests"
         if root_dir_name is not None:
-            input_manifest_folder_name = root_dir_name + input_manifest_folder_name
+            input_manifest_folder_name = root_dir_name + "_" + input_manifest_folder_name
 
         local_manifest_file = Path(manifest_write_dir, input_manifest_folder_name, manifest_name)
         logger.info(f"Creating local manifest file: {local_manifest_file}\n")

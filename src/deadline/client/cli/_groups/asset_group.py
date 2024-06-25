@@ -7,10 +7,6 @@ All the `deadline asset` commands:
     * diff
     * download
 """
-<<<<<<< HEAD
-=======
-
->>>>>>> ae6cbf17fcbeac9714ca0cb1f0924f5531bd3315
 import os
 from pathlib import Path
 
@@ -20,10 +16,8 @@ from deadline.client import api
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
-from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
+from .._common import _handle_error, _ProgressBarCallbackManager
 from ...exceptions import NonValidInputError
-
-IGNORE_FILE: str = "manifests"
 
 
 @click.group(name="asset")
@@ -36,7 +30,9 @@ def cli_asset():
 
 @cli_asset.command(name="snapshot")
 @click.option("--root-dir", required=True, help="The root directory to snapshot. ")
-@click.option("--manifest-out", help="Destination path to directory where manifest is created. ")
+@click.option(
+    "--manifest-out", default=None, help="Destination path to directory where manifest is created. "
+)
 @click.option(
     "--recursive",
     "-r",
@@ -46,31 +42,22 @@ def cli_asset():
     default=False,
 )
 @_handle_error
-def asset_snapshot(root_dir, manifest_out, recursive, **args):
+def asset_snapshot(root_dir: str, manifest_out: str, recursive: bool, **args):
     """
     Creates manifest of files specified root directory.
     """
-    root_dir_basename = os.path.basename(root_dir) + "_"
-
     if not os.path.isdir(root_dir):
-        misconfigured_directories_msg = f"Specified root directory {root_dir} does not exist. "
-        raise NonValidInputError(misconfigured_directories_msg)
+        raise NonValidInputError(f"Specified root directory {root_dir} does not exist. ")
 
     if manifest_out and not os.path.isdir(manifest_out):
-        misconfigured_directories_msg = (
-            f"Specified destination directory {manifest_out} does not exist. "
-        )
-        raise NonValidInputError(misconfigured_directories_msg)
+        raise NonValidInputError(f"Specified destination directory {manifest_out} does not exist. ")
     elif manifest_out is None:
         manifest_out = root_dir
+        click.echo(f"Manifest creation path defaulted to {root_dir} \n")
 
     inputs = []
     for root, dirs, files in os.walk(root_dir):
-        if os.path.basename(root).endswith("_manifests"):
-            continue
-        for file in files:
-            file_full_path = str(os.path.join(root, file))
-            inputs.append(file_full_path)
+        inputs.extend([str(os.path.join(root, file)) for file in files])
         if not recursive:
             break
 
@@ -101,11 +88,18 @@ def asset_snapshot(root_dir, manifest_out, recursive, **args):
         source_root = Path(asset_root_manifests.root_path)
         file_system_location_name = asset_root_manifests.file_system_location_name
         (_, _, manifest_name) = asset_uploader._gather_upload_metadata(
-            asset_root_manifests.asset_manifest, source_root, file_system_location_name
+            manifest=asset_root_manifests.asset_manifest,
+            source_root=source_root,
+            file_system_location_name=file_system_location_name,
         )
         asset_uploader._write_local_input_manifest(
-            manifest_out, manifest_name, asset_root_manifests.asset_manifest, root_dir_basename
+            manifest_write_dir=manifest_out,
+            manifest_name=manifest_name,
+            manifest=asset_root_manifests.asset_manifest,
+            root_dir_name=os.path.basename(root_dir),
         )
+
+    click.echo(f"Manifest created at {manifest_out}\n")
 
 
 @cli_asset.command(name="upload")
