@@ -1,1 +1,1 @@
-LD_LIBRARY_PATH=./DeadlineCloudSubmitter/DeadlineClient/cli/PySide6/Qt/lib
+LD_LIBRARY_PATH=/home/rocky/DeadlineCloudSubmitter/DeadlineClient/cli/PySide6/Qt/lib

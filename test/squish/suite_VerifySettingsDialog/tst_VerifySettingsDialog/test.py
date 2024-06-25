@@ -13,6 +13,8 @@ loggingLevel = "WARNING"
 
 
 def main():
+    import test
+
     gui_helpers.launchDeadlineConfigGUI()
     gui_helpers.setGlobalSettings(profileName, jobHistDir)
     gui_helpers.setProfileSettings(farmName)
