@@ -39,7 +39,7 @@ dependencies = [
     "click >= 8.1.7",
     "pyyaml >= 6.0",
     # Job Attachments
-    "typing_extensions >= 4.7,< 4.12; python_version == '3.7'",
+    "typing_extensions >= 4.7,< 4.13; python_version == '3.7'",
     "typing_extensions >= 4.8; python_version > '3.7'",
     # Pinning due to 3.4 not being available upstream
     "xxhash == 3.4.*",
