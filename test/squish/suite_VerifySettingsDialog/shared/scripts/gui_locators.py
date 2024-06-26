@@ -1,3 +1,4 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # encoding: UTF-8
 
 aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog = {
