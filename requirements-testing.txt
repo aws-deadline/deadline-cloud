@@ -13,5 +13,5 @@ black == 24.4.*; python_version > '3.7'
 mypy == 1.10.*; python_version == '3.7'
 mypy == 1.*; python_version > '3.7'
 ruff == 0.3.*
-moto == 4.*
+moto == 5.*
 jsondiff == 2.*
