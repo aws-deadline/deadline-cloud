@@ -44,7 +44,7 @@ dependencies = [
     # Pinning due to 3.4 not being available upstream
     "xxhash == 3.4.*",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
-    "jsonschema >= 4.17,< 4.23",
+    "jsonschema == 4.17.*",
     "pywin32 == 306; sys_platform == 'win32'",
     "QtPy == 2.4.*",
 ]

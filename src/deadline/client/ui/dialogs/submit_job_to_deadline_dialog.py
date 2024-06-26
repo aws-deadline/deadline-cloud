@@ -94,7 +94,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
-        self.parameter_values: Optional[list[Dict[str, Any]]] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
 
@@ -409,19 +408,6 @@ class SubmitJobToDeadlineDialog(QDialog):
             job_history_bundle_dir = create_job_history_bundle_dir(
                 settings.submitter_name, settings.name
             )
-
-            # First filter the queue parameters to exclude any from the job template,
-            # then extend it with the job template parameters.
-            job_parameter_names = {param["name"] for param in settings.parameters}
-            parameter_values: list[dict[str, Any]] = [
-                {"name": param["name"], "value": param["value"]}
-                for param in queue_parameters
-                if param["name"] not in job_parameter_names
-            ]
-            parameter_values.extend(
-                {"name": param["name"], "value": param["value"]} for param in settings.parameters
-            )
-            self.parameter_values = parameter_values
 
             if self.show_host_requirements_tab:
                 requirements = self.host_requirements.get_requirements()
