@@ -5,8 +5,10 @@ All the `deadline bundle` commands.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
+from typing import Any, Optional
 
 import click
 from contextlib import ExitStack
@@ -249,8 +251,20 @@ def bundle_submit(
     is_flag=True,
     help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
 )
+@click.option(
+    "--output",
+    type=click.Choice(
+        ["verbose", "json"],
+        case_sensitive=False,
+    ),
+    default="verbose",
+    help="Specifies the output format of the messages printed to stdout.\n"
+    "VERBOSE: Displays messages in a human-readable text format.\n"
+    "JSON: Displays messages in JSON line format, so that the info can be easily "
+    "parsed/consumed by custom scripts.",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
@@ -263,6 +277,7 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
             raise DeadlineOperationError(
                 "Specify a job bundle directory or run the bundle command with the --browse flag"
             )
+        output = output.lower()
 
         submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
 
@@ -276,10 +291,38 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
         response = None
         if submitter:
             response = submitter.create_job_response
-        if response:
+
+        _print_response(
+            output=output,
+            submitted=True if response else False,
+            job_bundle_dir=job_bundle_dir,
+            job_history_bundle_dir=submitter.job_history_bundle_dir,
+            job_id=response["jobId"] if response else None,
+        )
+
+
+def _print_response(
+    output: str,
+    submitted: bool,
+    job_bundle_dir: str,
+    job_history_bundle_dir: Optional[str],
+    job_id: Optional[str],
+):
+    if output == "json":
+        if submitted:
+            response: dict[str, Any] = {
+                "status": "SUBMITTED",
+                "jobId": job_id,
+                "jobHistoryBundleDirectory": job_history_bundle_dir,
+            }
+            click.echo(json.dumps(response))
+        else:
+            click.echo(json.dumps({"status": "CANCELED"}))
+    else:
+        if submitted:
             click.echo("Submitted job bundle:")
             click.echo(f"   {job_bundle_dir}")
-            click.echo(f"Job ID: {response['jobId']}")
+            click.echo(f"Job ID: {job_id}")
         else:
             click.echo("Job submission canceled.")
 
