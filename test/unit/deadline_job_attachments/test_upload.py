@@ -29,6 +29,7 @@ from deadline.job_attachments.asset_manifests import (
     HashAlgorithm,
     ManifestVersion,
 )
+from deadline.job_attachments.asset_manifests.v2023_03_03 import AssetManifest
 from deadline.job_attachments.caches import HashCacheEntry, S3CheckCacheEntry
 from deadline.job_attachments.exceptions import (
     AssetSyncError,
@@ -2493,6 +2494,131 @@ class TestUpload:
             size_threshold=size_threshold,
         )
         assert actual_queues == expected_queues
+
+    @pytest.mark.parametrize(
+        "cache_entry",
+        [
+            S3CheckCacheEntry(
+                s3_key="bucket/Data/test-hash",
+                last_seen_time=str(datetime.now().timestamp()),
+            ),
+            None,
+        ],
+    )
+    def test_verify_hash_cache_integrity_returns_true_when_cache_and_s3_match(self, cache_entry):
+        # Given
+        mock_s3_check_cache_impl = MagicMock()
+        mock_s3_check_cache_impl.get_entry.return_value = cache_entry
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.return_value = {}
+
+        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader._s3 = mock_s3_client
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            with patch.object(
+                s3_asset_uploader,
+                "file_already_uploaded",
+                wraps=s3_asset_uploader.file_already_uploaded,
+            ) as file_already_uploaded_spy:
+                # Then
+                # Execute verify_hash_cache_integrity where hash exists in S3
+                assert s3_asset_uploader.verify_hash_cache_integrity(
+                    s3_check_cache_dir="cache-dir",
+                    manifest=AssetManifest(
+                        hash_alg=HashAlgorithm.XXH128,
+                        paths=[
+                            BaseManifestPath(
+                                path="test-file.txt", hash="test-hash", size=5, mtime=1
+                            )
+                        ],
+                        total_size=1,
+                    ),
+                    s3_cas_prefix="Data",
+                    s3_bucket="bucket",
+                )
+                if cache_entry:
+                    file_already_uploaded_spy.assert_called_once_with(
+                        bucket="bucket", key="Data/test-hash"
+                    )
+                else:
+                    file_already_uploaded_spy.assert_not_called()
+
+    def test_verify_hash_cache_integrity_returns_false_when_cache_and_s3_mismatch(self):
+        # Given
+        mock_s3_check_cache_impl = MagicMock()
+        mock_s3_check_cache_impl.get_entry.return_value = S3CheckCacheEntry(
+            s3_key="bucket/Data/test-hash",
+            last_seen_time=str(datetime.now().timestamp()),
+        )
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.side_effect = ClientError(
+            {"ResponseMetadata": {"HTTPStatusCode": 404}}, "HeadObject"
+        )
+
+        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader._s3 = mock_s3_client
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            with patch.object(
+                s3_asset_uploader,
+                "file_already_uploaded",
+                wraps=s3_asset_uploader.file_already_uploaded,
+            ) as file_already_uploaded_spy:
+                # Execute verify_hash_cache_integrity where hash does not exist in S3
+                # Then
+                assert not s3_asset_uploader.verify_hash_cache_integrity(
+                    s3_check_cache_dir="cache-dir",
+                    manifest=AssetManifest(
+                        hash_alg=HashAlgorithm.XXH128,
+                        paths=[
+                            BaseManifestPath(
+                                path="test-file.txt", hash="test-hash", size=5, mtime=1
+                            )
+                        ],
+                        total_size=1,
+                    ),
+                    s3_cas_prefix="Data",
+                    s3_bucket="bucket",
+                )
+
+                file_already_uploaded_spy.assert_called_once_with(
+                    bucket="bucket", key="Data/test-hash"
+                )
+
+    def test_reset_s3_check_cache_removes_cache(self, tmpdir):
+        # Given
+        cache_dir: str = "mock_dir"
+        mock_s3_check_cache_impl = MagicMock()
+
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            # Execute reset_s3_check_cache where the cached hash does not exist in S3
+            s3_asset_uploader = S3AssetUploader()
+            s3_asset_uploader.reset_s3_check_cache(cache_dir)
+
+            # Then
+            mock_s3_check_cache_impl.remove_cache.assert_called_once()
 
     @mock_sts
     @pytest.mark.parametrize(

@@ -199,3 +199,16 @@ class TestS3CheckCache:
                     )
                 )
                 assert s3c.get_entry("bucket/Data/somehash") is None
+
+    def test_delete_cache(self, tmpdir):
+        """
+        Tests if the cache file can be deleted when calling remove_cache
+        """
+        cache_dir = tmpdir.mkdir("cache")
+        with S3CheckCache(cache_dir) as s3c:
+            file_name: str = os.path.join(cache_dir, "s3_check_cache.db")
+            assert os.path.exists(file_name)
+            s3c.remove_cache()
+
+            # Test if the cache file was deleted
+            assert not os.path.exists(file_name)
