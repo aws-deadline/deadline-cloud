@@ -1,11 +1,11 @@
-name: Mainline Integration Test
+name: Mainline Merge Integration Test
 
 on:
   workflow_dispatch:
 
 jobs:  
-  MainlineIntegrationTest:
-    name: Integration Test
+  MainlineLinuxIntegrationTest:
+    name: Linux Integration Test
     permissions:
       id-token: write
       contents: read
@@ -15,3 +15,16 @@ jobs:
       repository: ${{ github.event.repository.name }}
       branch: mainline
       environment: mainline
+      os: linux
+  MainlineWindowsIntegrationTest:
+    name: Windows Integration Test
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      branch: mainline
+      environment: mainline
+      os: windows

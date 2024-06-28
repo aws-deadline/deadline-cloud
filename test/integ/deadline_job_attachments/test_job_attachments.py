@@ -46,7 +46,6 @@ class JobAttachmentTest:
     Hold information used across all job attachment integration tests.
     """
 
-    ROOT_PREFIX = "root"
     ASSET_ROOT = Path(__file__).parent / "test_data"
     OUTPUT_PATH = ASSET_ROOT / "outputs"
     INPUT_PATH = ASSET_ROOT / "inputs"
@@ -70,21 +69,22 @@ class JobAttachmentTest:
         """
         self.job_attachment_resources = deploy_job_attachment_resources
 
-        if self.job_attachment_resources.farm is None:
-            raise TypeError("The Farm was not properly created when initializing resources.")
+        if self.job_attachment_resources.farm_id is None:
+            raise TypeError("The Farm ID was not properly retrieved when initializing resources.")
         if (
             self.job_attachment_resources.queue is None
             or self.job_attachment_resources.queue_with_no_settings is None
         ):
             raise TypeError("The Queues were not properly created when initializing resources.")
 
-        self.farm_id = self.job_attachment_resources.farm.id
+        self.farm_id = self.job_attachment_resources.farm_id
         self.queue_id = self.job_attachment_resources.queue.id
-        self.queue_with_no_settings = self.job_attachment_resources.queue_with_no_settings.id
+        self.queue_with_no_settings_id = self.job_attachment_resources.queue_with_no_settings.id
 
         self.bucket = boto3.resource("s3").Bucket(self.job_attachment_resources.bucket_name)
         self.deadline_client = self.job_attachment_resources.deadline_client
 
+        self.bucket_root_prefix = self.job_attachment_resources.bucket_root_prefix
         self.hash_cache_dir = tmp_path_factory.mktemp("hash_cache")
         self.s3_cache_dir = tmp_path_factory.mktemp("s3_check_cache")
         self.session = boto3.Session()
@@ -117,14 +117,6 @@ def upload_input_files_assets_not_in_cas(job_attachment_test: JobAttachmentTest)
     When no assets are in the CAS, make sure all files are uploaded.
     """
     # IF
-    job_attachment_test.deadline_client.update_queue(
-        queueId=job_attachment_test.queue_id,
-        farmId=job_attachment_test.farm_id,
-        jobAttachmentSettings={
-            "s3BucketName": job_attachment_test.bucket.name,
-            "rootPrefix": job_attachment_test.ROOT_PREFIX,
-        },
-    )
 
     job_attachment_settings = get_queue(
         farm_id=job_attachment_test.farm_id,
@@ -446,7 +438,7 @@ def sync_inputs_no_job_attachment_s3_settings(
 
     job_response = job_attachment_test.deadline_client.create_job(
         farmId=job_attachment_test.farm_id,
-        queueId=job_attachment_test.queue_with_no_settings,
+        queueId=job_attachment_test.queue_with_no_settings_id,
         attachments=upload_input_files_one_asset_in_cas.attachments.to_dict(),  # type: ignore
         targetTaskRunStatus="SUSPENDED",
         template=default_job_template_one_task_one_step,
@@ -467,14 +459,15 @@ def sync_inputs_no_job_attachment_s3_settings(
     # WHEN
     assert syncer.sync_inputs(
         syncer.get_s3_settings(
-            farm_id=job_attachment_test.farm_id, queue_id=job_attachment_test.queue_with_no_settings
+            farm_id=job_attachment_test.farm_id,
+            queue_id=job_attachment_test.queue_with_no_settings_id,
         ),
         syncer.get_attachments(
             job_attachment_test.farm_id,
-            job_attachment_test.queue_with_no_settings,
+            job_attachment_test.queue_with_no_settings_id,
             job_response["jobId"],
         ),
-        job_attachment_test.queue_with_no_settings,
+        job_attachment_test.queue_with_no_settings_id,
         job_response["jobId"],
         session_dir,
         on_downloading_files=on_downloading_files,
@@ -482,7 +475,7 @@ def sync_inputs_no_job_attachment_s3_settings(
 
     assert (
         "No Job Attachment settings configured for Queue "
-        f"{job_attachment_test.queue_with_no_settings}, no inputs to sync." in caplog.text
+        f"{job_attachment_test.queue_with_no_settings_id}, no inputs to sync." in caplog.text
     )
 
     return SyncInputsNoJobAttachmentS3SettingsOutput(
@@ -628,19 +621,19 @@ def test_sync_outputs_no_job_attachment_s3_settings(
     waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
     waiter.wait(
         jobId=sync_inputs_no_job_attachment_s3_settings.job_id,
-        queueId=job_attachment_test.queue_with_no_settings,
+        queueId=job_attachment_test.queue_with_no_settings_id,
         farmId=job_attachment_test.farm_id,
     )
 
     step_id = job_attachment_test.deadline_client.list_steps(
         farmId=job_attachment_test.farm_id,
-        queueId=job_attachment_test.queue_with_no_settings,
+        queueId=job_attachment_test.queue_with_no_settings_id,
         jobId=sync_inputs_no_job_attachment_s3_settings.job_id,
     )["steps"][0]["stepId"]
 
     task_id = job_attachment_test.deadline_client.list_tasks(
         farmId=job_attachment_test.farm_id,
-        queueId=job_attachment_test.queue_with_no_settings,
+        queueId=job_attachment_test.queue_with_no_settings_id,
         jobId=sync_inputs_no_job_attachment_s3_settings.job_id,
         stepId=step_id,
     )["tasks"][0]["taskId"]
@@ -648,14 +641,14 @@ def test_sync_outputs_no_job_attachment_s3_settings(
     # WHEN
     sync_inputs_no_job_attachment_s3_settings.asset_syncer.sync_outputs(
         s3_settings=sync_inputs_no_job_attachment_s3_settings.asset_syncer.get_s3_settings(
-            job_attachment_test.farm_id, job_attachment_test.queue_with_no_settings
+            job_attachment_test.farm_id, job_attachment_test.queue_with_no_settings_id
         ),
         attachments=sync_inputs_no_job_attachment_s3_settings.asset_syncer.get_attachments(
             job_attachment_test.farm_id,
-            job_attachment_test.queue_with_no_settings,
+            job_attachment_test.queue_with_no_settings_id,
             sync_inputs_no_job_attachment_s3_settings.job_id,
         ),
-        queue_id=job_attachment_test.queue_with_no_settings,
+        queue_id=job_attachment_test.queue_with_no_settings_id,
         job_id=sync_inputs_no_job_attachment_s3_settings.job_id,
         step_id=step_id,
         task_id=task_id,
@@ -667,7 +660,7 @@ def test_sync_outputs_no_job_attachment_s3_settings(
     # THEN
     assert (
         "No Job Attachment settings configured for Queue "
-        f"{job_attachment_test.queue_with_no_settings}, no outputs to sync." in caplog.text
+        f"{job_attachment_test.queue_with_no_settings_id}, no outputs to sync." in caplog.text
     )
 
 
@@ -1120,14 +1113,6 @@ def upload_input_files_no_input_paths(
     Test that the created job settings object doesn't have the requiredAssets field when there are no input files.
     """
     # IF
-    job_attachment_test.deadline_client.update_queue(
-        queueId=job_attachment_test.queue_id,
-        farmId=job_attachment_test.farm_id,
-        jobAttachmentSettings={
-            "s3BucketName": job_attachment_test.bucket.name,
-            "rootPrefix": job_attachment_test.ROOT_PREFIX,
-        },
-    )
 
     job_attachment_settings = get_queue(
         farm_id=job_attachment_test.farm_id,
@@ -1187,14 +1172,6 @@ def test_upload_input_files_no_download_paths(job_attachment_test: JobAttachment
     then the resulting attachments object has no output directories in it.
     """
     # IF
-    job_attachment_test.deadline_client.update_queue(
-        queueId=job_attachment_test.queue_id,
-        farmId=job_attachment_test.farm_id,
-        jobAttachmentSettings={
-            "s3BucketName": job_attachment_test.bucket.name,
-            "rootPrefix": job_attachment_test.ROOT_PREFIX,
-        },
-    )
 
     job_attachment_settings = get_queue(
         farm_id=job_attachment_test.farm_id,
@@ -1313,7 +1290,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
     # IF
     job_attachment_settings = JobAttachmentS3Settings(
         s3BucketName=external_bucket,
-        rootPrefix=job_attachment_test.ROOT_PREFIX,
+        rootPrefix=job_attachment_test.bucket_root_prefix,
     )
 
     asset_manager = upload.S3AssetManager(
@@ -1364,7 +1341,7 @@ def test_sync_inputs_bucket_wrong_account(
     # IF
     job_attachment_settings = JobAttachmentS3Settings(
         s3BucketName=external_bucket,
-        rootPrefix=job_attachment_test.ROOT_PREFIX,
+        rootPrefix=job_attachment_test.bucket_root_prefix,
     )
 
     job_response = job_attachment_test.deadline_client.create_job(
@@ -1410,7 +1387,7 @@ def test_sync_outputs_bucket_wrong_account(
     # IF
     job_attachment_settings = JobAttachmentS3Settings(
         s3BucketName=external_bucket,
-        rootPrefix=job_attachment_test.ROOT_PREFIX,
+        rootPrefix=job_attachment_test.bucket_root_prefix,
     )
 
     waiter = job_attachment_test.deadline_client.get_waiter("job_create_complete")
@@ -1493,7 +1470,7 @@ def test_download_outputs_bucket_wrong_account(
     # GIVEN
     job_attachment_settings = JobAttachmentS3Settings(
         s3BucketName=external_bucket,
-        rootPrefix=job_attachment_test.ROOT_PREFIX,
+        rootPrefix=job_attachment_test.bucket_root_prefix,
     )
 
     # WHEN

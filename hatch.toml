@@ -47,7 +47,8 @@ make_exe = "python scripts/pyinstaller/make_exe.py --output {env:OUT_FILE}"
 
 [envs.integ]
 pre-install-commands = [
-  "pip install -r requirements-integ-testing.txt"
+  "pip install -r requirements-integ-testing.txt",
+  "pip install -r requirements-testing.txt"
 ]
 
 [envs.integ.scripts]
