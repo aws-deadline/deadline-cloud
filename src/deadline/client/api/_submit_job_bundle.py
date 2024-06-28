@@ -276,7 +276,7 @@ def create_job_from_job_bundle(
                 print_function_callback("Job submission canceled.")
                 return None
 
-            _, asset_manifests = _hash_attachments(
+            _, asset_manifests = hash_attachments(
                 asset_manager=asset_manager,
                 asset_groups=upload_group.asset_groups,
                 total_input_files=upload_group.total_input_files,
@@ -396,7 +396,7 @@ def wait_for_create_job_to_complete(
     )
 
 
-def _hash_attachments(
+def hash_attachments(
     asset_manager: S3AssetManager,
     asset_groups: list[AssetRootGroup],
     total_input_files: int,

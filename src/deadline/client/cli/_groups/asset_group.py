@@ -7,10 +7,17 @@ All the `deadline asset` commands:
     * diff
     * download
 """
+import os
+from pathlib import Path
 
 import click
 
-from .._common import _handle_error
+from deadline.client import api
+from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
+from deadline.job_attachments.models import JobAttachmentS3Settings
+
+from .._common import _handle_error, _ProgressBarCallbackManager
+from ...exceptions import NonValidInputError
 
 
 @click.group(name="asset")
@@ -22,8 +29,10 @@ def cli_asset():
 
 
 @cli_asset.command(name="snapshot")
-@click.option("--root-dir", help="The root directory to snapshot. ")
-@click.option("--manifest-out", help="Destination path to directory where manifest is created. ")
+@click.option("--root-dir", required=True, help="The root directory to snapshot. ")
+@click.option(
+    "--manifest-out", default=None, help="Destination path to directory where manifest is created. "
+)
 @click.option(
     "--recursive",
     "-r",
@@ -33,11 +42,64 @@ def cli_asset():
     default=False,
 )
 @_handle_error
-def asset_snapshot(**args):
+def asset_snapshot(root_dir: str, manifest_out: str, recursive: bool, **args):
     """
     Creates manifest of files specified root directory.
     """
-    click.echo("snapshot taken")
+    if not os.path.isdir(root_dir):
+        raise NonValidInputError(f"Specified root directory {root_dir} does not exist. ")
+
+    if manifest_out and not os.path.isdir(manifest_out):
+        raise NonValidInputError(f"Specified destination directory {manifest_out} does not exist. ")
+    elif manifest_out is None:
+        manifest_out = root_dir
+        click.echo(f"Manifest creation path defaulted to {root_dir} \n")
+
+    inputs = []
+    for root, dirs, files in os.walk(root_dir):
+        inputs.extend([str(os.path.join(root, file)) for file in files])
+        if not recursive:
+            break
+
+    # Placeholder Asset Manager
+    asset_manager = S3AssetManager(
+        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
+    )
+    asset_uploader = S3AssetUploader()
+    hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
+
+    upload_group = asset_manager.prepare_paths_for_upload(
+        input_paths=inputs, output_paths=[root_dir], referenced_paths=[]
+    )
+    if upload_group.asset_groups:
+        _, manifests = api.hash_attachments(
+            asset_manager=asset_manager,
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
+            print_function_callback=click.echo,
+            hashing_progress_callback=hash_callback_manager.callback,
+        )
+
+    # Write created manifest into local file, at the specified location at manifest_out
+    for asset_root_manifests in manifests:
+        if asset_root_manifests.asset_manifest is None:
+            continue
+        source_root = Path(asset_root_manifests.root_path)
+        file_system_location_name = asset_root_manifests.file_system_location_name
+        (_, _, manifest_name) = asset_uploader._gather_upload_metadata(
+            manifest=asset_root_manifests.asset_manifest,
+            source_root=source_root,
+            file_system_location_name=file_system_location_name,
+        )
+        asset_uploader._write_local_input_manifest(
+            manifest_write_dir=manifest_out,
+            manifest_name=manifest_name,
+            manifest=asset_root_manifests.asset_manifest,
+            root_dir_name=os.path.basename(root_dir),
+        )
+
+    click.echo(f"Manifest created at {manifest_out}\n")
 
 
 @cli_asset.command(name="upload")
