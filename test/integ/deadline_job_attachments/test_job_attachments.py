@@ -1355,7 +1355,7 @@ def test_sync_inputs_bucket_wrong_account(
     )
 
     syncer = asset_sync.AssetSync(job_attachment_test.farm_id)
-    session_dir = tmp_path_factory.mktemp(r"An error occurred \(403\)")
+    session_dir = tmp_path_factory.mktemp("session_dir")
 
     def on_downloading_files(*args, **kwargs):
         return True
