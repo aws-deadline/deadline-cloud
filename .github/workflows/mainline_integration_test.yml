@@ -1,6 +1,9 @@
-name: Mainline Merge Integration Test
+name: Mainline Merge Integration Tests
 
 on:
+  push:
+    branches:
+      - mainline
   workflow_dispatch:
 
 jobs:  
