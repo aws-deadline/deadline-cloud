@@ -1,6 +1,8 @@
 name: Mainline Merge Integration Tests
 
 on:
+  schedule:
+    - cron: '0 */4 * * *'
   push:
     branches:
       - mainline
