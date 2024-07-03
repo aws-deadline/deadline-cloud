@@ -1,3 +1,9 @@
+## 0.48.7 (2024-07-03)
+
+
+### Features
+* support JSON output from bundle gui-submit (#380) ([`eb9acb0`](https://github.com/aws-deadline/deadline-cloud/commit/eb9acb0147494ae910ec92cef91ace589f7e8b74))
+
 ## 0.48.6 (2024-06-26)
 
 
