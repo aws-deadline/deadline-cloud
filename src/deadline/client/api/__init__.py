@@ -4,6 +4,7 @@ __all__ = [
     "login",
     "logout",
     "create_job_from_job_bundle",
+    "hash_attachments",
     "wait_for_create_job_to_complete",
     "get_boto3_session",
     "get_boto3_client",
@@ -52,7 +53,11 @@ from ._list_apis import (
     list_storage_profiles_for_queue,
 )
 from ._queue_parameters import get_queue_parameter_definitions
-from ._submit_job_bundle import create_job_from_job_bundle, wait_for_create_job_to_complete
+from ._submit_job_bundle import (
+    create_job_from_job_bundle,
+    wait_for_create_job_to_complete,
+    hash_attachments,
+)
 from ._telemetry import (
     get_telemetry_client,
     get_deadline_cloud_library_telemetry_client,
