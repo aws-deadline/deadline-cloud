@@ -14,13 +14,7 @@ from typing import Any, Callable, Generator
 from unittest.mock import patch
 
 import pytest
-from moto import mock_iotdata, mock_s3
-
-# A recent change to moto means that we _must_ start moto at least once before the first initialization of boto3
-# Else our mocks don't take effect
-# Our static initialization ends up initialization the iot data client. we don't interact with this service
-# or otherwise use moto with it in our tests, so let's just start it here so the rest of our mocking works as expected
-mock_iotdata().start()
+from moto import mock_aws
 
 from botocore.client import BaseClient  # noqa: E402 isort:skip
 
@@ -54,7 +48,7 @@ def s3_fixture(boto_config) -> Generator[BaseClient, None, None]:
     Fixture to get a mock S3 client.
     """
 
-    with mock_s3():
+    with mock_aws():
         yield aws_clients.get_s3_client()
 
 
