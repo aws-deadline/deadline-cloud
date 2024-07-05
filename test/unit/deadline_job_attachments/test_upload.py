@@ -19,7 +19,7 @@ import py.path
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 from botocore.stub import Stubber
-from moto import mock_sts
+from moto import mock_aws
 
 import deadline
 from deadline.client import config
@@ -76,7 +76,7 @@ class TestUpload:
         self.job_attachment_s3_settings = default_job_attachment_s3_settings
         create_s3_bucket(bucket_name=default_job_attachment_s3_settings.s3BucketName)
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version,expected_manifest",
         [
@@ -299,7 +299,7 @@ class TestUpload:
                 expected_manifest=expected_manifest,
             )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.skipif(
         sys.platform != "win32",
         reason="Requires Windows to test resolving paths completely with multiple drives",
@@ -467,7 +467,7 @@ class TestUpload:
                 expected_manifest=expected_manifest,
             )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "num_input_files",
         [
@@ -627,7 +627,7 @@ class TestUpload:
             )
             assert_expected_files_on_s3(bucket, expected_files=expected_files)
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "num_input_files",
         [
@@ -739,7 +739,7 @@ class TestUpload:
                 skipped_bytes=expected_total_input_bytes - expected_total_downloaded_bytes,
             )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version",
         [
@@ -877,7 +877,7 @@ class TestUpload:
                 },
             )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "num_input_files",
         [
@@ -1021,7 +1021,7 @@ class TestUpload:
             )
             assert_expected_files_on_s3(bucket, expected_files=expected_files)
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version",
         [
@@ -1336,7 +1336,7 @@ class TestUpload:
             _ = S3AssetUploader()
         assert expected_error_msg in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_file_already_uploaded_bucket_in_different_account(self):
         """
         Test that the appropriate error is raised when checking if a file has already been uploaded, but the bucket
@@ -1370,7 +1370,7 @@ class TestUpload:
                 "and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket."
             ) in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_file_already_uploaded_timeout(self):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -1393,7 +1393,7 @@ class TestUpload:
             " or contact support for further assistance."
         ) in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_upload_bytes_to_s3_bucket_in_different_account(self):
         """
         Test that the appropriate error is raised when uploading bytes, but the bucket
@@ -1428,7 +1428,7 @@ class TestUpload:
                 "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_upload_bytes_to_s3_timeout(self):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -1453,7 +1453,7 @@ class TestUpload:
             " or contact support for further assistance."
         ) in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_upload_file_to_s3_bucket_in_different_account(self, tmp_path: Path):
         """
         Test that the appropriate error is raised when uploading files, but the bucket
@@ -1492,7 +1492,7 @@ class TestUpload:
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_upload_file_to_s3_bucket_has_kms_permissions_error(self, tmp_path: Path):
         """
         Test that the appropriate error is raised when uploading files, but the bucket
@@ -1531,7 +1531,7 @@ class TestUpload:
             ) in str(err.value)
             assert (f"(Failed to upload {str(file)})") in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_upload_file_to_s3_timeout(self, tmp_path: Path):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -1648,7 +1648,7 @@ class TestUpload:
             assert man_path.hash == "a"
             hash_cache.put_entry.assert_not_called()
 
-    @mock_sts
+    @mock_aws
     def test_asset_management_misconfigured_inputs(self, farm_id, queue_id, tmpdir):
         """
         Ensure that when directories are classified as files the submission is prevented with a MisconfiguredInputsError.
@@ -1685,7 +1685,7 @@ class TestUpload:
                     referenced_paths=[],
                 )
 
-    @mock_sts
+    @mock_aws
     def test_asset_management_input_not_exists(self, farm_id, queue_id, tmpdir, caplog):
         """Test that input paths that do not exist are added to referenced files."""
         asset_root = str(tmpdir)
@@ -1772,7 +1772,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-    @mock_sts
+    @mock_aws
     def test_asset_management_input_not_exists_require_fails(self, farm_id, queue_id, tmpdir):
         """Test that input paths that do not exist raise a MisconfiguredInputsError if the `require_paths_exist` flag is true."""
         asset_root = str(tmpdir)
@@ -1809,7 +1809,7 @@ class TestUpload:
 
             assert "notexist.anywhere" in str(execinfo)
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version,expected_manifest",
         [
@@ -2494,7 +2494,7 @@ class TestUpload:
         )
         assert actual_queues == expected_queues
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version",
         [
@@ -2576,7 +2576,7 @@ class TestUpload:
                 # Posix
                 assert "Too many levels of symbolic links:" in caplog.text
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         "manifest_version",
         [

@@ -13,7 +13,7 @@ from unittest.mock import ANY, MagicMock, patch
 
 import boto3
 import pytest
-from moto import mock_sts
+from moto import mock_aws
 
 import deadline
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
@@ -558,7 +558,7 @@ class TestAssetSync:
                 in str(ase)
             )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.parametrize(
         (
             "s3_settings_fixture_name",
