@@ -72,6 +72,7 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
+WINDOWS_MAX_PATH_LENGTH = 260
 
 
 def get_manifest_from_s3(
@@ -516,7 +517,12 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        raise AssetSyncError(e) from e
+        if len(str(local_file_name)) < WINDOWS_MAX_PATH_LENGTH or os.name == "posix":
+            raise AssetSyncError(e) from e
+        raise AssetSyncError(
+            "Your file path is longer than what Windows allow.\n"
+            + f"File path have {len(str(local_file_name))} chars while Windows max file path length is {WINDOWS_MAX_PATH_LENGTH} chars"
+        )
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
