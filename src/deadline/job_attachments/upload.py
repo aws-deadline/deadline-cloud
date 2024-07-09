@@ -91,6 +91,7 @@ class FileStatus(Enum):
     UNCHANGED = 0
     NEW = 1
     MODIFIED = 2
+    DELETED = 3
 
 
 class S3AssetUploader:
