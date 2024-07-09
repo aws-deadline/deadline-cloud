@@ -1963,6 +1963,88 @@ class TestFullDownload:
                 " or contact support for further assistance."
             ) in str(exc.value)
 
+    @mock_aws
+    @patch('os.name', 'posix')
+    def test_windows_long_path_exception_PosixOS(self):
+        mock_s3_client = MagicMock()
+        mock_future = MagicMock()
+        mock_transfer_manager = MagicMock()
+        mock_transfer_manager.download.return_value = mock_future
+        mock_future.result.side_effect = Exception("Test exception")
+
+        file_path = ManifestPathv2023_03_03(
+            path="very/long/input/to/test/windows/max/file/path/for/error/handling/when/downloading/assest/from/job/attachment.txt",
+            hash="path",
+            size=1,
+            mtime=1234000000,
+        )
+
+        local_path = "Users/path/to/a/very/long/file/path/that/exceeds/the/windows/max/path/length/for/testing/max/file/path/error/handling/when/download/or/syncing/assest/using/job/attachment"
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
+            return_value=mock_transfer_manager,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                download_file(
+                    file_path,
+                    HashAlgorithm.XXH128,
+                    local_path,
+                    "test-bucket",
+                    "rootPrefix/Data",
+                    mock_s3_client,
+                )
+
+        expected_message = "Test exception"
+        assert str(exc.value) == expected_message
+
+    @mock_aws
+    @patch('os.name', 'NT')
+    def test_windows_long_path_exception_WindowsOS(self):
+        mock_s3_client = MagicMock()
+        mock_future = MagicMock()
+        mock_transfer_manager = MagicMock()
+        mock_transfer_manager.download.return_value = mock_future
+        mock_future.result.side_effect = Exception("Test exception")
+
+        file_path = ManifestPathv2023_03_03(
+            path="very/long/input/to/test/windows/max/file/path/for/error/handling/when/downloading/assest/from/job/attachment.txt",
+            hash="path",
+            size=1,
+            mtime=1234000000,
+        )
+
+        local_path = "C:\\path\\to\\a\\very\\long\\file\\path\\that\\exceeds\\the\\windows\\max\\path\\length\\for\\testing\\max\\file\\path\\error\\handling\\when\\download\\or\\syncing\\assest\\using\\job\\attachment"
+
+        long_path = Path(local_path).joinpath(file_path.path)
+        
+        with patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_client",
+            return_value=mock_s3_client,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
+            return_value=mock_transfer_manager,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
+        ):
+            with pytest.raises(AssetSyncError) as exc:
+                download_file(
+                    file_path,
+                    HashAlgorithm.XXH128,
+                    local_path,
+                    "test-bucket",
+                    "rootPrefix/Data",
+                    mock_s3_client,
+                )
+
+        expected_message = f"Your file path is longer than what Windows allow.\nFile path have {len(str(long_path))} chars while Windows max file path length is 260 chars"
+        assert str(exc.value) == expected_message
+
 
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
 class TestFullDownloadPrefixesWithSlashes:
