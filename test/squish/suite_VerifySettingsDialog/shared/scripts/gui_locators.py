@@ -73,7 +73,11 @@ profile_settings_QLineEdit = {
     "unnamed": 1,
     "visible": 1,
 }
-deadline_Cloud_Squish_Farm_QModelIndex = {"container": profile_settings_QComboBox, "text": "Deadline Cloud Squish Farm", "type": "QModelIndex"}
+deadline_Cloud_Squish_Farm_QModelIndex = {
+    "container": profile_settings_QComboBox,
+    "text": "Deadline Cloud Squish Farm",
+    "type": "QModelIndex",
+}
 
 # choose job history directory file browser
 profile_settings_QPushButton = {
@@ -120,8 +124,16 @@ farm_settings_QComboBox_3 = {
     "unnamed": 1,
     "visible": 1,
 }
-squish_Automation_Queue_QModelIndex = {"container": farm_settings_QComboBox, "text": "Squish Automation Queue", "type": "QModelIndex"}
-squish_Storage_Profile_QModelIndex = {"container": farm_settings_QComboBox_2, "text": "Squish Storage Profile", "type": "QModelIndex"}
+squish_Automation_Queue_QModelIndex = {
+    "container": farm_settings_QComboBox,
+    "text": "Squish Automation Queue",
+    "type": "QModelIndex",
+}
+squish_Storage_Profile_QModelIndex = {
+    "container": farm_settings_QComboBox_2,
+    "text": "Squish Storage Profile",
+    "type": "QModelIndex",
+}
 
 # general settings
 aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox = {
