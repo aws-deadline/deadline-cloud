@@ -5,7 +5,7 @@
 import gui_helpers
 import test
 
-profileName = "deadlinecloud\\_squish"
+profileName = "deadlinecloud_squish"
 jobHistDir = "~/.deadline/job_history/deadlinecloud_squish"
 farmName = "Deadline Cloud Squish Farm"
 queueName = "Squish Automation Queue"
