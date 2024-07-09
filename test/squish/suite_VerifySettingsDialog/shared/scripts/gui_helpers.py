@@ -25,140 +25,141 @@ def launchDeadlineConfigGUI():
     )
 
 
-def setGlobalSettings(profileName: str, jobHistDir: str):
+def setGlobalSettings(profileName: str):
+    # open AWS profile drop down menu
+    squish.mouseClick(
+        squish.waitForObjectExists(gui_locators.global_settings_AWS_profile_QComboBox),
+    )
     test.compare(
-        str(squish.waitForObjectExists(gui_locators.profile_settings_QLineEdit).displayText),
-        jobHistDir,
-        "Expect job history directory default path to be equal.",
+        squish.waitForObjectExists(gui_locators.aWS_profile_deadlinecloud_squish_QModelIndex).text,
+        "deadlinecloud_squish",
+        "Expect AWS profile name to be present in dropdown.",
     )
-    squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.global_settings_AWS_profile_QComboBox, profileName),
-        484,
-        9,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
-    squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.global_settings_AWS_profile_QComboBox, profileName),
-        225,
-        6,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
+    # select AWS profile: `deadlinecloud_squish`
+    squish.mouseClick(gui_locators.aWS_profile_deadlinecloud_squish_QModelIndex)
     test.log("Set Global settings")
 
 
-def setProfileSettings(farmName: str):
-    squish.mouseClick(
-        squish.waitForObject(gui_locators.profile_settings_QComboBox),
-        407,
-        13,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
+def setProfileSettings(jobHistDir: str, farmName: str):
+    test.compare(
+        str(squish.waitForObjectExists(gui_locators.profile_settings_QLineEdit).displayText),
+        jobHistDir,
+        "Expect Job history directory default path to be equal.",
     )
-    squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.profile_settings_QComboBox, farmName),
-        189,
-        10,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
+    # open Default farm drop down menu
+    squish.mouseClick(squish.waitForObject(gui_locators.profile_settings_QComboBox))
+    # select Default farm: `Deadline Cloud Squish Farm`
+    squish.mouseClick(squish.waitForObjectItem(gui_locators.profile_settings_QComboBox, farmName))
     test.log("Set Profile settings")
 
 
+def openAndSetDefaultJobHistDirectory():
+    # hit '...' button to open Choose Job history directory file browser
+    squish.clickButton(squish.waitForObject(gui_locators.profile_settings_QPushButton))
+    test.compare(
+        str(squish.waitForObjectExists(gui_locators.qFileDialog_QFileDialog).windowTitle),
+        "Choose Job history directory",
+        "Expect Choose Job history directory dialogue to be open.",
+    )
+    test.compare(
+        squish.waitForObjectExists(gui_locators.qFileDialog_QFileDialog).visible,
+        True,
+        "Expect Choose Job history directory dialogue to be open.",
+    )
+    # hit 'choose' button to set default and close file browser
+    squish.clickButton(squish.waitForObject(gui_locators.profile_settings_Choose_QPushButton))
+    test.log("Open and set default Job history directory")
+
+
 def setFarmSettings(queueName: str, storageProfile: str, jobAttachments: str):
-    squish.mouseClick(
-        squish.waitForObject(gui_locators.farm_settings_QComboBox),
-        392,
-        10,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
+    # open Default queue drop down menu
+    squish.mouseClick(squish.waitForObject(gui_locators.farm_settings_QComboBox))
+    test.compare(
+        squish.waitForObjectExists(gui_locators.aWS_profile_deadlinecloud_squish_QModelIndex).text,
+        "deadlinecloud_squish",
+        "Expect Default queue name to be present in dropdown.",
     )
+    # select Default queue: `Squish Automation Queue`
+    squish.mouseClick(squish.waitForObjectItem(gui_locators.farm_settings_QComboBox, queueName))
+    # open Default storage profile drop down menu
+    squish.mouseClick(squish.waitForObject(gui_locators.farm_settings_QComboBox_2))
+    # select Default storage profile: `Squish Storage Profile`
     squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.farm_settings_QComboBox, queueName),
-        200,
-        9,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
+        squish.waitForObjectItem(gui_locators.farm_settings_QComboBox_2, storageProfile)
     )
+    # open Job attachments filesystem options drop down menu
+    squish.mouseClick(squish.waitForObject(gui_locators.farm_settings_QComboBox_3))
+    # select Job attachments filesystem options: COPIED
     squish.mouseClick(
-        squish.waitForObject(gui_locators.farm_settings_QComboBox_2),
-        389,
-        12,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
-    squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.farm_settings_QComboBox_2, storageProfile),
-        185,
-        11,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
-    squish.mouseClick(
-        squish.waitForObject(gui_locators.farm_settings_QComboBox_3),
-        323,
-        8,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
-    squish.mouseClick(
-        squish.waitForObjectItem(gui_locators.farm_settings_QComboBox_3, jobAttachments),
-        183,
-        12,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
+        squish.waitForObjectItem(gui_locators.farm_settings_QComboBox_3, jobAttachments)
     )
     test.log("Set Farm settings")
 
 
 def setGeneralSettings(conflictResOption: str, loggingLevel: str):
+    # verify Auto accept prompt defaults check box can be checked
+    test.compare(
+        squish.waitForObjectExists(
+            gui_locators.general_settings_Auto_accept_prompt_defaults_QCheckBox
+        ).checkable,
+        True,
+    )
+    # verify Auto accept prompt defaults check box is unchecked (default setting)
+    test.compare(
+        squish.waitForObjectExists(
+            gui_locators.general_settings_Auto_accept_prompt_defaults_QCheckBox
+        ).checked,
+        False,
+    )
+    # verify Telemetry opt out check box can be checked
+    test.compare(
+        squish.waitForObjectExists(
+            gui_locators.general_settings_Telemetry_opt_out_QCheckBox
+        ).checkable,
+        True,
+    )
+    # verify Telemetry opt out check box is checked (default setting)
+    test.compare(
+        squish.waitForObjectExists(
+            gui_locators.general_settings_Telemetry_opt_out_QCheckBox
+        ).checked,
+        True,
+    )
+    # open Conflict resolution option drop down menu
     squish.mouseClick(
         squish.waitForObject(gui_locators.general_settings_Conflict_resolution_option_QComboBox),
-        382,
-        10,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
     )
+    # select Conflict resolution option: NOT_SELECTED
     squish.mouseClick(
         squish.waitForObjectItem(
             gui_locators.general_settings_Conflict_resolution_option_QComboBox, conflictResOption
         ),
-        202,
-        6,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
     )
+    # open Current logging level drop down menu
     squish.mouseClick(
         squish.waitForObject(gui_locators.general_settings_Current_logging_level_QComboBox),
-        382,
-        14,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
     )
+    # select Current logging level: WARNING
     squish.mouseClick(
         squish.waitForObjectItem(
             gui_locators.general_settings_Current_logging_level_QComboBox, loggingLevel
         ),
-        204,
-        10,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
-    )
-    squish.mouseClick(
-        squish.waitForObject(
-            gui_locators.aWS_Deadline_Cloud_workstation_configuration_Apply_QPushButton
-        ),
-        30,
-        8,
-        squish.Qt.NoModifier,
-        squish.Qt.LeftButton,
     )
     test.log("Set General settings")
 
 
+def hitApplyButton():
+    # hit 'Apply' button
+    squish.clickButton(
+        squish.waitForObject(
+            gui_locators.aWS_Deadline_Cloud_workstation_configuration_Apply_QPushButton
+        )
+    )
+
+
 def closeDeadlineConfigGUI():
     test.log("Hit `OK` button to close GUI")
+    # hit 'OK' button to close Deadline Config GUI
     squish.clickButton(
         squish.waitForObject(
             gui_locators.aWS_Deadline_Cloud_workstation_configuration_OK_QPushButton

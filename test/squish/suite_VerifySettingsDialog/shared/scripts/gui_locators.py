@@ -1,12 +1,31 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # encoding: UTF-8
 
+# workstation configuration dialogue
 aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog = {
     "type": "DeadlineConfigDialog",
     "unnamed": 1,
     "visible": 1,
     "windowTitle": "AWS Deadline Cloud workstation configuration",
 }
+# OK button
+aWS_Deadline_Cloud_workstation_configuration_OK_QPushButton = {
+    "text": "OK",
+    "type": "QPushButton",
+    "unnamed": 1,
+    "visible": 1,
+    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+# Apply button
+aWS_Deadline_Cloud_workstation_configuration_Apply_QPushButton = {
+    "text": "Apply",
+    "type": "QPushButton",
+    "unnamed": 1,
+    "visible": 1,
+    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+
+# global settings
 aWS_Deadline_Cloud_workstation_configuration_Global_settings_QGroupBox = {
     "title": "Global settings",
     "type": "QGroupBox",
@@ -28,6 +47,13 @@ global_settings_AWS_profile_QComboBox = {
     "unnamed": 1,
     "visible": 1,
 }
+aWS_profile_deadlinecloud_squish_QModelIndex = {
+    "container": global_settings_AWS_profile_QComboBox,
+    "text": "deadlinecloud_squish",
+    "type": "QModelIndex",
+}
+
+# profile settings
 aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox = {
     "title": "Profile settings",
     "type": "QGroupBox",
@@ -47,6 +73,25 @@ profile_settings_QLineEdit = {
     "unnamed": 1,
     "visible": 1,
 }
+
+# choose job history directory file browser
+profile_settings_QPushButton = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox,
+    "text": "...",
+    "type": "QPushButton",
+    "unnamed": 1,
+    "visible": 1,
+}
+qFileDialog_QFileDialog = {"name": "QFileDialog", "type": "QFileDialog", "visible": 1}
+profile_settings_Choose_QPushButton = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox,
+    "text": "Choose",
+    "type": "QPushButton",
+    "unnamed": 1,
+    "visible": 1,
+}
+
+# farm settings
 aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox = {
     "title": "Farm settings",
     "type": "QGroupBox",
@@ -74,12 +119,42 @@ farm_settings_QComboBox_3 = {
     "unnamed": 1,
     "visible": 1,
 }
+
+# general settings
 aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox = {
     "title": "General settings",
     "type": "QGroupBox",
     "unnamed": 1,
     "visible": 1,
     "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+general_settings_Auto_accept_prompt_defaults_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox,
+    "text": "Auto accept prompt defaults",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+general_settings_Auto_accept_prompt_defaults_QCheckBox = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox,
+    "leftWidget": general_settings_Auto_accept_prompt_defaults_QLabel,
+    "type": "QCheckBox",
+    "unnamed": 1,
+    "visible": 1,
+}
+general_settings_Telemetry_opt_out_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox,
+    "text": "Telemetry opt out",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+general_settings_Telemetry_opt_out_QCheckBox = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox,
+    "leftWidget": general_settings_Telemetry_opt_out_QLabel,
+    "type": "QCheckBox",
+    "unnamed": 1,
+    "visible": 1,
 }
 general_settings_Conflict_resolution_option_QLabel = {
     "container": aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox,
@@ -108,18 +183,4 @@ general_settings_Current_logging_level_QComboBox = {
     "type": "QComboBox",
     "unnamed": 1,
     "visible": 1,
-}
-aWS_Deadline_Cloud_workstation_configuration_Apply_QPushButton = {
-    "text": "Apply",
-    "type": "QPushButton",
-    "unnamed": 1,
-    "visible": 1,
-    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
-}
-aWS_Deadline_Cloud_workstation_configuration_OK_QPushButton = {
-    "text": "OK",
-    "type": "QPushButton",
-    "unnamed": 1,
-    "visible": 1,
-    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
 }
