@@ -2004,7 +2004,7 @@ class TestFullDownload:
         assert str(exc.value) == expected_message
 
     @mock_aws
-    @patch("os.name", "NT")
+    @patch("os.name", "nt")
     def test_windows_long_path_exception_WindowsOS(self):
         mock_s3_client = MagicMock()
         mock_future = MagicMock()
