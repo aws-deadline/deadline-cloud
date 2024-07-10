@@ -1964,7 +1964,10 @@ class TestFullDownload:
             ) in str(exc.value)
 
     @mock_aws
-    @patch("os.name", "posix")
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+            reason="This test is for Linux path only.",
+    )
     def test_windows_long_path_exception_PosixOS(self):
         mock_s3_client = MagicMock()
         mock_future = MagicMock()
@@ -2004,7 +2007,10 @@ class TestFullDownload:
         assert str(exc.value) == expected_message
 
     @mock_aws
-    @patch("os.name", "nt")
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+            reason="This test is for Windows path only.",
+    )
     def test_windows_long_path_exception_WindowsOS(self):
         mock_s3_client = MagicMock()
         mock_future = MagicMock()
