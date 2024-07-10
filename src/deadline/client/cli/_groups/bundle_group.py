@@ -252,9 +252,9 @@ def bundle_submit(
     help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
 )
 @click.option(
-    "-y",
+    "--install-gui",
     is_flag=True,
-    help="Accept prompts about installing GUI dependencies",
+    help="Installs GUI dependencies if they are not installed already",
 )
 @click.option(
     "--output",
@@ -269,13 +269,13 @@ def bundle_submit(
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, output, y, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
     from ...ui import gui_context_for_cli
 
-    with gui_context_for_cli(automatically_install_dependencies=y) as app:
+    with gui_context_for_cli(automatically_install_dependencies=install_gui) as app:
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
         if not job_bundle_dir and not browse:
