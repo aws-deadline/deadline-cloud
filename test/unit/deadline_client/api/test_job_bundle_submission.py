@@ -487,7 +487,7 @@ def test_create_job_from_job_bundle_job_attachments(
         S3AssetManager, "upload_assets"
     ) as mock_upload_assets, patch.object(
         _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ), patch.object(
+    ) as mock_telemetry, patch.object(
         api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
     ):
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
@@ -585,6 +585,7 @@ def test_create_job_from_job_bundle_job_attachments(
                 "fileSystem": JobAttachmentsFileSystem.COPIED,
             },
         )
+        assert mock_telemetry.call_count == 3
 
 
 def test_create_job_from_job_bundle_empty_job_attachments(

@@ -23,6 +23,7 @@ __all__ = [
     "get_telemetry_client",
     "get_deadline_cloud_library_telemetry_client",
     "get_storage_profile_for_queue",
+    "record_success_fail_telemetry_event",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -52,12 +53,15 @@ from ._list_apis import (
     list_storage_profiles_for_queue,
 )
 from ._queue_parameters import get_queue_parameter_definitions
-from ._submit_job_bundle import create_job_from_job_bundle, wait_for_create_job_to_complete
+
+# Telemetry must be imported before Submit Job Bundle to avoid circular dependencies.
 from ._telemetry import (
     get_telemetry_client,
     get_deadline_cloud_library_telemetry_client,
     TelemetryClient,
+    record_success_fail_telemetry_event,
 )
+from ._submit_job_bundle import create_job_from_job_bundle, wait_for_create_job_to_complete
 from ._get_storage_profile_for_queue import get_storage_profile_for_queue
 
 logger = getLogger(__name__)

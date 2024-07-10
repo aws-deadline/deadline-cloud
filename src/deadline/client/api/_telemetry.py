@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from queue import Queue, Full
 from threading import Thread
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
@@ -30,6 +30,10 @@ from .. import version
 __cached_telemetry_client = None
 
 logger = logging.getLogger(__name__)
+
+
+# Generic function return type.
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def get_deadline_endpoint_url(
@@ -349,3 +353,34 @@ def get_deadline_cloud_library_telemetry_client(
     :return: Telemetry client to make requests with.
     """
     return get_telemetry_client("deadline-cloud-library", version, config=config)
+
+
+def record_success_fail_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> Callable[..., F]:
+    """
+    Decorator to try catch a function. Sends a success / fail telemetry event.
+    :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
+    """
+
+    def inner(function: F) -> F:
+        def wrapper(*args: List[Any], **kwargs: Dict[str, Any]) -> Any:
+            """
+            Wrapper to try-catch a function for telemetry
+            :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
+            :param ** Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
+            """
+            success: bool = True
+            try:
+                return function(*args, **kwargs)
+            except Exception as e:
+                success = False
+                raise e
+            finally:
+                event_name = decorator_kwargs.get("metric_name", function.__name__)
+                get_deadline_cloud_library_telemetry_client().record_event(
+                    event_type=f"com.amazon.rum.deadline.{event_name}",
+                    event_details={"is_success": success},
+                )
+
+        return cast(F, wrapper)
+
+    return inner
