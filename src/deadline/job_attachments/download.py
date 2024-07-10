@@ -72,6 +72,7 @@ from ._utils import _is_relative_to, _join_s3_paths
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
+WINDOWS_MAX_PATH_LENGTH = 260
 
 
 def get_manifest_from_s3(
@@ -516,7 +517,14 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        raise AssetSyncError(e) from e
+        # Add 9 to account for .Hex value when file in the middle of downloading in windows paths
+        # For example: file test.txt when download will be test.txt.H4SD9Ddj
+        if len(str(local_file_name)) + 9 < WINDOWS_MAX_PATH_LENGTH or os.name == "posix":
+            raise AssetSyncError(e) from e
+        raise AssetSyncError(
+            "Your file path is longer than what Windows allow.\n"
+            + "This could be the error if you do not enable longer file path in Windows"
+        )
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
@@ -1097,7 +1105,9 @@ class OutputDownloader:
         new_root = str(os.path.normpath(Path(new_root).absolute()))
 
         if original_root not in self.outputs_by_root:
-            raise ValueError(f"The root path {original_root} was not found in output manifests.")
+            raise ValueError(
+                f"The root path {original_root} was not found in output manifests {self.outputs_by_root}."
+            )
 
         if new_root == original_root:
             return
@@ -1163,6 +1173,7 @@ class OutputDownloader:
 
         try:
             for root, output_path_group in self.outputs_by_root.items():
+                print(self.outputs_by_root)
                 for hash_alg, path_list in output_path_group.files_by_hash_alg.items():
                     # Validate the file paths to see if they are under the given download directory.
                     _ensure_paths_within_directory(root, [file.path for file in path_list])
