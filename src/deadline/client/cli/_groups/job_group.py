@@ -11,7 +11,7 @@ from configparser import ConfigParser
 from pathlib import Path
 import os
 import sys
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 import datetime
 from typing import Any
 
@@ -396,6 +396,19 @@ def _download_job_output(
     # in Job Attachments library can be increased (currently using default number, 10, which
     # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+
+        @api.record_success_fail_telemetry_event(metric_name="download_job_output")  # type: ignore
+        def _download_job_output(
+            file_conflict_resolution: Optional[
+                FileConflictResolution
+            ] = FileConflictResolution.CREATE_COPY,
+            on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+        ) -> DownloadSummaryStatistics:
+            return job_output_downloader.download_job_output(
+                file_conflict_resolution=file_conflict_resolution,
+                on_downloading_files=on_downloading_files,
+            )
+
         if not is_json_format:
             # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
             # not annotating the type of download_progress.
@@ -408,11 +421,9 @@ def _download_job_output(
                         download_progress.update(new_progress)
                     return sigint_handler.continue_operation
 
-                download_summary: DownloadSummaryStatistics = (
-                    job_output_downloader.download_job_output(
-                        file_conflict_resolution=file_conflict_resolution,
-                        on_downloading_files=_update_download_progress,
-                    )
+                download_summary: DownloadSummaryStatistics = _download_job_output(  # type: ignore
+                    file_conflict_resolution=file_conflict_resolution,
+                    on_downloading_files=_update_download_progress,
                 )
         else:
 
@@ -423,7 +434,7 @@ def _download_job_output(
                 # TODO: enable download cancellation for JSON format
                 return True
 
-            download_summary = job_output_downloader.download_job_output(
+            download_summary = _download_job_output(  # type: ignore
                 file_conflict_resolution=file_conflict_resolution,
                 on_downloading_files=_update_download_progress,
             )

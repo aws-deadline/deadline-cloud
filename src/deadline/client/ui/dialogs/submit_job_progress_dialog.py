@@ -366,6 +366,7 @@ class SubmitJobProgressDialog(QDialog):
             # Send the exception to the dialog
             self.hashing_thread_exception.emit(e)
 
+    @api.record_success_fail_telemetry_event(metric_name="gui_asset_upload")  # type: ignore
     def _upload_background_thread(self, manifests: List[AssetRootManifest]) -> None:
         """
         This function gets started in a background thread to start the upload
