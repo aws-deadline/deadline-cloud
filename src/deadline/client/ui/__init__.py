@@ -45,19 +45,22 @@ def gui_error_handler(message_title: str, parent: Any = None):
 
 
 @contextmanager
-def gui_context_for_cli():
+def gui_context_for_cli(automatically_install_dependencies: bool):
     """
     A context manager that initializes a Qt GUI context for
     the CLI handler to use.
 
     For example:
 
-    with gui_context_for_cli() as app:
+    with gui_context_for_cli(automatically_install_dependencies) as app:
         from deadline.client.ui.cli_job_submitter import show_cli_job_submitter
 
         show_cli_job_submitter()
 
         app.exec()
+
+    If automatically_install_dependencies is true, dependencies will be installed without prompting the user. Useful
+    if the command is triggered not from a command line.
     """
     import importlib
     import os
@@ -73,11 +76,12 @@ def gui_context_for_cli():
     has_pyside6 = importlib.util.find_spec("PySide6")
     has_pyside2 = importlib.util.find_spec("PySide2")
     if not (has_pyside6 or has_pyside2):
-        message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
-        will_install_gui = click.confirm(message, default=False)
-        if not will_install_gui:
-            click.echo("Unable to continue without GUI, exiting")
-            sys.exit(1)
+        if not automatically_install_dependencies:
+            message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
+            will_install_gui = click.confirm(message, default=False)
+            if not will_install_gui:
+                click.echo("Unable to continue without GUI, exiting")
+                sys.exit(1)
 
         # this should match what's in the pyproject.toml
         pyside6_pypi = "PySide6-essentials==6.6.*"

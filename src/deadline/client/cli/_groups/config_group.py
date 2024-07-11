@@ -83,14 +83,19 @@ def config_show():
 
 
 @cli_config.command(name="gui")
+@click.option(
+    "--install-gui",
+    is_flag=True,
+    help="Installs GUI dependencies if they are not installed already",
+)
 @_handle_error
-def config_gui():
+def config_gui(install_gui: bool):
     """
     Open the workstation configuration settings GUI.
     """
     from ...ui import gui_context_for_cli
 
-    with gui_context_for_cli():
+    with gui_context_for_cli(automatically_install_dependencies=install_gui):
         from ...ui.dialogs.deadline_config_dialog import DeadlineConfigDialog
 
         DeadlineConfigDialog.configure_settings()
