@@ -11,7 +11,6 @@ from deadline.client import api
 from deadline.client.api import _submit_job_bundle
 from deadline.job_attachments.models import (
     AssetRootGroup,
-    # AssetRootManifest,
     JobAttachmentS3Settings,
     Attachments,
 )
@@ -486,9 +485,15 @@ class TestUpload:
 
 class TestDiff:
 
-    def test_asset_diff_with_format(
-        self, mock_create_manifest_file, mock_read_local_manifest, mock_cachedb
+    def run_test_case(
+        self,
+        mock_create_manifest_file,
+        mock_read_local_manifest,
+        mock_cachedb,
+        file_paths,
+        raw=False,
     ):
+
         with patch.object(os.path, "isdir", side_effect=[True, True]), patch.object(
             asset_group, "HashCache", return_value=mock_cachedb
         ), patch.object(
@@ -497,97 +502,59 @@ class TestDiff:
             return_value=[
                 (
                     FileStatus.MODIFIED,
-                    BaseManifestPath(path="file1.txt", hash="mock_hash_1", size=0, mtime=0),
-                ),
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(path="subdir1/file2.txt", hash="mock_hash_2", size=0, mtime=0),
-                ),
+                    BaseManifestPath(path=path, hash=f"mock_hash_{i+1}", size=0, mtime=0),
+                )
+                for i, path in enumerate(file_paths)
             ],
         ):
             runner = CliRunner()
-            result = runner.invoke(
-                main,
-                [
-                    "asset",
-                    "diff",
-                    "--root-dir",
-                    MOCK_ROOT_DIR,
-                    "--manifest",
-                    MOCK_MANIFEST_DIR,
-                    "--format",
-                ],
-            )
+            args = [
+                "asset",
+                "diff",
+                "--root-dir",
+                MOCK_ROOT_DIR,
+                "--manifest-dir",
+                MOCK_MANIFEST_DIR,
+            ]
+            if raw:
+                args.append("--raw")
 
-            assert f"{MOCK_ROOT_DIR}" in result.output
-            assert "file1.txt M" in result.output
-            assert "file2.txt M" in result.output
-            assert result.exit_code == 0
+            result = runner.invoke(main, args)
+            return result
+
+    def test_asset_diff_with_format(
+        self, mock_create_manifest_file, mock_read_local_manifest, mock_cachedb
+    ):
+        file_paths = ["file1.txt", "subdir1/file2.txt"]
+        result = self.run_test_case(
+            mock_create_manifest_file, mock_read_local_manifest, mock_cachedb, file_paths
+        )
+        assert f"{MOCK_ROOT_DIR}" in result.output
+        assert "file1.txt M" in result.output
+        assert "file2.txt M" in result.output
+        assert result.exit_code == 0
 
     def test_asset_diff_with_multiple_subdirectories(
         self, mock_create_manifest_file, mock_read_local_manifest, mock_cachedb
     ):
-        with patch.object(os.path, "isdir", side_effect=[True, True]), patch.object(
-            asset_group, "HashCache", return_value=mock_cachedb
-        ), patch.object(
-            asset_group,
-            "compare_manifest",
-            return_value=[
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(path="file1.txt", hash="mock_hash_1", size=0, mtime=0),
-                ),
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(path="subdir1/file2.txt", hash="mock_hash_2", size=0, mtime=0),
-                ),
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(
-                        path="subdir2/subdir3/file3.txt", hash="mock_hash_3", size=0, mtime=0
-                    ),
-                ),
-            ],
-        ):
-
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                ["asset", "diff", "--root-dir", MOCK_ROOT_DIR, "--manifest", MOCK_MANIFEST_DIR],
-            )
-
-            expected_output = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir2/subdir3/file3.txt', hash='mock_hash_3', size=0, mtime=0))]"
-            assert expected_output in result.output
-            assert result.exit_code == 0
+        file_paths = ["file1.txt", "subdir1/file2.txt", "subdir2/subdir3/file3.txt"]
+        result = self.run_test_case(
+            mock_create_manifest_file, mock_read_local_manifest, mock_cachedb, file_paths, raw=True
+        )
+        expected_output = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir2/subdir3/file3.txt', hash='mock_hash_3', size=0, mtime=0))]"
+        assert expected_output in result.output
+        assert result.exit_code == 0
 
     def test_asset_diff_without_format(
         self, mock_init_objects, mock_create_manifest_file, mock_read_local_manifest, mock_cachedb
     ):
-        with patch.object(os.path, "isdir", side_effect=[True, True]), patch.object(
-            asset_group, "HashCache", return_value=mock_cachedb
-        ), patch.object(
-            asset_group,
-            "compare_manifest",
-            return_value=[
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(path="file1.txt", hash="mock_hash_1", size=0, mtime=0),
-                ),
-                (
-                    FileStatus.MODIFIED,
-                    BaseManifestPath(path="subdir1/file2.txt", hash="mock_hash_2", size=0, mtime=0),
-                ),
-            ],
-        ):
-            runner = CliRunner()
-            result = runner.invoke(
-                main,
-                ["asset", "diff", "--root-dir", MOCK_ROOT_DIR, "--manifest", MOCK_MANIFEST_DIR],
-            )
-
-            expected_result = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0))]\n"
-            assert expected_result in result.output
-            assert result.exit_code == 0
+        file_paths = ["file1.txt", "subdir1/file2.txt"]
+        result = self.run_test_case(
+            mock_create_manifest_file, mock_read_local_manifest, mock_cachedb, file_paths, raw=True
+        )
+        expected_result = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0))]\n"
+        assert expected_result in result.output
+        assert result.exit_code == 0
 
     def test_asset_diff_invalid_root_dir(self, tmp_path):
         invalid_root_dir = str(tmp_path / "invalid_dir")
@@ -596,7 +563,8 @@ class TestDiff:
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ["asset", "diff", "--root-dir", invalid_root_dir, "--manifest", str(manifest_dir)]
+            main,
+            ["asset", "diff", "--root-dir", invalid_root_dir, "--manifest-dir", str(manifest_dir)],
         )
 
         assert result.exit_code == 1
@@ -608,7 +576,7 @@ class TestDiff:
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ["asset", "diff", "--root-dir", root_dir, "--manifest", invalid_manifest_dir]
+            main, ["asset", "diff", "--root-dir", root_dir, "--manifest-dir", invalid_manifest_dir]
         )
 
         assert result.exit_code == 1
