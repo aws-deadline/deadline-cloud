@@ -238,29 +238,27 @@ def asset_upload(root_dir: str, manifest_dir: str, update: bool, **args):
 @cli_asset.command(name="diff")
 @click.option("--root-dir", help="The root directory to compare changes to. ")
 @click.option(
-    "--manifest",
+    "--manifest-dir",
     required=True,
     help="The path to manifest folder of the directory to show changes of. ",
 )
 @click.option(
-    "--format",
-    help="Pretty prints diff information with easy to read formatting. ",
+    "--raw",
+    help="Outputs the raw JSON info of files and their changed statuses. ",
     is_flag=True,
     show_default=True,
     default=False,
 )
 @_handle_error
-def asset_diff(root_dir: str, manifest: str, format: bool, **args):
+def asset_diff(root_dir: str, manifest_dir: str, raw: bool, **args):
     """
     Check file differences of a directory since last snapshot, specified by manifest.
     """
-    print("root_dir: ", root_dir)
-
-    if not os.path.isdir(manifest):
-        raise NonValidInputError(f"Specified manifest directory {manifest} does not exist. ")
+    if not os.path.isdir(manifest_dir):
+        raise NonValidInputError(f"Specified manifest directory {manifest_dir} does not exist. ")
 
     if root_dir is None:
-        asset_root_dir = os.path.dirname(manifest)
+        asset_root_dir = os.path.dirname(manifest_dir)
     else:
         if not os.path.isdir(root_dir):
             raise NonValidInputError(f"Specified root directory {root_dir} does not exist. ")
@@ -274,34 +272,30 @@ def asset_diff(root_dir: str, manifest: str, format: bool, **args):
     # get inputs of directory
     input_paths = []
     for root, dirs, files in os.walk(asset_root_dir):
-        # ignore manifest folder
-        # if os.path.samefile(root, manifest):
-        #     dirs[:] = []
-        #     continue
         for filename in files:
             file_path = os.path.join(root, filename)
             input_paths.append(Path(file_path))
 
     # hash and create manifest of local directory
-    cache_config = config_file.get_cache_directory()
+    cache_config: str = config_file.get_cache_directory()
     with HashCache(cache_config) as hash_cache:
         directory_manifest_object = asset_manager._create_manifest_file(
             input_paths=input_paths, root_path=asset_root_dir, hash_cache=hash_cache
         )
 
     # parse local manifest
-    local_manifest_object = read_local_manifest(manifest=manifest)
+    local_manifest_object: BaseAssetManifest = read_local_manifest(manifest=manifest_dir)
 
     # compare manifests
-    differences = compare_manifest(
+    differences: List[tuple] = compare_manifest(
         reference_manifest=local_manifest_object, compare_manifest=directory_manifest_object
     )
 
-    if format:
+    if raw:
+        click.echo(f"\nFile Diffs: {differences}")
+    else:
         click.echo(f"\n{asset_root_dir}")
         pretty_print(file_status_list=differences)
-    else:
-        click.echo(f"\nFile Diffs: {differences}")
 
 
 @cli_asset.command(name="download")

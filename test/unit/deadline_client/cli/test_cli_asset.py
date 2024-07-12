@@ -631,9 +631,8 @@ class TestDiff:
                     "diff",
                     "--root-dir",
                     MOCK_ROOT_DIR,
-                    "--manifest",
+                    "--manifest-dir",
                     MOCK_MANIFEST_DIR,
-                    "--format",
                 ],
             )
 
@@ -671,7 +670,15 @@ class TestDiff:
             runner = CliRunner()
             result = runner.invoke(
                 main,
-                ["asset", "diff", "--root-dir", MOCK_ROOT_DIR, "--manifest", MOCK_MANIFEST_DIR],
+                [
+                    "asset",
+                    "diff",
+                    "--root-dir",
+                    MOCK_ROOT_DIR,
+                    "--manifest-dir",
+                    MOCK_MANIFEST_DIR,
+                    "--raw",
+                ],
             )
 
             expected_output = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir2/subdir3/file3.txt', hash='mock_hash_3', size=0, mtime=0))]"
@@ -700,7 +707,15 @@ class TestDiff:
             runner = CliRunner()
             result = runner.invoke(
                 main,
-                ["asset", "diff", "--root-dir", MOCK_ROOT_DIR, "--manifest", MOCK_MANIFEST_DIR],
+                [
+                    "asset",
+                    "diff",
+                    "--root-dir",
+                    MOCK_ROOT_DIR,
+                    "--manifest-dir",
+                    MOCK_MANIFEST_DIR,
+                    "--raw",
+                ],
             )
 
             expected_result = "File Diffs: [(<FileStatus.MODIFIED: 2>, BaseManifestPath(path='file1.txt', hash='mock_hash_1', size=0, mtime=0)), (<FileStatus.MODIFIED: 2>, BaseManifestPath(path='subdir1/file2.txt', hash='mock_hash_2', size=0, mtime=0))]\n"
@@ -714,7 +729,8 @@ class TestDiff:
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ["asset", "diff", "--root-dir", invalid_root_dir, "--manifest", str(manifest_dir)]
+            main,
+            ["asset", "diff", "--root-dir", invalid_root_dir, "--manifest-dir", str(manifest_dir)],
         )
 
         assert result.exit_code == 1
@@ -726,7 +742,7 @@ class TestDiff:
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ["asset", "diff", "--root-dir", root_dir, "--manifest", invalid_manifest_dir]
+            main, ["asset", "diff", "--root-dir", root_dir, "--manifest-dir", invalid_manifest_dir]
         )
 
         assert result.exit_code == 1
