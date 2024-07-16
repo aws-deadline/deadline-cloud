@@ -24,6 +24,11 @@ datas += [
     (b_module_path + '/../../THIRD_PARTY_LICENSES',
      '.')
 ]
+
+# https://github.com/pyinstaller/pyinstaller/issues/8554
+# Can be removed once pyinstaller is upgraded to >= 6.7.0
+hiddenimports += ['pkg_resources.extern']
+
 cli_a = Analysis(
     ['../../src/deadline/client/cli/deadline_cli_main.py'],
     binaries=binaries,
