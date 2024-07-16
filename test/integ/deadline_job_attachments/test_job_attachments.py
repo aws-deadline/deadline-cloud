@@ -1500,9 +1500,7 @@ def test_download_outputs_bucket_wrong_account(
 )
 def test_download_outputs_windows_max_file_path_length_exception(
     job_attachment_test: JobAttachmentTest,
-    tmp_path: Path,
     sync_outputs: SyncOutputsOutput,
-    external_bucket: str,
 ):
     """
     Test that if trying to download outputs to a file path that

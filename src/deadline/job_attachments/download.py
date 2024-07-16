@@ -67,12 +67,13 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths
+from ._utils import _is_relative_to, _join_s3_paths, _is_Windows_file_path_limit
 
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
 WINDOWS_MAX_PATH_LENGTH = 260
+TEMP_DOWNLOAD_ADDED_CHARS_LENGTH = 9
 
 
 def get_manifest_from_s3(
@@ -519,12 +520,21 @@ def download_file(
     except Exception as e:
         # Add 9 to account for .Hex value when file in the middle of downloading in windows paths
         # For example: file test.txt when download will be test.txt.H4SD9Ddj
-        if len(str(local_file_name)) + 9 < WINDOWS_MAX_PATH_LENGTH or os.name == "posix":
-            raise AssetSyncError(e) from e
-        raise AssetSyncError(
-            "Your file path is longer than what Windows allow.\n"
-            + "This could be the error if you do not enable longer file path in Windows"
-        )
+        if (
+            len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
+            and not _is_Windows_file_path_limit()
+        ):
+            uncPath = str(local_file_name).startswith("\\\\?\\")
+            if uncPath:
+                raise AssetSyncError(
+                    f"UNC notation exist, but long path registry not enabled. Undefided error\n{e}"
+                ) from e
+            else:
+                raise AssetSyncError(
+                    "Your file path is longer than what Windows allow.\n"
+                    + "This could be the error if you do not enable longer file path in Windows"
+                )
+        raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
     os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
