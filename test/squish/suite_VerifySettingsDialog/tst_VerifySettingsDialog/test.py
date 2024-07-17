@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # mypy: disable-error-code="attr-defined"
 
-import gui_helpers
+import gui_PageObjects
 import test
 
 profileName = "deadlinecloud_squish"
@@ -16,13 +16,15 @@ loggingLevel = "WARNING"
 
 
 def main():
-    gui_helpers.launchDeadlineConfigGUI()
-    gui_helpers.setGlobalSettings(profileName)
-    gui_helpers.setProfileSettings(jobHistDir, farmName)
-    gui_helpers.openAndSetDefaultJobHistDirectory()
-    gui_helpers.setFarmSettings(queueName, storageProfile, jobAttachments)
-    gui_helpers.setGeneralSettings(conflictResOption, loggingLevel)
+    gui_PageObjects.launchDeadlineConfigGUI()
+    gui_PageObjects.setGlobalSettings(profileName)
+    gui_PageObjects.setProfileSettings(jobHistDir, farmName)
+    gui_PageObjects.openAndSetDefaultJobHistDirectory()
+    gui_PageObjects.setFarmSettings(queueName, storageProfile, jobAttachments)
+    gui_PageObjects.setGeneralSettings(conflictResOption, loggingLevel)
     # disabling due to https://sim.amazon.com/issues/Bea-28289
-    # gui_helpers.hitApplyButton()
+    # gui_PageObjects.hitApplyButton()
     test.log("All settings config have been applied.")
-    gui_helpers.closeDeadlineConfigGUI()
+    gui_PageObjects.closeDeadlineConfigGUI()
+    
+    
