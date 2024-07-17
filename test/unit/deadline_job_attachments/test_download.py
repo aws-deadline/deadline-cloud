@@ -2034,6 +2034,9 @@ class TestFullDownload:
             f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
             return_value=mock_transfer_manager,
         ), patch(
+            f"{deadline.__package__}.job_attachments.download._is_Windows_file_path_limit",
+            return_value=False,
+        ), patch(
             f"{deadline.__package__}.job_attachments.download.Path.mkdir"
         ):
             with pytest.raises(AssetSyncError) as exc:
@@ -2076,6 +2079,9 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
             return_value=mock_transfer_manager,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.download._is_Windows_file_path_limit",
+            return_value=False,
         ), patch(
             f"{deadline.__package__}.job_attachments.download.Path.mkdir"
         ):
