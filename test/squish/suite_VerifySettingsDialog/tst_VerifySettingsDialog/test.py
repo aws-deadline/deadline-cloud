@@ -26,5 +26,3 @@ def main():
     # gui_PageObjects.hitApplyButton()
     test.log("All settings config have been applied.")
     gui_PageObjects.closeDeadlineConfigGUI()
-    
-    
