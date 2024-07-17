@@ -122,7 +122,7 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
     ), patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        _submit_job_bundle, "_upload_attachments"
+        _submit_job_bundle, "upload_attachments"
     ), patch.object(
         bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
@@ -341,7 +341,7 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
     ) as qp_boto3_client_mock, patch.object(
         _submit_job_bundle, "hash_attachments", return_value=(attachment_mock, {})
     ), patch.object(
-        _submit_job_bundle, "_upload_attachments", return_value={}
+        _submit_job_bundle, "upload_attachments", return_value={}
     ), patch.object(
         _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
@@ -635,7 +635,7 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
     ) as get_boto3_client_mock, patch.object(
         _submit_job_bundle, "hash_attachments", return_value=[SummaryStatistics(), "test"]
     ), patch.object(
-        _submit_job_bundle, "_upload_attachments"
+        _submit_job_bundle, "upload_attachments"
     ), patch.object(
         _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
@@ -713,7 +713,7 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
     ) as qp_boto3_client_mock, patch.object(
         _submit_job_bundle, "hash_attachments", return_value=[SummaryStatistics(), "test"]
     ), patch.object(
-        _submit_job_bundle, "_upload_attachments"
+        _submit_job_bundle, "upload_attachments"
     ) as upload_attachments_mock, patch.object(
         _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
