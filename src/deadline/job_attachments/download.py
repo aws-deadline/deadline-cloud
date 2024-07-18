@@ -7,6 +7,7 @@ import concurrent.futures
 import io
 import os
 import re
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -67,11 +68,13 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths
+from ._utils import _is_relative_to, _join_s3_paths, _is_windows_file_path_limit
 
 download_logger = getLogger("deadline.job_attachments.download")
 
 S3_DOWNLOAD_MAX_CONCURRENCY = 10
+WINDOWS_MAX_PATH_LENGTH = 260
+TEMP_DOWNLOAD_ADDED_CHARS_LENGTH = 9
 
 
 def get_manifest_from_s3(
@@ -516,6 +519,25 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
+        # Add 9 to account for .Hex value when file in the middle of downloading in windows paths
+        # For example: file test.txt when download will be test.txt.H4SD9Ddj
+        if (
+            len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
+        ) and sys.platform == "win32":
+            uncPath = str(local_file_name).startswith("\\\\?\\")
+            if not uncPath:
+                # Path don't start with \\?\ -> Long path error
+                raise AssetSyncError(
+                    "Your file path is longer than what Windows allow.\n"
+                    + "This could be the error if you do not enable longer file path in Windows"
+                )
+            elif not _is_windows_file_path_limit():
+                # Path start with \\?\ but do not enable registry -> Undefined error
+                raise AssetSyncError(
+                    f"{e}\nUNC notation exist, but long path registry not enabled. Undefined error"
+                ) from e
+
+        # Path start with \\?\ and registry is enable, something else cause this error
         raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
@@ -1097,7 +1119,9 @@ class OutputDownloader:
         new_root = str(os.path.normpath(Path(new_root).absolute()))
 
         if original_root not in self.outputs_by_root:
-            raise ValueError(f"The root path {original_root} was not found in output manifests.")
+            raise ValueError(
+                f"The root path {original_root} was not found in output manifests {self.outputs_by_root}."
+            )
 
         if new_root == original_root:
             return
