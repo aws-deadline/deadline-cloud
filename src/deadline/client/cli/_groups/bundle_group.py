@@ -5,8 +5,10 @@ All the `deadline bundle` commands.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
+from typing import Any, Dict, Optional
 
 import click
 from botocore.exceptions import ClientError
@@ -247,8 +249,25 @@ def bundle_submit(
     is_flag=True,
     help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
 )
+@click.option(
+    "--output",
+    type=click.Choice(
+        ["verbose", "json"],
+        case_sensitive=False,
+    ),
+    default="verbose",
+    help="Specifies the output format of the messages printed to stdout.\n"
+    "VERBOSE: Displays messages in a human-readable text format.\n"
+    "JSON: Displays messages in JSON line format, so that the info can be easily "
+    "parsed/consumed by custom scripts.",
+)
+@click.option(
+    "--extra-info",
+    is_flag=True,
+    help="Returns additional information about the submitted job. Only valid with JSON output.",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, extra_info, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
@@ -260,6 +279,11 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
         if not job_bundle_dir and not browse:
             raise DeadlineOperationError(
                 "Specify a job bundle directory or run the bundle command with the --browse flag"
+            )
+        output = output.lower()
+        if output != "json" and extra_info:
+            raise DeadlineOperationError(
+                "--extra-info is only availalbe with JSON output. Add the --output JSON option."
             )
 
         submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
@@ -274,9 +298,50 @@ def bundle_gui_submit(job_bundle_dir, browse, **args):
         response = None
         if submitter:
             response = submitter.create_job_response
-        if response:
+
+        _print_response(
+            output=output,
+            extra_info=extra_info,
+            submitted=True if response else False,
+            job_bundle_dir=job_bundle_dir,
+            job_id=response["jobId"] if response else None,
+            parameter_values=submitter.parameter_values,
+            asset_references=submitter.job_attachments.get_asset_references().to_dict()[
+                "assetReferences"
+            ],
+        )
+
+
+def _print_response(
+    output: str,
+    extra_info: bool,
+    submitted: bool,
+    job_bundle_dir: str,
+    job_id: Optional[str],
+    parameter_values: Optional[list[Dict[str, Any]]],
+    asset_references: Dict[str, Any],
+):
+    if output == "json":
+        if submitted:
+            response: dict[str, Any] = {
+                "status": "SUBMITTED",
+                "jobId": job_id,
+                "jobBundleDirectory": job_bundle_dir,
+            }
+            if extra_info:
+                response.update(
+                    {
+                        "parameterValues": parameter_values,
+                        "assetReferences": asset_references,
+                    }
+                )
+            click.echo(json.dumps(response))
+        else:
+            click.echo(json.dumps({"status": "CANCELED"}))
+    else:
+        if submitted:
             click.echo("Submitted job bundle:")
             click.echo(f"   {job_bundle_dir}")
-            click.echo(f"Job ID: {response['jobId']}")
+            click.echo(f"Job ID: {job_id}")
         else:
             click.echo("Job submission canceled.")
