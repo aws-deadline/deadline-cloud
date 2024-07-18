@@ -7,6 +7,7 @@ import concurrent.futures
 import io
 import os
 import re
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -522,18 +523,21 @@ def download_file(
         # For example: file test.txt when download will be test.txt.H4SD9Ddj
         if (
             len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
-            and not _is_windows_file_path_limit()
-        ):
+        ) and sys.platform == "win32":
             uncPath = str(local_file_name).startswith("\\\\?\\")
-            if uncPath:
-                raise AssetSyncError(
-                    f"UNC notation exist, but long path registry not enabled. Undefided error\n{e}"
-                ) from e
-            else:
+            if not uncPath:
+                # Path don't start with \\?\ -> Long path error
                 raise AssetSyncError(
                     "Your file path is longer than what Windows allow.\n"
                     + "This could be the error if you do not enable longer file path in Windows"
                 )
+            elif not _is_windows_file_path_limit():
+                # Path start with \\?\ but do not enable registry -> Undefined error
+                raise AssetSyncError(
+                    f"{e}\nUNC notation exist, but long path registry not enabled. Undefined error"
+                ) from e
+
+        # Path start with \\?\ and registry is enable, something else cause this error
         raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
