@@ -432,6 +432,7 @@ def hash_attachments(
     return hashing_summary, manifests
 
 
+@api.record_success_fail_telemetry_event(metric_name="cli_asset_upload")  # type: ignore
 def upload_attachments(
     asset_manager: S3AssetManager,
     manifests: List[AssetRootManifest],

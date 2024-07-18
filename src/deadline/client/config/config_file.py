@@ -247,8 +247,11 @@ def _reset_directory_permissions_windows(directory: Path, username: str, permiss
             *_get_grant_args(username, permissions),
             # On Windows, both SYSTEM and the Administrators group normally
             # have Full Access to files in the user's home directory.
-            *_get_grant_args("Administrators", permissions),
-            *_get_grant_args("SYSTEM", permissions),
+            # Use SIDs to represent the Administrators and SYSTEM to
+            # support multi-language operating systems
+            # Administrator(S-1-5-32-544), SYSTEM(S-1-5-18)
+            *_get_grant_args("*S-1-5-32-544", permissions),
+            *_get_grant_args("*S-1-5-18", permissions),
         ],
         check=True,
         capture_output=True,

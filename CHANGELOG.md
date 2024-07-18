@@ -1,3 +1,26 @@
+## 0.48.7 (2024-07-03)
+
+
+### Features
+* support JSON output from bundle gui-submit (#380) ([`eb9acb0`](https://github.com/aws-deadline/deadline-cloud/commit/eb9acb0147494ae910ec92cef91ace589f7e8b74))
+
+## 0.48.6 (2024-06-26)
+
+
+### Bug Fixes
+* revert: "feat: support JSON output in bundle GUI submitter (#357)" ([`8d6dc62`](https://github.com/aws-deadline/deadline-cloud/pull/374/commits/8d6dc62ae35679461831b2e64d3e21cb43b9f116))
+
+## 0.48.5 (2024-06-24)
+
+
+### Features
+* support JSON output in bundle GUI submitter (#357) ([`aad9a49`](https://github.com/aws-deadline/deadline-cloud/commit/aad9a49c9085e67031abc3ce342ca8068a6508d1))
+
+### Bug Fixes
+* bundle gui-submit fails loading bundles with saved queue parameter values (#360) ([`a2c1f2d`](https://github.com/aws-deadline/deadline-cloud/commit/a2c1f2ddb697f3e6ac8f17d443ad5618674216a6))
+* use sids when granting permissions with icacls (#359) ([`133b059`](https://github.com/aws-deadline/deadline-cloud/commit/133b05938288afbdc11b3dbfe11c8c98349f81b3))
+* bundles are stored in job_history in their original format (#344) ([`b5de504`](https://github.com/aws-deadline/deadline-cloud/commit/b5de504918cc6420d80d5206f9332cb8880471a5))
+
 ## 0.48.4 (2024-06-03)
 
 

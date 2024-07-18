@@ -21,7 +21,7 @@ from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError
 from botocore.stub import Stubber
 
 import pytest
-from moto import mock_sts
+from moto import mock_aws
 
 import deadline
 from deadline.job_attachments.asset_manifests import HashAlgorithm
@@ -663,7 +663,7 @@ class TestFullDownload:
         ManifestVersion.v2023_03_03: INPUT_MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03,
     }
 
-    @mock_sts
+    @mock_aws
     def test_get_job_input_paths_by_asset_root(self, manifest_version: ManifestVersion):
         assert self.job.attachments is not None
         assert_get_job_input_paths_by_asset_root(
@@ -695,7 +695,7 @@ class TestFullDownload:
         ManifestVersion.v2023_03_03: MANIFEST_PATHS_BY_ASSET_ROOT_v2023_03_03,
     }
 
-    @mock_sts
+    @mock_aws
     def test_get_job_output_paths_by_asset_root(
         self, farm_id, queue_id, manifest_version: ManifestVersion
     ):
@@ -708,13 +708,13 @@ class TestFullDownload:
             manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_get_job_outputs_paths_by_asset_root_when_no_asset_root(self, farm_id, queue_id):
         assert_get_job_output_paths_by_asset_root_when_no_asset_root_throws_error(
             farm_id, queue_id, self.job_attachment_settings
         )
 
-    @mock_sts
+    @mock_aws
     def test_get_job_input_output_paths_by_asset_root(
         self, farm_id, queue_id, manifest_version: ManifestVersion
     ):
@@ -752,7 +752,7 @@ class TestFullDownload:
         "inputs/input5.txt",
     ]
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.skipif(
         sys.platform == "win32",
         reason="This test is for testing file permission changes in Posix-based OS.",
@@ -819,7 +819,7 @@ class TestFullDownload:
             [path for path in tmp_path.glob("**/*") if path.is_file()]
         )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.skipif(
         sys.platform != "win32",
         reason="This test is for testing file permission changes in Windows.",
@@ -892,7 +892,7 @@ class TestFullDownload:
             [path for path in tmp_path.glob("**/*") if path.is_file()]
         )
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.skipif(
         sys.platform == "win32",
         reason="This test is for testing file permission changes in Posix-based OS.",
@@ -976,7 +976,7 @@ class TestFullDownload:
             group_name = grp.getgrgid(os.stat(str(path)).st_gid).gr_name  # type: ignore
             assert group_name != posix_target_group
 
-    @mock_sts
+    @mock_aws
     @pytest.mark.skipif(
         sys.platform != "win32",
         reason="This test is for testing file permission changes in Windows.",
@@ -1057,7 +1057,7 @@ class TestFullDownload:
             assert "Guest" in permission_mapping
             assert permission_mapping["Guest"] == ntsecuritycon.FILE_ALL_ACCESS
 
-    @mock_sts
+    @mock_aws
     def test_download_task_output(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -1078,7 +1078,7 @@ class TestFullDownload:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_step_output(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -1103,7 +1103,7 @@ class TestFullDownload:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_job_output(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -1134,7 +1134,7 @@ class TestFullDownload:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_files_in_directory(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -1161,7 +1161,7 @@ class TestFullDownload:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_get_output_paths_by_root(
         self,
         farm_id,
@@ -1200,7 +1200,7 @@ class TestFullDownload:
             ]
         }
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_set_root_path(self, farm_id, queue_id, tmp_path: Path):
         with patch(
             f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
@@ -1244,7 +1244,7 @@ class TestFullDownload:
         is_windows_non_admin(),
         reason="Windows requires Admin to create symlinks, skipping this test.",
     )
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_set_root_path_with_symlinks(self, farm_id, queue_id, tmp_path: Path):
         """
         Test that when a symlink path containing '..' is used as a new root. Without
@@ -1281,7 +1281,7 @@ class TestFullDownload:
             ]
         }
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_set_root_path_wrong_root_throws_exception(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1304,7 +1304,7 @@ class TestFullDownload:
         with pytest.raises(ValueError):
             output_downloader.set_root_path(original_root="/wrong_root", new_root="/new_root_path")
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_download_job_output_when_skip(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1367,7 +1367,7 @@ class TestFullDownload:
             modified_time_after_second_trial = [path.stat().st_ctime for path in expected_files]
             assert modified_time_before_second_trial == modified_time_after_second_trial
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_download_job_output_when_overwrite(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1434,7 +1434,7 @@ class TestFullDownload:
             ):
                 assert time_before < time_after
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_download_job_output_when_create_copy(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1500,7 +1500,7 @@ class TestFullDownload:
             [path for path in tmp_path.glob("**/*") if path.is_file()]
         )
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_download_job_output_unknown_resolution_throws_exception(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1523,7 +1523,7 @@ class TestFullDownload:
                 file_conflict_resolution=FileConflictResolution(99)
             )
 
-    @mock_sts
+    @mock_aws
     def test_OutputDownloader_download_job_output_to_new_asset_root(
         self, farm_id, queue_id, tmp_path: Path
     ):
@@ -1713,7 +1713,7 @@ class TestFullDownload:
         ), pytest.raises((PathOutsideDirectoryError, ValueError)):
             output_downloader.download_job_output()
 
-    @mock_sts
+    @mock_aws
     def test_get_asset_root_from_s3_error_message_on_not_found(self):
         """
         Test if the function raises the expected exception with a proper error message
@@ -1742,7 +1742,7 @@ class TestFullDownload:
                 "HTTP Status Code: 404, Not found. "
             ) in str(err.value)
 
-    @mock_sts
+    @mock_aws
     def test_get_asset_root_from_s3_error_message_on_timeout(self):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -1766,7 +1766,7 @@ class TestFullDownload:
                 " or contact support for further assistance."
             ) in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_get_manifest_from_s3_error_message_on_access_denied(self):
         """
         Test if the function raises the expected exception with a proper error message
@@ -1795,7 +1795,7 @@ class TestFullDownload:
                 "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_get_manifest_from_s3_error_message_on_timeout(self):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -1819,7 +1819,7 @@ class TestFullDownload:
                 " or contact support for further assistance."
             ) in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_get_tasks_manifests_keys_from_s3_error_message_on_access_denied(self):
         """
         Test if the function raises the expected exception with a proper error message
@@ -1851,7 +1851,7 @@ class TestFullDownload:
                 "HTTP Status Code: 403, Forbidden or Access denied. "
             ) in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_get_tasks_manifests_keys_from_s3_error_message_on_timeout(self):
         """
         Test that the appropriate error is raised when S3 client's get_paginator call triggers
@@ -1878,7 +1878,7 @@ class TestFullDownload:
                 " or contact support for further assistance."
             ) in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_download_file_error_message_on_access_denied(self):
         """
         Test if the function raises the expected exception with a proper error message
@@ -1920,7 +1920,7 @@ class TestFullDownload:
             failed_file_path = Path("/home/username/assets/inputs/input1.txt")
             assert (f"(Failed to download the file to {str(failed_file_path)})") in str(exc.value)
 
-    @mock_sts
+    @mock_aws
     def test_download_file_error_message_on_timeout(self):
         """
         Test that the appropriate error is raised when a ReadTimeoutError occurs
@@ -2029,7 +2029,7 @@ class TestFullDownloadPrefixesWithSlashes:
             f"Manifests/{farm_id}/{queue_id}/job-1/junk2.json",
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_task_output_prefixes_with_slashes(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -2051,7 +2051,7 @@ class TestFullDownloadPrefixesWithSlashes:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_step_prefixes_with_slashes(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
@@ -2077,7 +2077,7 @@ class TestFullDownloadPrefixesWithSlashes:
             manifest_version=manifest_version,
         )
 
-    @mock_sts
+    @mock_aws
     def test_download_job_prefixes_with_slashes(
         self, farm_id, queue_id, tmp_path: Path, manifest_version: ManifestVersion
     ):
