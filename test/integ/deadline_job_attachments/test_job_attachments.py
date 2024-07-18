@@ -1492,10 +1492,6 @@ def test_download_outputs_bucket_wrong_account(
 
 @pytest.mark.integ
 @pytest.mark.skipif(
-    not is_windows_non_admin(),
-    reason="This test is for Windows max file path length error, skipping this if OS is not Windows",
-)
-@pytest.mark.skipif(
     _is_windows_file_path_limit(),
     reason="This test is for Windows max file path length error, skipping this if Windows path limit is extended",
 )
@@ -1518,6 +1514,16 @@ def test_download_outputs_windows_max_file_path_length_exception(
     if job_attachment_settings is None:
         raise Exception("Job attachment settings must be set for this test.")
 
+    job_output_downloader = download.OutputDownloader(
+        s3_settings=job_attachment_settings,
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        job_id=sync_outputs.job_id,
+        step_id=sync_outputs.step0_id,
+        task_id=sync_outputs.step0_task0_id,
+    )
+    job_output_downloader.set_root_path(str(job_attachment_test.ASSET_ROOT), str(long_root_path))
+
     # WHEN
     with pytest.raises(
         AssetSyncError,
@@ -1526,15 +1532,4 @@ def test_download_outputs_windows_max_file_path_length_exception(
             + "This could be the error if you do not enable longer file path in Windows"
         ),
     ):
-        job_output_downloader = download.OutputDownloader(
-            s3_settings=job_attachment_settings,
-            farm_id=job_attachment_test.farm_id,
-            queue_id=job_attachment_test.queue_id,
-            job_id=sync_outputs.job_id,
-            step_id=sync_outputs.step0_id,
-            task_id=sync_outputs.step0_task0_id,
-        )
-        job_output_downloader.set_root_path(
-            str(job_attachment_test.ASSET_ROOT), str(long_root_path)
-        )
         job_output_downloader.download_job_output()
