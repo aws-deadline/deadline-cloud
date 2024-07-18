@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+from typing import Any, Dict
 import pytest
 import uuid
 import time
@@ -9,7 +10,12 @@ from dataclasses import asdict
 from urllib import request
 
 from deadline.client import api, config
-from deadline.client.api._telemetry import TelemetryClient, TelemetryEvent
+from deadline.client.api._telemetry import (
+    TelemetryClient,
+    TelemetryEvent,
+    get_deadline_cloud_library_telemetry_client,
+    record_success_fail_telemetry_event,
+)
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 
@@ -288,3 +294,60 @@ def test_get_prefixed_endpoint(
 ):
     """Test that the _get_prefixed_endpoint function returns the expected prefixed endpoint"""
     assert mock_telemetry_client._get_prefixed_endpoint(endpoint, prefix) == expected_result
+
+
+def test_record_decorator_success():
+    """Tests that recording a decorator successful metric"""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        expected_summary: Dict[str, Any] = dict()
+        expected_summary["is_success"] = True
+        expected_summary["usage_mode"] = "CLI"
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.successful",
+            event_details=expected_summary,
+        )
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_success_fail_telemetry_event()
+        def successful():
+            return
+
+        # WHEN
+        successful()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_decorator_fails():
+    """Tests that recording a decorator failed metric"""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        expected_summary: Dict[str, Any] = dict()
+        expected_summary["is_success"] = False
+        expected_summary["usage_mode"] = "CLI"
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.fails",
+            event_details=expected_summary,
+        )
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_success_fail_telemetry_event()
+        def fails():
+            raise RuntimeError("foobar")
+
+        # WHEN
+        with pytest.raises(RuntimeError):
+            fails()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once_with(expected_event)

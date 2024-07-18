@@ -21,11 +21,36 @@ jobs:
     name: Unit Tests
     uses: ./.github/workflows/code_quality.yml
     with:
+      branch: mainline 
+  LinuxIntegrationTests:
+    name: Linux Integration Tests
+    needs: UnitTests
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
       branch: mainline
-
+      environment: mainline
+      os: linux
+  WindowsIntegrationTests:
+    name: Windows Integration Tests
+    needs: UnitTests
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      branch: mainline
+      environment: mainline
+      os: windows
   Bump:
     name: Version Bump
-    needs: UnitTests
+    needs: [UnitTests, WindowsIntegrationTests, LinuxIntegrationTests]
     uses: aws-deadline/.github/.github/workflows/reusable_bump.yml@mainline
     secrets: inherit
     with:

@@ -6,7 +6,6 @@ Tests for the CLI job bundle commands.
 import os
 import tempfile
 import json
-from unittest import mock
 from unittest.mock import ANY, patch, Mock
 
 import boto3  # type: ignore[import]
@@ -22,7 +21,6 @@ from deadline.client.config.config_file import set_setting
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.progress_tracker import SummaryStatistics
-from deadline.client.cli._groups.bundle_group import _print_response
 
 from ..api.test_job_bundle_submission import (
     MOCK_CREATE_JOB_RESPONSE,
@@ -752,68 +750,3 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
 
         upload_attachments_mock.assert_not_called()
         assert result.exit_code == 0
-
-
-def test_cli_bundle_gui_submit_format_output():
-    """
-    Verify that the GUI submitter returns responses correctly.
-    """
-    with mock.patch("deadline.client.cli._groups.bundle_group.click") as mock_click:
-        _print_response(
-            output="json",
-            extra_info=True,
-            submitted=False,
-            job_bundle_dir="./test",
-            job_id="job-1234",
-            parameter_values=[],
-            asset_references={},
-        )
-        mock_click.echo.assert_called_with('{"status": "CANCELED"}')
-
-        _print_response(
-            output="json",
-            extra_info=False,
-            submitted=True,
-            job_bundle_dir="./test",
-            job_id="job-1234",
-            parameter_values=[{"name": "Frames", "value": "1-4"}],
-            asset_references={"inputs": {"filenames:": ["test.file"]}},
-        )
-        mock_click.echo.assert_called_with(
-            '{"status": "SUBMITTED", "jobId": "job-1234", "jobBundleDirectory": "./test"}'
-        )
-
-        _print_response(
-            output="json",
-            extra_info=True,
-            submitted=True,
-            job_bundle_dir="./test",
-            job_id="job-1234",
-            parameter_values=[{"name": "Frames", "value": "1-4"}],
-            asset_references={"inputs": {"filenames:": ["test.file"]}},
-        )
-        mock_click.echo.assert_called_with(
-            '{"status": "SUBMITTED", "jobId": "job-1234", "jobBundleDirectory": "./test", "parameterValues": [{"name": "Frames", "value": "1-4"}], "assetReferences": {"inputs": {"filenames:": ["test.file"]}}}'
-        )
-
-        _print_response(
-            output="verbose",
-            extra_info=False,
-            submitted=False,
-            job_bundle_dir="./test",
-            job_id="job-1234",
-            parameter_values=[],
-            asset_references={},
-        )
-        mock_click.echo.assert_called_with("Job submission canceled.")
-
-        _print_response(
-            output="verbose",
-            extra_info=False,
-            submitted=True,
-            job_bundle_dir="./test",
-            job_id="job-1234",
-            parameter_values=[],
-            asset_references={},
-        )
-        mock_click.echo.assert_any_call("Submitted job bundle:")

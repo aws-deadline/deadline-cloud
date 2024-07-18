@@ -1,6 +1,11 @@
-name: Mainline Integration Test
+name: Mainline Merge Integration Tests
 
 on:
+  schedule:
+    - cron: '0 */4 * * *'
+  push:
+    branches:
+      - mainline
   workflow_dispatch:
 
 jobs:  
@@ -16,3 +21,15 @@ jobs:
       branch: mainline
       environment: mainline
       os: linux
+  MainlineWindowsIntegrationTest:
+    name: Windows Integration Test
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      branch: mainline
+      environment: mainline
+      os: windows

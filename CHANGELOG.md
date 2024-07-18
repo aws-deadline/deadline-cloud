@@ -1,3 +1,15 @@
+## 0.48.7 (2024-07-03)
+
+
+### Features
+* support JSON output from bundle gui-submit (#380) ([`eb9acb0`](https://github.com/aws-deadline/deadline-cloud/commit/eb9acb0147494ae910ec92cef91ace589f7e8b74))
+
+## 0.48.6 (2024-06-26)
+
+
+### Bug Fixes
+* revert: "feat: support JSON output in bundle GUI submitter (#357)" ([`8d6dc62`](https://github.com/aws-deadline/deadline-cloud/pull/374/commits/8d6dc62ae35679461831b2e64d3e21cb43b9f116))
+
 ## 0.48.5 (2024-06-24)
 
 

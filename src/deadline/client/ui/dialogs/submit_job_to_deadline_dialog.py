@@ -94,7 +94,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
-        self.parameter_values: Optional[list[Dict[str, Any]]] = None
+        self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
 
@@ -340,7 +340,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         # Save the bundle
         try:
-            job_history_bundle_dir = create_job_history_bundle_dir(
+            self.job_history_bundle_dir = create_job_history_bundle_dir(
                 settings.submitter_name, settings.name
             )
 
@@ -348,7 +348,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 requirements = self.host_requirements.get_requirements()
                 self.on_create_job_bundle_callback(
                     self,
-                    job_history_bundle_dir,
+                    self.job_history_bundle_dir,
                     settings,
                     queue_parameters,
                     asset_references,
@@ -359,21 +359,21 @@ class SubmitJobToDeadlineDialog(QDialog):
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
                     self,
-                    job_history_bundle_dir,
+                    self.job_history_bundle_dir,
                     settings,
                     queue_parameters,
                     asset_references,
                     purpose=JobBundlePurpose.EXPORT,
                 )
 
-            logger.info(f"Saved the submission as a job bundle: {job_history_bundle_dir}")
+            logger.info(f"Saved the submission as a job bundle: {self.job_history_bundle_dir}")
             if sys.platform == "win32":
                 # Open the directory in the OS's file explorer
-                os.startfile(job_history_bundle_dir)
+                os.startfile(self.job_history_bundle_dir)
             QMessageBox.information(
                 self,
                 f"{settings.submitter_name} job submission",
-                f"Saved the submission as a job bundle:\n{job_history_bundle_dir}",
+                f"Saved the submission as a job bundle:\n{self.job_history_bundle_dir}",
             )
             # Close the submitter window to signal the submission is done
             self.close()
@@ -406,28 +406,15 @@ class SubmitJobToDeadlineDialog(QDialog):
         try:
             deadline = api.get_boto3_client("deadline")
 
-            job_history_bundle_dir = create_job_history_bundle_dir(
+            self.job_history_bundle_dir = create_job_history_bundle_dir(
                 settings.submitter_name, settings.name
             )
-
-            # First filter the queue parameters to exclude any from the job template,
-            # then extend it with the job template parameters.
-            job_parameter_names = {param["name"] for param in settings.parameters}
-            parameter_values: list[dict[str, Any]] = [
-                {"name": param["name"], "value": param["value"]}
-                for param in queue_parameters
-                if param["name"] not in job_parameter_names
-            ]
-            parameter_values.extend(
-                {"name": param["name"], "value": param["value"]} for param in settings.parameters
-            )
-            self.parameter_values = parameter_values
 
             if self.show_host_requirements_tab:
                 requirements = self.host_requirements.get_requirements()
                 self.on_create_job_bundle_callback(
                     self,
-                    job_history_bundle_dir,
+                    self.job_history_bundle_dir,
                     settings,
                     queue_parameters,
                     asset_references,
@@ -438,7 +425,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
                     self,
-                    job_history_bundle_dir,
+                    self.job_history_bundle_dir,
                     settings,
                     queue_parameters,
                     asset_references,
@@ -487,7 +474,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 farm_id,
                 queue_id,
                 storage_profile,
-                job_history_bundle_dir,
+                self.job_history_bundle_dir,
                 queue_parameters,
                 asset_manager,
                 deadline,
