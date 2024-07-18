@@ -67,7 +67,7 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths, _is_Windows_file_path_limit
+from ._utils import _is_relative_to, _join_s3_paths, _is_windows_file_path_limit
 
 download_logger = getLogger("deadline.job_attachments.download")
 
@@ -522,7 +522,7 @@ def download_file(
         # For example: file test.txt when download will be test.txt.H4SD9Ddj
         if (
             len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
-            and not _is_Windows_file_path_limit()
+            and not _is_windows_file_path_limit()
         ):
             uncPath = str(local_file_name).startswith("\\\\?\\")
             if uncPath:

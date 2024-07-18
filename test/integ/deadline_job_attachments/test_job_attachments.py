@@ -34,7 +34,8 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
     _get_unique_dest_dir_name,
 )
-from .conftest import is_Windows_file_path_limit, is_windows_non_admin
+from deadline.job_attachments._utils import _is_windows_file_path_limit
+from .conftest import is_windows_non_admin
 
 
 def notifier_callback(progress: float, message: str) -> None:
@@ -1495,7 +1496,7 @@ def test_download_outputs_bucket_wrong_account(
     reason="This test is for Windows max file path length error, skipping this if OS is not Windows",
 )
 @pytest.mark.skipif(
-    is_Windows_file_path_limit(),
+    _is_windows_file_path_limit(),
     reason="This test is for Windows max file path length error, skipping this if Windows path limit is extended",
 )
 def test_download_outputs_windows_max_file_path_length_exception(

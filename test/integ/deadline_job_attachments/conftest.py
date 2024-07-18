@@ -4,7 +4,6 @@ import getpass
 import json
 import sys
 import pytest
-import ctypes
 
 
 @pytest.fixture(scope="session")
@@ -104,13 +103,3 @@ def external_bucket() -> str:
 
 def is_windows_non_admin():
     return sys.platform == "win32" and getpass.getuser() != "Administrator"
-
-
-def is_Windows_file_path_limit():
-    if sys.platform == "win32":
-        ntdll = ctypes.WinDLL("ntdll")
-        ntdll.RtlAreLongPathsEnabled.restype = ctypes.c_ubyte
-        ntdll.RtlAreLongPathsEnabled.argtypes = ()
-
-        return bool(ntdll.RtlAreLongPathsEnabled())
-    return True

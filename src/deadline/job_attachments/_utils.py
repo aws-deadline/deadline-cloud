@@ -90,7 +90,7 @@ def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
         return False
 
 
-def _is_Windows_file_path_limit() -> bool:
+def _is_windows_file_path_limit() -> bool:
     if sys.platform == "win32":
         ntdll = ctypes.WinDLL("ntdll")
         ntdll.RtlAreLongPathsEnabled.restype = ctypes.c_ubyte
