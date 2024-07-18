@@ -2095,7 +2095,6 @@ class TestFullDownload:
         expected_message = "Test exception\nUNC notation exist, but long path registry not enabled. Undefined error"
         assert str(exc.value) == expected_message
 
-
     @mock_aws
     @pytest.mark.skipif(
         sys.platform != "win32",
