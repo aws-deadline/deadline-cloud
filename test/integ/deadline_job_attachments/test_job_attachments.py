@@ -34,6 +34,7 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
     _get_unique_dest_dir_name,
 )
+from deadline.job_attachments._utils import _is_windows_file_path_limit
 from .conftest import is_windows_non_admin
 
 
@@ -1486,4 +1487,49 @@ def test_download_outputs_bucket_wrong_account(
             step_id=sync_outputs.step0_id,
             task_id=sync_outputs.step0_task0_id,
         )
+        job_output_downloader.download_job_output()
+
+
+@pytest.mark.integ
+@pytest.mark.skipif(
+    _is_windows_file_path_limit(),
+    reason="This test is for Windows max file path length error, skipping this if Windows path limit is extended",
+)
+def test_download_outputs_windows_max_file_path_length_exception(
+    job_attachment_test: JobAttachmentTest,
+    sync_outputs: SyncOutputsOutput,
+):
+    """
+    Test that if trying to download outputs to a file path that
+    longer than 260 chars in Windows, the correct error is thrown.
+    """
+    long_root_path = Path(__file__).parent / str("A" * 135)
+
+    job_attachment_settings = get_queue(
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        deadline_endpoint_url=job_attachment_test.deadline_endpoint,
+    ).jobAttachmentSettings
+
+    if job_attachment_settings is None:
+        raise Exception("Job attachment settings must be set for this test.")
+
+    job_output_downloader = download.OutputDownloader(
+        s3_settings=job_attachment_settings,
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        job_id=sync_outputs.job_id,
+        step_id=sync_outputs.step0_id,
+        task_id=sync_outputs.step0_task0_id,
+    )
+    job_output_downloader.set_root_path(str(job_attachment_test.ASSET_ROOT), str(long_root_path))
+
+    # WHEN
+    with pytest.raises(
+        AssetSyncError,
+        match=(
+            "Your file path is longer than what Windows allow.\n"
+            + "This could be the error if you do not enable longer file path in Windows"
+        ),
+    ):
         job_output_downloader.download_job_output()
