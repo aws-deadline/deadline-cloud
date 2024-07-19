@@ -71,6 +71,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         f: Qt Window Flags
         show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
             to False.
+        submitter_name: Override the default submitter_name value
     """
 
     def __init__(
@@ -85,6 +86,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         parent=None,
         f=Qt.WindowFlags(),
         show_host_requirements_tab=False,
+        submitter_name: Optional[str] = None,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
@@ -92,6 +94,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
+        self.submitter_name = submitter_name or self.job_settings_type.submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
         self.job_history_bundle_dir: Optional[str] = None
@@ -341,7 +344,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Save the bundle
         try:
             self.job_history_bundle_dir = create_job_history_bundle_dir(
-                settings.submitter_name, settings.name
+                self.submitter_name, settings.name
             )
 
             if self.show_host_requirements_tab:
@@ -372,7 +375,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 os.startfile(self.job_history_bundle_dir)
             QMessageBox.information(
                 self,
-                f"{settings.submitter_name} job submission",
+                f"{self.submitter_name} job submission",
                 f"Saved the submission as a job bundle:\n{self.job_history_bundle_dir}",
             )
             # Close the submitter window to signal the submission is done
@@ -380,7 +383,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         except Exception as exc:
             logger.exception("Error saving bundle")
             message = str(exc)
-            QMessageBox.warning(self, f"{settings.submitter_name} job submission", message)
+            QMessageBox.warning(self, f"{self.submitter_name} job submission", message)
 
     def on_submit(self):
         """
@@ -407,7 +410,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             deadline = api.get_boto3_client("deadline")
 
             self.job_history_bundle_dir = create_job_history_bundle_dir(
-                settings.submitter_name, settings.name
+                self.submitter_name, settings.name
             )
 
             if self.show_host_requirements_tab:
@@ -465,7 +468,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             api.get_deadline_cloud_library_telemetry_client().record_event(
                 event_type="com.amazon.rum.deadline.submission",
                 event_details={
-                    "submitter_name": settings.submitter_name,
+                    "submitter_name": self.submitter_name,
                 },
                 from_gui=True,
             )
@@ -483,7 +486,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
-            QMessageBox.information(self, f"{settings.submitter_name} job submission", str(uic))
+            QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))
             job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
@@ -492,11 +495,11 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
                 from_gui=True,
             )
-            QMessageBox.warning(self, f"{settings.submitter_name} job submission", str(exc))
+            QMessageBox.warning(self, f"{self.submitter_name} job submission", str(exc))
             job_progress_dialog.close()
 
         if self.create_job_response:
             # Close the submitter window to signal the submission is done but
             # keep the standalone gui submitter open
-            if settings.submitter_name != "JobBundle":
+            if self.submitter_name != "JobBundle":
                 self.close()

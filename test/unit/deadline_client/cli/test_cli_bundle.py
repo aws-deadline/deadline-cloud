@@ -4,6 +4,7 @@
 Tests for the CLI job bundle commands.
 """
 import os
+import sys
 import tempfile
 import json
 from unittest.mock import ANY, patch, Mock
@@ -750,3 +751,23 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
 
         upload_attachments_mock.assert_not_called()
         assert result.exit_code == 0
+
+
+@patch("deadline.client.ui.gui_context_for_cli")
+def test_gui_submit_submitter_name(_mock_context):
+    """
+    Verify that the --submitter-name arg gets passed through correctly
+    """
+
+    # Unconventional mocking pattern because of how the function is imported in code
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+    mock_job_bundle_submitter.show_job_bundle_submitter
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        ["bundle", "gui-submit", "--browse", "--submitter-name", "MyDCC"],
+    )
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    assert kwargs["submitter_name"] == "MyDCC"

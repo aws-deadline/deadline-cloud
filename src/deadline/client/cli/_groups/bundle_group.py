@@ -257,6 +257,11 @@ def bundle_submit(
     help="Installs GUI dependencies if they are not installed already",
 )
 @click.option(
+    "--submitter-name",
+    type=click.STRING,
+    help="Name of the application submitting the bundle. If a name is specified, the GUI will automatically close after submitting the job.",
+)
+@click.option(
     "--output",
     type=click.Choice(
         ["verbose", "json"],
@@ -269,7 +274,7 @@ def bundle_submit(
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, submitter_name, **args):
     """
     Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
     """
@@ -284,7 +289,9 @@ def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, **args):
             )
         output = output.lower()
 
-        submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
+        submitter = show_job_bundle_submitter(
+            input_job_bundle_dir=job_bundle_dir, browse=browse, submitter_name=submitter_name
+        )
 
         if not submitter:
             return
