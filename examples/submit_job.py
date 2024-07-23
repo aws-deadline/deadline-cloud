@@ -7,10 +7,10 @@ import pprint
 import time
 from pathlib import Path
 
-import boto3
-
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.client.config.config_file import get_cache_directory
+from deadline.client.api import get_queue_user_boto3_session, get_boto3_session
 
 """
 This is a sample script that illustrates how to submit a custom job using the
@@ -23,7 +23,7 @@ python submit_job.py -f $FARM_ID -q $QUEUE_ID -i /tmp/asset_root/inputs -o /tmp/
 """
 
 
-def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_client):
+def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_client, session):
     """
     Uploads all of the input files to the Job Attachments S3 bucket associated with
     the Deadline Queue, returning Attachment Settings to be associated with a Deadline Job.
@@ -41,18 +41,27 @@ def process_job_attachments(farm_id, queue_id, inputs, outputDir, deadline_clien
         farm_id=farm_id,
         queue_id=queue_id,
         job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+        session=session,
     )
-    upload_group = asset_manager.prepare_paths_for_upload(".", inputs, [outputDir], [])
+    upload_group = asset_manager.prepare_paths_for_upload(
+        inputs,
+        [outputDir],
+        [],
+    )
+    cache_directory = get_cache_directory()
     (_, manifests) = asset_manager.hash_assets_and_create_manifest(
-        upload_group.asset_groups, upload_group.total_input_files, upload_group.total_input_bytes
+        upload_group.asset_groups,
+        upload_group.total_input_files,
+        upload_group.total_input_bytes,
+        cache_directory,
     )
-    (_, attachments) = asset_manager.upload_assets(manifests)
-    attachments = attachments.to_dict()
+    (_, attachments) = asset_manager.upload_assets(manifests, s3_check_cache_dir=cache_directory)
+    attachments_dict = attachments.to_dict()
     total = time.perf_counter() - start
     print(f"Finished processing job attachments after {total} seconds.\n")
-    print(f"Created these attachment settings: {attachments}\n")
+    print(f"Created these attachment settings: {attachments_dict}\n")
 
-    return attachments
+    return attachments_dict
 
 
 JOB_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
@@ -82,12 +91,12 @@ steps:
                 #!/bin/env bash
 
                 set -euo pipefail
-                echo 'Confirming that inputs were downloaded to the correct location'",
-                echo 'Total number of inputs' && find {{Param.DataDir}} -type f | wc -l",
-                echo 'Total file size' && du -hs {{Param.DataDir}}",
-                echo 'Creating the expected output directory and output file'",
-                mkdir -p {{Param.DataDir}}/{{Param.RelOutput}}",
-                echo 'This is test output' > {{Param.DataDir}}/{{Param.RelOutput}}/output.txt",
+                echo 'Confirming that inputs were downloaded to the correct location'
+                echo 'Total number of inputs' && find {{Param.DataDir}} -type f | wc -l
+                echo 'Total file size' && du -hs {{Param.DataDir}}
+                echo 'Creating the expected output directory and output file'
+                mkdir -p {{Param.DataDir}}/{{Param.RelOutput}}
+                echo 'This is test output' > {{Param.DataDir}}/{{Param.RelOutput}}/output.txt
 """
 
 
@@ -167,14 +176,22 @@ if __name__ == "__main__":
         else:
             inputs.append(str(file_path))
 
-    deadline_client = boto3.client(
-        "deadline",
-        region_name="us-west-2",
-        endpoint_url="https://management.deadline.us-west-2.amazonaws.com",
+    session = get_boto3_session()
+    deadline_client = session.client("deadline")
+    queue_session = get_queue_user_boto3_session(
+        deadline_client,
+        None,
+        args.farm_id,
+        args.queue_id,
     )
 
     attachments = process_job_attachments(
-        args.farm_id, args.queue_id, inputs, args.output_dir, deadline_client
+        args.farm_id,
+        args.queue_id,
+        inputs,
+        args.output_dir,
+        deadline_client,
+        queue_session,
     )
 
     if not args.assets_only:
