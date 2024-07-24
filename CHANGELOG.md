@@ -1,3 +1,14 @@
+## 0.48.8 (2024-07-24)
+
+
+### Features
+* support skipping prompts for installing GUI dependencies (#395) ([`74293ac`](https://github.com/aws-deadline/deadline-cloud/commit/74293acadd15d5e9437f94d8a8e8b8d908a84d2c))
+* record Success-Fail telemetry event on job attachments upload. (#393) ([`9bc590b`](https://github.com/aws-deadline/deadline-cloud/commit/9bc590b1fc17bf3c6e33d6b46e4231d5e252526b))
+
+### Bug Fixes
+* Fixed the job submission example (#415) ([`17eadb7`](https://github.com/aws-deadline/deadline-cloud/commit/17eadb75844794e9d8a1cab8f40db8bb6231ad52))
+* Add better log when JA hit Windows path length limit (#403) ([`0344537`](https://github.com/aws-deadline/deadline-cloud/commit/0344537a2d6ccdea3a17596f28e263edaff39879))
+
 ## 0.48.7 (2024-07-03)
 
 
