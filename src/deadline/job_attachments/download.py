@@ -14,6 +14,7 @@ from datetime import datetime
 from itertools import chain
 from logging import Logger, LoggerAdapter, getLogger
 from pathlib import Path
+from retry import retry
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, DefaultDict, List, Optional, Tuple, Union
 
@@ -386,7 +387,7 @@ def download_file(
     modified_time_override: Optional[float] = None,
     progress_tracker: Optional[ProgressTracker] = None,
     file_conflict_resolution: Optional[FileConflictResolution] = FileConflictResolution.CREATE_COPY,
-) -> Tuple[int, Optional[Path]]:
+) -> Tuple[int, Optional[Path], float]:
     """
     Downloads a file from the S3 bucket to the local directory. `modified_time_override` is ignored if the manifest
     version used supports timestamps.
@@ -416,7 +417,7 @@ def download_file(
     # If the file name already exists, resolve the conflict based on the file_conflict_resolution
     if local_file_name.is_file():
         if file_conflict_resolution == FileConflictResolution.SKIP:
-            return (file_bytes, None)
+            return (file_bytes, None, 0)
         elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
             pass
         elif file_conflict_resolution == FileConflictResolution.CREATE_COPY:
@@ -541,9 +542,17 @@ def download_file(
         raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
-    os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
 
-    return (file_bytes, local_file_name)
+    return (file_bytes, local_file_name, modified_time_override)
+
+
+@retry(FileNotFoundError, delay=1, tries=3)
+def _update_file_time_stamps(files: List[Tuple]):
+    """
+    Updates the file time stamp for all input files. Retries if the file is not found due to file system consistency.
+    """
+    for local_file_name, modified_time_override in files:
+        os.utime(local_file_name, (modified_time_override, modified_time_override))
 
 
 def _download_files_parallel(
@@ -564,6 +573,7 @@ def _download_files_parallel(
     Returns a list of local paths of downloaded files.
     """
     downloaded_file_names: list[str] = []
+    downloaded_file_name_timestamps: list[tuple] = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_download_workers) as executor:
         futures = {
@@ -584,9 +594,10 @@ def _download_files_parallel(
         }
         # surfaces any exceptions in the thread
         for future in concurrent.futures.as_completed(futures):
-            (file_bytes, local_file_name) = future.result()
+            (file_bytes, local_file_name, modified_time_override) = future.result()
             if local_file_name:
                 downloaded_file_names.append(str(local_file_name.resolve()))
+                downloaded_file_name_timestamps.append((local_file_name, modified_time_override))
                 if progress_tracker:
                     progress_tracker.increase_processed(1, 0)
                     progress_tracker.report_progress()
@@ -594,6 +605,9 @@ def _download_files_parallel(
                 if progress_tracker:
                     progress_tracker.increase_skipped(1, file_bytes)
                     progress_tracker.report_progress()
+
+    # Update the timestamps on all file download completion
+    _update_file_time_stamps(downloaded_file_name_timestamps)
 
     # to report progress 100% at the end
     if progress_tracker:
