@@ -54,10 +54,32 @@ hatch run test
 ```
 
 ## Run integration tests
+- Pre-requisites:
+  - Developer must have a valid AWS account.
+  - Developer must create a Farm and Queue. This can be done easily via Deadline Cloud's AWS Console quick Farm create workflow. Please copy the Farm resource ID for the next step. Please copy the Queue's Job Attachment S3 bucket name and Root Prefix for the next step.
+
+- Setup Environment Variables
+```bash
+export SERVICE_ACCOUNT_ID="your AWS Account Id"
+export JOB_ATTACHMENTS_BUCKET="your Queue configured Job Attachments bucket"
+export JA_TEST_ROOT_PREFIX="/your/path/root"
+export FARM_ID="farm-{uuid}"
+export AWS_DEFAULT_REGION="us-west-2"
+```
+
+- Optional Environment Variables
+```bash
+export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"
+export INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET="Your regional S3 bucket in another account"
+```
+
+- Running the integration tests.
 ```
 hatch run integ:test
 ```
 
+- Notes:
+  - If the integration test is run in any region other than `us-west-2`, please set the environment variable `INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET`. The bucket must be from another AWS account in the same region as the farm setup to run this test.
 ## Run linting
 ```
 hatch run lint
