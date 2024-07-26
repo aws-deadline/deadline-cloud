@@ -107,6 +107,11 @@ def validate_parameters(ctx, param, value):
     is_flag=True,
     help="Require all input paths to exist",
 )
+@click.option(
+    "--submitter-name",
+    type=click.STRING,
+    help="Name of the application submitting the bundle.",
+)
 @click.argument("job_bundle_dir")
 @_handle_error
 def bundle_submit(
@@ -119,6 +124,7 @@ def bundle_submit(
     max_failed_tasks_count,
     max_retries_per_task,
     require_paths_exist,
+    submitter_name,
     **args,
 ):
     """
@@ -199,6 +205,7 @@ def bundle_submit(
             print_function_callback=click.echo,
             decide_cancel_submission_callback=_decide_cancel_submission,
             require_paths_exist=require_paths_exist,
+            submitter_name=submitter_name,
         )
 
         # Check Whether the CLI options are modifying any of the default settings that affect

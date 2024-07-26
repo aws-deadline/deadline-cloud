@@ -94,7 +94,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
-        self.submitter_name = submitter_name or self.job_settings_type.submitter_name
+        self.submitter_name = submitter_name or self.job_settings_type().submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
         self.job_history_bundle_dir: Optional[str] = None

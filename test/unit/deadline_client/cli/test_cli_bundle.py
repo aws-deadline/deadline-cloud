@@ -400,7 +400,11 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
     Verify that job parameters specified at the CLI are passed to the CreateJob call
     """
     # Use a temporary directory for the job bundle
-    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+        boto3, "Session"
+    ) as session_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ) as telemetry_mock:
         session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
         session_mock.reset_mock()
@@ -426,6 +430,8 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                 "priority=90",
                 "--priority",
                 "45",
+                "--submitter-name",
+                "MyDCC",
             ],
         )
 
@@ -439,6 +445,11 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                 "priority": {"int": "90"},
             },
             priority=45,
+        )
+
+        telemetry_mock.return_value.record_event.assert_any_call(
+            event_type="com.amazon.rum.deadline.submission",
+            event_details={"submitter_name": "MyDCC"},
         )
 
         assert result.exit_code == 0
