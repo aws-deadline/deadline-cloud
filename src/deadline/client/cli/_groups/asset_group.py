@@ -20,13 +20,19 @@ import click
 
 from deadline.client import api
 from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
+from deadline.job_attachments.download import download_file_with_s3_key
 from deadline.job_attachments.models import (
     JobAttachmentS3Settings,
     AssetRootManifest,
+    S3_MANIFEST_FOLDER_NAME,
 )
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.caches import HashCache
+from deadline.job_attachments._aws.aws_clients import (
+    get_s3_client,
+    get_s3_transfer_manager,
+)
 
 from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
 from ...exceptions import NonValidInputError, ManifestOutdatedError
@@ -300,15 +306,83 @@ def asset_diff(root_dir: str, manifest_dir: str, raw: bool, **args):
 
 
 @cli_asset.command(name="download")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option("--job-id", help="The AWS Deadline Cloud Job to get. ")
+@click.option(
+    "--manifest-out",
+    required=True,
+    help="Destination path to directory where manifest is created. ",
+)
 @_handle_error
-def asset_download(**args):
+def asset_download(manifest_out: str, **args):
     """
     Downloads input manifest of previously submitted job.
     """
-    click.echo("download complete")
+    if not os.path.isdir(manifest_out):
+        raise NonValidInputError(f"Specified destination directory {manifest_out} does not exist. ")
+
+    # setup config
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+    deadline: BaseClient = api.get_boto3_client("deadline", config=config)
+    queue_id: str = get_setting("defaults.queue_id", config=config)
+    farm_id: str = get_setting("defaults.farm_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+
+    queue: dict = deadline.get_queue(
+        farmId=farm_id,
+        queueId=queue_id,
+    )
+
+    # assume queue role - session permissions
+    queue_role_session: boto3.Session = api.get_queue_user_boto3_session(
+        deadline=deadline,
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
+
+    # get input_manifest_paths from Deadline GetJob API
+    job: dict = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    attachments: dict = job["attachments"]
+    input_manifest_paths: list[str] = [
+        manifest["inputManifestPath"] for manifest in attachments["manifests"]
+    ]
+
+    # get s3BucketName from Deadline GetQueue API
+    bucket_name: str = queue["jobAttachmentSettings"]["s3BucketName"]
+
+    # get S3 prefix
+    s3_prefix: Path = Path(queue["jobAttachmentSettings"]["rootPrefix"], S3_MANIFEST_FOLDER_NAME)
+
+    s3_client: BaseClient = get_s3_client(session=queue_role_session)
+    transfer_manager = get_s3_transfer_manager(s3_client=s3_client)
+
+    # download each input_manifest_path
+    for input_manifest_path in input_manifest_paths:
+        local_file_name = Path(manifest_out, job_id + "_manifest")
+
+        result = download_file_with_s3_key(
+            s3_bucket=bucket_name,
+            s3_key=(s3_prefix / input_manifest_path).as_posix(),
+            local_file_name=local_file_name,
+            session=queue_role_session,
+            transfer_manager=transfer_manager,
+        )
+
+        if result is not None:
+            transfer_path = result.meta.call_args.fileobj  # type: ignore[attr-defined]
+            file_size = result.meta.size  # type: ignore[attr-defined]
+            click.echo(
+                f"\nDownloaded file to '{transfer_path}' ({file_size} bytes)\nWith S3 key: '{input_manifest_path}'. "
+            )
+        else:
+            click.echo(
+                f"\nFailed to download file with S3 key '{input_manifest_path}' from bucket '{bucket_name}'"
+            )
 
 
 def read_local_manifest(manifest: str) -> BaseAssetManifest:
