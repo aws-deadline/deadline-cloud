@@ -7,10 +7,13 @@ All the `deadline asset` commands:
     * diff
     * download
 """
+from __future__ import annotations
+
 import os
 from pathlib import Path
 import concurrent.futures
 from typing import List
+import logging
 import glob
 
 import click
@@ -237,23 +240,63 @@ def asset_upload(root_dir: str, manifest_dir: str, update: bool, **args):
 @cli_asset.command(name="diff")
 @click.option("--root-dir", help="The root directory to compare changes to. ")
 @click.option(
-    "--manifest", help="The path to manifest folder of the directory to show changes of. "
+    "--manifest-dir",
+    required=True,
+    help="The path to manifest folder of the directory to show changes of. ",
 )
 @click.option(
-    "--format",
-    help="Pretty prints diff information with easy to read formatting. ",
+    "--raw",
+    help="Outputs the raw JSON info of files and their changed statuses. ",
     is_flag=True,
     show_default=True,
     default=False,
 )
 @_handle_error
-def asset_diff(**args):
+def asset_diff(root_dir: str, manifest_dir: str, raw: bool, **args):
     """
-    Check file differences of a directory since last snapshot.
+    Check file differences of a directory since last snapshot, specified by manifest.
+    """
+    if not os.path.isdir(manifest_dir):
+        raise NonValidInputError(f"Specified manifest directory {manifest_dir} does not exist. ")
 
-    TODO: show example of diff output
-    """
-    click.echo("diff shown")
+    if root_dir is None:
+        asset_root_dir = os.path.dirname(manifest_dir)
+    else:
+        if not os.path.isdir(root_dir):
+            raise NonValidInputError(f"Specified root directory {root_dir} does not exist. ")
+        asset_root_dir = root_dir
+
+    asset_manager = S3AssetManager(
+        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
+    )
+
+    # get inputs of directory
+    input_paths = []
+    for root, dirs, files in os.walk(asset_root_dir):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+            input_paths.append(Path(file_path))
+
+    # hash and create manifest of local directory
+    cache_config = config_file.get_cache_directory()
+    with HashCache(cache_config) as hash_cache:
+        directory_manifest_object = asset_manager._create_manifest_file(
+            input_paths=input_paths, root_path=asset_root_dir, hash_cache=hash_cache
+        )
+
+    # parse local manifest
+    local_manifest_object: BaseAssetManifest = read_local_manifest(manifest=manifest_dir)
+
+    # compare manifests
+    differences: List[tuple] = compare_manifest(
+        reference_manifest=local_manifest_object, compare_manifest=directory_manifest_object
+    )
+
+    if raw:
+        click.echo(f"\nFile Diffs: {differences}")
+    else:
+        click.echo(f"\n{asset_root_dir}")
+        pretty_print(file_status_list=differences)
 
 
 @cli_asset.command(name="download")
@@ -408,3 +451,123 @@ def update_manifest(manifest: str, new_or_modified_paths: List[tuple]) -> BaseAs
         manifest_file.write(local_base_asset_manifest.encode())
 
     return local_base_asset_manifest
+
+
+def compare_manifest(
+    reference_manifest: BaseAssetManifest, compare_manifest: BaseAssetManifest
+) -> List[(tuple)]:
+    """
+    Compares two manifests, reference_manifest acting as the base, and compare_manifest acting as manifest with changes.
+    Returns a list of FileStatus and BaseManifestPath
+
+    """
+    reference_dict = {
+        manifest_path.path: manifest_path for manifest_path in reference_manifest.paths
+    }
+    compare_dict = {manifest_path.path: manifest_path for manifest_path in compare_manifest.paths}
+
+    differences = []
+
+    # Find new files
+    for file_path, manifest_path in compare_dict.items():
+        if file_path not in reference_dict:
+            differences.append((FileStatus.NEW, manifest_path))
+        else:
+            if reference_dict[file_path].hash != manifest_path.hash:
+                differences.append((FileStatus.MODIFIED, manifest_path))
+            else:
+                differences.append((FileStatus.UNCHANGED, manifest_path))
+
+    # Find deleted files
+    for file_path, manifest_path in reference_dict.items():
+        if file_path not in compare_dict:
+            differences.append((FileStatus.DELETED, manifest_path))
+
+    return differences
+
+
+def pretty_print(file_status_list: List[(tuple)]):
+    """
+    Prints to command line a formatted file tree structure with corresponding file statuses
+    """
+
+    # ASCII characters for the tree structure
+    PIPE = "│"
+    HORIZONTAL = "──"
+    ELBOW = "└"
+    TEE = "├"
+    SPACE = "    "
+
+    # ANSI escape sequences for colors
+    COLORS = {
+        "MODIFIED": "\033[93m",  # yellow
+        "NEW": "\033[92m",  # green
+        "DELETED": "\033[91m",  # red
+        "UNCHANGED": "\033[90m",  # grey
+        "RESET": "\033[0m",  # base color
+        "DIRECTORY": "\033[80m",  # grey
+    }
+
+    # Tooltips:
+    TOOLTIPS = {
+        FileStatus.NEW: " +",  # added files
+        FileStatus.DELETED: " -",  # deleted files
+        FileStatus.MODIFIED: " M",  # modified files
+        FileStatus.UNCHANGED: "",  # unchanged files
+    }
+
+    class ColorFormatter(logging.Formatter):
+        def format(self, record):
+            message = super().format(record)
+            return f"{message}"
+
+    # Configure logger
+    formatter = ColorFormatter("")
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(__name__)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    def print_tree(directory_tree, prefix=""):
+        sorted_entries = sorted(directory_tree.items())
+
+        for i, (entry, subtree) in enumerate(sorted_entries, start=1):
+            is_last_entry = i == len(sorted_entries)
+            symbol = ELBOW + HORIZONTAL if is_last_entry else TEE + HORIZONTAL
+            is_dir = isinstance(subtree, dict)
+            color = COLORS["DIRECTORY"] if is_dir else COLORS[subtree.name]
+            tooltip = TOOLTIPS[FileStatus.UNCHANGED] if is_dir else TOOLTIPS[subtree]
+
+            message = f"{prefix}{symbol}{color}{entry}{tooltip}{COLORS['RESET']}{os.path.sep if is_dir else ''}"
+            logger.info(message)
+
+            if is_dir:
+                new_prefix = prefix + (SPACE if is_last_entry else PIPE + SPACE)
+                print_tree(subtree, new_prefix)
+
+        if not directory_tree:
+            symbol = ELBOW + HORIZONTAL
+            message = f"{prefix}{symbol}{COLORS['UNCHANGED']}. {COLORS['RESET']}"
+            logger.info(message)
+
+    def build_directory_tree(file_status_list: List[tuple]) -> dict[str, dict]:
+        directory_tree: dict = {}
+
+        def add_to_tree(path, status):
+            parts = path.split(os.path.sep)
+            current_level = directory_tree
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    current_level[part] = status
+                else:
+                    current_level = current_level.setdefault(part, {})
+
+        for status, manifest_path in file_status_list:
+            add_to_tree(manifest_path.path, status)
+        return directory_tree
+
+    directory_tree = build_directory_tree(file_status_list)
+    print_tree(directory_tree)
+    logger.info("")
