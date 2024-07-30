@@ -51,14 +51,14 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
             popen_mock.assert_called_once_with(
                 ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.PIPE,
             )
         else:
             popen_mock.assert_called_once_with(
                 ["/bin/DeadlineCloudMonitor", "login", "--profile", "sandbox-us-west-2"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
             )
 

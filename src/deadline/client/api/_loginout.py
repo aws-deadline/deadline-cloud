@@ -46,16 +46,12 @@ def _login_deadline_cloud_monitor(
             # We don't hookup to stdin but do this to avoid issues on windows
             # See https://docs.python.org/3/library/subprocess.html#subprocess.STARTUPINFO.lpAttributeList
             p = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE
+                args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.PIPE
             )
         else:
             p = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL
+                args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL
             )
-        # Linux takes time to start DCM binary, which causes the TTY to suspend the process and send it to background job
-        # With wait here, the DCM binary starts and TTY does not suspend the deadline process.
-        if sys.platform == "linux":
-            time.sleep(0.5)
     except FileNotFoundError:
         raise DeadlineOperationError(
             f"Could not find Deadline Cloud monitor at {deadline_cloud_monitor_path}. "
