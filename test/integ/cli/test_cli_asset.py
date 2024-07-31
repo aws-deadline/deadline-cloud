@@ -60,7 +60,7 @@ class TestSnapshot:
         with open(manifest_file_path, "r") as f:
             manifest_data = json.load(f)
 
-        expected_hash = hash_file(file_path, HashAlgorithm())  # hashed with xxh128
+        expected_hash = hash_file(file_path, HashAlgorithm("xxh128"))  # hashed with xxh128
         manifest_data_paths = manifest_data["paths"]
         assert (
             len(manifest_data_paths) == 1
@@ -103,7 +103,7 @@ class TestSnapshot:
             manifest_data = json.load(f)
 
         # should ignore subdirectories
-        expected_hash = hash_file(root_file_path, HashAlgorithm())  # hashed with xxh128
+        expected_hash = hash_file(root_file_path, HashAlgorithm("xxh128"))  # hashed with xxh128
         manifest_data_paths = manifest_data["paths"]
         assert (
             len(manifest_data_paths) == 1
@@ -118,7 +118,8 @@ class TestSnapshot:
         root_dir = os.path.join(temp_dir, TEST_ROOT_DIR)
 
         # Create a file in the root directory
-        root_file_path = os.path.join(root_dir, TEST_ROOT_DIR)
+        root_file_path = os.path.join(root_dir, TEST_ROOT_FILE)
+        os.makedirs(os.path.dirname(root_file_path), exist_ok=True)
         with open(root_file_path, "w") as f:
             f.write(TEST_ROOT_DIR_FILE_CONTENT)
 
@@ -145,8 +146,10 @@ class TestSnapshot:
         with open(root_manifest_file_path, "r") as f:
             manifest_data = json.load(f)
 
-        root_file_hash = hash_file(root_file_path, HashAlgorithm())  # hashed with xxh128
-        subdir_file_hash = hash_file(subdir_file_path, HashAlgorithm())  # hashed with xxh128
+        root_file_hash = hash_file(root_file_path, HashAlgorithm("xxh128"))  # hashed with xxh128
+        subdir_file_hash = hash_file(
+            subdir_file_path, HashAlgorithm("xxh128")
+        )  # hashed with xxh128
         manifest_data_paths = manifest_data["paths"]
         assert (
             len(manifest_data_paths) == 2
@@ -192,7 +195,7 @@ class TestSnapshot:
         with open(manifest_file_path, "r") as f:
             manifest_data = json.load(f)
 
-        expected_hash = hash_file(file_path, HashAlgorithm())  # hashed with xxh128
+        expected_hash = hash_file(file_path, HashAlgorithm("xxh128"))  # hashed with xxh128
         manifest_data_paths = manifest_data["paths"]
         assert (
             len(manifest_data_paths) == 1

@@ -191,7 +191,10 @@ class S3AssetUploader:
 
         if manifest_write_dir:
             self._write_local_manifest(
-                manifest_write_dir, manifest_name, full_manifest_key, manifest
+                manifest_write_dir,
+                manifest_name,
+                full_manifest_key,
+                manifest,
             )
 
         self.upload_bytes_to_s3(
