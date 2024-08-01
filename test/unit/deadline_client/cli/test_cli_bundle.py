@@ -4,6 +4,7 @@
 Tests for the CLI job bundle commands.
 """
 import os
+import sys
 import tempfile
 import json
 from unittest.mock import ANY, patch, Mock
@@ -399,7 +400,11 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
     Verify that job parameters specified at the CLI are passed to the CreateJob call
     """
     # Use a temporary directory for the job bundle
-    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+        boto3, "Session"
+    ) as session_mock, patch.object(
+        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
+    ) as telemetry_mock:
         session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
         session_mock.reset_mock()
@@ -425,6 +430,8 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                 "priority=90",
                 "--priority",
                 "45",
+                "--submitter-name",
+                "MyDCC",
             ],
         )
 
@@ -438,6 +445,11 @@ def test_cli_bundle_job_parameter_from_cli(fresh_deadline_config):
                 "priority": {"int": "90"},
             },
             priority=45,
+        )
+
+        telemetry_mock.return_value.record_event.assert_any_call(
+            event_type="com.amazon.rum.deadline.submission",
+            event_details={"submitter_name": "MyDCC"},
         )
 
         assert result.exit_code == 0
@@ -750,3 +762,23 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
 
         upload_attachments_mock.assert_not_called()
         assert result.exit_code == 0
+
+
+@patch("deadline.client.ui.gui_context_for_cli")
+def test_gui_submit_submitter_name(_mock_context):
+    """
+    Verify that the --submitter-name arg gets passed through correctly
+    """
+
+    # Unconventional mocking pattern because of how the function is imported in code
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+    mock_job_bundle_submitter.show_job_bundle_submitter
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        ["bundle", "gui-submit", "--browse", "--submitter-name", "MyDCC"],
+    )
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    assert kwargs["submitter_name"] == "MyDCC"

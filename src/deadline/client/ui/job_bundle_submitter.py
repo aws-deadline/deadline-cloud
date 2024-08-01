@@ -38,7 +38,12 @@ logger = getLogger(__name__)
 
 
 def show_job_bundle_submitter(
-    *, input_job_bundle_dir: str = "", browse: bool = False, parent=None, f=Qt.WindowFlags()
+    *,
+    input_job_bundle_dir: str = "",
+    browse: bool = False,
+    parent=None,
+    f=Qt.WindowFlags(),
+    submitter_name="JobBundle",
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -177,6 +182,7 @@ def show_job_bundle_submitter(
         on_create_job_bundle_callback=on_create_job_bundle_callback,
         parent=parent,
         f=f,
+        submitter_name=submitter_name,
     )
     submitter_dialog.show()
     return submitter_dialog
