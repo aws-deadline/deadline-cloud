@@ -5,6 +5,9 @@
 ### What is the impact of this change?
 
 ### How was this change tested?
+- Have you run `hatch run test` ?
+
+- Have you run `hatch run integ:test` ? See `DEVELOPMENT.md` on "Run integration tests"
 
 ### Was this change documented?
 
