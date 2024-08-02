@@ -65,7 +65,7 @@ def cli_asset():
 @_handle_error
 def asset_snapshot(root_dir: str, manifest_out: str, recursive: bool, **args):
     """
-    Creates manifest of files specified root directory.
+    Creates manifest of files specified by root directory.
     """
     if not os.path.isdir(root_dir):
         raise NonValidInputError(f"Specified root directory {root_dir} does not exist. ")
@@ -260,7 +260,7 @@ def asset_upload(root_dir: str, manifest_dir: str, update: bool, **args):
 @_handle_error
 def asset_diff(root_dir: str, manifest_dir: str, raw: bool, **args):
     """
-    Check file differences of a directory since last snapshot, specified by manifest.
+    Check file differences between a directory and specified manifest.
     """
     if not os.path.isdir(manifest_dir):
         raise NonValidInputError(f"Specified manifest directory {manifest_dir} does not exist. ")
@@ -306,14 +306,14 @@ def asset_diff(root_dir: str, manifest_dir: str, raw: bool, **args):
 
 
 @cli_asset.command(name="download")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
-@click.option("--job-id", help="The AWS Deadline Cloud Job to get. ")
 @click.option(
     "--manifest-out",
     required=True,
     help="Destination path to directory where manifest is created. ",
 )
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
+@click.option("--job-id", help="The AWS Deadline Cloud Job to get. ")
 @_handle_error
 def asset_download(manifest_out: str, **args):
     """
@@ -363,7 +363,7 @@ def asset_download(manifest_out: str, **args):
 
     # download each input_manifest_path
     for input_manifest_path in input_manifest_paths:
-        local_file_name = Path(manifest_out, job_id + "_manifest")
+        local_file_name = Path(manifest_out, job_id + "_input")
 
         result = download_file_with_s3_key(
             s3_bucket=bucket_name,
