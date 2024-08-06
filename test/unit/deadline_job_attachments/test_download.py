@@ -564,6 +564,7 @@ def assert_get_job_input_output_paths_by_asset_root(
         assert total_bytes == expected_total_bytes
 
 
+
 @pytest.mark.docker
 @pytest.mark.parametrize("manifest_version", [ManifestVersion.v2023_03_03])
 class TestFullDownload:

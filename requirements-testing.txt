@@ -10,5 +10,5 @@ twine == 5.*
 black == 24.4.*
 mypy == 1.*
 ruff == 0.5.*
-moto == 5.*
+moto[all] == 5.0.*
 jsondiff == 2.*

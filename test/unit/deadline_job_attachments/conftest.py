@@ -18,7 +18,7 @@ from moto import mock_aws
 
 from botocore.client import BaseClient  # noqa: E402 isort:skip
 
-from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
+# from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
 from deadline.job_attachments.asset_sync import AssetSync  # noqa: E402 isort:skip
 from deadline.job_attachments.models import (  # noqa: E402 isort:skip
     JobAttachmentsFileSystem,
@@ -37,6 +37,8 @@ def boto_config() -> Generator[None, None, None]:
         "AWS_ACCESS_KEY_ID": "ACCESSKEY",
         "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "AWS_DEFAULT_REGION": "us-west-2",
+        "AWS_SECURITY_TOKEN": "EXAMPLE",
+        "AWS_SESSION_TOKEN": "EXAMPLE",
     }
     with patch.dict("os.environ", updated_environment):
         yield
@@ -49,7 +51,70 @@ def s3_fixture(boto_config) -> Generator[BaseClient, None, None]:
     """
 
     with mock_aws():
-        yield aws_clients.get_s3_client()
+
+        from functools import lru_cache
+        from typing import Optional
+
+        import boto3
+        import botocore
+        from boto3.s3.transfer import create_transfer_manager
+        from botocore.client import BaseClient, Config
+
+        from deadline.client.config import config_file
+        from deadline.job_attachments.exceptions import AssetSyncError
+        from deadline.job_attachments._aws.aws_config import (
+            S3_CONNECT_TIMEOUT_IN_SECS,
+            S3_READ_TIMEOUT_IN_SECS,
+            S3_RETRIES_MODE,
+        )
+        MAX_SIZE_CACHE = 128
+
+        def get_botocore_session() -> botocore.session.Session:
+            return botocore.session.get_session()
+
+
+        @lru_cache(maxsize=MAX_SIZE_CACHE)
+        def get_boto3_session(
+            botocore_session: botocore.session.Session = get_botocore_session(),
+        ) -> boto3.session.Session:
+            return boto3.session.Session(botocore_session=botocore_session)
+        
+        def get_s3_max_pool_connections() -> int:
+            try:
+                s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+            except ValueError as ve:
+                raise AssetSyncError(
+                    "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
+                    "'s3_max_pool_connections'"
+                ) from ve
+            if s3_max_pool_connections <= 0:
+                raise AssetSyncError(
+                    f"Nonvalid value for configuration setting: 's3_max_pool_connections' ({s3_max_pool_connections}) must be positive integer."
+                )
+            return s3_max_pool_connections
+
+
+        session = get_boto3_session()
+
+        s3_max_pool_connections = get_s3_max_pool_connections()
+
+        client = session.client(
+            "s3",
+            config=Config(
+                signature_version="s3v4",
+                connect_timeout=S3_CONNECT_TIMEOUT_IN_SECS,
+                read_timeout=S3_READ_TIMEOUT_IN_SECS,
+                retries={"mode": S3_RETRIES_MODE},
+                user_agent_extra=f"S3A/Deadline/NA/JobAttachments/0.48.8.post5+g6fc2129.d20240802",
+                max_pool_connections=s3_max_pool_connections,
+            ),
+            endpoint_url=f"https://s3.{session.region_name}.amazonaws.com",
+        )
+        
+        # from deadline.job_attachments._aws import aws_clients  # noqa: E402 isort:skip
+        # client = aws_clients.get_s3_client()
+        # client.create_bucket(Bucket="morgan-test", CreateBucketConfiguration={"LocationConstraint": "us-west-2"})
+        yield client
 
 
 @pytest.fixture(scope="function")
