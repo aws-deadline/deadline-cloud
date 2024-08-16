@@ -80,8 +80,9 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
 
         assert "Successfully logged out" in result.output
 
-        # Verify that the logout call resets the cached session to None
-        assert api._session.__cached_boto3_session is None
+        # Verify that the logout call clears the session caches
+        assert api._session._get_boto3_session_for_profile.cache_info()[3] == 0
+        assert api._session._get_queue_user_boto3_session.cache_info()[3] == 0
 
 
 def test_cli_auth_status(fresh_deadline_config):
