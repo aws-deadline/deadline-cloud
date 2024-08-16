@@ -72,13 +72,13 @@ def _get_boto3_session_for_profile(profile_name: str):
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
-    # Also DCM credentials currently take several seconds to refresh. Set the refresh timeouts to 1 and
-    # 2 minutes so they are reused between API calls to save time.
+    # Also DCM credentials currently take several seconds to refresh. Lower the refresh timeouts so creds
+    # are reused between API calls to save time.
     # See https://github.com/boto/botocore/blob/develop/botocore/credentials.py#L342-L362
     credentials = session.get_credentials()
     if isinstance(credentials, RefreshableCredentials):
-        credentials._advisory_refresh_timeout = 2 * 60  # 2 minutes
-        credentials._mandatory_refresh_timeout = 60  # 1 minute
+        credentials._advisory_refresh_timeout = 5 * 60  # 5 minutes
+        credentials._mandatory_refresh_timeout = 2.5 * 60  # 2.5 minutes
 
     return session
 
