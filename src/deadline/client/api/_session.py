@@ -75,11 +75,19 @@ def _get_boto3_session_for_profile(profile_name: str):
     # Also DCM credentials currently take several seconds to refresh. Lower the refresh timeouts so creds
     # are reused between API calls to save time.
     # See https://github.com/boto/botocore/blob/develop/botocore/credentials.py#L342-L362
-    credentials = session.get_credentials()
-    if isinstance(credentials, RefreshableCredentials):
-        credentials._advisory_refresh_timeout = 5 * 60  # 5 minutes
-        credentials._mandatory_refresh_timeout = 2.5 * 60  # 2.5 minutes
 
+    try:
+        credentials = session.get_credentials()
+        if (
+            isinstance(credentials, RefreshableCredentials)
+            and credentials.method == "custom-process"
+        ):
+            credentials._advisory_refresh_timeout = 5 * 60  # 5 minutes
+            credentials._mandatory_refresh_timeout = 2.5 * 60  # 2.5 minutes
+    except:  # noqa: E722
+        # Attempt to patch the timeouts but ignore any errors. These patched proeprties are internal and could change
+        # without notice. Creds are functional without patching timeouts.
+        pass
     return session
 
 
