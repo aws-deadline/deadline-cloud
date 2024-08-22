@@ -31,8 +31,14 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", profile_name)
 
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
+        api._session._get_boto3_session_for_profile, "cache_clear"
+    ) as mock_profile_session_cache_clear, patch.object(
+        api._session._get_queue_user_boto3_session, "cache_clear"
+    ) as mock_queue_session_cache_clear, patch.object(
         api, "get_boto3_session", new=session_mock
-    ), patch.object(subprocess, "Popen") as popen_mock, patch.object(
+    ), patch.object(
+        subprocess, "Popen"
+    ) as popen_mock, patch.object(
         subprocess, "check_output"
     ) as check_output_mock:
         # The profile name
@@ -79,9 +85,8 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         )
 
         assert "Successfully logged out" in result.output
-
-        # Verify that the logout call resets the cached session to None
-        assert api._session.__cached_boto3_session is None
+        mock_profile_session_cache_clear.assert_called()
+        mock_queue_session_cache_clear.assert_called()
 
 
 def test_cli_auth_status(fresh_deadline_config):
