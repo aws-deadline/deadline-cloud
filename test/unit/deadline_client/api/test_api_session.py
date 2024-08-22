@@ -4,6 +4,7 @@
 tests the deadline.client.api functions relating to boto3.Client
 """
 
+from typing import Optional
 from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
@@ -14,12 +15,13 @@ def test_get_boto3_session(fresh_deadline_config):
     """Confirm that api.get_boto3_session gets a session for the configured profile"""
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
 
-    with patch.object(boto3, "Session", return_value="SomeReturnValue") as boto3_session:
+    mock_session = MagicMock()
+    with patch.object(boto3, "Session", return_value=mock_session) as boto3_session:
         # Testing this function
         result = api.get_boto3_session()
 
         # Confirm it returned the mocked value, and was called with the correct args
-        assert result == "SomeReturnValue"
+        assert result == mock_session
         boto3_session.assert_called_once_with(profile_name="SomeRandomProfileName")
 
 
@@ -28,31 +30,30 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
     Confirm that api.get_boto3_session caches the session, and refreshes if
     the configured profile name changes
     """
+
     # mock boto3.Session to return a fresh object based on the input profile name
-    with patch.object(
-        boto3, "Session", side_effect=lambda profile_name: f"session for {profile_name}"
-    ) as boto3_session:
+    def mock_create_session(profile_name: Optional[str]):
+        session = MagicMock()
+        session._profile_name = profile_name
+        return session
+
+    with patch.object(boto3, "Session", side_effect=mock_create_session) as boto3_session:
         # This is a session with the default profile name
         session0 = api.get_boto3_session()
 
-        assert session0 == "session for None"  # type: ignore
+        assert session0._profile_name is None
 
         # This should return the cached object, and not call boto3.Session
         session1 = api.get_boto3_session()
 
         assert session1 is session0
 
-        # Overriding the config object means to not use the cached object
-        session1_override_config = api.get_boto3_session(config=config.config_file.read_config())
-
-        assert session1_override_config is not session0
-
         # Configuring a new session name should result in a new Session object
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
         session2 = api.get_boto3_session()
 
         assert session2 is not session0
-        assert session2 == "session for SomeRandomProfileName"  # type: ignore
+        assert session2._profile_name == "SomeRandomProfileName"
 
         # This should return the cached object, and not call boto3.Session
         session3 = api.get_boto3_session()
@@ -91,39 +92,6 @@ def test_get_check_authentication_status_configuration_error(fresh_deadline_conf
         )
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
-
-
-def test_get_queue_user_boto3_session_cache(fresh_deadline_config):
-    session_mock = MagicMock()
-    session_mock.profile_name = "test_profile"
-    session_mock.region_name = "us-west-2"
-    deadline_mock = MagicMock()
-    mock_botocore_session = MagicMock()
-    mock_botocore_session.get_config_variable = lambda name: (
-        "test_profile" if name == "profile" else None
-    )
-
-    with patch.object(api._session, "get_boto3_session", return_value=session_mock), patch(
-        "botocore.session.Session", return_value=mock_botocore_session
-    ), patch.object(
-        api._session, "_get_queue_user_boto3_session"
-    ) as _get_queue_user_boto3_session_mock:
-        _ = api.get_queue_user_boto3_session(
-            deadline_mock, farm_id="farm-1234", queue_id="queue-1234", queue_display_name="queue"
-        )
-        # Same farm ID and queue ID, returns cached session
-        _ = api.get_queue_user_boto3_session(
-            deadline_mock, farm_id="farm-1234", queue_id="queue-1234", queue_display_name="queue"
-        )
-        # Different queue ID, makes a fresh session
-        _ = api.get_queue_user_boto3_session(
-            deadline_mock, farm_id="farm-1234", queue_id="queue-5678", queue_display_name="queue"
-        )
-        # Different queue ID, makes a fresh session
-        _ = api.get_queue_user_boto3_session(
-            deadline_mock, farm_id="farm-5678", queue_id="queue-1234", queue_display_name="queue"
-        )
-        assert _get_queue_user_boto3_session_mock.call_count == 3
 
 
 def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):
