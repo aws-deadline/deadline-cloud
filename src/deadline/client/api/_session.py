@@ -93,7 +93,7 @@ def _get_boto3_session_for_profile(profile_name: str):
 
 def invalidate_boto3_session_cache() -> None:
     _get_boto3_session_for_profile.cache_clear()
-    _get_boto3_session_for_profile.cache_clear()
+    _get_queue_user_boto3_session.cache_clear()
 
 
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
