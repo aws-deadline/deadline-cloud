@@ -8,6 +8,56 @@ aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog = {
     "visible": 1,
     "windowTitle": "AWS Deadline Cloud workstation configuration",
 }
+# authentication status
+aWS_Deadline_Cloud_workstation_configuration_Credential_source_AuthenticationStatusGroup = {
+    "title": "Credential source",
+    "type": "AuthenticationStatusGroup",
+    "unnamed": 1,
+    "visible": 1,
+    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+aWS_Deadline_Cloud_workstation_configuration_Authentication_status_AuthenticationStatusGroup = {
+    "title": "Authentication status",
+    "type": "AuthenticationStatusGroup",
+    "unnamed": 1,
+    "visible": 1,
+    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+aWS_Deadline_Cloud_workstation_configuration_AWS_Deadline_Cloud_API_AuthenticationStatusGroup = {
+    "title": "AWS Deadline Cloud API",
+    "type": "AuthenticationStatusGroup",
+    "unnamed": 1,
+    "visible": 1,
+    "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
+}
+credential_source_b_style_color_green_HOST_PROVIDED_b_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Credential_source_AuthenticationStatusGroup,
+    "text": "<b style='color:green;'>HOST_PROVIDED</b>",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+credential_source_b_style_color_green_DEADLINE_CLOUD_MONITOR_LOGIN_b_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Credential_source_AuthenticationStatusGroup,
+    "text": "<b style='color:green;'>DEADLINE_CLOUD_MONITOR_LOGIN</b>",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+authentication_status_b_style_color_green_AUTHENTICATED_b_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Authentication_status_AuthenticationStatusGroup,
+    "text": "<b style='color:green;'>AUTHENTICATED</b>",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+aWS_Deadline_Cloud_API_b_style_color_green_AUTHORIZED_b_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_AWS_Deadline_Cloud_API_AuthenticationStatusGroup,
+    "text": "<b style='color:green;'>AUTHORIZED</b>",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
 # OK button
 aWS_Deadline_Cloud_workstation_configuration_OK_QPushButton = {
     "text": "OK",
@@ -25,7 +75,7 @@ aWS_Deadline_Cloud_workstation_configuration_Apply_QPushButton = {
     "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
 }
 
-# global settings
+# global settings box
 aWS_Deadline_Cloud_workstation_configuration_Global_settings_QGroupBox = {
     "title": "Global settings",
     "type": "QGroupBox",
@@ -47,13 +97,22 @@ global_settings_AWS_profile_QComboBox = {
     "unnamed": 1,
     "visible": 1,
 }
-aWS_profile_deadlinecloud_squish_QModelIndex = {
+aWS_profile_default_QModelIndex = {
     "container": global_settings_AWS_profile_QComboBox,
-    "text": "deadlinecloud_squish",
+    "text": "(default)",
     "type": "QModelIndex",
-}
+}  # `(default)` aws profile element
 
-# profile settings
+
+def profileNameLocator(profileName):
+    return {
+        "container": global_settings_AWS_profile_QComboBox,
+        "text": profileName,
+        "type": "QModelIndex",
+    }
+
+
+# profile settings box
 aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox = {
     "title": "Profile settings",
     "type": "QGroupBox",
@@ -96,7 +155,7 @@ profile_settings_Choose_QPushButton = {
     "visible": 1,
 }
 
-# farm settings
+# farm settings box
 aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox = {
     "title": "Farm settings",
     "type": "QGroupBox",
@@ -134,8 +193,23 @@ squish_Storage_Profile_QModelIndex = {
     "text": "Squish Storage Profile",
     "type": "QModelIndex",
 }
+farm_settings_Job_attachments_filesystem_options_QLabel = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
+    "text": "Job attachments filesystem options",
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
+farm_settings_Job_attachments_filesystem_options_QLabel_2 = {
+    "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
+    "leftWidget": farm_settings_Job_attachments_filesystem_options_QLabel,
+    "type": "QLabel",
+    "unnamed": 1,
+    "visible": 1,
+}
 
-# general settings
+
+# general settings box
 aWS_Deadline_Cloud_workstation_configuration_General_settings_QGroupBox = {
     "title": "General settings",
     "type": "QGroupBox",
