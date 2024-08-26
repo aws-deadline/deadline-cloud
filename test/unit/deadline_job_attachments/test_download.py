@@ -2426,11 +2426,11 @@ def test_download_files_from_manifests(
     def download_file(*args):
         nonlocal downloaded_files
         downloaded_files.append(args[0].path)
-        return (40, Path(args[0].path))
+        return (40, Path(args[0].path), 123456)
 
     with patch(
         f"{deadline.__package__}.job_attachments.download.download_file", side_effect=download_file
-    ):
+    ), patch(f"{deadline.__package__}.job_attachments.download._update_file_time_stamps"):
         download_files_from_manifests(
             s3_bucket="s3_settings.s3BucketName",
             manifests_by_root={"/test": merged_manifest},
