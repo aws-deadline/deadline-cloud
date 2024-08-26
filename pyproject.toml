@@ -47,8 +47,6 @@ dependencies = [
     "jsonschema == 4.17.*",
     "pywin32 == 306; sys_platform == 'win32'",
     "QtPy == 2.4.*",
-    "retry >= 0.9.2",
-    "types-retry >= 0.9.2",
 ]
 
 [project.urls]
