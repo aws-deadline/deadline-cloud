@@ -2,100 +2,207 @@
 
 This documentation provides guidance on developer workflows for working with the code in this repository.
 
-## Code organization
+Table of Contents:
+* [Development Environment Setup](#development-environment-setup)
+* [The Development Loop](#the-development-loop)
+* [Code Organization](#code-organization)
+* [Testing](#testing)
+   * [Writing tests](#writing-tests)
+   * [Unit tests](#unit-tests)
+   * [Integration tests](#integration-tests)
+* [Things to Know](#things-to-know)
+   * [Public contracts](#public-contracts)
+   * [Qt and Calling AWS APIs](#qt-and-calling-aws-including-aws-deadline-cloud-apis)
 
-This repository is split up into two main modules:
-1. `src/client`
-2. `src/job_attachments`
+## Development Environment Setup
 
-The `src/client` organization is laid out below.
+To develop the Python code in this repository you will need:
 
-For more information on job attachments, see [here](src/deadline/job_attachments/README.md).
+1. Python 3.8 or higher. We recommend [mise](https://github.com/jdx/mise) if you would like to run more than one version
+   of Python on the same system. When running unit tests against all supported Python versions, for instance.
+2. The [hatch](https://github.com/pypa/hatch) package installed (`pip install --upgrade hatch`) into your Python environment. 
 
-### `src/client/api`
+You can develop on a Linux, MacOs, or Windows workstation, but you may find that some of the support scripting is specific to
+Linux/MacOS workstations.
 
-This submodule contains utilities to call boto3 in a standardized way
-using an aws profile configured for AWS Deadline Cloud, helpers for working with the
-AWS Deadline Cloud monitor login/logout, and objects representing AWS Deadline Cloud
-resources.
+If you are making changes to the Job Attachments files, then you will also need the following to be able to run the integration
+tests:
 
-### `src/client/cli`
+1. A valid AWS Account
+2. An AWS Deadline Cloud Farm and Queue.
+   *  You can create these via AWS Deadline Cloud's AWS Console quick Farm create workflow.
+      The Queue's configuration must include a Job Attachments bucket. If used only for running these tests then the cost of
+      this infrastructure should be negligible, but do keep an eye on your costs and destroy the infrastructure (especially S3 buckets)
+      when you no longer need it.
 
-This submodule contains entry points for the CLI applications provided
-by the library.
+## The Development Loop
 
-### `src/client/config`
+We have configured [hatch](https://github.com/pypa/hatch) commands to support a standard development loop. You can run the following
+from any directory of this repository:
 
-This submodule contains an interface to the machine-specific AWS Deadline Cloud
-configuration, specifically settings stored in `~/.deadline/*`
+* `hatch build` - To build the installable Python wheel and sdist packages into the `dist/` directory.
+* `hatch run test` - To run the PyTest unit tests found in the `test/unit` directory. See [Testing](#testing).
+* `hatch run all:test` - To run the PyTest unit tests against all available supported versions of Python.
+* `hatch run integ:test` - To run the PyTest integration tests found in the `test/integ` directory. See [Testing](#testing).
+* `hatch run lint` - To check that the package's formatting adheres to our standards.
+* `hatch run fmt` - To automatically reformat all code to adhere to our formatting standards.
+* `hatch shell` - Enter a shell environment where you can run the `deadline` command-line directly as it is implemented in your
+  checked-out local git repository.
+* `hatch env prune` - Delete all of your isolated workspace [environments](https://hatch.pypa.io/1.12/environment/) 
+   for this package.
 
-### `src/client/ui`
+For your development loop, we recommend something along the lines of:
 
-This submodule contains Qt GUIs, based on PySide(2/6), for common controls
-and widgets used in interactive submitters, and to display the status
-of various AWS Deadline Cloud resources.
+1. Loop until all integration tests pass:
+   1. Loop until all unit tests pass:
+      1. Make some incremental changes to the package code
+      2. Add or modify relevant unit tests (See [Testing](#testing))
+      2. Run the unit tests
+   2. Add or modify relevant integration tests (See [Testing](#testing))
+   3. Run the integration tests 
 
-### `src/client/job_bundle`
+Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
+your code and post your pull request.
 
-This submodule contains code related to the history of job submissions
-performed on the workstation. Its initial functionality is to create
-job bundle directories in a standardized manner.
+Note: Hatch uses [environments](https://hatch.pypa.io/1.12/environment/) to isolate the Python development workspace
+for this package from your system or virtual environment Python. If your build/test run is not making sense, then
+sometimes pruning (`hatch env prune`) all of these environments for the package can fix the issue.
 
-# Build / Test / Release
+## Code Organization
 
-## Build the package.
-```
-hatch build
-```
+Please see [code organization](docs/code_organization.md).
 
-## Run tests
-```
-hatch run test
-```
+## Testing
 
-## Run integration tests
-- Pre-requisites:
-  - Developer must have a valid AWS account.
-  - Developer must create a Farm and Queue. This can be done easily via Deadline Cloud's AWS Console quick Farm create workflow. Please copy the Farm resource ID for the next step. Please copy the Queue's Job Attachment S3 bucket name and Root Prefix for the next step.
+The objective for the tests of this package are to act as regression tests to help identify unintended changes to
+functionality in the package. As such, we strive to have high test coverage of the different behaviours/functionality
+that the package contains. Code coverage metrics are not the goal, but rather are a guide to help identify places
+where there may be gaps in testing coverage.
 
-- Setup Environment Variables
+The tests for this package have two forms:
+
+1. Unit tests - Small tests that are narrowly focused on ensuring that function-level behavior
+   of the implementation behaves as it is expected to. These can always be run locally on your workstation
+   without requiring an AWS account.
+2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
+   Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
+
+### Writing Tests
+
+If you want assistance developing tests, then please don't hesitate to open a draft pull request and ask for help.
+We'll do our best to help you out and point you in the right direction.
+
+Our tests are implemented using the [PyTest](https://docs.pytest.org/en/stable/) testing framework,
+and unit tests generally make use of Python's [unittest.mock](https://docs.python.org/3.8/library/unittest.mock.html)
+package to avoid runtime dependencies and narrowly focus tests on a specific aspect of the implementation.
+
+If you are not sure how to start writing tests, then we suggest looking at the existing tests
+for the same or similar functions for inspiration (search for calls to the function within the `test/`
+subdirectories). You will also find both the official [PyTest documentation](https://docs.pytest.org/en/stable/)
+and [unitest.mock documentation](https://docs.python.org/3.8/library/unittest.mock.html) very informative (we do).
+
+### Unit Tests
+
+Unit tests are all located under the `test/unit` directory of this repository. If you are adding or modifying
+functionality, then you will almost always want to be writing one or more unit tests to demonstrate that your
+logic behaves as expected and that future changes do not accidentally break your change.
+
+#### Running Unit Tests
+
+You can run unit tests by running:
+
+* `hatch run test` - To run the unit tests with your default Python runtime.
+* `hatch run all:test` - To run the unit tests with all of the supported Python runtime versions that you have installed.
+
+#### Running Docker-based Unit Tests
+
+Some of the unit tests in this package require a docker environment to run. These tests are marked with `@pytest.mark.docker`.
+In order to run these tests, please run the `run_sudo_tests.sh` script located in the `scripts` directory. For detailed instructions,
+please refer to [scripts/README.md](./scripts/README.md).
+
+If you make changes to the `download` or `asset_sync` modules, it's highly recommended to run and ensure these tests pass.
+
+### Integration Tests
+
+Integration tests are all located under the `test/integ` directory of this repository. You should consider
+adding or modifying an integration test for any change that adds or modifies functionality that directly
+interfaces with the local filesystem or an AWS service API.
+
+#### Running Integration Tests
+
+Our integration tests run using using infrastructure that is in your AWS Account. The identifiers for
+these resources are communicated to the tests through environment variables that you must define before running
+the tests. Define the following environment variables:
+
 ```bash
-export SERVICE_ACCOUNT_ID="your AWS Account Id"
-export JOB_ATTACHMENTS_BUCKET="your Queue configured Job Attachments bucket"
-export JA_TEST_ROOT_PREFIX="/your/path/root"
-export FARM_ID="farm-{uuid}"
-export AWS_DEFAULT_REGION="us-west-2"
+# Replace with your AWS Account ID
+export SERVICE_ACCOUNT_ID=000000000000
+# Replace with the region code where your AWS test resources are located (e.g. us-west-2)
+export AWS_DEFAULT_REGION=xx-yyyy-nn
+# Replace with the ID of your AWS Deadline Cloud Farm
+export FARM_ID=farm-00112233445566778899aabbccddeeff
+# Replace with the ID of your AWS Deadline Cloud Queue that is configured with a
+# Job Attachments bucket.
+export QUEUE_ID=queue-00112233445566778899aabbccddeeff
+
+export JOB_ATTACHMENTS_BUCKET=$(
+   aws deadline get-queue --farm-id $FARM_ID --queue-id $QUEUE_ID \
+    --query 'jobAttachmentSettings.s3BucketName' | tr -d '"'
+)
+export JA_TEST_ROOT_PREFIX=$(
+   aws deadline get-queue --farm-id $FARM_ID --queue-id $QUEUE_ID \
+    --query 'jobAttachmentSettings.rootPrefix' | tr -d '"' 
+)
 ```
 
-- Optional Environment Variables
+Then you can run the integration tests with:
+
 ```bash
-export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"
-export INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET="Your regional S3 bucket in another account"
-```
-
-- Running the integration tests.
-```
 hatch run integ:test
 ```
 
-- Notes:
-  - If the integration test is run in any region other than `us-west-2`, please set the environment variable `INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET`. The bucket must be from another AWS account in the same region as the farm setup to run this test.
-## Run linting
-```
-hatch run lint
-```
+Notes: 
+* If you are not one of the AWS Deadline Cloud developers then you may see test failures in tests marked with
+  `pytest.mark.cross_account`. That's okay, just ignore them; they'll be tested with the required setup in our CI.
+* If you are adding/changing code related to the Job Attachments' file-upload interactions with S3, then if you have a second
+  AWS account then we request that you also ensure that the tests marked with the `pytest.mark.cross_account` marker also pass.
+  If you don't have a second account, then don't worry about it. These tests will run in our CI. To run these tests:
+  1. Create an S3 bucket in the same region as your testing resources but in your second AWS Account.
+  2. Set the access policy of that S3 bucket to allow your first AWS Account to perform all operations on the bucket. Do
+     NOT open the bucket up to the world for reading/writing!
+  3. `export INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET=<your-bucket-name-in-the-second-account>`
+  4. Run the integration tests.
+* AWS Developers note: If testing with a non-production deployment of AWS Deadline Cloud then you will have to
+define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
+production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
 
-## Run formating
-```
-hatch run fmt
-```
+## Things to Know
 
-## Run tests for all supported Python versions.
-```
-hatch run all:test
-```
+### Public Contracts
 
-## Qt and Calling AWS (including AWS Deadline Cloud) APIs
+The publicly consumable interfaces of this library and CLI are all considered to be public contracts. Meaning that any
+change to them that is not backwards compatible is considered to be a breaking change. We strive to avoid making breaking
+changes when possible, but accept that there are sometimes very good reasons for why a breaking change is necessary.
+
+The following are some heuristics to demonstrate how to think about breaking vs non-breaking changes in the public interface.
+
+For the command-line interface:
+* Things like adding a non-required argument to a subcommand, or adding a new subcommand are not breaking changes.
+* Renaming a subcommand or arugment is a breaking change.
+* Adding a new required subcommand argument is a breaking change.
+* Changing a default value/behaviour is a breaking change.
+
+For the Python library interface:
+* We follow the [PEP 8](https://peps.python.org/pep-0008/#descriptive-naming-styles) weak internal use indicator convention
+  and name all functions and modules that are internal/private with a leading underscore character. 
+* All functions and modules whose name does not begin with an underscore are part of the public contract for this package.
+* Things like adding a non-required keyword argument to a function, or adding a new public function are not breaking changes.
+* Things like renaming a keyword argument, or adding/removing a positional argument in a public function is a breaking change.
+* Changing a default argument value is a breaking change.
+* Changing the location that a file or directory is created should be considered to be a breaking change. These locations have a tendancy to become
+  de-facto parts of the public contract as users build automation that assumes these locations is unchanged.
+
+### Qt and Calling AWS (including AWS Deadline Cloud) APIs
 
 > TL;DR Never call an AWS API from the main Qt event loop. Always run it in a separate thread,
 > and use a Signal/Slot to send the result back to GUI widget that needs an update. The code
@@ -185,9 +292,3 @@ class MyCustomWidget(QWidget):
 
 ```
 
-**We recommend you set up your runtimes via `mise`.**
-
-## Running Docker-based Unit Tests
-
-- Some of the unit tests in this package require a docker environment to run. These tests are marked with `@pytest.mark.docker`. In order to execute these tests, please run the `run_sudo_tests.sh` script located in the `scripts` directory. For detailed instructions, please refer to [scripts/README.md](./scripts/README.md).
-- If you make changes to the `download` or `asset_sync` modules, it's highly recommended to run and ensure these tests pass.
