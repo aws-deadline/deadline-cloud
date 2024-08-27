@@ -100,7 +100,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "settings.conflict_resolution": {
         "default": FileConflictResolution.NOT_SELECTED.name,
-        "description": "How to handle duplicate files when downloading (if a file with the same path/name already exists.)",
+        "description": "How to handle duplicate files while downloading if a file with the same name already exists",
     },
     "settings.log_level": {
         "default": "WARNING",

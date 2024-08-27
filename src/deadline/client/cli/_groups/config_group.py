@@ -14,52 +14,8 @@ from .._common import _handle_error
 @_handle_error
 def cli_config():
     """
-    Manage AWS Deadline Cloud's workstation configuration.
-
-    The available AWS Deadline Cloud settings are:
-
-    defaults.aws_profile_name:
-
-        The default AWS profile to use for AWS Deadline Cloud commands. Set to '' to use the default credentials. Other settings are saved with the profile.
-
-    defaults.farm_id:
-
-        The default farm ID to use for job submissions or CLI operations.
-
-    defaults.queue_id:
-
-        The default queue ID to use for job submissions or CLI operations.
-
-    settings.storage_profile_id:
-
-        The storage profile that this workstation conforms to. It specifies
-        where shared file systems are mounted, and where named job attachments
-        should go.
-
-    defaults.job_id:
-
-        The Job ID to use by default. This gets updated by job submission so is normally the most recently submitted job.
-
-    settings.job_history_dir:
-
-        The directory in which to create new job bundles for submitting to AWS Deadline Cloud, to produce a history of job submissions.
-
-    settings.auto_accept:
-
-        Flag to automatically confirm any confirmation prompts.
-
-    settings.log_level:
-
-        Setting to change the log level. Must be one of ["ERROR", "WARNING", "INFO", "DEBUG"]
-
-    defaults.job_attachments_file_system:
-
-        Setting to determine if attachments are copied on to workers before a job executes
-        or fetched in realtime. Must be one of ["COPIED", "VIRTUAL"]
-
-    telemetry.opt_out:
-
-        Flag to specify opting out of telemetry data collection.
+    Manage AWS Deadline Cloud's workstation configuration. Config options are organized
+    and documented in config_file.SETTINGS.
     """
 
 

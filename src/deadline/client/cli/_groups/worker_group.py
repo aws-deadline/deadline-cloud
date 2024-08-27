@@ -25,8 +25,8 @@ def cli_worker():
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @click.option("--fleet-id", help="The AWS Deadline Cloud Fleet to use.", required=True)
-@click.option("--page-size", default=5, help="The number of items shown in the page.")
-@click.option("--item-offset", default=0, help="The starting offset of the items.")
+@click.option("--page-size", default=5, help="The number of workers to load at a time.")
+@click.option("--item-offset", default=0, help="The index of the worker to start listing from.")
 @_handle_error
 def worker_list(page_size, item_offset, fleet_id, **args):
     """

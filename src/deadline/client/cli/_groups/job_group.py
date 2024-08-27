@@ -62,8 +62,8 @@ def cli_job():
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--page-size", default=5, help="The number of items shown in the page.")
-@click.option("--item-offset", default=0, help="The starting offset of the items.")
+@click.option("--page-size", default=5, help="The number of jobs to load at a time.")
+@click.option("--item-offset", default=0, help="The index of the job to start listing from.")
 @_handle_error
 def job_list(page_size, item_offset, **args):
     """
@@ -151,7 +151,7 @@ def job_get(**args):
     "--mark-as",
     type=click.Choice(["CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
     default="CANCELED",
-    help="The run status to mark the job as.",
+    help="The task run status to mark the job as.",
 )
 @click.option(
     "--yes",
@@ -608,11 +608,10 @@ def _assert_valid_path(path: str) -> None:
         ],
         case_sensitive=False,
     ),
-    help="The resolution method to use when a file already exists."
-    "Please choose one from the following options. If it is not provided, it defaults to CREATE_COPY:\n"
-    "[1] SKIP: Do not download these files\n"
-    "[2] OVERWRITE: Download these files and overwrite existing files\n"
-    "[3] CREATE_COPY: Download the file with a new name, appending '(1)' to the end",
+    help="The resolution method to use when a file already exists:\n"
+    "CREATE_COPY (default): Download the file with a new name, appending '(1)' to the end\n"
+    "SKIP: Do not download the file\n"
+    "OVERWRITE: Download and replace the existing file",
 )
 @click.option(
     "--yes",

@@ -73,13 +73,22 @@ def validate_parameters(ctx, param, value):
 
 @cli_bundle.command(name="submit")
 @click.option(
-    "-p", "--parameter", multiple=True, callback=validate_parameters, help="Job template parameters"
+    "-p",
+    "--parameter",
+    multiple=True,
+    callback=validate_parameters,
+    help='The values for the job template\'s parameters. Can be provided as key-value pairs, inline JSON strings, or as paths to a JSON or YAML document. If provided more than once, the values are combined in the order that they appear. Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"MyParam": "5"}\'',
 )
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @click.option("--name", help="The job name to use in place of the one in the job bundle.")
-@click.option("--priority", type=int, default=50, help="The priority of the job.")
+@click.option(
+    "--priority",
+    type=int,
+    default=50,
+    help="The priority of the job. The highest priority is 100.",
+)
 @click.option(
     "--max-failed-tasks-count",
     type=int,
@@ -92,9 +101,9 @@ def validate_parameters(ctx, param, value):
 )
 @click.option(
     "--job-attachments-file-system",
-    help="The method for accessing files from job attachments. "
-    + "COPIED means to copy files to the host and "
-    + "VIRTUAL means to load files when needed with a virtual file system.",
+    help="The method workers use to access job attachments. "
+    + "COPIED means to copy files to the worker and "
+    + "VIRTUAL means to load files as needed from a virtual file system.",
     type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
@@ -105,7 +114,7 @@ def validate_parameters(ctx, param, value):
 @click.option(
     "--require-paths-exist",
     is_flag=True,
-    help="Require all input paths to exist",
+    help="Return an error if any input files are missing.",
 )
 @click.option(
     "--submitter-name",
@@ -256,7 +265,7 @@ def bundle_submit(
 @click.option(
     "--browse",
     is_flag=True,
-    help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
+    help="Opens a file browser to select a bundle.",
 )
 @click.option(
     "--install-gui",
