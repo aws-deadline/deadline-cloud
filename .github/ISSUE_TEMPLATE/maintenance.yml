@@ -1,17 +1,19 @@
 name: "🛠️ Maintenance"
 description: Some type of improvement
-title: "Maintenance: TITLE"
-labels: ["feature"]
+title: "Maintenance: (short description of the issue)"
+labels: ["feature", "needs triage"]
 body:
   - type: textarea
     id: description
     attributes:
       label: Description
+      description: Describe the improvement and why it is important to do.
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
       label: Solution
+      description: Provide any ideas you have for how the suggestion can be implemented.
     validations:
       required: true

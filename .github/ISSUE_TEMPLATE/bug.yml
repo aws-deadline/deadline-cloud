@@ -1,12 +1,31 @@
 name: "\U0001F41B Bug Report"
 description: Report a bug
-title: "Bug: TITLE"
-labels: ["bug"]
+title: "Bug: (short bug description)"
+labels: ["bug", "needs triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to fill out this bug report!
+
+        ⚠️ If the bug that you are reporting is a security-related issue or security vulnerability,
+        then please do not create a report via this template. Instead please 
+        notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/)
+        or directly via email to [AWS Security](aws-security@amazon.com).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What is the problem? A clear and concise description of the bug.
+    validations:
+      required: true
+
   - type: textarea
     id: expected_behaviour
     attributes:
       label: Expected Behaviour
+      description: What did you expect to happen?
     validations:
       required: true
 
@@ -14,6 +33,7 @@ body:
     id: current_behaviour
     attributes:
       label: Current Behaviour
+      description: What actually happened? Please include as much detail as you can.
     validations:
       required: true
 
@@ -21,13 +41,24 @@ body:
     id: reproduction_steps
     attributes:
       label: Reproduction Steps
+      description: |
+        Please provide as much detail as you can to help us understand how we can reproduce the bug.
+        Step by step instructions and self-contained code snippets are ideal.
     validations:
       required: true
 
   - type: textarea
-    id: code_snippet
+    id: environment
     attributes:
-      label: Code Snippet
+      label: Environment
+      description: Please provide information on the environment and software versions that you are using to reproduce the bug.
+      value: |
+        At minimum:
+        1. Operating system: (e.g. Windows Server 2022; Amazon Linux 2023; etc.) 
+        2. Output of `python3 --version`: 
+        3. Output of `deadline --version`: 
+        4. If this is from a version installed by the Deadline Cloud Submitter installer, then what version of the submitter installer?
+
+        Please share other details about your environment that you think might be relevant to reproducing the bug.
     validations:
       required: true
-
