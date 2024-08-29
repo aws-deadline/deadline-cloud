@@ -8,11 +8,10 @@ Fixes: *<insert link to GitHub issue here>*
 
 ### How was this change tested?
 
-See `DEVELOPMENT.md` for information on testing.
+See [DEVELOPMENT.md](https://github.com/aws-deadline/deadline-cloud/blob/mainline/DEVELOPMENT.md#testing) for information on running tests.
 
-- Have you run the unit tests (`hatch run test`) ?
-- Have you run the integration tests (`hatch run integ:test`) ?
-
+- Have you run the unit tests?
+- Have you run the integration tests?
 - Have you made changes to the `download` or `asset_sync` modules? If so, then it is highly recommended
   that you ensure that the docker-based unit tests pass.
 

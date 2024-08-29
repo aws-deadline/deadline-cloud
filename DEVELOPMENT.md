@@ -51,15 +51,14 @@ from any directory of this repository:
 * `hatch env prune` - Delete all of your isolated workspace [environments](https://hatch.pypa.io/1.12/environment/) 
    for this package.
 
-For your development loop, we recommend something along the lines of:
+If you are not sure about how to approach development for this package, then we suggest a development
+process along the lines of the following as a starting point:
 
-1. Loop until all integration tests pass:
-   1. Loop until all unit tests pass:
-      1. Make some incremental changes to the package code
-      2. Add or modify relevant unit tests (See [Testing](#testing))
-      2. Run the unit tests
-   2. Add or modify relevant integration tests (See [Testing](#testing))
-   3. Run the integration tests 
+1. Make your functional changes and make sure that they work.
+2. Add unit tests for your changes and ensure that all unit tests pass. 
+   Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
+3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
+   Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -188,7 +187,7 @@ The following are some heuristics to demonstrate how to think about breaking vs 
 
 For the command-line interface:
 * Things like adding a non-required argument to a subcommand, or adding a new subcommand are not breaking changes.
-* Renaming a subcommand or arugment is a breaking change.
+* Renaming a subcommand or argument is a breaking change.
 * Adding a new required subcommand argument is a breaking change.
 * Changing a default value/behaviour is a breaking change.
 
