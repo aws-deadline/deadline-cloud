@@ -49,6 +49,12 @@ the command-line interfaces' commands or arguments. We want to make sure that yo
 with you to design the change before you spend much of your time on it. If you want to create a draft pull request to show what
 you are thinking and then talk with us, then that works with us as well.
 
+We prefer that this package contain primarily features that are useful to many users of it, rather than features that are specific
+to niche workflows. If you have a feature in mind, but are not sure whether it is niche or not then please 
+[open a feature request issue](https://github.com/aws-deadline/deadline-cloud/issues/new/choose). We will do our best to help
+you make that assessment, and posting a public issue will help others find your feature idea and add their support if they
+would also find it useful.
+
 ### Contributing via Pull Requests
 
 Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
