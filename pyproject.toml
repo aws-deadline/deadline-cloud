@@ -42,7 +42,7 @@ dependencies = [
     "typing_extensions >= 4.7,< 4.12; python_version == '3.7'",
     "typing_extensions >= 4.8; python_version > '3.7'",
     # Pinning due to 3.4 not being available upstream
-    "xxhash == 3.4.*",
+    "xxhash >= 3.4,< 3.6",
     # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
     "jsonschema == 4.17.*",
     "pywin32 == 306; sys_platform == 'win32'",
