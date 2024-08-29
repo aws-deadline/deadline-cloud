@@ -17,20 +17,20 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 @_handle_error
 def cli_worker():
     """
-    Commands to work with AWS Deadline Cloud Workers.
+    Commands to work with workers.
     """
 
 
 @cli_worker.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--fleet-id", help="The AWS Deadline Cloud Fleet to use.", required=True)
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--fleet-id", help="The fleet to use.", required=True)
 @click.option("--page-size", default=5, help="The number of workers to load at a time.")
 @click.option("--item-offset", default=0, help="The index of the worker to start listing from.")
 @_handle_error
 def worker_list(page_size, item_offset, fleet_id, **args):
     """
-    Lists the Workers in an AWS Deadline Cloud Fleet.
+    Lists the Workers in a fleet.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -62,13 +62,13 @@ def worker_list(page_size, item_offset, fleet_id, **args):
 
 @cli_worker.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--fleet-id", help="The AWS Deadline Cloud Fleet to use.", required=True)
-@click.option("--worker-id", help="The AWS Deadline Cloud Worker to get.", required=True)
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--fleet-id", help="The fleet to use.", required=True)
+@click.option("--worker-id", help="The worker to get.", required=True)
 @_handle_error
 def worker_get(fleet_id, worker_id, **args):
     """
-    Get the details of an AWS Deadline Cloud worker.
+    Get the details of a worker.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)

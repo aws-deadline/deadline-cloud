@@ -80,14 +80,14 @@ def validate_parameters(ctx, param, value):
     help='The values for the job template\'s parameters. Can be provided as key-value pairs, inline JSON strings, or as paths to a JSON or YAML document. If provided more than once, the values are combined in the order that they appear. Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"MyParam": "5"}\'',
 )
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
 @click.option("--name", help="The job name to use in place of the one in the job bundle.")
 @click.option(
     "--priority",
     type=int,
     default=50,
-    help="The priority of the job. The highest priority is 100.",
+    help="The priority of the job. Jobs with a higher priority run first.",
 )
 @click.option(
     "--max-failed-tasks-count",
@@ -102,8 +102,9 @@ def validate_parameters(ctx, param, value):
 @click.option(
     "--job-attachments-file-system",
     help="The method workers use to access job attachments. "
-    + "COPIED means to copy files to the worker and "
-    + "VIRTUAL means to load files as needed from a virtual file system.",
+    "COPIED means to copy files to the worker and VIRTUAL means to load "
+    "files as needed from a virtual file system. If VIRTUAL is selected "
+    "but not supported by a worker, it will fallback to COPIED.",
     type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
@@ -137,7 +138,7 @@ def bundle_submit(
     **args,
 ):
     """
-    Submits an Open Job Description job bundle to AWS Deadline Cloud.
+    Submits an Open Job Description job bundle.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -265,7 +266,7 @@ def bundle_submit(
 @click.option(
     "--browse",
     is_flag=True,
-    help="Opens a file browser to select a bundle.",
+    help="Opens a folder browser to select a bundle.",
 )
 @click.option(
     "--install-gui",
@@ -292,7 +293,7 @@ def bundle_submit(
 @_handle_error
 def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, submitter_name, **args):
     """
-    Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
+    Opens a GUI to submit an Open Job Description job bundle.
     """
     from ...ui import gui_context_for_cli
 

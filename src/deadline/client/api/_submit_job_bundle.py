@@ -68,7 +68,7 @@ def create_job_from_job_bundle(
     submitter_name: str = "CLI",
 ) -> Union[str, None]:
     """
-    Creates a job in the AWS Deadline Cloud farm/queue configured as default for the
+    Creates a job in the farm/queue configured as default for the
     workstation from the job bundle in the provided directory.
 
     A job bundle has the following directory structure:
