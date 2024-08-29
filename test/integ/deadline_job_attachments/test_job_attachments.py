@@ -1284,6 +1284,7 @@ def test_sync_inputs_no_inputs(
     assert not any(Path(session_dir).iterdir())
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: JobAttachmentTest):
     """
@@ -1307,7 +1308,11 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
 
     # WHEN
     with pytest.raises(
-        JobAttachmentsS3ClientError, match=".*when calling the PutObject operation: Access Denied"
+        # Note: This error is raised in this case when the s3:PutObject operation is denied
+        # due to the ExpectedBucketOwner check on our s3 operation. If the bucket is in the expected
+        # account, then the error is a different access denied error.
+        JobAttachmentsS3ClientError,
+        match=".*when calling the PutObject operation: Access Denied",
     ):
         # The attempt to upload the asset manifest should be blocked.
         upload_group = asset_manager.prepare_paths_for_upload(
@@ -1329,6 +1334,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_sync_inputs_bucket_wrong_account(
     external_bucket: str,
@@ -1377,6 +1383,7 @@ def test_sync_inputs_bucket_wrong_account(
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_sync_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
@@ -1385,6 +1392,8 @@ def test_sync_outputs_bucket_wrong_account(
 ) -> None:
     """
     Test that if trying to sync outputs to a bucket that isn't in the farm's AWS account, the correct error is thrown.
+    This is ensuring that the S3 file upload is passing the ExpectedBucketOwner property and verifying that the returned
+    error is what we expect when using that property (rather than just plain not having access to the bucket).
     """
     # IF
     job_attachment_settings = JobAttachmentS3Settings(
@@ -1458,6 +1467,7 @@ def test_sync_outputs_bucket_wrong_account(
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_download_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
