@@ -5,6 +5,7 @@ All the `deadline config` commands.
 """
 
 import click
+import textwrap
 
 from ...config import config_file
 from .._common import _handle_error
@@ -14,52 +15,7 @@ from .._common import _handle_error
 @_handle_error
 def cli_config():
     """
-    Manage AWS Deadline Cloud's workstation configuration.
-
-    The available AWS Deadline Cloud settings are:
-
-    defaults.aws_profile_name:
-
-        The default AWS profile to use for AWS Deadline Cloud commands. Set to '' to use the default credentials. Other settings are saved with the profile.
-
-    defaults.farm_id:
-
-        The default farm ID to use for job submissions or CLI operations.
-
-    defaults.queue_id:
-
-        The default queue ID to use for job submissions or CLI operations.
-
-    settings.storage_profile_id:
-
-        The storage profile that this workstation conforms to. It specifies
-        where shared file systems are mounted, and where named job attachments
-        should go.
-
-    defaults.job_id:
-
-        The Job ID to use by default. This gets updated by job submission so is normally the most recently submitted job.
-
-    settings.job_history_dir:
-
-        The directory in which to create new job bundles for submitting to AWS Deadline Cloud, to produce a history of job submissions.
-
-    settings.auto_accept:
-
-        Flag to automatically confirm any confirmation prompts.
-
-    settings.log_level:
-
-        Setting to change the log level. Must be one of ["ERROR", "WARNING", "INFO", "DEBUG"]
-
-    defaults.job_attachments_file_system:
-
-        Setting to determine if attachments are copied on to workers before a job executes
-        or fetched in realtime. Must be one of ["COPIED", "VIRTUAL"]
-
-    telemetry.opt_out:
-
-        Flag to specify opting out of telemetry data collection.
+    Manage Deadline's workstation configuration.
     """
 
 
@@ -67,7 +23,7 @@ def cli_config():
 @_handle_error
 def config_show():
     """
-    Show AWS Deadline Cloud's current workstation configuration.
+    Show all workstation configuration settings and current values.
     """
     click.echo(f"AWS Deadline Cloud configuration file:\n   {config_file.get_config_file_path()}")
     click.echo()
@@ -75,10 +31,17 @@ def config_show():
     for setting_name in config_file.SETTINGS.keys():
         setting_value = config_file.get_setting(setting_name)
         setting_default = config_file.get_setting_default(setting_name)
-        if setting_value == setting_default:
-            click.echo(f"{setting_name}: (default)\n   {setting_value}")
-        else:
-            click.echo(f"{setting_name}:\n   {setting_value}")
+
+        # Wrap and indent the descriptions to 80 characters because they may be multiline.
+        setting_description: str = config_file.SETTINGS[setting_name].get("description", "")
+        setting_description = "\n".join(
+            f"   {line}" for line in textwrap.wrap(setting_description, width=77)
+        )
+
+        click.echo(
+            f"{setting_name}: {setting_value} {'(default)' if setting_value == setting_default else ''}"
+        )
+        click.echo(setting_description)
         click.echo()
 
 
@@ -107,7 +70,7 @@ def config_gui(install_gui: bool):
 @_handle_error
 def config_set(setting_name, value):
     """
-    Sets an AWS Deadline Cloud workstation configuration setting.
+    Sets a workstation configuration setting.
 
     For example `deadline config set defaults.farm_id <farm-id>`.
     Run `deadline config --help` to show available settings.
@@ -120,7 +83,7 @@ def config_set(setting_name, value):
 @_handle_error
 def config_get(setting_name):
     """
-    Gets an AWS Deadline Cloud workstation configuration setting.
+    Gets a workstation configuration setting.
 
     For example `deadline config get defaults.farm_id`.
     Run `deadline config --help` to show available settings.

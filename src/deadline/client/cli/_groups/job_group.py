@@ -54,20 +54,20 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_job():
     """
-    Commands to work with AWS Deadline Cloud Jobs.
+    Commands to work with jobs.
     """
 
 
 @cli_job.command(name="list")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--page-size", default=5, help="The number of items shown in the page.")
-@click.option("--item-offset", default=0, help="The starting offset of the items.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--page-size", default=5, help="The number of jobs to load at a time.")
+@click.option("--item-offset", default=0, help="The index of the job to start listing from.")
 @_handle_error
 def job_list(page_size, item_offset, **args):
     """
-    Lists the Jobs in an AWS Deadline Cloud Queue.
+    Lists the Jobs in a queue.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -118,13 +118,13 @@ def job_list(page_size, item_offset, **args):
 
 @cli_job.command(name="get")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The AWS Deadline Cloud Job to get.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to get.")
 @_handle_error
 def job_get(**args):
     """
-    Get the details of an AWS Deadline Cloud Job.
+    Get the details of a job.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -144,14 +144,14 @@ def job_get(**args):
 
 @cli_job.command(name="cancel")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The AWS Deadline Cloud Job to cancel.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to cancel.")
 @click.option(
     "--mark-as",
     type=click.Choice(["CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
     default="CANCELED",
-    help="The run status to mark the job as.",
+    help="The status to apply to all active tasks in the job.",
 )
 @click.option(
     "--yes",
@@ -161,7 +161,7 @@ def job_get(**args):
 @_handle_error
 def job_cancel(mark_as: str, yes: bool, **args):
     """
-    Cancel an AWS Deadline Cloud Job from running.
+    Cancel job from running.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -593,11 +593,11 @@ def _assert_valid_path(path: str) -> None:
 
 @cli_job.command(name="download-output")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The AWS Deadline Cloud Job to use.")
-@click.option("--step-id", help="The AWS Deadline Cloud Step to use.")
-@click.option("--task-id", help="The AWS Deadline Cloud Task to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to use.")
+@click.option("--step-id", help="The step to use.")
+@click.option("--task-id", help="The task to use.")
 @click.option(
     "--conflict-resolution",
     type=click.Choice(
@@ -608,11 +608,10 @@ def _assert_valid_path(path: str) -> None:
         ],
         case_sensitive=False,
     ),
-    help="The resolution method to use when a file already exists."
-    "Please choose one from the following options. If it is not provided, it defaults to CREATE_COPY:\n"
-    "[1] SKIP: Do not download these files\n"
-    "[2] OVERWRITE: Download these files and overwrite existing files\n"
-    "[3] CREATE_COPY: Download the file with a new name, appending '(1)' to the end",
+    help="How to handle downloads if a file already exists:\n"
+    "CREATE_COPY (default): Download the file with a new name, appending '(1)' to the end\n"
+    "SKIP: Do not download the file\n"
+    "OVERWRITE: Download and replace the existing file",
 )
 @click.option(
     "--yes",
@@ -633,7 +632,7 @@ def _assert_valid_path(path: str) -> None:
 @_handle_error
 def job_download_output(step_id, task_id, output, **args):
     """
-    Download the output attached to an AWS Deadline Cloud Job.
+    Download a job's output.
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
@@ -660,9 +659,9 @@ def job_download_output(step_id, task_id, output, **args):
 
 @cli_job.command(name="trace-schedule")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
-@click.option("--job-id", help="The AWS Deadline Cloud Job to trace.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to trace.")
 @click.option("-v", "--verbose", is_flag=True, help="Output verbose trace details.")
 @click.option(
     "--trace-format",
@@ -676,8 +675,7 @@ def job_download_output(step_id, task_id, output, **args):
 @_handle_error
 def job_trace_schedule(verbose, trace_format, trace_file, **args):
     """
-    EXPERIMENTAL - Print statistics about how a job, and optionally
-    write a trace file.
+    EXPERIMENTAL - Generate statistics from a completed job.
 
     To visualize the trace output file when providing the options
     "--trace-format chrome --trace-file <output>.json", use
