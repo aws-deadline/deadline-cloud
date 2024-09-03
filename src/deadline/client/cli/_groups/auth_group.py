@@ -34,7 +34,7 @@ def _cli_on_pending_authorization(**kwargs):
 @_handle_error
 def cli_auth():
     """
-    Commands to handle AWS Deadline Cloud authentication.
+    Commands to handle authentication.
     """
 
 
@@ -42,9 +42,9 @@ def cli_auth():
 @_handle_error
 def auth_login():
     """
-    Logs in to the AWS Deadline Cloud configured AWS profile.
+    Logs in to the Deadline-configured AWS profile.
 
-    This is for any profile type that AWS Deadline Cloud knows how to login to
+    This is for any profile type that Deadline knows how to login to
     Currently only supports Deadline Cloud monitor
     """
     click.echo(
