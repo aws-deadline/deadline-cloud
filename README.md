@@ -22,6 +22,7 @@ Notable features include:
 [deadline-cloud-samples]: https://github.com/aws-deadline/deadline-cloud-samples
 [deadline-jobs]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
 [job-attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-attachments.html
+[shared-storage]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-shared.html
 [job-bundles]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
 [openjd]: https://github.com/OpenJobDescription/openjd-specifications/wiki
 
@@ -77,13 +78,33 @@ api.list_farms()
 # {'farms': [{'farmId': 'farm-1234567890abcdefg', 'displayName': 'my-first-farm', ...},]}
 ```
 
-## Job attachments
+## Job-related files
+For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.  
 
-Job attachments enable you to transfer files between your workstations and AWS Deadline Cloud, by using Amazon S3 buckets as
+### Job attachments
+
+Job attachments enable you to transfer files between your workstations and AWS Deadline Cloud using Amazon S3 buckets as
 [content-addressed storage][cas] in your AWS account. The use of a content-addressed storage means that a file will never need
 to be uploaded again once it has been uploaded once.
 
 See [job attachments][job-attachments] for a more in-depth look at how files are uploaded, stored, and retrieved.
+
+### Shared storage and storage profiles
+Jobs can reference files that are stored on shared network storage. The Deadline Client uses a storage profile to determine which paths on the workstation are part of the network storage and do not need to be transferred using job attachments.
+
+To use an existing storage profile with the Deadline Client, you can configure your default storage profile via CLI:
+
+```sh
+deadline config set settings.storage_profile_id sp-10b2e48ad6ac4fc88595dfcbef6271f2
+```
+
+Or with the configuration GUI:
+```sh
+deadline config gui
+```
+
+
+To set up shared storage for your farm, you will need to set up a customer-managed fleet with shared network storage and to create a storage profile. See [shared storage](shared-storage) for more information.
 
 ## Job bundles
 
