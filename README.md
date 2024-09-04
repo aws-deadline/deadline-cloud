@@ -104,7 +104,7 @@ deadline config gui
 ```
 
 
-To set up shared storage for your farm, you will need to set up a customer-managed fleet with shared network storage and to create a storage profile. See [shared storage](shared-storage) for more information.
+Shared storage is possible with customer-managed fleets (CMF) but not service-managed fleets (SMF). See [shared storage](shared-storage) for more information.
 
 ## Job bundles
 
