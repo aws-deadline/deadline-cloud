@@ -14,7 +14,14 @@ from deadline.client.config import config_file
 def fresh_deadline_config():
     """
     Fixture to start with a blank AWS Deadline Cloud config file.
+
     """
+
+    # Clear the session cache. Importing the cache invalidator at runtime is necessary
+    # to make sure the import order doesn't bypass moto mocking in other areas.
+    from deadline.client.api._session import invalidate_boto3_session_cache
+
+    invalidate_boto3_session_cache()
 
     try:
         # Create an empty temp file to set as the AWS Deadline Cloud config

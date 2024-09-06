@@ -1,17 +1,37 @@
 name: "\U0001F680 Feature Request"
 description: Request a new feature
-title: "Feature request: TITLE"
-labels: ["feature"]
+title: "Feature request: (short description of the feature)"
+labels: ["feature", "needs triage"]
 body:
   - type: textarea
-    id: use_case
+    id: problem
     attributes:
-      label: Use Case
+      label: Describe the problem
+      description: |
+        Help us understand the problem that you are trying to solve, and why it is important to you.
+        Provide as much detail as you are able.
     validations:
       required: true
+
   - type: textarea
     id: proposed_solution
     attributes:
       label: Proposed Solution
+      description: |
+        Describe your proposed feature that you see solving this problem for you. If you have a
+        full or partial prototype implementation then please open a draft pull request and link to
+        it here as well.
     validations:
       required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Example Use Cases
+      description: |
+        Provide some sample code snippets or shell scripts that show how **you** would use this feature as
+        you have proposed it.
+    validations:
+      required: true
+
+

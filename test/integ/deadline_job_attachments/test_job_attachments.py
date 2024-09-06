@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock
+import sys
 
 from deadline.job_attachments.models import JobAttachmentS3Settings
 
@@ -1283,6 +1284,7 @@ def test_sync_inputs_no_inputs(
     assert not any(Path(session_dir).iterdir())
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: JobAttachmentTest):
     """
@@ -1306,7 +1308,11 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
 
     # WHEN
     with pytest.raises(
-        JobAttachmentsS3ClientError, match=".*when calling the PutObject operation: Access Denied"
+        # Note: This error is raised in this case when the s3:PutObject operation is denied
+        # due to the ExpectedBucketOwner check on our s3 operation. If the bucket is in the expected
+        # account, then the error is a different access denied error.
+        JobAttachmentsS3ClientError,
+        match=".*when calling the PutObject operation: Access Denied",
     ):
         # The attempt to upload the asset manifest should be blocked.
         upload_group = asset_manager.prepare_paths_for_upload(
@@ -1328,6 +1334,7 @@ def test_upload_bucket_wrong_account(external_bucket: str, job_attachment_test: 
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_sync_inputs_bucket_wrong_account(
     external_bucket: str,
@@ -1376,6 +1383,7 @@ def test_sync_inputs_bucket_wrong_account(
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_sync_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
@@ -1384,6 +1392,8 @@ def test_sync_outputs_bucket_wrong_account(
 ) -> None:
     """
     Test that if trying to sync outputs to a bucket that isn't in the farm's AWS account, the correct error is thrown.
+    This is ensuring that the S3 file upload is passing the ExpectedBucketOwner property and verifying that the returned
+    error is what we expect when using that property (rather than just plain not having access to the bucket).
     """
     # IF
     job_attachment_settings = JobAttachmentS3Settings(
@@ -1457,6 +1467,7 @@ def test_sync_outputs_bucket_wrong_account(
         )
 
 
+@pytest.mark.cross_account
 @pytest.mark.integ
 def test_download_outputs_bucket_wrong_account(
     job_attachment_test: JobAttachmentTest,
@@ -1533,3 +1544,90 @@ def test_download_outputs_windows_max_file_path_length_exception(
         ),
     ):
         job_output_downloader.download_job_output()
+
+
+@pytest.mark.integ
+def test_download_outputs_no_outputs_dir(
+    job_attachment_test: JobAttachmentTest,
+    sync_outputs: SyncOutputsOutput,
+):
+    """
+    Test that if trying to download outputs but not specify a file path
+    Download will be saved to the current directory.
+    """
+
+    download_path = Path(
+        os.path.normpath(Path("").absolute()) / sync_outputs.step0_task0_output_file
+    )
+
+    job_attachment_settings = get_queue(
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        deadline_endpoint_url=job_attachment_test.deadline_endpoint,
+    ).jobAttachmentSettings
+
+    if job_attachment_settings is None:
+        raise Exception("Job attachment settings must be set for this test.")
+
+    job_output_downloader = download.OutputDownloader(
+        s3_settings=job_attachment_settings,
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        job_id=sync_outputs.job_id,
+        step_id=sync_outputs.step0_id,
+        task_id=sync_outputs.step0_task0_id,
+    )
+    job_output_downloader.set_root_path(str(job_attachment_test.ASSET_ROOT), "")
+
+    # WHEN
+    try:
+        job_output_downloader.download_job_output()
+        # THEN
+        # The output file should be downloaded to the current directory
+        assert download_path.exists()
+    finally:
+        shutil.rmtree(download_path.parent)
+
+
+@pytest.mark.integ
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="This test is for Windows file path length UNC, skipping this if os not Windows",
+)
+def test_download_outputs_windows_file_path_UNC(
+    job_attachment_test: JobAttachmentTest,
+    sync_outputs: SyncOutputsOutput,
+):
+    """
+    Test that if trying to download outputs to a file path that
+    longer than 260 chars in Windows but have UNC, the download is success.
+    """
+    long_root_path = Path("\\\\?\\" + __file__).parent / str("A" * 135)
+
+    job_attachment_settings = get_queue(
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        deadline_endpoint_url=job_attachment_test.deadline_endpoint,
+    ).jobAttachmentSettings
+
+    if job_attachment_settings is None:
+        raise Exception("Job attachment settings must be set for this test.")
+
+    job_output_downloader = download.OutputDownloader(
+        s3_settings=job_attachment_settings,
+        farm_id=job_attachment_test.farm_id,
+        queue_id=job_attachment_test.queue_id,
+        job_id=sync_outputs.job_id,
+        step_id=sync_outputs.step0_id,
+        task_id=sync_outputs.step0_task0_id,
+    )
+    job_output_downloader.set_root_path(str(job_attachment_test.ASSET_ROOT), str(long_root_path))
+
+    # WHEN
+    try:
+        job_output_downloader.download_job_output()
+        # THEN
+        # The output file should be downloaded to the current directory
+        assert Path(long_root_path / sync_outputs.step0_task0_output_file).exists()
+    finally:
+        shutil.rmtree(long_root_path)

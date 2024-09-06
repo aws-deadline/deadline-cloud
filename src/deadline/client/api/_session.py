@@ -5,6 +5,7 @@ Provides functionality for boto3 Sessions, Clients, and properties
 of the Deadline-configured IAM credentials.
 """
 from __future__ import annotations
+from functools import lru_cache
 import logging
 from configparser import ConfigParser
 from contextlib import contextmanager
@@ -22,12 +23,6 @@ from botocore.session import get_session as get_botocore_session
 
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
-
-__cached_boto3_session = None
-__cached_boto3_session_profile_name = None
-__cached_boto3_queue_session = None
-__cached_farm_id_for_queue_session = None
-__cached_queue_id_for_queue_session = None
 
 
 class AwsCredentialsSource(Enum):
@@ -57,8 +52,6 @@ def get_boto3_session(
         force_refresh (bool, optional): If set to True, forces a cache refresh.
         config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
-    global __cached_boto3_session
-    global __cached_boto3_session_profile_name
 
     profile_name: Optional[str] = get_setting("defaults.aws_profile_name", config)
 
@@ -67,36 +60,40 @@ def get_boto3_session(
     if profile_name in ("(default)", "default", ""):
         profile_name = None
 
-    # If a config was provided, don't use the Session caching mechanism.
-    if config:
-        return boto3.Session(profile_name=profile_name)
-
     if force_refresh:
         invalidate_boto3_session_cache()
 
-    # If this is the first call or the profile name has changed, make a fresh Session
-    if not __cached_boto3_session or __cached_boto3_session_profile_name != profile_name:
-        __cached_boto3_session = boto3.Session(profile_name=profile_name)
-        __cached_boto3_session_profile_name = profile_name
+    return _get_boto3_session_for_profile(profile_name)
 
-    return __cached_boto3_session
+
+@lru_cache
+def _get_boto3_session_for_profile(profile_name: str):
+    session = boto3.Session(profile_name=profile_name)
+
+    # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
+    # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
+    # Also DCM credentials currently take several seconds to refresh. Lower the refresh timeouts so creds
+    # are reused between API calls to save time.
+    # See https://github.com/boto/botocore/blob/develop/botocore/credentials.py#L342-L362
+
+    try:
+        credentials = session.get_credentials()
+        if (
+            isinstance(credentials, RefreshableCredentials)
+            and credentials.method == "custom-process"
+        ):
+            credentials._advisory_refresh_timeout = 5 * 60  # 5 minutes
+            credentials._mandatory_refresh_timeout = 2.5 * 60  # 2.5 minutes
+    except:  # noqa: E722
+        # Attempt to patch the timeouts but ignore any errors. These patched proeprties are internal and could change
+        # without notice. Creds are functional without patching timeouts.
+        pass
+    return session
 
 
 def invalidate_boto3_session_cache() -> None:
-    """
-    Invalidates the cached boto3 session and boto3 queue session.
-    """
-    global __cached_boto3_session
-    global __cached_boto3_session_profile_name
-    global __cached_boto3_queue_session
-    global __cached_farm_id_for_queue_session
-    global __cached_queue_id_for_queue_session
-
-    __cached_boto3_session = None
-    __cached_boto3_session_profile_name = None
-    __cached_boto3_queue_session = None
-    __cached_farm_id_for_queue_session = None
-    __cached_queue_id_for_queue_session = None
+    _get_boto3_session_for_profile.cache_clear()
+    _get_queue_user_boto3_session.cache_clear()
 
 
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
@@ -182,10 +179,6 @@ def get_queue_user_boto3_session(
         force_refresh (bool, optional): If True, forces a cache refresh.
     """
 
-    global __cached_boto3_queue_session
-    global __cached_farm_id_for_queue_session
-    global __cached_queue_id_for_queue_session
-
     base_session = get_boto3_session(config=config, force_refresh=force_refresh)
 
     if farm_id is None:
@@ -193,28 +186,12 @@ def get_queue_user_boto3_session(
     if queue_id is None:
         queue_id = get_setting("defaults.queue_id")
 
-    # If a config was provided, don't use the Session caching mechanism.
-    if config:
-        return _get_queue_user_boto3_session(
-            deadline, base_session, farm_id, queue_id, queue_display_name
-        )
-
-    # If this is the first call or the farm ID/queue ID has changed, make a fresh Session and cache it
-    if (
-        not __cached_boto3_queue_session
-        or __cached_farm_id_for_queue_session != farm_id
-        or __cached_queue_id_for_queue_session != queue_id
-    ):
-        __cached_boto3_queue_session = _get_queue_user_boto3_session(
-            deadline, base_session, farm_id, queue_id, queue_display_name
-        )
-
-        __cached_farm_id_for_queue_session = farm_id
-        __cached_queue_id_for_queue_session = queue_id
-
-    return __cached_boto3_queue_session
+    return _get_queue_user_boto3_session(
+        deadline, base_session, farm_id, queue_id, queue_display_name
+    )
 
 
+@lru_cache
 def _get_queue_user_boto3_session(
     deadline: BaseClient,
     base_session: boto3.Session,

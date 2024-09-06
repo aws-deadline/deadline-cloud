@@ -73,13 +73,22 @@ def validate_parameters(ctx, param, value):
 
 @cli_bundle.command(name="submit")
 @click.option(
-    "-p", "--parameter", multiple=True, callback=validate_parameters, help="Job template parameters"
+    "-p",
+    "--parameter",
+    multiple=True,
+    callback=validate_parameters,
+    help='The values for the job template\'s parameters. Can be provided as key-value pairs, inline JSON strings, or as paths to a JSON or YAML document. If provided more than once, the values are combined in the order that they appear. Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"MyParam": "5"}\'',
 )
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
-@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
 @click.option("--name", help="The job name to use in place of the one in the job bundle.")
-@click.option("--priority", type=int, default=50, help="The priority of the job.")
+@click.option(
+    "--priority",
+    type=int,
+    default=50,
+    help="The priority of the job. Jobs with a higher priority run first.",
+)
 @click.option(
     "--max-failed-tasks-count",
     type=int,
@@ -92,9 +101,10 @@ def validate_parameters(ctx, param, value):
 )
 @click.option(
     "--job-attachments-file-system",
-    help="The method for accessing files from job attachments. "
-    + "COPIED means to copy files to the host and "
-    + "VIRTUAL means to load files when needed with a virtual file system.",
+    help="The method workers use to access job attachments. "
+    "COPIED means to copy files to the worker and VIRTUAL means to load "
+    "files as needed from a virtual file system. If VIRTUAL is selected "
+    "but not supported by a worker, it will fallback to COPIED.",
     type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
@@ -105,7 +115,12 @@ def validate_parameters(ctx, param, value):
 @click.option(
     "--require-paths-exist",
     is_flag=True,
-    help="Require all input paths to exist",
+    help="Return an error if any input files are missing.",
+)
+@click.option(
+    "--submitter-name",
+    type=click.STRING,
+    help="Name of the application submitting the bundle.",
 )
 @click.argument("job_bundle_dir")
 @_handle_error
@@ -119,10 +134,11 @@ def bundle_submit(
     max_failed_tasks_count,
     max_retries_per_task,
     require_paths_exist,
+    submitter_name,
     **args,
 ):
     """
-    Submits an Open Job Description job bundle to AWS Deadline Cloud.
+    Submits an Open Job Description job bundle.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -199,6 +215,7 @@ def bundle_submit(
             print_function_callback=click.echo,
             decide_cancel_submission_callback=_decide_cancel_submission,
             require_paths_exist=require_paths_exist,
+            submitter_name=submitter_name,
         )
 
         # Check Whether the CLI options are modifying any of the default settings that affect
@@ -249,12 +266,17 @@ def bundle_submit(
 @click.option(
     "--browse",
     is_flag=True,
-    help="Allows user to choose Bundle and adds a 'Load a different job bundle' option to the Job-Specific Settings UI",
+    help="Opens a folder browser to select a bundle.",
 )
 @click.option(
     "--install-gui",
     is_flag=True,
     help="Installs GUI dependencies if they are not installed already",
+)
+@click.option(
+    "--submitter-name",
+    type=click.STRING,
+    help="Name of the application submitting the bundle. If a name is specified, the GUI will automatically close after submitting the job.",
 )
 @click.option(
     "--output",
@@ -269,9 +291,9 @@ def bundle_submit(
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, **args):
+def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, submitter_name, **args):
     """
-    Opens GUI to submit an Open Job Description job bundle to AWS Deadline Cloud.
+    Opens a GUI to submit an Open Job Description job bundle.
     """
     from ...ui import gui_context_for_cli
 
@@ -284,7 +306,9 @@ def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, **args):
             )
         output = output.lower()
 
-        submitter = show_job_bundle_submitter(input_job_bundle_dir=job_bundle_dir, browse=browse)
+        submitter = show_job_bundle_submitter(
+            input_job_bundle_dir=job_bundle_dir, browse=browse, submitter_name=submitter_name
+        )
 
         if not submitter:
             return

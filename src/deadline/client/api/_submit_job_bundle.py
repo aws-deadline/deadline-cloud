@@ -65,9 +65,10 @@ def create_job_from_job_bundle(
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
     require_paths_exist: bool = False,
+    submitter_name: str = "CLI",
 ) -> Union[str, None]:
     """
-    Creates a job in the AWS Deadline Cloud farm/queue configured as default for the
+    Creates a job in the farm/queue configured as default for the
     workstation from the job bundle in the provided directory.
 
     A job bundle has the following directory structure:
@@ -310,7 +311,7 @@ def create_job_from_job_bundle(
 
     api.get_deadline_cloud_library_telemetry_client().record_event(
         event_type="com.amazon.rum.deadline.submission",
-        event_details={},
+        event_details={"submitter_name": submitter_name},
     )
 
     create_job_response = deadline.create_job(**create_job_args)

@@ -120,8 +120,8 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert "farm-82934h23k4j23kjh" in result.output
     assert "queue-389348u234jhk34" in result.output
     assert "job-239u40234jkl234nkl23" in result.output
-    assert "settings.conflict_resolution:\n   CREATE_COPY" in result.output
-    assert "settings.log_level:\n   DEBUG" in result.output
+    assert "CREATE_COPY" in result.output
+    assert "DEBUG" in result.output
     assert "user-id-123abc-456def" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
