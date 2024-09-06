@@ -1,4 +1,4 @@
-name: Mainline Merge Integration Tests
+name: Mainline Integration Tests
 
 on:
   schedule:
