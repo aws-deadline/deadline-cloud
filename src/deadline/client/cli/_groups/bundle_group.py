@@ -82,6 +82,7 @@ def validate_parameters(ctx, param, value):
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
 @click.option("--queue-id", help="The queue to use.")
+@click.option("--storage-profile-id", help="The storage profile to use.")
 @click.option("--name", help="The job name to use in place of the one in the job bundle.")
 @click.option(
     "--priority",
@@ -140,7 +141,7 @@ def bundle_submit(
     """
     Submits an Open Job Description job bundle.
     """
-    # Get a temporary config object with the standard options handled
+    # Apply the CLI args to the config
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
 
     hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
@@ -226,6 +227,7 @@ def bundle_submit(
             and args.get("profile") is None
             and args.get("farm_id") is None
             and args.get("queue_id") is None
+            and args.get("storage_profile_id") is None
         ):
             set_setting("defaults.job_id", job_id)
 
