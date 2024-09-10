@@ -2430,7 +2430,7 @@ def test_download_files_from_manifests(
 
     with patch(
         f"{deadline.__package__}.job_attachments.download.download_file", side_effect=download_file
-    ):
+    ), patch(f"{deadline.__package__}.job_attachments.download.get_s3_client"):
         download_files_from_manifests(
             s3_bucket="s3_settings.s3BucketName",
             manifests_by_root={"/test": merged_manifest},

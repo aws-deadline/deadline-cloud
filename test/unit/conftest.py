@@ -34,6 +34,11 @@ def fresh_deadline_config():
         # Yield the temp file name with it patched in as the
         # AWS Deadline Cloud config file
         with patch.object(config_file, "CONFIG_FILE_PATH", str(temp_file_path)):
+            # Write a telemetry id to force it getting saved to the config file. If we don't, then
+            # an ID will get generated and force a save of the config file in the middle of a test.
+            # Writing the config file may be undesirable in the middle of a test.
+            config_file.set_setting("telemetry.identifier", "00000000-0000-0000-0000-000000000000")
+
             yield str(temp_file_path)
     finally:
         temp_dir.cleanup()

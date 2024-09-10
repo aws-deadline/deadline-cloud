@@ -96,6 +96,12 @@ def _apply_cli_options_to_config(
         if queue_id:
             config_file.set_setting("defaults.queue_id", queue_id, config=config)
 
+        storage_profile_id = args.pop("storage_profile_id", None)
+        if storage_profile_id:
+            config_file.set_setting(
+                "settings.storage_profile_id", storage_profile_id, config=config
+            )
+
         job_id = args.pop("job_id", None)
         if job_id:
             config_file.set_setting("defaults.job_id", job_id, config=config)
@@ -111,7 +117,7 @@ def _apply_cli_options_to_config(
             )
     else:
         # Remove the standard option names from the args list
-        for name in ["profile", "farm_id", "queue_id", "job_id"]:
+        for name in ["profile", "farm_id", "queue_id", "job_id", "storage_profile_id"]:
             args.pop(name, None)
 
     # Check that the required options have values
