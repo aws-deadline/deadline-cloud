@@ -15,11 +15,11 @@ __all__ = [
 import getpass
 import os
 import platform
-import stat
 import subprocess
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import tempfile
 
 import boto3
 from deadline.job_attachments.models import FileConflictResolution
@@ -268,10 +268,6 @@ def write_config(config: ConfigParser) -> None:
     """
     config_file_path = get_config_file_path()
     config_file_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        config_file_path.unlink()
-    except FileNotFoundError:
-        pass
 
     if platform.system() == "Windows":
         username = getpass.getuser()
@@ -280,21 +276,16 @@ def write_config(config: ConfigParser) -> None:
         # CI - Sub-directories will inherit
         # F  - Full control
         _reset_directory_permissions_windows(config_file_parent_path, username, "(OI)(CI)(F)")
-        with open(config_file_path, "w", encoding="utf8") as configfile:
-            config.write(configfile)
 
-    else:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-        mode = stat.S_IRUSR | stat.S_IWUSR
+    # Using the config file path as the prefix ensures that the tmpfile and real file are
+    # on the same filesystem. This is a requirement for os.replace to be atomic.
+    file_descriptor, tmp_file_name = tempfile.mkstemp(prefix=str(config_file_path), text=True)
 
-        original_umask = os.umask(0)
-        try:
-            file_descriptor = os.open(config_file_path, flags, mode)
-        finally:
-            os.umask(original_umask)
+    # Note: The file descriptor is closed when exiting the context manager.
+    with os.fdopen(file_descriptor, "w", encoding="utf8") as configfile:
+        config.write(configfile)
 
-        with os.fdopen(file_descriptor, "w", encoding="utf8") as configfile:
-            config.write(configfile)
+    os.replace(tmp_file_name, config_file_path)
 
 
 def _get_setting_config(setting_name: str) -> dict:
