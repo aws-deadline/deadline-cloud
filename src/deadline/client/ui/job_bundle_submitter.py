@@ -33,6 +33,7 @@ from .dialogs.submit_job_to_deadline_dialog import (
 )
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
 from ..job_bundle.submission import AssetReferences
+from ..api._session import session_context
 
 logger = getLogger(__name__)
 
@@ -43,7 +44,7 @@ def show_job_bundle_submitter(
     browse: bool = False,
     parent=None,
     f=Qt.WindowFlags(),
-    submitter_name="JobBundle",
+    submitter_name: Optional[str] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -51,6 +52,11 @@ def show_job_bundle_submitter(
     Pass f=Qt.Tool if running it within an application context and want it
     to stay on top.
     """
+
+    if not submitter_name:
+        submitter_name = "JobBundle"
+
+    session_context["submitter-name"] = submitter_name
 
     if parent is None:
         # Get the main application window so we can parent ours to it
