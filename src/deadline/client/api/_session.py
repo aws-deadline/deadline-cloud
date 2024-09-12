@@ -20,6 +20,9 @@ from botocore.exceptions import (  # type: ignore[import]
 )
 
 from botocore.session import get_session as get_botocore_session
+import botocore
+from .. import version
+
 
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
@@ -35,6 +38,10 @@ class AwsAuthenticationStatus(Enum):
     CONFIGURATION_ERROR = 1
     AUTHENTICATED = 2
     NEEDS_LOGIN = 3
+
+
+# Place for stashing context to be attached to boto clients.
+session_context: dict[str, Optional[str]] = {"submitter-name": None}
 
 
 def get_boto3_session(
@@ -88,6 +95,7 @@ def _get_boto3_session_for_profile(profile_name: str):
         # Attempt to patch the timeouts but ignore any errors. These patched proeprties are internal and could change
         # without notice. Creds are functional without patching timeouts.
         pass
+
     return session
 
 
@@ -106,8 +114,13 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
         service_name (str): The AWS service to get the client for, e.g. "deadline".
         config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
+
+    user_agent_extra = f"app/deadline-client#{version}"
+    if session_context.get("submitter-name"):
+        user_agent_extra += f" submitter/{session_context['submitter-name']}"
+    session_config = botocore.config.Config(user_agent_extra=user_agent_extra)
     session = get_boto3_session(config=config)
-    return session.client(service_name)
+    return session.client(service_name, config=session_config)
 
 
 def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
