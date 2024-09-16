@@ -5,7 +5,6 @@ __all__ = [
     "logout",
     "create_job_from_job_bundle",
     "hash_attachments",
-    "upload_attachments",
     "wait_for_create_job_to_complete",
     "get_boto3_session",
     "get_boto3_client",

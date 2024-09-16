@@ -7,7 +7,6 @@ from typing import List, Optional, Tuple, Union
 import uuid
 import ctypes
 import sys
-import pathlib
 
 
 __all__ = [
@@ -115,7 +114,7 @@ def _glob_paths(
         include_files.extend(
             [
                 path.as_posix() if path.is_file() else None
-                for path in pathlib.Path(path).glob(input_glob)
+                for path in Path(path).glob(input_glob)
             ]
         )
     include_files = list(filter(None, include_files))
@@ -126,7 +125,7 @@ def _glob_paths(
             exclude_files.extend(
                 [
                     path.as_posix() if path.is_file() else None
-                    for path in pathlib.Path(path).glob(exclude_glob)
+                    for path in Path(path).glob(exclude_glob)
                 ]
             )
 
