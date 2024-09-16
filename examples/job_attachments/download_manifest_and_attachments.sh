@@ -4,12 +4,14 @@
 # to debug the input files of a job.
 ###
 
-deadline manifest download \
+manifest=$(deadline manifest download \
     --farm-id farm-e28af39d92b044f8a34905e2e37af257 \
     --queue-id queue-81a7e66a968c45b5a52a7e8e7edeffca \
     --job-id job-9a3706751fcf43d5ae304bff3f9a00e7 \
     --json \
-    .
+    .)
+
+echo "$manifest" | jq
 
 ###
 # Output: 
