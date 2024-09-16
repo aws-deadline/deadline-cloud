@@ -362,3 +362,11 @@ class ManifestDownload:
 
     s3: str = field(default_factory=str)
     local: str = field(default_factory=str)
+
+
+@dataclass
+class ManifestDownloadResponse:
+    """Data structure to capture the response for manifest download"""
+
+    downloaded: list[ManifestDownload] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)

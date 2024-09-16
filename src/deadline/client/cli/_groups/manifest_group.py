@@ -45,6 +45,7 @@ from deadline.job_attachments.models import (
     JobAttachmentS3Settings,
     ManifestDiff,
     ManifestDownload,
+    ManifestDownloadResponse,
 )
 from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
 
@@ -127,6 +128,7 @@ def manifest_snapshot(
     # This is a hard failure, we are snapshotting 1 directory.
     assert len(manifests) == 1
     output_manifest = manifests[0].asset_manifest
+    assert output_manifest
 
     # If this is a diff manifest, load the supplied manifest file.
     if diff:
@@ -227,7 +229,7 @@ def manifest_diff(root: str, manifest: str, glob: str, json: bool, **args):
         )
 
     # parse local manifest
-    local_manifest_object: BaseAssetManifest = None
+    local_manifest_object: BaseAssetManifest
     with open(manifest) as input_file:
         manifest_data_str = input_file.read()
         local_manifest_object = decode_manifest(manifest_data_str)
@@ -251,7 +253,7 @@ def manifest_diff(root: str, manifest: str, glob: str, json: bool, **args):
         logger.json(dataclasses.asdict(output), indent=4)
     else:
         logger.echo(f"\n{root}")
-        pretty_print(file_status_list=differences, logger=logger)
+        pretty_print(file_status_list=differences)
 
 
 @cli_manifest.command(name="download")
@@ -316,7 +318,7 @@ def manifest_download(
     transfer_manager = get_s3_transfer_manager(s3_client=s3_client)
 
     # Capture a list of success and failed to download files for JSON output.
-    successful_downloads: list[tuple[str, str]] = []
+    successful_downloads: list[ManifestDownload] = []
     failed_downloads: list[str] = []
 
     # download each input_manifest_path
@@ -332,6 +334,7 @@ def manifest_download(
         )
 
         if result is not None:
+            # Todo: do we want to add file size.
             # transfer_path = result.meta.call_args.fileobj  # type: ignore[attr-defined]
             # file_size = result.meta.size  # type: ignore[attr-defined]
 
@@ -366,8 +369,8 @@ def manifest_download(
             logger.echo(f"Found Step-Step dependency. {step['stepId']}")
 
     # JSON output at the end.
-    output_json = {"downloaded": successful_downloads, "failed": failed_downloads}
-    logger.json(dataclasses.asdict(output_json))
+    output = ManifestDownloadResponse(downloaded=successful_downloads, failed=failed_downloads)
+    logger.json(dataclasses.asdict(output))
 
 
 @cli_manifest.command(name="upload")
@@ -629,7 +632,7 @@ def compare_manifest(
     return differences
 
 
-def pretty_print(file_status_list: List[(tuple)], logger: ClickLogger):
+def pretty_print(file_status_list: List[(tuple)]):
     """
     Prints to command line a formatted file tree structure with corresponding file statuses
     """
