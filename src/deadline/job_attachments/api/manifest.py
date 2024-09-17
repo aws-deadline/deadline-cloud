@@ -64,7 +64,7 @@ def _manifest_download(
     queue_id: str,
     job_id: str,
     deadline: BaseClient,
-    config: ConfigParser = None,  # This needs refactoring to be removed
+    config: Optional[ConfigParser] = None,  # This needs refactoring to be removed
     step_id: Optional[str] = None,
     logger: ClickLogger = ClickLogger(False),
 ) -> ManifestDownloadResponse:

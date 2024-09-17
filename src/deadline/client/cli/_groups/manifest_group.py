@@ -12,7 +12,6 @@ from __future__ import annotations
 import concurrent.futures
 import dataclasses
 import datetime
-import glob
 import logging
 import os
 from pathlib import Path
@@ -380,40 +379,6 @@ def manifest_upload(
     logger.echo("Uploading successful!")
 
 
-def read_local_manifest(manifest: str) -> BaseAssetManifest:
-    """
-    Read manifests specified by filepath to manifest folder, returns BaseAssetManifest Object
-    """
-    input_files = glob.glob(os.path.join(manifest, "*_input"))
-
-    if not input_files:
-        raise ValueError(f"No manifest files found in {manifest}")
-    elif len(input_files) >= 2:
-        raise NonValidInputError(
-            f"Multiple input manifest files are not supported, found: {input_files}."
-        )
-
-    manifest_file_path = input_files[0]
-
-    with open(manifest_file_path) as input_file:
-        manifest_data_str = input_file.read()
-        asset_manifest = decode_manifest(manifest_data_str)
-
-        return asset_manifest
-
-
-def clear_S3_mapping(manifest: str):
-    """
-    Clears manifest_s3_mapping file contents if it previously exists.
-    """
-    for filename in os.listdir(manifest):
-        if filename.endswith("manifest_s3_mapping"):
-            # if S3 mapping already exists, clear contents
-            filepath = os.path.join(manifest, filename)
-            with open(filepath, "w") as _:
-                pass
-
-
 def diff_manifest(
     asset_manager: S3AssetManager,
     asset_root_manifest: AssetRootManifest,
@@ -478,48 +443,6 @@ def find_file_with_status(
                     status_paths.append((file_status, manifestPath))
 
             return status_paths
-
-
-def update_manifest(manifest: str, new_or_modified_paths: List[tuple]) -> BaseAssetManifest:
-    """
-    Updates the local manifest file to reflect modified or new files
-    """
-    input_files = glob.glob(os.path.join(manifest, "*_input"))
-
-    if not input_files:
-        raise ValueError(f"No manifest files found in {manifest}")
-    elif len(input_files) >= 2:
-        raise NonValidInputError(
-            f"Multiple input manifest files are not supported, found: {input_files}."
-        )
-
-    manifest_file_path = input_files[0]
-
-    with open(manifest_file_path) as manifest_file:
-        manifest_data_str = manifest_file.read()
-        local_base_asset_manifest = decode_manifest(manifest_data_str)
-
-    # maps paths of local to optimize updating of manifest entries
-    manifest_info_dict = {
-        base_manifest_path.path: base_manifest_path
-        for base_manifest_path in local_base_asset_manifest.paths
-    }
-
-    for _, base_asset_manifest in new_or_modified_paths:
-        if base_asset_manifest.path in manifest_info_dict:
-            # Update the hash_value of the existing object
-            manifest_info_dict[base_asset_manifest.path].hash = base_asset_manifest.hash
-        else:
-            # Add the new object if it doesn't exist
-            manifest_info_dict[base_asset_manifest.path] = base_asset_manifest
-
-    # write to local manifest
-    updated_path_list = list(manifest_info_dict.values())
-    local_base_asset_manifest.paths = updated_path_list
-    with open(manifest_file_path, "w") as manifest_file:
-        manifest_file.write(local_base_asset_manifest.encode())
-
-    return local_base_asset_manifest
 
 
 def compare_manifest(
