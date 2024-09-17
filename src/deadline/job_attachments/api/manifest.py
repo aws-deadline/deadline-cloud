@@ -3,20 +3,33 @@
 from configparser import ConfigParser
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 import boto3
 from botocore.client import BaseClient
 
 from deadline.client import api
 from deadline.client.cli._groups.click_logger import ClickLogger
+from deadline.client.config import config_file
 from deadline.job_attachments._aws.aws_clients import get_s3_client, get_s3_transfer_manager
+from deadline.job_attachments._diff import compare_manifest, pretty_print_cli
+from deadline.job_attachments._glob import _process_glob_inputs
+from deadline.job_attachments._utils import _glob_paths
+from deadline.job_attachments.asset_manifests.base_manifest import (
+    BaseAssetManifest,
+    BaseManifestPath,
+)
+from deadline.job_attachments.asset_manifests.decode import decode_manifest
+from deadline.job_attachments.caches.hash_cache import HashCache
 from deadline.job_attachments.download import download_file_with_s3_key
 from deadline.job_attachments.models import (
     S3_MANIFEST_FOLDER_NAME,
+    GlobConfig,
+    JobAttachmentS3Settings,
+    ManifestDiff,
     ManifestDownload,
     ManifestDownloadResponse,
 )
-from deadline.job_attachments.upload import S3AssetUploader
+from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
 
 """
 APIs here should be business logic only. It should perform one thing, and one thing well. 
@@ -165,4 +178,66 @@ def _manifest_download(
 
     # JSON output at the end.
     output = ManifestDownloadResponse(downloaded=successful_downloads, failed=failed_downloads)
+    return output
+
+
+def _manifest_diff(
+    manifest: str,
+    root: str,
+    glob: str,
+    logger: ClickLogger = ClickLogger(False),
+    pretty_print: bool = False,
+) -> ManifestDiff:
+    """
+    ALPHA API - This API is still evolving but will be made public in the near future.
+    API to diff a manifest root with a previously snapshotted manifest.
+    manifest: Manifest file path to compare against.
+    root: Root directory to generate the manifest fileset.
+    glob: Glob include and exclude of directory and file regex to include in the manifest.
+    logger: Click Logger instance to print to CLI as test or JSON.
+    """
+
+    asset_manager = S3AssetManager(
+        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
+    )
+
+    # get inputs of directory
+    glob_config: GlobConfig = _process_glob_inputs(glob)
+    input_files = _glob_paths(
+        root, include=glob_config.include_glob, exclude=glob_config.exclude_glob
+    )
+    input_paths = [Path(p) for p in input_files]
+
+    # hash and create manifest of local directory
+    cache_config = config_file.get_cache_directory()
+    with HashCache(cache_config) as hash_cache:
+        directory_manifest_object = asset_manager._create_manifest_file(
+            input_paths=input_paths, root_path=root, hash_cache=hash_cache
+        )
+
+    # parse local manifest
+    local_manifest_object: BaseAssetManifest
+    with open(manifest) as input_file:
+        manifest_data_str = input_file.read()
+        local_manifest_object = decode_manifest(manifest_data_str)
+
+    # compare manifests
+    differences: List[tuple[FileStatus, BaseManifestPath]] = compare_manifest(
+        reference_manifest=local_manifest_object, compare_manifest=directory_manifest_object
+    )
+
+    if pretty_print:
+        logger.echo(f"\n{root}")
+        pretty_print_cli(file_status_list=differences)
+
+    output: ManifestDiff = ManifestDiff()
+
+    for item in differences:
+        if item[0] == FileStatus.MODIFIED:
+            output.modified.append(item[1].path)
+        elif item[0] == FileStatus.NEW:
+            output.new.append(item[1].path)
+        elif item[0] == FileStatus.DELETED:
+            output.deleted.append(item[1].path)
+
     return output
