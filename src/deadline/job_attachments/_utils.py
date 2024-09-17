@@ -112,10 +112,7 @@ def _glob_paths(
     include_files: List[str | None] = []
     for input_glob in include:
         include_files.extend(
-            [
-                path.as_posix() if path.is_file() else None
-                for path in Path(path).glob(input_glob)
-            ]
+            [path.as_posix() if path.is_file() else None for path in Path(path).glob(input_glob)]
         )
     include_files = list(filter(None, include_files))
 

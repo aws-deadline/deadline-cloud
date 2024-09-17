@@ -13,7 +13,6 @@ import concurrent.futures
 import dataclasses
 import datetime
 import glob
-from io import BytesIO
 import logging
 import os
 from pathlib import Path
@@ -31,6 +30,7 @@ from deadline.job_attachments._aws.aws_clients import (
 )
 from deadline.job_attachments._glob import _process_glob_inputs
 from deadline.job_attachments._utils import _glob_paths
+from deadline.job_attachments.api.manifest import _manifest_upload
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
@@ -47,7 +47,7 @@ from deadline.job_attachments.models import (
     ManifestDownload,
     ManifestDownloadResponse,
 )
-from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
+from deadline.job_attachments.upload import FileStatus, S3AssetManager
 
 from ...config import config_file
 from ...exceptions import NonValidInputError
@@ -63,7 +63,10 @@ def cli_manifest():
     """
 
 
-@cli_manifest.command(name="snapshot", help="BETA - Generates a snapshot of files in a directory root as a Job Attachment Manifest.")
+@cli_manifest.command(
+    name="snapshot",
+    help="BETA - Generates a snapshot of files in a directory root as a Job Attachment Manifest.",
+)
 @click.option("--root", required=True, help="The root directory to snapshot. ")
 @click.option(
     "--destination",
@@ -192,7 +195,9 @@ def manifest_snapshot(
         logger.json({})
 
 
-@cli_manifest.command(name="diff", help="BETA - Compute a directory root diff of new, modified or deleted files.")
+@cli_manifest.command(
+    name="diff", help="BETA - Compute a directory root diff of new, modified or deleted files."
+)
 @click.option("--root", help="The root directory to compare changes to. ")
 @click.option(
     "--manifest",
@@ -263,7 +268,10 @@ def manifest_diff(root: str, manifest: str, glob: str, json: bool, **args):
         pretty_print(file_status_list=differences)
 
 
-@cli_manifest.command(name="download", help="BETA - Download Job Attachment Manifests for a Job, or Step including dependencies.")
+@cli_manifest.command(
+    name="download",
+    help="BETA - Download Job Attachment Manifests for a Job, or Step including dependencies.",
+)
 @click.argument("download_dir")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--job-id", required=True, help="The AWS Deadline Cloud Job to get. ")
@@ -380,7 +388,10 @@ def manifest_download(
     logger.json(dataclasses.asdict(output))
 
 
-@cli_manifest.command(name="upload", help="BETA - Uploads a job attachment manifest file to a Content Addressable Storage's Manifest store.")
+@cli_manifest.command(
+    name="upload",
+    help="BETA - Uploads a job attachment manifest file to a Content Addressable Storage's Manifest store.",
+)
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--cas-path", help="The path to the Content Addressable Storage root.")
@@ -447,21 +458,7 @@ def manifest_upload(
         manifest_path = url_fragments.path
 
     logger.echo(f"Uploading Manifest to {bucket_name} {manifest_path}")
-
-    # Always upload the manifest file to case root /Manifest with the original file name.
-    manifest_path = manifest_path + "/Manifests/" + Path(manifest_file).name
-
-    # Uploader
-    upload = S3AssetUploader(session=session)
-    with open(manifest_file) as manifest:
-        upload.upload_bytes_to_s3(
-            bytes=BytesIO(manifest.read().encode("utf-8")),
-            bucket=bucket_name,
-            key=manifest_path,
-            progress_handler=logger.echo,
-            extra_args=metadata,
-        )
-
+    _manifest_upload(manifest_file, bucket_name, manifest_path, metadata, session, logger)
     logger.echo("Uploading successful!")
 
 
