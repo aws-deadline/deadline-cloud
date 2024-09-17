@@ -20,13 +20,14 @@ echo "$manifest" | jq
 #     [
 #       {
 #         "s3": "farm-e28af39d92b044f8a34905e2e37af257/queue-81a7e66a968c45b5a52a7e8e7edeffca/Inputs/b3335850cc734bd092f9b2a3af905fca/875ff8acdc14022f4c3315cf6d7b5f06_input",
-#         "local": "/Users/leongdl/work/deadline-cloud/-home-ssm-user-deadline-cloud-bundles-blender_car_sample.manifest"
+#         "local": "/Users/hello/work/deadline-cloud/blender_car_sample.manifest"
 #       }
 #     ]
 #   ],
 #   failed:[
 #   ]
 # }
+###
 
 # todo: sync outputs CLI loop:
 # deadline attachment sync ...

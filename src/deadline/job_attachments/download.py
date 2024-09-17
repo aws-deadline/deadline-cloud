@@ -393,7 +393,7 @@ def download_file_with_s3_key(
     # If the file name already exists, resolve the conflict based on the file_conflict_resolution
     if local_file_name.is_file():
         if file_conflict_resolution == FileConflictResolution.SKIP:
-            # if file is said to be skipped, no dowload will occur, and None will be returned.
+            # if file is said to be skipped, no download will occur, and None will be returned.
             # This allows `download_file` to return (file_bytes, None) when this function is called.
             return None
         elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
