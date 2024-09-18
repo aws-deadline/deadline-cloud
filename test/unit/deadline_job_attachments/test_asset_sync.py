@@ -1038,3 +1038,602 @@ class TestAssetSync:
                 session_dir=tmp_path,
                 file_system=JobAttachmentsFileSystem.VIRTUAL,
             )
+
+    def test_attachment_sync_inputs_no_inputs_successful(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        default_job: Job,
+        attachments_no_inputs: Attachments,
+    ):
+        """Asserts that sync_inputs is successful when no required assets exist for the Job"""
+        # GIVEN
+        default_job.attachments = attachments_no_inputs
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (summary_statistics, result_pathmap_rules) = (
+                self.default_asset_sync.attachment_sync_inputs(
+                    default_queue.jobAttachmentSettings,
+                    attachments_no_inputs,
+                    default_queue.queueId,
+                    default_job.jobId,
+                    tmp_path,
+                    on_downloading_files=mock_on_downloading_files,
+                )
+            )
+
+            # THEN
+            expected_source_path_format = (
+                "windows"
+                if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": default_job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+            expected_summary_statistics = SummaryStatistics(
+                total_time=summary_statistics.total_time,
+                total_files=0,
+                total_bytes=0,
+                processed_files=0,
+                processed_bytes=0,
+                skipped_files=0,
+                skipped_bytes=0,
+                transfer_rate=0.0,
+            )
+            assert summary_statistics == expected_summary_statistics
+
+    @pytest.mark.parametrize(
+        ("job_fixture_name"),
+        [
+            ("default_job"),
+            ("vfs_job"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_attachment_sync_inputs_successful(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        job_fixture_name: str,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that a valid manifest can be processed to download attachments from S3"""
+        # GIVEN
+        job: Job = request.getfixturevalue(job_fixture_name)
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        test_fs_permission_settings: PosixFileSystemPermissionSettings = (
+            PosixFileSystemPermissionSettings(
+                os_user="test-user",
+                os_group="test-group",
+                dir_mode=0o20,
+                file_mode=0o20,
+            )
+        )
+        os_env_vars: Dict[str, str] = {"AWS_PROFILE": "test-profile"}
+        assert job.attachments
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
+                s3_settings,
+                job.attachments,
+                default_queue.queueId,
+                job.jobId,
+                tmp_path,
+                on_downloading_files=mock_on_downloading_files,
+                fs_permission_settings=test_fs_permission_settings,
+                os_env_vars=os_env_vars,
+            )
+            # THEN
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+
+    @pytest.mark.parametrize(
+        ("job_fixture_name"),
+        [
+            ("default_job"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_attachment_sync_inputs_404_error(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        job_fixture_name: str,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that a specific error message is raised when getting 404 errors synching inputs"""
+        # GIVEN
+        download_exception = JobAttachmentsS3ClientError(
+            action="get-object",
+            status_code=404,
+            bucket_name="test bucket",
+            key_or_prefix="test-key.xxh128",
+            message="File not found",
+        )
+        job: Job = request.getfixturevalue(job_fixture_name)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        assert job.attachments
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=download_exception,
+        ):
+            with pytest.raises(JobAttachmentsS3ClientError) as excinfo:
+                self.default_asset_sync.attachment_sync_inputs(
+                    s3_settings,
+                    job.attachments,
+                    default_queue.queueId,
+                    job.jobId,
+                    tmp_path,
+                )
+        # THEN
+        assert "usually located in the home directory (~/.deadline/cache/s3_check_cache.db)" in str(
+            excinfo
+        )
+
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_sync_attachment_inputs_with_step_dependencies(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        default_job: Job,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that input syncing is done correctly when step dependencies are provided."""
+        # GIVEN
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        assert default_job.attachments
+        step_output_root = "/home/outputs_roots"
+        step_dest_dir = "assetroot-8a7d189e9c17186fb88b"
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir, step_dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
+            side_effect=[{step_output_root: {}}],
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
+                s3_settings,
+                default_job.attachments,
+                default_queue.queueId,
+                default_job.jobId,
+                tmp_path,
+                step_dependencies=["step-1"],
+                on_downloading_files=mock_on_downloading_files,
+            )
+            # THEN
+            expected_source_path_format = (
+                "windows"
+                if default_job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": default_job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                },
+            ]
+
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_attachment_sync_inputs_with_step_dependencies_same_root_vfs_on_posix(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        vfs_job: Job,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        test_manifest_two: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that input syncing is done correctly when step dependencies are provided."""
+        # GIVEN
+        job = vfs_job
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        test_fs_permission_settings: PosixFileSystemPermissionSettings = (
+            PosixFileSystemPermissionSettings(
+                os_user="test-user",
+                os_group="test-group",
+                dir_mode=0o20,
+                file_mode=0o20,
+            )
+        )
+        os_env_vars: Dict[str, str] = {"AWS_PROFILE": "test-profile"}
+        assert job.attachments
+        test_manifest = decode_manifest(json.dumps(test_manifest_two))
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=json.dumps(test_manifest_one),
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            return_value=dest_dir,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
+            return_value={"tmp/": [(test_manifest, "hello")]},
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.merge_asset_manifests",
+        ) as merge_manifests_mock, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.AssetSync._ensure_disk_capacity",
+        ) as disk_capacity_mock, patch(
+            f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
+            return_value="tmp_manifest",
+        ), patch(
+            "sys.platform", "linux"
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
+                s3_settings,
+                job.attachments,
+                default_queue.queueId,
+                job.jobId,
+                tmp_path,
+                step_dependencies=["step-1"],
+                on_downloading_files=mock_on_downloading_files,
+                fs_permission_settings=test_fs_permission_settings,
+                os_env_vars=os_env_vars,
+            )
+            # THEN
+            merge_manifests_mock.assert_called()
+            disk_capacity_mock.assert_not_called()
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                },
+            ]
+
+    @pytest.mark.parametrize(
+        ("job_fixture_name"),
+        [
+            ("default_job"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_attachment_sync_inputs_no_space_left(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        job_fixture_name: str,
+        s3_settings_fixture_name: str,
+        really_big_manifest: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that an AssetSyncError is thrown if there is not enough space left on the device to download all inputs."""
+        # GIVEN
+        job: Job = request.getfixturevalue(job_fixture_name)
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        test_manifest = decode_manifest(json.dumps(really_big_manifest))
+        test_fs_permission_settings: PosixFileSystemPermissionSettings = (
+            PosixFileSystemPermissionSettings(
+                os_user="test-user",
+                os_group="test-group",
+                dir_mode=0o20,
+                file_mode=0o20,
+            )
+        )
+        os_env_vars: Dict[str, str] = {"AWS_PROFILE": "test-profile"}
+        assert job.attachments
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            with pytest.raises(AssetSyncError) as ase:
+                self.default_asset_sync.attachment_sync_inputs(
+                    s3_settings,
+                    job.attachments,
+                    default_queue.queueId,
+                    job.jobId,
+                    tmp_path,
+                    on_downloading_files=mock_on_downloading_files,
+                    fs_permission_settings=test_fs_permission_settings,
+                    os_env_vars=os_env_vars,
+                )
+
+            # THEN
+            assert (
+                "Total file size required for download (300.0 PB) is larger than available disk space"
+                in str(ase)
+            )
+
+    def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
+        self,
+        default_queue: Queue,
+        default_job: Job,
+        test_manifest_one: dict,
+        tmp_path: Path,
+    ):
+        """Tests when a non-empty `storage_profiles_path_mapping_rules` is passed to `sync_inputs`.
+        Check that, for input manifests with an `fileSystemLocationName`, if the root path
+        corresponding to it exists in the `storage_profiles_path_mapping_rules`, the download
+        is attempted to the correct destination path."""
+        # GIVEN
+        default_job.attachments = Attachments(
+            manifests=[
+                ManifestProperties(
+                    rootPath="/tmp",
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="manifest_input",
+                    inputManifestHash="manifesthash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+                ManifestProperties(
+                    fileSystemLocationName="Movie 1",
+                    rootPath="/home/user/movie1",
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="manifest-movie1_input",
+                    inputManifestHash="manifestmovie1hash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+            ],
+        )
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(tmp_path.joinpath(dest_dir))
+
+        storage_profiles_path_mapping_rules = {
+            "/home/user/movie1": "/tmp/movie1",
+        }
+
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            return_value=DownloadSummaryStatistics(),
+        ) as mock_download_files_from_manifests, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (summary_statistics, result_pathmap_rules) = (
+                self.default_asset_sync.attachment_sync_inputs(
+                    s3_settings=default_queue.jobAttachmentSettings,
+                    attachments=default_job.attachments,
+                    queue_id=default_queue.queueId,
+                    job_id=default_job.jobId,
+                    session_dir=tmp_path,
+                    storage_profiles_path_mapping_rules=storage_profiles_path_mapping_rules,
+                    on_downloading_files=mock_on_downloading_files,
+                )
+            )
+
+            # THEN
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": "posix",
+                    "source_path": default_job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+
+            mock_download_files_from_manifests.assert_called_once_with(
+                s3_bucket="test-bucket",
+                manifests_by_root={
+                    f"{local_root}": test_manifest,
+                    "/tmp/movie1": test_manifest,
+                },
+                cas_prefix="assetRoot/Data",
+                fs_permission_settings=None,
+                session=ANY,
+                on_downloading_files=mock_on_downloading_files,
+                logger=getLogger("deadline.job_attachments"),
+            )
+
+    @pytest.mark.parametrize(
+        ("job_fixture_name"),
+        [
+            ("default_job"),
+            ("vfs_job"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
+    def test_attachment_sync_inputs_successful_using_vfs_fallback(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        job_fixture_name: str,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Asserts that a valid manifest can be processed to download attachments from S3"""
+        # GIVEN
+        job: Job = request.getfixturevalue(job_fixture_name)
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        session_dir = str(tmp_path)
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        local_root = str(Path(session_dir) / dest_dir)
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        assert job.attachments
+
+        # WHEN
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs",
+            side_effect=VFSExecutableMissingError,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
+        ) as mock_mount_vfs, patch(
+            "sys.platform", "linux"
+        ), patch.object(
+            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
+        ):
+            mock_on_downloading_files = MagicMock(return_value=True)
+
+            (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
+                s3_settings,
+                job.attachments,
+                default_queue.queueId,
+                job.jobId,
+                tmp_path,
+                on_downloading_files=mock_on_downloading_files,
+            )
+
+            # THEN
+            expected_source_path_format = (
+                "windows"
+                if job.attachments.manifests[0].rootPathFormat == PathFormat.WINDOWS
+                else "posix"
+            )
+            assert result_pathmap_rules == [
+                {
+                    "source_path_format": expected_source_path_format,
+                    "source_path": job.attachments.manifests[0].rootPath,
+                    "destination_path": local_root,
+                }
+            ]
+            mock_mount_vfs.assert_not_called()
