@@ -18,7 +18,6 @@ from urllib.parse import urlparse
 
 import boto3
 import click
-from botocore.client import BaseClient
 
 from deadline.client import api
 from deadline.job_attachments._diff import compare_manifest
@@ -249,7 +248,7 @@ def manifest_download(
     queue_id: str = config_file.get_setting("defaults.queue_id", config=config)
     farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
-    deadline: BaseClient = api.get_boto3_client("deadline", config=config)
+    boto3_session: boto3.Session = api.get_boto3_session(config=config)
 
     output = _manifest_download(
         download_dir=download_dir,
@@ -257,8 +256,7 @@ def manifest_download(
         queue_id=queue_id,
         job_id=job_id,
         step_id=step_id,
-        deadline=deadline,
-        config=config,
+        boto3_session=boto3_session,
         logger=logger,
     )
     logger.json(dataclasses.asdict(output))

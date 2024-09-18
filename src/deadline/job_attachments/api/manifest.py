@@ -1,13 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from configparser import ConfigParser
 from io import BytesIO
 from pathlib import Path
 from typing import Any, List, Optional
 import boto3
 from botocore.client import BaseClient
 
-from deadline.client import api
+from deadline.client.api._session import _get_queue_user_boto3_session, get_default_client_config
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.client.config import config_file
 from deadline.job_attachments._aws.aws_clients import get_s3_client, get_s3_transfer_manager
@@ -76,8 +75,7 @@ def _manifest_download(
     farm_id: str,
     queue_id: str,
     job_id: str,
-    deadline: BaseClient,
-    config: Optional[ConfigParser] = None,  # This needs refactoring to be removed
+    boto3_session: boto3.Session,
     step_id: Optional[str] = None,
     logger: ClickLogger = ClickLogger(False),
 ) -> ManifestDownloadResponse:
@@ -94,15 +92,18 @@ def _manifest_download(
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
 
+    # Deadline Client and get the Queue to download.
+    deadline = boto3_session.client("deadline", config=get_default_client_config())
+
     queue: dict = deadline.get_queue(
         farmId=farm_id,
         queueId=queue_id,
     )
 
     # assume queue role - session permissions
-    queue_role_session: boto3.Session = api.get_queue_user_boto3_session(
+    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
         deadline=deadline,
-        config=config,
+        base_session=boto3_session,
         farm_id=farm_id,
         queue_id=queue_id,
         queue_display_name=queue["displayName"],
