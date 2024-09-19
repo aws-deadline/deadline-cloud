@@ -9,14 +9,13 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set, Any
+from typing import Any, List, Optional, Set
 
 from deadline.job_attachments.asset_manifests import HashAlgorithm
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
 )
-
 from deadline.job_attachments.exceptions import MissingS3RootPrefixError
 
 from ._utils import (
@@ -330,3 +329,50 @@ class FileConflictResolution(Enum):
     SKIP = 1
     OVERWRITE = 2
     CREATE_COPY = 3
+
+
+def default_glob_all() -> List[str]:
+    return ["**/*"]
+
+
+@dataclass
+class GlobConfig:
+    """Include and Exclude configuration for glob input files"""
+
+    include_glob: List[str] = field(default_factory=default_glob_all)
+    exclude_glob: List[str] = field(default_factory=list)
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+
+
+@dataclass
+class ManifestSnapshot:
+    """Data structure to store the results of a manifest snapshot"""
+
+    manifest: str = field(default_factory=str)
+
+
+@dataclass
+class ManifestDiff:
+    """Data structure to store new, modified, or deleted files when comparing manifest to a local file system"""
+
+    new: List[str] = field(default_factory=list)
+    modified: List[str] = field(default_factory=list)
+    deleted: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ManifestDownload:
+    """Data structure to store the S3 and local paths of a manifest"""
+
+    s3_key: str = field(default_factory=str)
+    local: str = field(default_factory=str)
+
+
+@dataclass
+class ManifestDownloadResponse:
+    """Data structure to capture the response for manifest download"""
+
+    downloaded: list[ManifestDownload] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
