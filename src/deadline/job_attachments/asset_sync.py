@@ -167,27 +167,31 @@ class AssetSync:
             storage_profiles_path_mapping_rules: a dict of source path -> destination path mappings.
 
         Returns: local destination corresponding to the given manifest properties.
+        Raises: AssetSyncError If no path mapping rule is found for the given root path.
         """
+        root_path = manifest_properties.rootPath
 
         if manifest_properties.fileSystemLocationName:
-            return storage_profiles_path_mapping_rules.get(manifest_properties.rootPath)
+            local_destination = storage_profiles_path_mapping_rules.get(root_path)
         else:
-            path_mapping: PathMappingRule = dynamic_mapping_rules.get(manifest_properties.rootPath)
-            if path_mapping:
-                return path_mapping.destination_path
+            path_mapping: Optional[PathMappingRule] = dynamic_mapping_rules.get(root_path)
+            local_destination = path_mapping.destination_path if path_mapping else None
 
-        raise AssetSyncError(
-            "Error occurred while attempting to sync input files: "
-            f"No path mapping rule found for the source path {manifest_properties.rootPath}"
-        )
+        if local_destination:
+            return local_destination
+        else:
+            raise AssetSyncError(
+                "Error occurred while attempting to sync input files: "
+                f"No path mapping rule found for the source path {manifest_properties.rootPath}"
+            )
 
     def aggregate_asset_root_manifests(
         self,
         session_dir: Path,
-        s3_settings: Optional[JobAttachmentS3Settings],
+        s3_settings: JobAttachmentS3Settings,
         queue_id: str,
         job_id: str,
-        attachments: Optional[Attachments],
+        attachments: Attachments,
         step_dependencies: Optional[list[str]] = None,
         dynamic_mapping_rules: dict[str, PathMappingRule] = {},
         storage_profiles_path_mapping_rules: dict[str, str] = {},
@@ -244,7 +248,7 @@ class AssetSync:
 
     def launch_vfs(
         self,
-        s3_settings: Optional[JobAttachmentS3Settings],
+        s3_settings: JobAttachmentS3Settings,
         session_dir: Path,
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
@@ -281,7 +285,7 @@ class AssetSync:
 
     def copied_download(
         self,
-        s3_settings: Optional[JobAttachmentS3Settings],
+        s3_settings: JobAttachmentS3Settings,
         session_dir: Path,
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
@@ -415,6 +419,7 @@ class AssetSync:
                 total_input_size += merged_manifest.totalSize  # type: ignore[attr-defined]
 
         # Download
+        summary_statistics: SummaryStatistics = SummaryStatistics()
         if (
             attachments.fileSystem == JobAttachmentsFileSystem.VIRTUAL.value
             and sys.platform != "win32"
@@ -431,11 +436,10 @@ class AssetSync:
                 merged_manifests_by_root=merged_manifests_by_root,
                 os_env_vars=os_env_vars,
             )
-            summary_statistics: SummaryStatistics = SummaryStatistics()
         else:
             # Copied Download flow
             self._ensure_disk_capacity(session_dir, total_input_size)
-            summary_statistics: SummaryStatistics = self.copied_download(
+            summary_statistics = self.copied_download(
                 s3_settings=s3_settings,
                 session_dir=session_dir,
                 fs_permission_settings=fs_permission_settings,
