@@ -80,14 +80,6 @@ class PathMappingRule:
     destination_path: str
     """The path to transform the source path to"""
 
-    def __init__(self, source_path_format: str, source_path: str, destination_path: str):
-        self.source_path_format = source_path_format
-        self.source_path = source_path
-        self.destination_path = destination_path
-
-    def to_dict(self) -> dict[str, str]:
-        return {k: str(v) for k, v in asdict(self).items()}
-
 
 class AssetSync:
     """Class for managing AWS Deadline Cloud job-level attachments."""
@@ -246,7 +238,7 @@ class AssetSync:
 
         return grouped_manifests_by_root
 
-    def launch_vfs(
+    def _launch_vfs(
         self,
         s3_settings: JobAttachmentS3Settings,
         session_dir: Path,
@@ -429,7 +421,7 @@ class AssetSync:
             and isinstance(fs_permission_settings, PosixFileSystemPermissionSettings)
         ):
             # Virtual Download Flow
-            self.launch_vfs(
+            self._launch_vfs(
                 s3_settings=s3_settings,
                 session_dir=session_dir,
                 fs_permission_settings=fs_permission_settings,
@@ -450,7 +442,7 @@ class AssetSync:
         self._record_attachment_mtimes(merged_manifests_by_root)
         return (
             summary_statistics,
-            list(r.to_dict() for r in dynamic_mapping_rules.values()),
+            list(asdict(r) for r in dynamic_mapping_rules.values()),
         )
 
     def _upload_output_files_to_s3(
