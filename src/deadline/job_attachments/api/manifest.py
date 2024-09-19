@@ -1,12 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, List, Optional
+
 import boto3
 from botocore.client import BaseClient
 
+from deadline.client import api
 from deadline.client.api._session import _get_queue_user_boto3_session, get_default_client_config
+from deadline.client.cli._common import _ProgressBarCallbackManager
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.client.config import config_file
 from deadline.job_attachments._aws.aws_clients import get_s3_client, get_s3_transfer_manager
@@ -27,6 +31,7 @@ from deadline.job_attachments.models import (
     ManifestDiff,
     ManifestDownload,
     ManifestDownloadResponse,
+    ManifestSnapshot,
 )
 from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
 
@@ -143,7 +148,7 @@ def _manifest_download(
         )
 
         if result is not None:
-            # Todo: do we want to add file size.
+            # TODO: do we want to add file size.
             # transfer_path = result.meta.call_args.fileobj  # type: ignore[attr-defined]
             # file_size = result.meta.size  # type: ignore[attr-defined]
 
@@ -180,6 +185,104 @@ def _manifest_download(
     # JSON output at the end.
     output = ManifestDownloadResponse(downloaded=successful_downloads, failed=failed_downloads)
     return output
+
+
+def _manifest_snapshot(
+    root: str,
+    destination: str,
+    name: str,
+    glob: str,
+    diff: Optional[str] = None,
+    logger: ClickLogger = ClickLogger(False),
+) -> Optional[ManifestSnapshot]:
+
+    # Get all files in the root.
+    glob_config: GlobConfig = _process_glob_inputs(glob)
+    inputs = _glob_paths(root, include=glob_config.include_glob, exclude=glob_config.exclude_glob)
+
+    # Placeholder Asset Manager
+    asset_manager = S3AssetManager(
+        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
+    )
+
+    hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
+
+    upload_group = asset_manager.prepare_paths_for_upload(
+        input_paths=inputs, output_paths=[root], referenced_paths=[]
+    )
+    assert len(upload_group.asset_groups) == 1
+
+    if upload_group.asset_groups:
+        _, manifests = api.hash_attachments(
+            asset_manager=asset_manager,
+            asset_groups=upload_group.asset_groups,
+            total_input_files=upload_group.total_input_files,
+            total_input_bytes=upload_group.total_input_bytes,
+            print_function_callback=logger.echo,
+            hashing_progress_callback=hash_callback_manager.callback,
+        )
+
+    if not manifests or len(manifests) == 0:
+        logger.echo("No manifest generated")
+        return None
+
+    # This is a hard failure, we are snapshotting 1 directory.
+    assert len(manifests) == 1
+    output_manifest = manifests[0].asset_manifest
+    assert output_manifest
+
+    # If this is a diff manifest, load the supplied manifest file.
+    if diff:
+        # Parse local manifest
+        with open(diff) as source_diff:
+            source_manifest_str = source_diff.read()
+            source_manifest = decode_manifest(source_manifest_str)
+
+        # Get the differences
+        changed_paths: list[str] = []
+        differences: list[tuple[FileStatus, BaseManifestPath]] = compare_manifest(
+            source_manifest, output_manifest
+        )
+        for diff_item in differences:
+            if diff_item[0] == FileStatus.MODIFIED or diff_item[0] == FileStatus.NEW:
+                full_diff_path = f"{root}/{diff_item[1].path}"
+                changed_paths.append(full_diff_path)
+                logger.echo(f"Found difference at: {full_diff_path}, Status: {diff_item[0]}")
+
+        # Since the files are already hashed, we can easily re-use has_attachments to remake a diff manifest.
+        diff_group = asset_manager.prepare_paths_for_upload(
+            input_paths=changed_paths, output_paths=[root], referenced_paths=[]
+        )
+        _, diff_manifests = api.hash_attachments(
+            asset_manager=asset_manager,
+            asset_groups=diff_group.asset_groups,
+            total_input_files=diff_group.total_input_files,
+            total_input_bytes=diff_group.total_input_bytes,
+            print_function_callback=logger.echo,
+            hashing_progress_callback=hash_callback_manager.callback,
+        )
+        output_manifest = diff_manifests[0].asset_manifest
+
+    # Write created manifest into local file, at the specified location at destination
+    if output_manifest is not None:
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        manifest_name = name if name else root.replace("/", "_")
+        manifest_name = manifest_name[1:] if manifest_name[0] == "_" else manifest_name
+        manifest_name = f"{manifest_name}-{timestamp}.manifest"
+
+        local_manifest_file = Path(destination, manifest_name)
+        local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(local_manifest_file, "w") as file:
+            file.write(output_manifest.encode())
+
+        # Output results.
+        logger.echo(f"Manifest Generated at {destination}{manifest_name}\n")
+        return ManifestSnapshot(manifest=f"{destination}{manifest_name}")
+    else:
+        # No manifest generated.
+        logger.echo("No manifest generated")
+        return None
 
 
 def _manifest_diff(

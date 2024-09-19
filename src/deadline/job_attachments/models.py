@@ -9,14 +9,13 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set, Any
+from typing import Any, List, Optional, Set
 
 from deadline.job_attachments.asset_manifests import HashAlgorithm
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
 )
-
 from deadline.job_attachments.exceptions import MissingS3RootPrefixError
 
 from ._utils import (
@@ -345,6 +344,13 @@ class GlobConfig:
 
     INCLUDE = "include"
     EXCLUDE = "exclude"
+
+
+@dataclass
+class ManifestSnapshot:
+    """Data structure to store the results of a manifest snapshot"""
+
+    manifest: str = field(default_factory=str)
 
 
 @dataclass

@@ -5,25 +5,25 @@ Provides functionality for boto3 Sessions, Clients, and properties
 of the Deadline-configured IAM credentials.
 """
 from __future__ import annotations
-from functools import lru_cache
+
 import logging
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
+from functools import lru_cache
 from typing import Optional
+
 import boto3  # type: ignore[import]
+import botocore
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
 from botocore.exceptions import (  # type: ignore[import]
     ClientError,
     ProfileNotFound,
 )
-
 from botocore.session import get_session as get_botocore_session
-import botocore
+
 from .. import version
-
-
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
 
