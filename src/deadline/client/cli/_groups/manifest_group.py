@@ -165,7 +165,7 @@ def manifest_download(
 
 @cli_manifest.command(
     name="upload",
-    help="BETA - Uploads a job attachment manifest file to a Content Addressable Storage's Manifest store.",
+    help="BETA - Uploads a job attachment manifest file to a Content Addressable Storage's Manifest store. If calling via --cas-path, it is recommended to use with --profile for a specific AWS profile with CAS S3 bucket access.",
 )
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
@@ -204,7 +204,7 @@ def manifest_upload(
 
     bucket_name: str = ""
     manifest_path: str = ""
-    session: boto3.Session = api.get_boto3_session()
+    session: boto3.Session = api.get_boto3_session(config=config)
     if not cas_path:
         farm_id = config_file.get_setting("defaults.farm_id", config=config)
         queue_id = config_file.get_setting("defaults.queue_id", config=config)
