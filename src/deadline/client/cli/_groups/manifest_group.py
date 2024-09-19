@@ -47,19 +47,19 @@ def cli_manifest():
 @click.option(
     "--destination",
     default=None,
-    help="Destination directory where manifest is created. Defaults to the root directory.",
+    help="Destination directory where manifest is created. Defaults to the manifest root directory.",
 )
 @click.option(
     "--name",
     default=None,
-    help="Name of the manifest. A time stamp is added YYYY-MM-DD-HH-MM-SS for versioning.",
+    help="Name of the manifest. A timestamp is added YYYY-MM-DD-HH-MM-SS for versioning.",
 )
 @click.option(
     "--glob",
     default=None,
     help="Glob include and exclude of directory and file regex to include in the manifest.",
 )
-@click.option("--diff", default=None, help="Asset Manifest to diff against.")
+@click.option("--diff", default=None, help="File Path to Asset Manifest to diff against.")
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
 @_handle_error
 def manifest_snapshot(
@@ -97,7 +97,7 @@ def manifest_snapshot(
 @click.option(
     "--glob",
     default=None,
-    help="Glob include and exclude of directory and file regex to include in the manifest.",
+    help="Glob regex to find include and exclude directories and files to include in the manifest.",
 )
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
 @_handle_error

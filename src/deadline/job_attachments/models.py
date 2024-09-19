@@ -366,7 +366,7 @@ class ManifestDiff:
 class ManifestDownload:
     """Data structure to store the S3 and local paths of a manifest"""
 
-    s3: str = field(default_factory=str)
+    s3_key: str = field(default_factory=str)
     local: str = field(default_factory=str)
 
 

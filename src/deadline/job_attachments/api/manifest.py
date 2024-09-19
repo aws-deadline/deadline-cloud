@@ -155,7 +155,7 @@ def _manifest_download(
             logger.echo(f"\nDownloaded manifest file to {local_file_name}.")
             # I don't like this output structure, how can we make it better?
             download_info = ManifestDownload(
-                s3=input_manifest[0], local=local_file_name.absolute().as_posix()
+                s3_key=input_manifest[0], local=local_file_name.absolute().as_posix()
             )
             successful_downloads.append(download_info)
         else:
