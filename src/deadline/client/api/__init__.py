@@ -61,7 +61,10 @@ from ._telemetry import (
     TelemetryClient,
     record_success_fail_telemetry_event,
 )
-from ._submit_job_bundle import create_job_from_job_bundle, wait_for_create_job_to_complete
+from ._submit_job_bundle import (
+    create_job_from_job_bundle,
+    wait_for_create_job_to_complete,
+)
 from ._get_storage_profile_for_queue import get_storage_profile_for_queue
 
 logger = getLogger(__name__)

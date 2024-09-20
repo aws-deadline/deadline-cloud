@@ -5,25 +5,25 @@ Provides functionality for boto3 Sessions, Clients, and properties
 of the Deadline-configured IAM credentials.
 """
 from __future__ import annotations
-from functools import lru_cache
+
 import logging
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
+from functools import lru_cache
 from typing import Optional
+
 import boto3  # type: ignore[import]
+import botocore
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
 from botocore.exceptions import (  # type: ignore[import]
     ClientError,
     ProfileNotFound,
 )
-
 from botocore.session import get_session as get_botocore_session
-import botocore
+
 from .. import version
-
-
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
 
@@ -104,6 +104,18 @@ def invalidate_boto3_session_cache() -> None:
     _get_queue_user_boto3_session.cache_clear()
 
 
+def get_default_client_config() -> botocore.config.Config:
+    """
+    Gets the default botocore Config object to use with `boto3 sessions`.
+    This method adds user agent version and submitter context into botocore calls.
+    """
+    user_agent_extra = f"app/deadline-client#{version}"
+    if session_context.get("submitter-name"):
+        user_agent_extra += f" submitter/{session_context['submitter-name']}"
+    session_config = botocore.config.Config(user_agent_extra=user_agent_extra)
+    return session_config
+
+
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
     """
     Gets a client from the boto3 session returned by `get_boto3_session`.
@@ -115,12 +127,8 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
         config (ConfigParser, optional): If provided, the AWS Deadline Cloud config to use.
     """
 
-    user_agent_extra = f"app/deadline-client#{version}"
-    if session_context.get("submitter-name"):
-        user_agent_extra += f" submitter/{session_context['submitter-name']}"
-    session_config = botocore.config.Config(user_agent_extra=user_agent_extra)
     session = get_boto3_session(config=config)
-    return session.client(service_name, config=session_config)
+    return session.client(service_name, config=get_default_client_config())
 
 
 def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
