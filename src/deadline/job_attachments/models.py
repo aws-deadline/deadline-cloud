@@ -412,3 +412,14 @@ class PathMappingRule:
 
     def get_hashed_source_path(self, hash_alg: HashAlgorithm) -> str:
         return hash_data(self.source_path.encode("utf-8"), hash_alg)
+
+
+class FileStatus(Enum):
+    """
+    Status of local files compared to manifest listed files, comparing hash and time modfied
+    """
+
+    UNCHANGED = 0
+    NEW = 1
+    MODIFIED = 2
+    DELETED = 3
