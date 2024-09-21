@@ -23,6 +23,7 @@ from ._groups.job_group import cli_job
 from ._groups.queue_group import cli_queue
 from ._groups.worker_group import cli_worker
 from ._groups.attachment_group import cli_attachment
+from ._groups.manifest_group import cli_manifest
 
 logger = getLogger(__name__)
 
@@ -81,3 +82,4 @@ main.add_command(cli_worker)
 
 if os.environ.get("JOB_ATTACHMENT_CLI") is not None:
     main.add_command(cli_attachment)
+    main.add_command(cli_manifest)

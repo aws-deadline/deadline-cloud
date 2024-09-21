@@ -52,7 +52,7 @@ from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
     SummaryStatistics,
 )
-from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
+from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
 from deadline.job_attachments._utils import _human_readable_file_size
 from ..conftest import is_windows_non_admin
 
@@ -1605,7 +1605,7 @@ class TestUpload:
             )
 
             # THEN
-            assert is_hashed is True
+            assert is_hashed == FileStatus.NEW or is_hashed == FileStatus.MODIFIED
             assert man_path.path == "test.txt"
             assert man_path.hash == "b"
             hash_cache.put_entry.assert_called_with(expected_entry)
@@ -1642,7 +1642,7 @@ class TestUpload:
             )
 
             # THEN
-            assert is_hashed is False
+            assert is_hashed == FileStatus.UNCHANGED
             assert size == file_bytes
             assert man_path.path == "test.txt"
             assert man_path.hash == "a"
