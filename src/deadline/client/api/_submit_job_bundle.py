@@ -42,6 +42,7 @@ from ...job_attachments.models import (
 )
 from ...job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
 from ...job_attachments.upload import S3AssetManager
+from ._session import session_context
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +66,10 @@ def create_job_from_job_bundle(
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
     require_paths_exist: bool = False,
-    submitter_name: str = "CLI",
+    submitter_name: Optional[str] = None,
 ) -> Union[str, None]:
     """
-    Creates a job in the AWS Deadline Cloud farm/queue configured as default for the
+    Creates a job in the farm/queue configured as default for the
     workstation from the job bundle in the provided directory.
 
     A job bundle has the following directory structure:
@@ -133,6 +134,11 @@ def create_job_from_job_bundle(
                 is to not cancel the operation. hashing_progress_callback and upload_progress_callback both receive
                 ProgressReport as a parameter, which can be used for projecting remaining time, as in done in the CLI.
     """
+
+    if not submitter_name:
+        submitter_name = "CLI"
+
+    session_context["submitter-name"] = submitter_name
 
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(job_bundle_dir)

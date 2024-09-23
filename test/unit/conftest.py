@@ -14,7 +14,14 @@ from deadline.client.config import config_file
 def fresh_deadline_config():
     """
     Fixture to start with a blank AWS Deadline Cloud config file.
+
     """
+
+    # Clear the session cache. Importing the cache invalidator at runtime is necessary
+    # to make sure the import order doesn't bypass moto mocking in other areas.
+    from deadline.client.api._session import invalidate_boto3_session_cache
+
+    invalidate_boto3_session_cache()
 
     try:
         # Create an empty temp file to set as the AWS Deadline Cloud config
@@ -27,6 +34,11 @@ def fresh_deadline_config():
         # Yield the temp file name with it patched in as the
         # AWS Deadline Cloud config file
         with patch.object(config_file, "CONFIG_FILE_PATH", str(temp_file_path)):
+            # Write a telemetry id to force it getting saved to the config file. If we don't, then
+            # an ID will get generated and force a save of the config file in the middle of a test.
+            # Writing the config file may be undesirable in the middle of a test.
+            config_file.set_setting("telemetry.identifier", "00000000-0000-0000-0000-000000000000")
+
             yield str(temp_file_path)
     finally:
         temp_dir.cleanup()

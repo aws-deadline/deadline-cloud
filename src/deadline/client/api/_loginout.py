@@ -13,12 +13,12 @@ import sys
 
 
 from ._session import (
-    invalidate_boto3_session_cache,
     get_credentials_source,
     check_authentication_status,
     AwsCredentialsSource,
     AwsAuthenticationStatus,
 )
+from . import _session
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
 import time
@@ -143,7 +143,7 @@ def logout(config: Optional[ConfigParser] = None) -> str:
             )
 
         # Force a refresh of the cached boto3 Session
-        invalidate_boto3_session_cache()
+        _session.invalidate_boto3_session_cache()
         return output.decode("utf8")
     raise UnsupportedProfileTypeForLoginLogout(
         "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor."

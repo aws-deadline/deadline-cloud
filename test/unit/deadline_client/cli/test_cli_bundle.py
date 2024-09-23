@@ -15,6 +15,7 @@ import pytest
 
 from deadline.client import config
 from deadline.client.api import _queue_parameters
+import deadline.client.api as api_module
 from deadline.client.cli import main
 from deadline.client.cli._groups import bundle_group
 from deadline.client.api import _submit_job_bundle
@@ -288,6 +289,54 @@ def test_cli_bundle_job_name(fresh_deadline_config):
         priority=50,
     )
     assert result.exit_code == 0
+
+
+def test_cli_bundle_storage_profile_id(fresh_deadline_config):
+    """
+    Confirm that --storage-profile-id sets the ID that the job is submitted with, but does not
+    change the value of storage profile saved to the configuration file.
+    """
+    PRE_STORAGE_PROFILE_ID = "sp-11223344556677889900abbccddeeff"
+    CLI_STORAGE_PROFILE_ID = "sp-0000000000000000000000000000000"
+
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    # Set the storage profile ID in the config; as someone may have by using `deadline config set`
+    config.set_setting("settings.storage_profile_id", PRE_STORAGE_PROFILE_ID)
+
+    # Use a temporary directory for the job bundle
+    with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
+        session_mock().client("deadline").create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
+        session_mock.reset_mock()
+
+        # Write a JSON template
+        with open(os.path.join(tmpdir, "template.json"), "w", encoding="utf8") as f:
+            f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+        runner = CliRunner()
+        with patch.object(api_module, "get_storage_profile_for_queue"):
+            result = runner.invoke(
+                main,
+                ["bundle", "submit", tmpdir, "--storage-profile-id", CLI_STORAGE_PROFILE_ID],
+            )
+
+    assert tmpdir in result.output
+    assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output
+    assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output
+    session_mock().client().create_job.assert_called_once_with(
+        farmId=MOCK_FARM_ID,
+        queueId=MOCK_QUEUE_ID,
+        template=ANY,
+        templateType="JSON",
+        priority=50,
+        storageProfileId=CLI_STORAGE_PROFILE_ID,
+    )
+    assert result.exit_code == 0
+    # Force a re-load from disk of the config object
+    with patch.object(config.config_file, "_should_read_config", return_value=True):
+        assert config.get_setting("settings.storage_profile_id") == PRE_STORAGE_PROFILE_ID
 
 
 @pytest.mark.parametrize("loading_method", [e.value for e in JobAttachmentsFileSystem] + [None])
