@@ -17,6 +17,7 @@ from io import BufferedReader, BytesIO
 from math import trunc
 from pathlib import Path, PurePath
 from typing import Any, Callable, Generator, Optional, Tuple, Type, Union
+from enum import Enum
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
@@ -80,6 +81,17 @@ S3_MULTIPART_UPLOAD_CHUNK_SIZE: int = 8388608  # 8 MB
 # The maximum number of concurrency for multipart uploads. This is used to determine the max number
 # of thread workers for uploading multiple small files in parallel.
 S3_UPLOAD_MAX_CONCURRENCY: int = 10
+
+
+class FileStatus(Enum):
+    """
+    Status of local files compared to manifest listed files, comparing hash and time modfied
+    """
+
+    UNCHANGED = 0
+    NEW = 1
+    MODIFIED = 2
+    DELETED = 3
 
 
 class S3AssetUploader:
@@ -164,12 +176,9 @@ class S3AssetUploader:
         """
 
         # Upload asset manifest
-        hash_alg = manifest.get_default_hash_alg()
-        manifest_bytes = manifest.encode().encode("utf-8")
-        manifest_name_prefix = hash_data(
-            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
+        (hash_alg, manifest_bytes, manifest_name) = self._gather_upload_metadata(
+            manifest, source_root, file_system_location_name
         )
-        manifest_name = f"{manifest_name_prefix}_input"
 
         if partial_manifest_prefix:
             partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -182,7 +191,10 @@ class S3AssetUploader:
 
         if manifest_write_dir:
             self._write_local_manifest(
-                manifest_write_dir, manifest_name, full_manifest_key, manifest
+                manifest_write_dir,
+                manifest_name,
+                full_manifest_key,
+                manifest,
             )
 
         self.upload_bytes_to_s3(
@@ -203,26 +215,74 @@ class S3AssetUploader:
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
 
+    def _gather_upload_metadata(
+        self,
+        manifest: BaseAssetManifest,
+        source_root: Path,
+        file_system_location_name: Optional[str] = None,
+    ) -> tuple[HashAlgorithm, bytes, str]:
+        """
+        Gathers metadata information of manifest to be used for writing the local manifest
+        """
+        hash_alg = manifest.get_default_hash_alg()
+        manifest_bytes = manifest.encode().encode("utf-8")
+        manifest_name_prefix = hash_data(
+            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
+        )
+        manifest_name = f"{manifest_name_prefix}_input"
+
+        return (hash_alg, manifest_bytes, manifest_name)
+
     def _write_local_manifest(
         self,
         manifest_write_dir: str,
         manifest_name: str,
         full_manifest_key: str,
         manifest: BaseAssetManifest,
+        root_dir_name: Optional[str] = None,
     ) -> None:
         """
         Writes a manifest file locally in a 'manifests' sub-directory.
         Also creates/appends to a file mapping the local manifest name to the full S3 key in the same directory.
         """
-        local_manifest_file = Path(manifest_write_dir, "manifests", manifest_name)
+        self._write_local_input_manifest(manifest_write_dir, manifest_name, manifest, root_dir_name)
+
+        self._write_local_manifest_s3_mapping(manifest_write_dir, manifest_name, full_manifest_key)
+
+    def _write_local_input_manifest(
+        self,
+        manifest_write_dir: str,
+        manifest_name: str,
+        manifest: BaseAssetManifest,
+        root_dir_name: Optional[str] = None,
+    ):
+        """
+        Creates 'manifests' sub-directory and writes a local input manifest file
+        """
+        input_manifest_folder_name = "manifests"
+        if root_dir_name is not None:
+            input_manifest_folder_name = root_dir_name + "_" + input_manifest_folder_name
+
+        local_manifest_file = Path(manifest_write_dir, input_manifest_folder_name, manifest_name)
         logger.info(f"Creating local manifest file: {local_manifest_file}\n")
         local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(local_manifest_file, "w") as file:
             file.write(manifest.encode())
 
-        # Create or append to an existing mapping file. We use this since path lengths can go beyond the
-        # file name length limit on Windows if we were to create the full S3 key path locally.
-        manifest_map_file = Path(manifest_write_dir, "manifests", "manifest_s3_mapping")
+    def _write_local_manifest_s3_mapping(
+        self,
+        manifest_write_dir: str,
+        manifest_name: str,
+        full_manifest_key: str,
+        manifest_dir_name: Optional[str] = None,
+    ):
+        """
+        Create or append to an existing mapping file. We use this since path lengths can go beyond the
+        file name length limit on Windows if we were to create the full S3 key path locally.
+        """
+        manifest_map_file = Path(
+            manifest_write_dir, manifest_dir_name or "manifests", "manifest_s3_mapping"
+        )
         mapping = {"local_file": manifest_name, "s3_key": full_manifest_key}
         with open(manifest_map_file, "a") as mapping_file:
             mapping_file.write(f"{mapping}\n")
@@ -676,7 +736,7 @@ class S3AssetUploader:
                 error_details=str(bce),
             ) from bce
         except Exception as e:
-            raise AssetSyncError(e) from e
+            raise AssetSyncError(e)
 
 
 class S3AssetManager:
@@ -720,7 +780,8 @@ class S3AssetManager:
         root_path: str,
         hash_cache: HashCache,
         progress_tracker: Optional[ProgressTracker] = None,
-    ) -> Tuple[bool, int, base_manifest.BaseManifestPath]:
+        update: bool = True,
+    ) -> Tuple[FileStatus, int, base_manifest.BaseManifestPath]:
         # If it's cancelled, raise an AssetSyncCancelledError exception
         if progress_tracker and not progress_tracker.continue_reporting:
             raise AssetSyncCancelledError(
@@ -733,7 +794,7 @@ class S3AssetManager:
         hash_alg: HashAlgorithm = manifest_model.AssetManifest.get_default_hash_alg()
 
         full_path = str(path.resolve())
-        is_new_or_modified: bool = False
+        file_status: FileStatus = FileStatus.UNCHANGED
         actual_modified_time = str(datetime.fromtimestamp(path.stat().st_mtime))
 
         entry: Optional[HashCacheEntry] = hash_cache.get_entry(full_path, hash_alg)
@@ -743,7 +804,7 @@ class S3AssetManager:
                 entry.last_modified_time = actual_modified_time
                 entry.file_hash = hash_file(full_path, hash_alg)
                 entry.hash_algorithm = hash_alg
-                is_new_or_modified = True
+                file_status = FileStatus.MODIFIED
         else:
             entry = HashCacheEntry(
                 file_path=full_path,
@@ -751,9 +812,9 @@ class S3AssetManager:
                 file_hash=hash_file(full_path, hash_alg),
                 last_modified_time=actual_modified_time,
             )
-            is_new_or_modified = True
+            file_status = FileStatus.NEW
 
-        if is_new_or_modified:
+        if file_status != FileStatus.UNCHANGED and update:
             hash_cache.put_entry(entry)
 
         file_size = path.resolve().stat().st_size
@@ -767,7 +828,7 @@ class S3AssetManager:
         path_args["mtime"] = trunc(path.stat().st_mtime_ns // 1000)
         path_args["size"] = file_size
 
-        return (is_new_or_modified, file_size, manifest_model.Path(**path_args))
+        return (file_status, file_size, manifest_model.Path(**path_args))
 
     def _create_manifest_file(
         self,
@@ -792,10 +853,10 @@ class S3AssetManager:
                     for path in input_paths
                 }
                 for future in concurrent.futures.as_completed(futures):
-                    (is_hashed, file_size, path_to_put_in_manifest) = future.result()
+                    (file_status, file_size, path_to_put_in_manifest) = future.result()
                     paths.append(path_to_put_in_manifest)
                     if progress_tracker:
-                        if is_hashed:
+                        if file_status == FileStatus.NEW or file_status == FileStatus.MODIFIED:
                             progress_tracker.increase_processed(1, file_size)
                         else:
                             progress_tracker.increase_skipped(1, file_size)
