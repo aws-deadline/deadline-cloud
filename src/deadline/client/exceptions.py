@@ -19,3 +19,7 @@ class UserInitiatedCancel(Exception):
 
 class NonValidInputError(Exception):
     """Error for when the user input is nonvalid"""
+
+
+class ManifestOutdatedError(Exception):
+    """Error for when local files are different from version captured in manifest"""

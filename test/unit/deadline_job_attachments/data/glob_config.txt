@@ -1,0 +1,8 @@
+{
+  "include": [
+    "include.file"
+  ],
+  "exclude": [
+    "exclude.file"
+  ]
+}

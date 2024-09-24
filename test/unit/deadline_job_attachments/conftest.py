@@ -482,3 +482,17 @@ def posix_target_group() -> str:
 def posix_disjoint_group() -> str:
     # Intentionally fail if the var is not defined.
     return os.environ["DEADLINE_JOB_ATTACHMENT_TEST_SUDO_DISJOINT_GROUP"]
+
+
+@pytest.fixture(scope="function")
+def test_glob_folder() -> str:
+    glob_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "glob"))
+    return glob_data_dir
+
+
+@pytest.fixture(scope="function")
+def glob_config_file() -> str:
+    manifest_file = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "data", "glob_config.txt")
+    )
+    return manifest_file
