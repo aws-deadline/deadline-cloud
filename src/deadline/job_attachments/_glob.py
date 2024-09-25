@@ -46,9 +46,11 @@ def _glob_paths(
 ) -> List[str]:
     """
     Glob routine that supports Unix style pathname pattern expansion for includes and excludes.
+    This function will recursively list all files of path, including all files globbed by include and removing all files marked by exclude.
     path: Root path to glob.
     include: Optional, pattern syntax for files to include.
-    exlucde: Optional, pattern syntax for files to exclude.
+    exclude: Optional, pattern syntax for files to exclude.
+    return: List of files found based on supplied glob patterns.
     """
     include_files: List[Optional[str]] = []
     for input_glob in include:

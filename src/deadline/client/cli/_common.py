@@ -9,6 +9,7 @@ __all__ = [
     "_handle_error",
     "_apply_cli_options_to_config",
     "_cli_object_repr",
+    "_ProgressBarCallbackManager",
 ]
 
 import sys
@@ -16,12 +17,18 @@ from configparser import ConfigParser
 from typing import Any, Callable, Optional, Set
 
 import click
+from contextlib import ExitStack
+from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
 from ..config import config_file
 from ..exceptions import DeadlineOperationError
 from ..job_bundle import deadline_yaml_dump
+from ._groups._sigint_handler import SigIntHandler
 
 _PROMPT_WHEN_COMPLETE = "PROMPT_WHEN_COMPLETE"
+
+# Set up the signal handler for handling Ctrl + C interruptions.
+sigint_handler = SigIntHandler()
 
 
 def _prompt_at_completion(ctx: click.Context):
@@ -182,3 +189,42 @@ def _cli_object_repr(obj: Any):
     # strings to end with "\n".
     obj = _fix_multiline_strings(obj)
     return deadline_yaml_dump(obj)
+
+
+class _ProgressBarCallbackManager:
+    """
+    Manages creation, update, and deletion of a progress bar. On first call of the callback, the progress bar is created. The progress bar is closed
+    on the final call (100% completion)
+    """
+
+    BAR_NOT_CREATED = 0
+    BAR_CREATED = 1
+    BAR_CLOSED = 2
+
+    def __init__(self, length: int, label: str):
+        self._length = length
+        self._label = label
+        self._bar_status = self.BAR_NOT_CREATED
+        self._exit_stack = ExitStack()
+
+    def callback(self, upload_metadata: ProgressReportMetadata) -> bool:
+        if self._bar_status == self.BAR_CLOSED:
+            # from multithreaded execution this can be called after completion somtimes.
+            return sigint_handler.continue_operation
+        elif self._bar_status == self.BAR_NOT_CREATED:
+            # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
+            # not annotating the type of hashing_progress.
+            self._upload_progress = click.progressbar(length=self._length, label=self._label)  # type: ignore[var-annotated]
+            self._exit_stack.enter_context(self._upload_progress)
+            self._bar_status = self.BAR_CREATED
+
+        total_progress = int(upload_metadata.progress)
+        new_progress = total_progress - self._upload_progress.pos
+        if new_progress > 0:
+            self._upload_progress.update(new_progress)
+
+        if total_progress == self._length or not sigint_handler.continue_operation:
+            self._bar_status = self.BAR_CLOSED
+            self._exit_stack.close()
+
+        return sigint_handler.continue_operation

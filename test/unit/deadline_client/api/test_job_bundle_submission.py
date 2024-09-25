@@ -479,7 +479,7 @@ def test_create_job_from_job_bundle_job_attachments(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
+        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
         S3AssetManager,
         "prepare_paths_for_upload",
@@ -602,7 +602,7 @@ def test_create_job_from_job_bundle_empty_job_attachments(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
+        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
         S3AssetManager,
         "prepare_paths_for_upload",
@@ -924,7 +924,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
     ), patch.object(
-        api._submit_job_bundle, "_hash_attachments", return_value=(None, None)
+        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
     ) as mock_hash_attachments, patch.object(
         S3AssetManager,
         "prepare_paths_for_upload",
