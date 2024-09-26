@@ -5,7 +5,7 @@ import boto3
 import json
 
 from contextlib import ExitStack
-from typing import Optional
+from typing import Optional, List, Dict
 
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
@@ -16,13 +16,13 @@ from deadline.client.exceptions import NonValidInputError
 
 
 def attachment_download(
-    manifests: list[str],
+    manifests: List[str],
     s3_root_path: str,
     boto3_session: boto3.Session,
     path_mapping_rules: Optional[str] = None,
 ):
     """
-    ALPHA API - This API is still evolving but will be made public in the near future.
+    BETA API - This API is still evolving but will be made public in the near future.
 
     API to download job attachments based on given list of manifests.
     If path mapping rules file is given, map to corresponding destinations.
@@ -38,7 +38,7 @@ def attachment_download(
     if not all([os.path.isfile(manifest) for manifest in manifests]):
         raise NonValidInputError(f"Specified manifests {manifests} contain invalid file.")
 
-    parsed_mappings: list[PathMappingRule] = list()
+    parsed_mappings: List[PathMappingRule] = list()
 
     if path_mapping_rules:
         if not os.path.isfile(path_mapping_rules):
@@ -50,7 +50,7 @@ def attachment_download(
             parsed_mappings = [PathMappingRule(**mapping) for mapping in json.load(f)]
 
     # Read in manifests
-    merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
+    merged_manifests_by_root: Dict[str, BaseAssetManifest] = dict()
     with ExitStack() as stack:
         for file_path in manifests:
             manifest: BaseAssetManifest = decode_manifest(
@@ -72,6 +72,7 @@ def attachment_download(
             print(f"local root is {destination}")
             merged_manifests_by_root[destination] = manifest
 
+    # Given manifests and S3 bucket + root, downloads all files from a CAS in each manifest.
     s3_settings: JobAttachmentS3Settings = JobAttachmentS3Settings.from_root_path(s3_root_path)
     download_summary: DownloadSummaryStatistics = download_files_from_manifests(
         s3_bucket=s3_settings.s3BucketName,

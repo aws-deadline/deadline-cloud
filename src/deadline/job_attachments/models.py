@@ -223,12 +223,12 @@ class JobAttachmentS3Settings:
     def from_root_path(root_path: str) -> JobAttachmentS3Settings:
         path_split: list = root_path.split("/")
 
-        if len(path_split) != 2:
+        if len(path_split) < 2:
             raise MalformedAttachmentSettingError(
                 "Invalid root path format, should be s3BucketName/rootPrefix."
             )
 
-        return JobAttachmentS3Settings(path_split[0], path_split[1])
+        return JobAttachmentS3Settings(path_split[0], "/".join(path_split[1:]))
 
     def to_root_path(self) -> str:
         return _join_s3_paths(self.s3BucketName, self.rootPrefix)
@@ -408,9 +408,7 @@ class PathMappingRule:
     """The path to transform the source path to"""
 
     def get_hashed_source(self, hash_alg: HashAlgorithm) -> str:
-        return hash_data(
-            f"{self.get_hashed_source_path}{self.source_path}".encode("utf-8"), hash_alg
-        )
+        return hash_data(f"{self.source_path_format}{self.source_path}".encode("utf-8"), hash_alg)
 
     def get_hashed_source_path(self, hash_alg: HashAlgorithm) -> str:
         return hash_data(self.source_path.encode("utf-8"), hash_alg)

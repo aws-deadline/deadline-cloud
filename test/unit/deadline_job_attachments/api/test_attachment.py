@@ -1,10 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-tests the deadline.client.api functions relating to storage profiles
+Test the deadline.client.api functions relating to attachment
 """
 
 from unittest.mock import patch
+from typing import Dict
 
 import os
 import pytest
@@ -13,7 +14,7 @@ import json
 import deadline
 
 from deadline.client import api
-from deadline.client.api._attachment import attachment_download
+from deadline.job_attachments import api as attachment_api
 from deadline.client.exceptions import NonValidInputError
 from deadline.job_attachments.exceptions import MalformedAttachmentSettingError
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
@@ -71,10 +72,10 @@ def test_attachment_download_single_to_mapped(temp_assets_dir):
             json.dump([PATH_MAPPING], f)
 
         with patch(
-            f"{deadline.__package__}.client.api._attachment.download_files_from_manifests",
+            f"{deadline.__package__}.job_attachments.api.attachment.download_files_from_manifests",
             return_value=DownloadSummaryStatistics(),
         ) as mock_download_files_from_manifests:
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
                 s3_root_path="bucket/assetRoot",
                 boto3_session=session_mock,
@@ -104,10 +105,10 @@ def test_attachment_download_single_to_current(temp_assets_dir, manifest_case_ke
             json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
 
         with patch(
-            f"{deadline.__package__}.client.api._attachment.download_files_from_manifests",
+            f"{deadline.__package__}.job_attachments.api.attachment.download_files_from_manifests",
             return_value=DownloadSummaryStatistics(),
         ) as mock_download_files_from_manifests:
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=[os.path.join(temp_assets_dir, manifest_case_key)],
                 s3_root_path="bucket/assetRoot",
                 boto3_session=session_mock,
@@ -127,7 +128,7 @@ def test_attachment_download_single_to_current(temp_assets_dir, manifest_case_ke
 
 def test_attachment_download_multiple_to_current(temp_assets_dir):
     with patch.object(api._session, "get_boto3_session") as session_mock:
-        expected_merged: dict[str, BaseAssetManifest] = dict()
+        expected_merged: Dict[str, BaseAssetManifest] = dict()
 
         for manifest_case_key in MOCK_MANIFEST_CASE.keys():
             expected_merged[f"{os.getcwd()}/{manifest_case_key}"] = decode_manifest(
@@ -141,10 +142,10 @@ def test_attachment_download_multiple_to_current(temp_assets_dir):
                 json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
 
         with patch(
-            f"{deadline.__package__}.client.api._attachment.download_files_from_manifests",
+            f"{deadline.__package__}.job_attachments.api.attachment.download_files_from_manifests",
             return_value=DownloadSummaryStatistics(),
         ) as mock_download_files_from_manifests:
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=[os.path.join(temp_assets_dir, key) for key in MOCK_MANIFEST_CASE.keys()],
                 s3_root_path="bucket/assetRoot",
                 boto3_session=session_mock,
@@ -161,7 +162,7 @@ def test_attachment_download_multiple_to_current(temp_assets_dir):
 def test_attachment_download_invalid_input_manifests(fresh_deadline_config):
     with patch.object(api._session, "get_boto3_session") as session_mock:
         with pytest.raises(NonValidInputError):
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=["file-not-found"],
                 s3_root_path="bucket/root",
                 boto3_session=session_mock,
@@ -171,7 +172,7 @@ def test_attachment_download_invalid_input_manifests(fresh_deadline_config):
 def test_attachment_download_invalid_input_path_mapping_rules(fresh_deadline_config):
     with patch.object(api._session, "get_boto3_session") as session_mock:
         with pytest.raises(NonValidInputError):
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=[],
                 s3_root_path="bucket/root",
                 boto3_session=session_mock,
@@ -182,7 +183,7 @@ def test_attachment_download_invalid_input_path_mapping_rules(fresh_deadline_con
 def test_attachment_download_invalid_input_s3_root_path(fresh_deadline_config):
     with patch.object(api._session, "get_boto3_session") as session_mock:
         with pytest.raises(MalformedAttachmentSettingError):
-            attachment_download(
+            attachment_api.attachment_download(
                 manifests=[],
                 s3_root_path="MalformedPath",
                 boto3_session=session_mock,

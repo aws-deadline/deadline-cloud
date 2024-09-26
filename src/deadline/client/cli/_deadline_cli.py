@@ -79,5 +79,5 @@ main.add_command(cli_job)
 main.add_command(cli_queue)
 main.add_command(cli_worker)
 
-if os.environ.get("ATTACHMENT_SYNC_JOB_USER") is not None:
+if os.environ.get("JOB_ATTACHMENT_CLI") is not None:
     main.add_command(cli_attachment)
