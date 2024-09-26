@@ -1,7 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from unittest.mock import patch
 
-from deadline.job_attachments.models import PathFormat, StorageProfileOperatingSystemFamily
+from deadline.job_attachments.models import (
+    PathFormat,
+    StorageProfileOperatingSystemFamily,
+    PathMappingRule,
+)
+from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
 
 import pytest
 
@@ -48,3 +53,19 @@ class TestModels:
         """
         with pytest.raises(ValueError):
             StorageProfileOperatingSystemFamily(input)
+
+    def test_path_mapping_rules(self):
+        """
+        Test rule construction and hashing the source attributes
+        """
+        path_mapping = PathMappingRule(
+            source_path_format="posix",
+            source_path="/local/home/test",
+            destination_path="/loca/home/test/output",
+        )
+        assert "ff1fbf8027e081c6f7927a5a622a86fc" == path_mapping.get_hashed_source(
+            HashAlgorithm.XXH128
+        )
+        assert "4ab97c97c825551aaa963888278ef9ec" == path_mapping.get_hashed_source_path(
+            HashAlgorithm.XXH128
+        )
