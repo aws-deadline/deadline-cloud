@@ -7,6 +7,7 @@ import pytest
 
 from deadline.job_attachments._utils import (
     _is_relative_to,
+    _retry,
 )
 
 
@@ -60,3 +61,23 @@ class TestUtils:
         Tests if the is_relative_to() works correctly when using Windows paths.
         """
         assert _is_relative_to(path1, path2) == expected
+
+    def test_retry(self):
+        """
+        Test a function that throws an exception is retried.
+        """
+        call_count = 0
+
+        # Given
+        @_retry(ExceptionToCheck=NotImplementedError, tries=2, delay=0.1, backoff=0.1)
+        def test_bad_function():
+            nonlocal call_count
+            call_count = call_count + 1
+            if call_count == 1:
+                raise NotImplementedError()
+
+        # When
+        test_bad_function()
+
+        # Then
+        assert call_count == 2
