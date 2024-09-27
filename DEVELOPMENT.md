@@ -12,6 +12,7 @@ Table of Contents:
    * [Integration tests](#integration-tests)
 * [Things to Know](#things-to-know)
    * [Public contracts](#public-contracts)
+   * [Library Dependencies](#dependencies)
    * [Qt and Calling AWS APIs](#qt-and-calling-aws-including-aws-deadline-cloud-apis)
 
 ## Development Environment Setup
@@ -200,6 +201,38 @@ For the Python library interface:
 * Changing a default argument value is a breaking change.
 * Changing the location that a file or directory is created should be considered to be a breaking change. These locations have a tendancy to become
   de-facto parts of the public contract as users build automation that assumes these locations is unchanged.
+
+### Library Dependencies
+
+Library dependencies are Python packages required to build and run the Deadline Cloud Python project. Dependencies are specified in the `dependencies` section of `pyproject.toml`.
+
+The Deadline Cloud library is designed to be integrated into third-party applications that have bespoke and customized deployment environments. Adding dependencies will increase the chance of library version conflicts and incompatabilities. Please evaluate the addition of each new dependency.
+
+We try to minimize the number of dependencies required to build and run Deadline Cloud. When contributing changes, please consider the following. 
+
+#### Why is a new dependency needed? 
+
+* Is the dependency library functionality required small enough to have a minimal version added to the Deadline Cloud code base?
+
+#### Quality of the dependency
+
+* Is the dependency active, reputable or maintained by a reputable source? Considerations can include:
+    - PyPI download stats
+    - GitHub stars
+    - GitHub dependency graph showing downstream consumers
+* Is it well-maintained? 
+* Is the library released regularly or recently?
+
+#### Version Pinning
+
+* How should we pin the version of this new dependency? 
+    - Please consider changes over time such as API or CLI command evolution and breakage.
+* Does the library follow a versioning scheme such as semver?
+
+#### Licensing
+
+*   Please ensure the license of the dependency is compatible with the distribution license of this library.
+*   Please attribute dependencies in https://github.com/aws-deadline/deadline-cloud/blob/mainline/THIRD_PARTY_LICENSES.
 
 ### Qt and Calling AWS (including AWS Deadline Cloud) APIs
 
