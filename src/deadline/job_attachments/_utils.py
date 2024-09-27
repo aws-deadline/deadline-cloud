@@ -8,7 +8,6 @@ import random
 import time
 from typing import Any, Callable, Optional, Tuple, Type, Union
 import uuid
-import ctypes
 import sys
 
 
@@ -94,13 +93,16 @@ def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
 
 
 def _is_windows_file_path_limit() -> bool:
-    if sys.platform == "win32":
-        ntdll = ctypes.WinDLL("ntdll")
-        ntdll.RtlAreLongPathsEnabled.restype = ctypes.c_ubyte
-        ntdll.RtlAreLongPathsEnabled.argtypes = ()
+    if sys.platform != "win32":
+        return True
 
-        return bool(ntdll.RtlAreLongPathsEnabled())
-    return True
+    import ctypes
+
+    ntdll = ctypes.WinDLL("ntdll")
+    ntdll.RtlAreLongPathsEnabled.restype = ctypes.c_ubyte
+    ntdll.RtlAreLongPathsEnabled.argtypes = ()
+
+    return bool(ntdll.RtlAreLongPathsEnabled())
 
 
 def _retry(
