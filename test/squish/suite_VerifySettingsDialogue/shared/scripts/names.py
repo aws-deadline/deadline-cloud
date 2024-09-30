@@ -288,3 +288,18 @@ general_settings_Current_logging_level_QComboBox = {
     "unnamed": 1,
     "visible": 1,
 }
+#
+
+qFileDialog_fileNameLabel_QLabel = {"name": "fileNameLabel", "type": "QLabel", "visible": 1, "window": qFileDialog_QFileDialog}
+fileNameEdit_QLineEdit = {"buddy": qFileDialog_fileNameLabel_QLabel, "name": "fileNameEdit", "type": "QLineEdit", "visible": 1}
+qFileDialog_Choose_QPushButton = {"text": "Choose", "type": "QPushButton", "unnamed": 1, "visible": 1, "window": qFileDialog_QFileDialog}
+qFileDialog_Cancel_QPushButton = {"text": "Cancel", "type": "QPushButton", "unnamed": 1, "visible": 1, "window": qFileDialog_QFileDialog}
+error_running_deadline_bundle_gui_submit_browse_QMessageBox = {"type": "QMessageBox", "unnamed": 1, "visible": 1, "windowTitle": "Error running \"deadline bundle gui-submit --browse\""}
+error_running_deadline_bundle_gui_submit_browse_OK_QPushButton = {"text": "OK", "type": "QPushButton", "unnamed": 1, "visible": 1, "window": error_running_deadline_bundle_gui_submit_browse_QMessageBox}
+submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog = {"type": "SubmitJobToDeadlineDialog", "unnamed": 1, "visible": 1, "windowTitle": "Submit to AWS Deadline Cloud"}
+submit_to_AWS_Deadline_Cloud_Settings_QPushButton = {"text": "Settings...", "type": "QPushButton", "unnamed": 1, "visible": 1, "window": submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog}
+submit_to_AWS_Deadline_Cloud_qt_tabwidget_stackedwidget_QStackedWidget = {"name": "qt_tabwidget_stackedwidget", "type": "QStackedWidget", "visible": 1, "window": submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog}
+qt_tabwidget_stackedwidget_QScrollArea = {"container": submit_to_AWS_Deadline_Cloud_qt_tabwidget_stackedwidget_QStackedWidget, "type": "QScrollArea", "unnamed": 1, "visible": 1}
+job_Properties_SharedJobPropertiesWidget = {"container": qt_tabwidget_stackedwidget_QScrollArea, "title": "Job Properties", "type": "SharedJobPropertiesWidget", "unnamed": 1, "visible": 1}
+job_Properties_Name_QLabel = {"container": job_Properties_SharedJobPropertiesWidget, "text": "Name", "type": "QLabel", "unnamed": 1, "visible": 1}
+name_QLineEdit = {"buddy": job_Properties_Name_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*
 # mypy: disable-error-code="attr-defined"
 
-import blenderSubmitter_locators
+import blender_submitter_locators
 import squish
 import test
 
-snoozeTimeout = 3 # seconds
+snooze_timeout = 3 # seconds
 

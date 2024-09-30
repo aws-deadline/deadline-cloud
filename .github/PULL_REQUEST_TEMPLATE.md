@@ -20,6 +20,13 @@ See [DEVELOPMENT.md](https://github.com/aws-deadline/deadline-cloud/blob/mainlin
 - Are relevant docstrings in the code base updated?
 - Has the README.md been updated? If you modified CLI arguments, for instance.
 
+### Does this PR introduce new dependencies?
+
+This library is designed to be integrated into third-party applications that have bespoke and customized deployment environments. Adding dependencies will increase the chance of library version conflicts and incompatabilities. Please evaluate the addition of new dependencies. See the [Dependencies](https://github.com/aws-deadline/deadline-cloud/blob/mainline/DEVELOPMENT.md#dependencies) section of DEVELOPMENT.md for more details.
+
+*   [ ] This PR adds one or more new dependency Python packages. I acknowledge I have reviewed the considerations for adding dependencies in [DEVELOPMENT.md](https://github.com/aws-deadline/deadline-cloud/blob/mainline/DEVELOPMENT.md#dependencies).
+*   [ ] This PR does not add any new dependencies.
+
 ### Is this a breaking change?
 
 A breaking change is one that modifies a public contract in a way that is not backwards compatible. See the 

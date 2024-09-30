@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # mypy: disable-error-code="attr-defined"
 
+# deadline config gui workstation config
 profile_name = "(default)"
 job_hist_dir = "~/.deadline/job_history/(default)"
 farm_name = "Deadline Cloud Squish Farm"
@@ -14,3 +15,7 @@ tooltip_text_lightbulb = "This setting determines how job attachments are loaded
 conflict_res_option = "NOT\\_SELECTED"
 conflict_res_option_expected_text = conflict_res_option.replace("\\_", "_")
 logging_level = "WARNING"
+
+# blender submitter job bundle directory
+blender_filepath = "/home/rocky/deadline-cloud-fork/deadline-cloud/test/squish/test_files/blender/chicken_anim_nimble"
+blender_job_bundle_folder = "chicken_anim_nimble"
