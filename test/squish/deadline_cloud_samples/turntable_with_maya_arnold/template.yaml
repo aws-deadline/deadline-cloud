@@ -1,0 +1,444 @@
+specificationVersion: jobtemplate-2023-09
+name: Turntable with Maya/Arnold
+description: |
+  This job takes an OBJ geometry file as input, and outputs a video turntable render.
+  A turntable render is a 360 degree rotation of a rendered 3D model that allows inspection
+  of the geometry without a 3D viewer. You can download just the EncodeVideo step from
+  Deadline Cloud Monitor to get the video without the intermediate scene file or images.
+
+  The job needs Maya, Arnold, and FFmpeg to run. On Deadline Cloud service-managed fleets,
+  you can use "deadline-cloud conda-forge" as the CondaChannels parameter for a conda queue
+  environment. Maya and Arnold is available from the deadline-cloud channel, and FFmpeg
+  is available from the conda-forge community channel.
+
+  To run the job without such a conda virtual environment created by a Deadline Cloud
+  queue environment you must provide the commands mayapy, maya-openjd, and ffmpeg from
+  the PATH environment variable.
+
+  The job bundle defines a 3-step pipeline as follows:
+
+  1. It runs a MayaPy script to produce a turntable Maya scene file by loading a base Maya scene
+     and importing the geometry model.
+  2. It uses the Maya Open Job Description interface to render all the frames of the Maya scene file as a sequence of images.
+  3. It uses FFmpeg to encode the sequence of images into a video.
+parameterDefinitions:
+# Input Geometry
+- name: InputGeometryFile
+  description: Choose the input geometry file. Uses a placeholder object if not selected.
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  default: ''
+  userInterface:
+    control: CHOOSE_INPUT_FILE
+    label: Input Geometry File
+    groupLabel: Input Geometry
+    fileFilters:
+    - label: OBJ Files
+      patterns: ["*.obj"]
+    - label: All Files
+      patterns: ["*"]
+- name: GeometryFileCoordSystem
+  description: The coordinate system the input geometry file uses.
+  type: STRING
+  default: Y-UP-RIGHT-HANDED
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Coordinate System of the Geometry File
+    groupLabel: Input Geometry
+  allowedValues: [Y-UP-RIGHT-HANDED, Z-UP-RIGHT-HANDED]
+- name: CenterObject
+  description: Center the object's bounding box on the turntable.
+  type: STRING
+  default: "TRUE"
+  allowedValues: ["TRUE", "FALSE"]
+  userInterface:
+    control: CHECK_BOX
+    label: Center the object on the turntable
+    groupLabel: Input Geometry
+
+# Turntable Control
+- name: FrameRange
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: Frame Range
+    groupLabel: Turntable Control
+  default: 1-50
+- name: WhatToRotate
+  type: STRING
+  default: CAMERA
+  userInterface:
+    control: DROPDOWN_LIST
+    label: What to Rotate
+    groupLabel: Turntable Control
+  allowedValues: [CAMERA, SUBJECT]
+- name: AnimationCurve
+  type: STRING
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Animation Curve
+    groupLabel: Turntable Control
+  default: EASE_IN_OUT
+  allowedValues: [EASE_IN_OUT, LOOPABLE]
+- name: ViewSlope
+  description: The slope (y/x) of the direction for the camera to look.
+  type: FLOAT
+  default: 0.3
+  userInterface:
+    control: SPIN_BOX
+    label: Camera View Slope
+    groupLabel: Turntable Control
+  minValue: -1
+  maxValue: 5
+- name: CameraDistanceScale
+  description: Adjust the size of the subject from the default by scaling the distance from the camera to the subject.
+  type: FLOAT
+  default: 0.7
+  userInterface:
+    control: SPIN_BOX
+    label: Camera Distance Scale Control
+    groupLabel: Turntable Control
+
+# Render Output
+- name: ImageWidth
+  type: INT
+  userInterface:
+    control: SPIN_BOX
+    label: Image Width
+    groupLabel: Render Output
+  default: 960
+- name: ImageHeight
+  type: INT
+  userInterface:
+    control: SPIN_BOX
+    label: Image Height
+    groupLabel: Render Output
+  default: 540
+- name: EnableAdaptiveSampling
+  type: STRING
+  userInterface:
+    control: CHECK_BOX
+    label: Enable adaptive sampling
+    groupLabel: Render Output
+  default: "FALSE"
+  allowedValues: ["TRUE", "FALSE"]
+- name: AdaptiveMaxCameraAA
+  type: INT
+  userInterface:
+    control: SPIN_BOX
+    label: Adaptive Max Camera (AA)
+    groupLabel: Render Output
+  default: 6
+  minValue: 2
+- name: SceneName
+  type: STRING
+  default: turntable
+  userInterface:
+    control: LINE_EDIT
+    label: Scene Name
+    groupLabel: Render Output
+
+# Video Encoding
+- name: VideoOutputDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: OUT
+  default: output
+  userInterface:
+    control: CHOOSE_DIRECTORY
+    label: Video Output Directory
+    groupLabel: Video Encoding
+- name: EncodingPreset
+  description: Controls the encoding speed to compression ratio.
+  type: STRING
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Encoding Preset (FFmpeg)
+    groupLabel: Video Encoding
+  default: slower
+  allowedValues: [ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow]
+- name: ConstantRateFactor
+  description: Ranges from 0 (lossless) to 51 (worst quality). 17-18 is nearly visually lossless.
+  type: INT
+  userInterface:
+    control: SPIN_BOX
+    label: Constant Rate Factor (FFmpeg H.264)
+    groupLabel: Video Encoding
+  default: 18
+  minValue: 0
+  maxValue: 51
+
+# Advanced
+- name: TurntableBaseScene
+  description: The base Maya scene file for the turntable. It must be compatible with the job bundle code.
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  default: scenes/turntable_base_scene.ma
+  userInterface:
+    control: CHOOSE_INPUT_FILE
+    label: Turntable Base Scene
+    groupLabel: Advanced
+    fileFilters:
+    - label: Maya Scene Files
+      patterns: ["*.ma", "*.mb"]
+
+# Software Environment
+- name: CondaPackages
+  type: STRING
+  description: Choose which Conda packages to install for the render. Requires a conda queue environment to process the value.
+  default: maya=2024 maya-mtoa maya-openjd=0.14 ffmpeg
+  userInterface:
+    control: LINE_EDIT
+    label: Conda Packages
+    groupLabel: Software Environment
+
+# Hidden
+- name: WorkspacePath
+  description: A temporary directory for the job to use.
+  userInterface:
+    control: HIDDEN
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: OUT
+  default: workspace
+
+jobEnvironments:
+- name: JobEnvVars
+  variables:
+    # Turn off buffering in Python
+    PYTHONUNBUFFERED: "True"
+
+steps:
+- name: PrepareSceneFile
+  script:
+    actions:
+      onRun:
+        command: mayapy
+        args: ["{{Task.File.PrepareMayaSceneFile}}"]
+    embeddedFiles:
+    - name: PrepareMayaSceneFile
+      filename: prepare_maya_scene_file.py
+      type: TEXT
+      data: |
+        import sys
+        import os
+        import math
+
+        import maya.standalone
+        from maya import cmds
+        import maya.OpenMaya as om
+
+        os.makedirs(r"{{Param.WorkspacePath}}", exist_ok=True)
+        maya.standalone.initialize()
+
+        frame_range = r"{{Param.FrameRange}}".split("-")
+        start_frame = int(frame_range[0])
+        end_frame = int(frame_range[1])
+
+        # Print some info about the Maya runtime
+        print()
+        print(f"Maya version: {maya.cmds.about(installedVersion=True)}")
+        print(f"Maya Python version: {sys.version}")
+        print(f"Python binary: {sys.executable}")
+        print()
+
+        # Load the base turntable scene
+        cmds.file(r"{{Param.TurntableBaseScene}}", o=True, force=True)
+
+        # Set the render settings
+        cmds.setAttr("defaultRenderGlobals.ren", "arnold", type="string")
+        cmds.setAttr("defaultRenderGlobals.animation", 1)
+        cmds.setAttr('defaultRenderGlobals.putFrameBeforeExt', 1)
+        cmds.setAttr("defaultRenderGlobals.imageFormat", 32)
+        cmds.setAttr("defaultRenderGlobals.outFormatControl", 0)
+        cmds.setAttr("defaultRenderGlobals.extensionPadding", 4)
+
+        # Adjust adaptive sampling options
+        cmds.setAttr("defaultArnoldRenderOptions.enable_adaptive_sampling", "{{Param.EnableAdaptiveSampling}}" == "TRUE")
+        cmds.setAttr("defaultArnoldRenderOptions.AA_samples_max", {{Param.AdaptiveMaxCameraAA}})
+
+        input_geometry_file = r"{{Param.InputGeometryFile}}"
+        if input_geometry_file != "":
+            # Delete and replace the default subject
+            cmds.delete("subject")
+            cmds.file(input_geometry_file, i=True, groupReference=True, groupName="subject")
+            geometry_file_coord_sys = r"{{Param.GeometryFileCoordSystem}}"
+            if geometry_file_coord_sys == "Y-UP-RIGHT-HANDED":
+                # This is Maya's default coordinate system
+                pass
+            elif geometry_file_coord_sys == "Z-UP-RIGHT-HANDED":
+                # Rotate the Z axis 90 degrees towards Y
+                cmds.setAttr("subject.rx", -90)
+            else:
+                raise ValueError(f"GeometryFileCoordSystem must be Y-UP-RIGHT-HANDED or Z-UP-RIGHT-HANDED, not {geometry_file_coord_sys}")
+
+        bounds = cmds.exactWorldBoundingBox("subject")
+
+        # Determine an appropriate camera to subject distance based on the camera intrinsics and the subject's bounds
+        bbox_vert = bounds[4] - bounds[1]
+        bbox_horiz = math.sqrt(sum((max_val - min_val) ** 2 for max_val, min_val in zip(bounds[:3:2], bounds[3::2])))
+        focal_length = cmds.camera("camera1", q=True, focalLength=True)
+        vert_aperture = cmds.camera("camera1", q=True, verticalFilmAperture=True) * 25.4
+        horiz_aperture = cmds.camera("camera1", q=True, horizontalFilmAperture=True) * 25.4
+        subject_distance = focal_length * max(bbox_vert / vert_aperture, bbox_horiz / horiz_aperture) / {{Param.CameraDistanceScale}}
+
+        print(f"Camera horizontal aperture is {horiz_aperture}")
+        print(f"Camera vertical aperture is {vert_aperture}")
+        print(f"Camera focal length is {focal_length}")
+        print(f"Subject bounds are {bounds}")
+        print(f"Subject bounds horizontal diagonal length is {bbox_horiz}")
+        print(f"Subject bounds vertical length is {bbox_vert}")
+        print(f"Setting camera/subject distance to {subject_distance}")
+
+        if "{{Param.CenterObject}}" == "TRUE" and input_geometry_file:
+            subject_translate = (-0.5 * (bounds[0] + bounds[3]),
+                      -bounds[1],
+                      -0.5 * (bounds[2] + bounds[5]))
+            print(f"Centering object bounds by applying subject translation of {subject_translate}")
+            cmds.move(*subject_translate, "subject", absolute=True)
+
+            # Refresh the bounds since we moved the object
+            bounds = cmds.exactWorldBoundingBox("subject")
+
+        # Move the camera to the starting position
+        lookat_y = 0.5 * (bounds[1] + bounds[4])
+        cmds.move(0, {{Param.ViewSlope}} * subject_distance + lookat_y, subject_distance, "camera1", absolute=True)
+        # Adjust the camera to look at the center of the object's bounds at the rotation axis
+        cmds.viewLookAt("camera1", position=(0.0, lookat_y, 0.0))
+
+        # Create the rotation motion.
+        cmds.spaceLocator(name="rotator")
+        what_to_rotate = r"{{Param.WhatToRotate}}"
+        if what_to_rotate == "CAMERA":
+            cmds.parent("camera1", "rotator")
+            rotation_multiplier = 1
+        elif what_to_rotate == "SUBJECT":
+            cmds.parent("subject", "rotator")
+            rotation_multiplier = -1
+        else:
+            raise ValueError(f"WhatToRotate must be CAMERA or SUBJECT, not {what_to_rotate}")
+        turntable_mode = r"{{Param.AnimationCurve}}"
+        if turntable_mode == "EASE_IN_OUT":
+            cmds.setKeyframe("rotator.ry", time=start_frame, outTangentType="flat", value=0)
+            cmds.setKeyframe("rotator.ry", time=end_frame, inTangentType="flat", value=rotation_multiplier * 360)
+        elif turntable_mode == "LOOPABLE":
+            cmds.setKeyframe("rotator.ry", time=start_frame, outTangentType="linear", value=0)
+            cmds.setKeyframe("rotator.ry", time=end_frame + 1, inTangentType="linear", value=rotation_multiplier * 360)
+        else:
+            raise ValueError(f"AnimationCurve must be EASE_IN_OUT or LOOPABLE, not {turntable_mode}")
+
+        # Save the Maya scene file
+        maya_scene_file = r"{{Param.WorkspacePath}}/{{Param.SceneName}}_scene.mb"
+        print(f"Saving Maya scene file: {maya_scene_file}")
+        cmds.file(rename=maya_scene_file)
+        cmds.file(save=True, type='mayaBinary')
+
+        # Graceful shut down
+        maya.standalone.uninitialize()
+
+- name: RenderSequence
+  parameterSpace:
+    taskParameterDefinitions:
+    - name: Frame
+      type: INT
+      range: "{{Param.FrameRange}}"
+  dependencies:
+  - dependsOn: PrepareSceneFile
+  stepEnvironments:
+  - name: Maya
+    description: Runs Maya in the background.
+    script:
+      embeddedFiles:
+      - name: initData
+        filename: init-data.yaml
+        type: TEXT
+        data: |
+          renderer: arnold
+          render_layer: masterLayer
+          camera: camera1
+          scene_file: '{{Param.WorkspacePath}}/{{Param.SceneName}}_scene.mb'
+          project_path: '{{Param.WorkspacePath}}'
+          output_file_path: '{{Param.WorkspacePath}}/outputs'
+          strict_error_checking: false
+          output_file_prefix: '{{Param.SceneName}}'
+          image_width: {{Param.ImageWidth}}
+          image_height: {{Param.ImageHeight}}
+      actions:
+        onEnter:
+          command: maya-openjd
+          args:
+          - daemon
+          - start
+          - --path-mapping-rules
+          - file://{{Session.PathMappingRulesFile}}
+          - --init-data
+          - file://{{Env.File.initData}}
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+        onExit:
+          command: maya-openjd
+          args:
+          - daemon
+          - stop
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+  script:
+    embeddedFiles:
+    - name: runData
+      filename: run-data.yaml
+      type: TEXT
+      data: |
+        frame: {{Task.Param.Frame}}
+    actions:
+      onRun:
+        command: MayaAdaptor
+        args:
+        - daemon
+        - run
+        - --run-data
+        - file://{{Task.File.runData}}
+        cancelation:
+          mode: NOTIFY_THEN_TERMINATE
+        timeout: 600
+
+- name: EncodeVideo
+  dependencies:
+  - dependsOn: RenderSequence
+  script:
+    actions:
+      onRun:
+        command: bash
+        args:
+          - "{{Task.File.Encode}}"
+    embeddedFiles:
+    - name: Encode
+      type: TEXT
+      runnable: True
+      data: |
+        #!/bin/env bash
+
+        set -xeuo pipefail
+
+        FRAME_RANGE='{{Param.FrameRange}}'
+        START=${FRAME_RANGE%%-*}
+        END=${FRAME_RANGE##*-}
+
+        mkdir -p '{{Param.VideoOutputDir}}'
+
+        ffmpeg -r 24 \
+            -start_number $START \
+            -i '{{Param.WorkspacePath}}/outputs/{{Param.SceneName}}.%04d.png' \
+            -frames:v $(($END - $START)) \
+            -pix_fmt yuv420p \
+            -vf "scale=in_color_matrix=bt709:out_color_matrix=bt709" \
+            -c:v libx264 \
+            -preset {{Param.EncodingPreset}} \
+            -crf {{Param.ConstantRateFactor}} \
+            -color_range tv \
+            -colorspace bt709 \
+            -color_primaries bt709 \
+            -color_trc iec61966-2-1 \
+            -movflags faststart \
+            '{{Param.VideoOutputDir}}/{{Param.SceneName}}.mp4'

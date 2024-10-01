@@ -16,6 +16,10 @@ conflict_res_option = "NOT\\_SELECTED"
 conflict_res_option_expected_text = conflict_res_option.replace("\\_", "_")
 logging_level = "WARNING"
 
-# blender submitter job bundle directory
-blender_filepath = "/home/rocky/deadline-cloud-fork/deadline-cloud/test/squish/test_files/blender/chicken_anim_nimble"
-blender_job_bundle_folder = "chicken_anim_nimble"
+# blender job bundle directory
+blender_filepath = "/home/rocky/deadline-cloud-fork/deadline-cloud/test/squish/deadline_cloud_samples/blender_render"
+blender_job_bundle_folder = "blender_render"
+
+# maya job bundle directory
+maya_filepath = "/home/rocky/deadline-cloud-fork/deadline-cloud/test/squish/deadline_cloud_samples/turntable_with_maya_arnold"
+maya_job_bundle_folder = "turntable_with_maya_arnold"
