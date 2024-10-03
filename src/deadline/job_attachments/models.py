@@ -11,12 +11,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Set
 
-from deadline.job_attachments.asset_manifests import HashAlgorithm
+from deadline.job_attachments.asset_manifests import HashAlgorithm, hash_data
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
 )
-from deadline.job_attachments.exceptions import MissingS3RootPrefixError
+
+from deadline.job_attachments.exceptions import (
+    MissingS3RootPrefixError,
+    MalformedAttachmentSettingError,
+)
 
 from ._utils import (
     _generate_random_guid,
@@ -215,6 +219,20 @@ class JobAttachmentS3Settings:
     # The S3 bucket prefix all files are stored relative to. (required)
     rootPrefix: str  # pylint: disable=invalid-name
 
+    @staticmethod
+    def from_root_path(root_path: str) -> JobAttachmentS3Settings:
+        path_split: list = root_path.split("/")
+
+        if len(path_split) < 2:
+            raise MalformedAttachmentSettingError(
+                "Invalid root path format, should be s3BucketName/rootPrefix."
+            )
+
+        return JobAttachmentS3Settings(path_split[0], "/".join(path_split[1:]))
+
+    def to_root_path(self) -> str:
+        return _join_s3_paths(self.s3BucketName, self.rootPrefix)
+
     def full_cas_prefix(self) -> str:
         self._validate_root_prefix()
         return _join_s3_paths(self.rootPrefix, S3_DATA_FOLDER_NAME)
@@ -376,3 +394,21 @@ class ManifestDownloadResponse:
 
     downloaded: list[ManifestDownload] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PathMappingRule:
+    source_path_format: str
+    """The path format associated with the source path (windows vs posix)"""
+
+    source_path: str
+    """The path we're looking to change"""
+
+    destination_path: str
+    """The path to transform the source path to"""
+
+    def get_hashed_source(self, hash_alg: HashAlgorithm) -> str:
+        return hash_data(f"{self.source_path_format}{self.source_path}".encode("utf-8"), hash_alg)
+
+    def get_hashed_source_path(self, hash_alg: HashAlgorithm) -> str:
+        return hash_data(self.source_path.encode("utf-8"), hash_alg)
