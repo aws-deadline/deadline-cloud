@@ -2,7 +2,7 @@
 
 """ Module for File Attachment synching """
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 import os
 import shutil
 import sys
@@ -56,6 +56,7 @@ from .models import (
     ManifestProperties,
     OutputFile,
     PathFormat,
+    PathMappingRule,
 )
 from .upload import S3AssetUploader
 from .os_file_permission import FileSystemPermissionSettings, PosixFileSystemPermissionSettings
@@ -67,18 +68,6 @@ from ._utils import (
 )
 
 logger = getLogger("deadline.job_attachments")
-
-
-@dataclass
-class PathMappingRule:
-    source_path_format: str
-    """The path format associated with the source path (windows vs posix)"""
-
-    source_path: str
-    """The path we're looking to change"""
-
-    destination_path: str
-    """The path to transform the source path to"""
 
 
 class AssetSync:

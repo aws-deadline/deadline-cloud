@@ -1,7 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from unittest.mock import patch
 
-from deadline.job_attachments.models import PathFormat, StorageProfileOperatingSystemFamily
+from deadline.job_attachments.models import (
+    PathFormat,
+    StorageProfileOperatingSystemFamily,
+    PathMappingRule,
+    JobAttachmentS3Settings,
+)
+from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
+from deadline.job_attachments.exceptions import MalformedAttachmentSettingError
 
 import pytest
 
@@ -48,3 +55,40 @@ class TestModels:
         """
         with pytest.raises(ValueError):
             StorageProfileOperatingSystemFamily(input)
+
+    def test_path_mapping_rules(self):
+        """
+        Test rule construction and hashing the source attributes
+        """
+        path_mapping = PathMappingRule(
+            source_path_format="posix",
+            source_path="/local/home/test",
+            destination_path="/loca/home/test/output",
+        )
+        assert "f59f1ffe44f9a64aa7330625e3b70447" == path_mapping.get_hashed_source(
+            HashAlgorithm.XXH128
+        )
+        assert "4ab97c97c825551aaa963888278ef9ec" == path_mapping.get_hashed_source_path(
+            HashAlgorithm.XXH128
+        )
+
+    @pytest.mark.parametrize(
+        ("input", "output"),
+        [
+            ("s3BucketName/rootPrefix", JobAttachmentS3Settings("s3BucketName", "rootPrefix")),
+            ("s3BucketName/root/Prefix", JobAttachmentS3Settings("s3BucketName", "root/Prefix")),
+        ],
+    )
+    def test_job_attachment_setting_root_path(self, input: str, output: JobAttachmentS3Settings):
+        """
+        Test Job Attachment S3 Settings from and to S3 root path
+        """
+        assert output == JobAttachmentS3Settings.from_root_path(input)
+        assert input == output.to_root_path()
+
+    def test_job_attachment_setting_from_path_error(self):
+        """
+        Test Job Attachment S3 Settings from malformed S3 root path
+        """
+        with pytest.raises(MalformedAttachmentSettingError):
+            JobAttachmentS3Settings.from_root_path("s3BucketOnly")

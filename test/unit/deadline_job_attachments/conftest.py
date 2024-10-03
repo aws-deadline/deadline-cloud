@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Generator
@@ -29,6 +30,16 @@ from deadline.job_attachments.models import (  # noqa: E402 isort:skip
     PathFormat,
     Queue,
 )
+
+
+@pytest.fixture(scope="function")
+def temp_assets_dir():
+    """
+    Fixture to provide a temporary directory for asset files.
+    """
+
+    with tempfile.TemporaryDirectory() as assets_dir:
+        yield assets_dir
 
 
 @pytest.fixture(scope="function")
