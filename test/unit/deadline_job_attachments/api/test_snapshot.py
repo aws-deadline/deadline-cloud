@@ -223,6 +223,95 @@ class TestSnapshotAPI:
 
             assert second_test_file_name in files
 
+    def test_snapshot_time_diff(self, temp_dir):
+        """
+        Create a snapshot with 1 file. Change the time stamp of the file.
+        The diff manifest should contain the file again.
+        """
+
+        # Given snapshot folder and 1 test file
+        root_dir = os.path.join(temp_dir, "snapshot")
+
+        test_file_name = "test_file"
+        test_file = os.path.join(root_dir, test_file_name)
+        os.makedirs(os.path.dirname(test_file), exist_ok=True)
+        with open(test_file, "w") as f:
+            f.write("testing123")
+
+        # When
+        manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
+            root=root_dir, destination=temp_dir, name="test"
+        )
+
+        # Then
+        assert manifest is not None
+        assert manifest.manifest is not None
+
+        # Given the file's timestamp is updated.
+        os.utime(test_file, (1234567890, 1234567890))
+
+        # When snapshot again.
+        diffed_manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
+            root=root_dir, destination=temp_dir, name="test", diff=manifest.manifest
+        )
+
+        # Then. We should find the file again.
+        assert diffed_manifest is not None
+        assert diffed_manifest.manifest is not None
+        with open(diffed_manifest.manifest, "r") as diff_manifest_file:
+            manifest_payload = json.load(diff_manifest_file)
+            assert len(manifest_payload["paths"]) == 1
+            files = set()
+            for item in manifest_payload["paths"]:
+                files.add(item["path"])
+
+            assert test_file_name in files
+
+    def test_snapshot_size_diff(self, temp_dir):
+        """
+        Create a snapshot with 1 file. Change the contents of the file.
+        The diff manifest should contain the file again.
+        """
+
+        # Given snapshot folder and 1 test file
+        root_dir = os.path.join(temp_dir, "snapshot")
+
+        test_file_name = "test_file"
+        test_file = os.path.join(root_dir, test_file_name)
+        os.makedirs(os.path.dirname(test_file), exist_ok=True)
+        with open(test_file, "w") as f:
+            f.write("testing123")
+
+        # When
+        manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
+            root=root_dir, destination=temp_dir, name="test"
+        )
+
+        # Then
+        assert manifest is not None
+        assert manifest.manifest is not None
+
+        # Given the file's contents is updated.
+        with open(test_file, "w") as f:
+            f.write("testing123testing123testing123")
+
+        # When snapshot again.
+        diffed_manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
+            root=root_dir, destination=temp_dir, name="test", diff=manifest.manifest
+        )
+
+        # Then. We should find the file again.
+        assert diffed_manifest is not None
+        assert diffed_manifest.manifest is not None
+        with open(diffed_manifest.manifest, "r") as diff_manifest_file:
+            manifest_payload = json.load(diff_manifest_file)
+            assert len(manifest_payload["paths"]) == 1
+            files = set()
+            for item in manifest_payload["paths"]:
+                files.add(item["path"])
+
+            assert test_file_name in files
+
     def test_snapshot_diff_no_diff(self, temp_dir):
         """
         Create a snapshot with 1 file. Snapshot again and diff. It should have no manifest.
