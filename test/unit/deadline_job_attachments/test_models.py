@@ -62,13 +62,10 @@ class TestModels:
         """
         path_mapping = PathMappingRule(
             source_path_format="posix",
-            source_path="/local/home/test",
-            destination_path="/loca/home/test/output",
+            source_path="/tmp",
+            destination_path="/local/home/test/output",
         )
-        assert "f59f1ffe44f9a64aa7330625e3b70447" == path_mapping.get_hashed_source(
-            HashAlgorithm.XXH128
-        )
-        assert "4ab97c97c825551aaa963888278ef9ec" == path_mapping.get_hashed_source_path(
+        assert "a0271fe0c8b1c1f99b82b442cd878122" == path_mapping.get_hashed_source_path(
             HashAlgorithm.XXH128
         )
 
@@ -92,3 +89,24 @@ class TestModels:
         """
         with pytest.raises(MalformedAttachmentSettingError):
             JobAttachmentS3Settings.from_root_path("s3BucketOnly")
+
+    @pytest.mark.parametrize(
+        ("input", "output"),
+        [
+            ("s3://BucketName/rootPrefix", JobAttachmentS3Settings("BucketName", "rootPrefix")),
+            ("s3://BucketName/root/Prefix", JobAttachmentS3Settings("BucketName", "root/Prefix")),
+        ],
+    )
+    def test_job_attachment_setting_root_uri(self, input: str, output: JobAttachmentS3Settings):
+        """
+        Test Job Attachment S3 Settings from and to S3 root uri
+        """
+        assert output == JobAttachmentS3Settings.from_s3_root_uri(input)
+        assert input == output.to_s3_root_uri()
+
+    def test_job_attachment_setting_from_s3_root_uri_error(self):
+        """
+        Test Job Attachment S3 Settings from malformed S3 root uri
+        """
+        with pytest.raises(MalformedAttachmentSettingError):
+            JobAttachmentS3Settings.from_s3_root_uri("s3://s3BucketOnly")
