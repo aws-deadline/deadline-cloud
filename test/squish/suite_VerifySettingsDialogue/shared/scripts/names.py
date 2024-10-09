@@ -288,8 +288,6 @@ general_settings_Current_logging_level_QComboBox = {
     "unnamed": 1,
     "visible": 1,
 }
-#
-
 qFileDialog_fileNameLabel_QLabel = {"name": "fileNameLabel", "type": "QLabel", "visible": 1, "window": qFileDialog_QFileDialog}
 fileNameEdit_QLineEdit = {"buddy": qFileDialog_fileNameLabel_QLabel, "name": "fileNameEdit", "type": "QLineEdit", "visible": 1}
 qFileDialog_Choose_QPushButton = {"text": "Choose", "type": "QPushButton", "unnamed": 1, "visible": 1, "window": qFileDialog_QFileDialog}
@@ -317,3 +315,18 @@ queue_Environment_Conda_Conda_Packages_QLabel = {"container": queue_Environment_
 queue_Environment_Conda_Conda_Channels_QLabel = {"container": queue_Environment_Conda_JobTemplateGroupLayout, "text": "Conda Channels", "type": "QLabel", "unnamed": 1, "visible": 1}
 o_SharedJobSettingsWidget = {"container": qt_tabwidget_stackedwidget_QScrollArea, "type": "SharedJobSettingsWidget", "unnamed": 1, "visible": 1}
 submit_to_AWS_Deadline_Cloud_DeadlineAuthenticationStatusWidget = {"type": "DeadlineAuthenticationStatusWidget", "unnamed": 1, "visible": 1, "window": submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog}
+queue_Environment_Conda_Conda_Packages_QLineEdit = {"container": queue_Environment_Conda_JobTemplateGroupLayout, "leftWidget": queue_Environment_Conda_Conda_Packages_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+queue_Environment_Conda_Conda_Channels_QLineEdit = {"container": queue_Environment_Conda_JobTemplateGroupLayout, "leftWidget": queue_Environment_Conda_Conda_Channels_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+submit_to_AWS_Deadline_Cloud_QTabWidget = {"type": "QTabWidget", "unnamed": 1, "visible": 1, "window": submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog}
+software_Environment_JobTemplateGroupLayout = {"container": qt_tabwidget_stackedwidget_QScrollArea, "name": "Software Environment", "type": "_JobTemplateGroupLayout", "visible": 1}
+software_Environment_Conda_Packages_QLabel = {"container": software_Environment_JobTemplateGroupLayout, "text": "Conda Packages", "type": "QLabel", "unnamed": 1, "visible": 1}
+software_Environment_Conda_Packages_QLineEdit = {"container": software_Environment_JobTemplateGroupLayout, "leftWidget": software_Environment_Conda_Packages_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+render_Parameters_JobTemplateGroupLayout = {"container": qt_tabwidget_stackedwidget_QScrollArea, "name": "Render Parameters", "type": "_JobTemplateGroupLayout", "visible": 1}
+render_Parameters_QLineEdit = {"container": render_Parameters_JobTemplateGroupLayout, "occurrence": 3, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+render_Parameters_Output_File_Pattern_QLabel = {"container": render_Parameters_JobTemplateGroupLayout, "text": "Output File Pattern", "type": "QLabel", "unnamed": 1, "visible": 1}
+render_Parameters_Output_File_Pattern_QLineEdit = {"container": render_Parameters_JobTemplateGroupLayout, "leftWidget": render_Parameters_Output_File_Pattern_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+render_Parameters_Output_File_Format_QLabel = {"container": render_Parameters_JobTemplateGroupLayout, "text": "Output File Format", "type": "QLabel", "unnamed": 1, "visible": 1}
+render_Parameters_Output_File_Format_QComboBox = {"container": render_Parameters_JobTemplateGroupLayout, "leftWidget": render_Parameters_Output_File_Format_QLabel, "type": "QComboBox", "unnamed": 1, "visible": 1}
+render_Parameters_Frames_QLabel = {"container": render_Parameters_JobTemplateGroupLayout, "text": "Frames", "type": "QLabel", "unnamed": 1, "visible": 1}
+render_Parameters_Frames_QLineEdit = {"container": render_Parameters_JobTemplateGroupLayout, "leftWidget": render_Parameters_Frames_QLabel, "type": "QLineEdit", "unnamed": 1, "visible": 1}
+o_JobBundleSettingsWidget = {"container": qt_tabwidget_stackedwidget_QScrollArea, "type": "JobBundleSettingsWidget", "unnamed": 1, "visible": 1}
