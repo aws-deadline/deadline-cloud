@@ -30,6 +30,7 @@ def main():
     # verify shared job settings tab contains correct defaults based on selected blender job bundle
     choose_jobbundledir_helpers.verify_shared_job_settings()
     # verify job-specific settings tab contains correct defaults based on selected blender job bundle
+    
     # verify job attachments tab contains correct defaults based on selected blender job bundle
     # verify settings can be opened and closed from Submitter dialogue
     # verify export bundle button works
@@ -42,7 +43,7 @@ def cleanup():
     choose_jobbundledir_helpers.open_settings_dialogue()
     loginout_helpers.set_aws_profile_name_and_verify_auth(config.profile_name)
     choose_jobbundledir_helpers.close_settings_dialogue()
-    # close submitter dialogue by hitting 'x'
+    # close AWS Submitter dialogue by hitting 'x'
     sendEvent("QCloseEvent", waitForObject(names.submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog))
 
 

@@ -62,37 +62,35 @@ def open_settings_dialogue():
 def close_settings_dialogue():
     # click on 'OK' button to close Deadline Settings dialogue
     gui_helpers.close_deadline_config_gui()
-    # verify Submitter dialogue remains open
+    # verify AWS Deadline Cloud Submitter dialogue remains open
+    test.compare(str(squish.waitForObjectExists(names.submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog).windowTitle), 
+        "Submit to AWS Deadline Cloud", 
+        "Expect AWS Deadline Cloud Submitter window title to be present.")
     test.compare(
-        str(squish.waitForObjectExists(choose_jobbundledir_locators.qFileDialog_QFileDialog).windowTitle), 
-        "Choose job bundle directory", 
-        "Expect Choose job bundle directory window title to be present.",
-    )
-    test.compare(
-        squish.waitForObjectExists(choose_jobbundledir_locators.qFileDialog_QFileDialog).visible,
+        squish.waitForObjectExists(names.submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog).visible,
         True,
-        "Expect Choose job bundle directory dialogue to be open.",
+        "Expect AWS Deadline Cloud Submitter to be open.",
     )
    
 def verify_shared_job_settings():
     # verify shared job settings widget is visible when on shared job settings tab
-    test.compare(waitForObjectExists(names.o_SharedJobSettingsWidget).visible, True)
-    # verify default job name is set
-    test.compare(str(squish.waitForObjectExists(names.name_QLineEdit).displayText), config.blender_job_bundle_folder)
+    test.compare(squish.waitForObjectExists(names.o_SharedJobSettingsWidget).visible, True)
+    # verify default job name is set to correct name
+    test.compare(str(squish.waitForObjectExists(names.name_QLineEdit).displayText), config.blender_job_name)
     # verify default description contains no text
-    test.compare(str(waitForObjectExists(names.job_Properties_Description_QLineEdit).displayText), "")
+    test.compare(str(squish.waitForObjectExists(names.job_Properties_Description_QLineEdit).displayText), config.empty_desc)
     # verify correct farm name is displayed
-    test.compare(str(waitForObjectExists(names.deadline_Cloud_settings_Deadline_Cloud_Squish_Farm_QLabel).text), "Deadline Cloud Squish Farm")
+    test.compare(str(squish.waitForObjectExists(names.deadline_Cloud_settings_Deadline_Cloud_Squish_Farm_QLabel).text), config.farm_name)
     # verify farm name tooltip contains correct farm description
-    test.compare(str(waitForObjectExists(names.deadline_Cloud_settings_Deadline_Cloud_Squish_Farm_QLabel).toolTip), "Squish Automation Test Framework")
+    test.compare(str(squish.waitForObjectExists(names.deadline_Cloud_settings_Deadline_Cloud_Squish_Farm_QLabel).toolTip), config.farm_desc)
     # verify correct queue name is displayed
-    test.compare(str(waitForObjectExists(names.deadline_Cloud_settings_Squish_Automation_Queue_QLabel).text), "Squish Automation Queue")
+    test.compare(str(squish.waitForObjectExists(names.deadline_Cloud_settings_Squish_Automation_Queue_QLabel).text), config.queue_name)
     # verify Conda Packages contains correct tooltip text
-    test.compare(str(waitForObjectExists(names.queue_Environment_Conda_Conda_Packages_QLabel).toolTip), "This is a space-separated list of Conda package match specifications to install for the job. E.g. \"blender=3.6\" for a job that renders frames in Blender 3.6.\nSee https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/pkg-specs.html#package-match-specifications\n")
+    test.compare(str(squish.waitForObjectExists(names.queue_Environment_Conda_Conda_Packages_QLabel).toolTip), config.tooltip_text_conda_packages)
     # verify Conda Channels contains correct tooltip text
-    test.compare(str(waitForObjectExists(names.queue_Environment_Conda_Conda_Channels_QLabel).toolTip), "This is a space-separated list of Conda channels from which to install packages. Deadline Cloud SMF packages are installed from the \"deadline-cloud\" channel that is configured by Deadline Cloud.\nAdd \"conda-forge\" to get packages from the https://conda-forge.org/ community, and \"defaults\" to get packages from Anaconda Inc (make sure your usage complies with https://www.anaconda.com/terms-of-use).\n")
+    test.compare(str(squish.waitForObjectExists(names.queue_Environment_Conda_Conda_Channels_QLabel).toolTip), config.tooltip_text_conda_channels)
     # verify authentication status widget is present when on shared job settings tab
-    test.compare(waitForObjectExists(names.submit_to_AWS_Deadline_Cloud_DeadlineAuthenticationStatusWidget).visible, True)
+    test.compare(squish.waitForObjectExists(names.submit_to_AWS_Deadline_Cloud_DeadlineAuthenticationStatusWidget).visible, True)
     
 # def submit_blender_job_bundle():
     
