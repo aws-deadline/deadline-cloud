@@ -8,6 +8,7 @@ import logging
 from logging import getLogger
 
 import click
+import os
 
 from .. import version
 from ..config import get_setting, get_setting_default
@@ -21,6 +22,8 @@ from ._groups.handle_web_url_command import cli_handle_web_url
 from ._groups.job_group import cli_job
 from ._groups.queue_group import cli_queue
 from ._groups.worker_group import cli_worker
+from ._groups.attachment_group import cli_attachment
+from ._groups.manifest_group import cli_manifest
 
 logger = getLogger(__name__)
 
@@ -76,3 +79,7 @@ main.add_command(cli_handle_web_url)
 main.add_command(cli_job)
 main.add_command(cli_queue)
 main.add_command(cli_worker)
+
+if os.environ.get("JOB_ATTACHMENT_CLI") is not None:
+    main.add_command(cli_attachment)
+    main.add_command(cli_manifest)

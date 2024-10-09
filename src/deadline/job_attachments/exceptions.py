@@ -74,6 +74,18 @@ class JobAttachmentS3BotoCoreError(AssetSyncError):
         super().__init__(message)
 
 
+class MissingJobAttachmentSettingsError(JobAttachmentsError):
+    """
+    Exception raised when attempting to use Job Attachments but the settings are not set in Queue.
+    """
+
+
+class ManifestCreationException(Exception):
+    """
+    Exception for errors related to Creating Manifests.
+    """
+
+
 class MissingS3BucketError(JobAttachmentsError):
     """
     Exception raised when attempting to use Job Attachments but the S3 bucket is not set in Queue.
@@ -83,6 +95,12 @@ class MissingS3BucketError(JobAttachmentsError):
 class MissingS3RootPrefixError(JobAttachmentsError):
     """
     Exception raised when attempting to use Job Attachments but the S3 root prefix is not set in Queue.
+    """
+
+
+class MalformedAttachmentSettingError(JobAttachmentsError):
+    """
+    Exception raised when encountering error parsing input attachment settings.
     """
 
 

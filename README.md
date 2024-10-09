@@ -1,4 +1,4 @@
-# AWS Deadline Cloud client
+# AWS Deadline Cloud Client
 
 [![pypi](https://img.shields.io/pypi/v/deadline.svg?style=flat)](https://pypi.python.org/pypi/deadline)
 [![python](https://img.shields.io/pypi/pyversions/deadline.svg?style=flat)](https://pypi.python.org/pypi/deadline)
@@ -7,8 +7,8 @@
 AWS Deadline Cloud client is a multi-purpose python library and command line tool for interacting with and submitting
 [Open Job Description (OpenJD)][openjd] jobs to [AWS Deadline Cloud][deadline-cloud].
 
-To support building workflows on top of AWS Deadline Cloud it implements its own user interaction, job creation, file upload/download, and other useful
-helpers around the service's api. It can function as a pipeline tool, a standalone gui application, or even be embedded within other applications' runtimes.
+To support building workflows on top of AWS Deadline Cloud, it implements its own user interaction, job creation, file upload/download, and other useful
+helpers around the service's API. It can function as a pipeline tool, a standalone GUI application, or even be embedded within other applications' runtimes.
 
 Notable features include:
 * A command-line interface with subcommands for querying your AWS Deadline Cloud resources, and submitting jobs to your AWS Deadline Cloud Farm.
@@ -46,8 +46,8 @@ versions will increment during this initial development stage, they are describe
 ## Contributing
 
 We welcome all contributions. Please see [CONTRIBUTING.md](https://github.com/aws-deadline/deadline-cloud/blob/mainline/CONTRIBUTING.md)
-for guidance on how to contribute. Please report issues like bugs, inaccurate or confusing information, and so on
-and make feature requests in the [issue tracker](https://github.com/aws-deadline/deadline-cloud/issues). We encourage
+for guidance on how to contribute. Please report issues such as bugs, inaccurate or confusing information, and so on,
+by making feature requests in the [issue tracker](https://github.com/aws-deadline/deadline-cloud/issues). We encourage
 code contributions in the form of [pull requests](https://github.com/aws-deadline/deadline-cloud/pulls). 
 
 ## Getting Started
@@ -78,7 +78,7 @@ api.list_farms()
 # {'farms': [{'farmId': 'farm-1234567890abcdefg', 'displayName': 'my-first-farm', ...},]}
 ```
 
-## Job-related files
+## Job-related Files
 For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.  
 
 ### Job attachments
@@ -104,19 +104,19 @@ deadline config gui
 ```
 
 
-Shared storage is possible with customer-managed fleets (CMF) but not service-managed fleets (SMF). See [shared storage](shared-storage) for more information.
+Shared storage is possible with customer-managed fleets (CMF) but not service-managed fleets (SMF). See [shared storage][shared-storage] for more information.
 
-## Job bundles
+## Job Bundles
 
-A job bundle is one of the tools that you can use to define jobs for AWS Deadline Cloud. They group an [Open Job Description](openjd) template with
+A job bundle is one of the tools that you can use to define jobs for AWS Deadline Cloud. They group an [Open Job Description (OpenJD)][openjd] template with
 additional information such as files and directories that your jobs use with job attachments. You can use this package's command-line interface and/or
-its Python interface to use a job bundle to submit jobs for a queue to run. Please see the [Job Bundles](job-bundles)
+its Python interface to use a job bundle to submit jobs for a queue to run. Please see the [Job Bundles][job-bundles]
 section of the AWS Deadline Cloud Developer Guide for detailed information on job bundles.
 
-At minimum a job bundle is a folder that contains an [OpenJD][openjd] template as a file named `template.json` or `template.yaml`, however it can optionally include:
-1. an `asset_references.yaml` - lists file inputs and outputs,
-2. a `parameter_values.yaml` - contains the selected values for the job template's parameters,
-3. and any number of additional files required for the job.
+At a minimum, a job bundle is a folder that contains an [OpenJD][openjd] template as a file named `template.json` or `template.yaml`. However, it can optionally include:
+1. An `asset_references.yaml` file - lists file inputs and outputs.
+2. A `parameter_values.yaml` file - contains the selected values for the job template's parameters.
+3. Any number of additional files required for the job.
 
 For example job bundles, visit the [samples repository][deadline-cloud-samples].
 
@@ -130,7 +130,7 @@ or if you have the optional GUI components installed, you can load up a job bund
 $ deadline bundle gui-submit --browse
 ```
 
-On submission a job bundle will be created in the job history directory (default: `~/.deadline/job_history`).
+On submission, a job bundle will be created in the job history directory (default: `~/.deadline/job_history`).
 
 ## Configuration
 
@@ -145,7 +145,7 @@ To see a list of settings that can be configured, run:
 $ deadline config --help
 ```
 
-Or you can manage settings by a graphical interface if you have the optional gui dependencies:
+Or you can manage settings by a graphical user-interface if you have the optional GUI dependencies:
 ```sh
 $ deadline config gui
 ```
@@ -183,13 +183,13 @@ This project has adopted the [Amazon Open Source Code of Conduct](https://aws.gi
 For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
 opensource-codeofconduct@amazon.com with any additional questions or comments.
 
-## Security issue notifications
+## Security Issue Notifications
 
 We take all security reports seriously. When we receive such reports, we will 
 investigate and subsequently address any potential vulnerabilities as quickly 
 as possible. If you discover a potential security issue in this project, please 
 notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/)
-or directly via email to [AWS Security](aws-security@amazon.com). Please do not 
+or directly via email to [AWS Security](mailto:aws-security@amazon.com). Please do not 
 create a public GitHub issue in this project.
 
 ## Telemetry
