@@ -19,8 +19,8 @@ logging_level = "WARNING"
 
 # AWS Submitter dialogue job properties
 empty_desc = ""
-tooltip_text_conda_packages = "This is a space-separated list of Conda package match specifications to install for the job. E.g. \"blender=3.6\" for a job that renders frames in Blender 3.6.\nSee https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/pkg-specs.html#package-match-specifications\n"
-tooltip_text_conda_channels = "This is a space-separated list of Conda channels from which to install packages. Deadline Cloud SMF packages are installed from the \"deadline-cloud\" channel that is configured by Deadline Cloud.\nAdd \"conda-forge\" to get packages from the https://conda-forge.org/ community, and \"defaults\" to get packages from Anaconda Inc (make sure your usage complies with https://www.anaconda.com/terms-of-use).\n"
+tooltip_text_conda_packages = 'This is a space-separated list of Conda package match specifications to install for the job. E.g. "blender=3.6" for a job that renders frames in Blender 3.6.\nSee https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/pkg-specs.html#package-match-specifications\n'
+tooltip_text_conda_channels = 'This is a space-separated list of Conda channels from which to install packages. Deadline Cloud SMF packages are installed from the "deadline-cloud" channel that is configured by Deadline Cloud.\nAdd "conda-forge" to get packages from the https://conda-forge.org/ community, and "defaults" to get packages from Anaconda Inc (make sure your usage complies with https://www.anaconda.com/terms-of-use).\n'
 conda_channel = "deadline-cloud"
 
 # blender job bundle directory
@@ -31,7 +31,3 @@ blender_frames = "1-10"
 blender_output_dir = "./deadline-cloud/test/squish/deadline_cloud_samples/blender_render/output"
 blender_output_pattern = "output_####"
 blender_output_format = "JPEG"
-
-# maya job bundle directory
-maya_filepath = "./deadline-cloud/test/squish/deadline_cloud_samples/turntable_with_maya_arnold"
-maya_job_bundle_folder = "turntable_with_maya_arnold"
