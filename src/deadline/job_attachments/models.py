@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Set
+from urllib.parse import urlparse
 
 from deadline.job_attachments.asset_manifests import HashAlgorithm, hash_data
 from deadline.job_attachments.asset_manifests.base_manifest import (
@@ -230,8 +231,22 @@ class JobAttachmentS3Settings:
 
         return JobAttachmentS3Settings(path_split[0], "/".join(path_split[1:]))
 
+    @staticmethod
+    def from_s3_root_uri(uri: str) -> JobAttachmentS3Settings:
+        res = urlparse(uri)
+
+        if not res.netloc or not res.path[1:] or res.scheme != "s3":
+            raise MalformedAttachmentSettingError(
+                "Invalid root uri format, should be s3://s3BucketName/rootPrefix."
+            )
+
+        return JobAttachmentS3Settings(res.netloc, res.path[1:])
+
     def to_root_path(self) -> str:
         return _join_s3_paths(self.s3BucketName, self.rootPrefix)
+
+    def to_s3_root_uri(self) -> str:
+        return f"s3://{self.to_root_path()}"
 
     def full_cas_prefix(self) -> str:
         self._validate_root_prefix()
@@ -408,9 +423,6 @@ class PathMappingRule:
 
     destination_path: str
     """The path to transform the source path to"""
-
-    def get_hashed_source(self, hash_alg: HashAlgorithm) -> str:
-        return hash_data(f"{self.source_path_format}{self.source_path}".encode("utf-8"), hash_alg)
 
     def get_hashed_source_path(self, hash_alg: HashAlgorithm) -> str:
         return hash_data(self.source_path.encode("utf-8"), hash_alg)

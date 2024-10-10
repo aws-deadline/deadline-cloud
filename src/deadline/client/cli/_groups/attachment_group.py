@@ -12,6 +12,7 @@ import boto3
 
 from typing import Optional
 
+from .click_logger import ClickLogger
 from .._common import _apply_cli_options_to_config, _handle_error
 from ...config import config_file
 
@@ -26,7 +27,7 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 @_handle_error
 def cli_attachment():
     """
-    Commands to work with AWS Deadline Cloud Job Attachments.
+    Commands to work with Job Attachments.
     """
 
 
@@ -35,23 +36,24 @@ def cli_attachment():
     help="BETA",
 )
 @click.option(
+    "-m",
     "--manifests",
     multiple=True,
     required=True,
-    help="Comma separated file paths to manifest formatted files.",
+    help="File path(s) to manifest formatted file(s).",
 )
 @click.option(
-    "--s3-root-path", help="Job Attachments S3 root path including bucket name and root prefix."
+    "--s3-root-uri", help="Job Attachments S3 root uri including bucket name and root prefix."
 )
-@click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use")
+@click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
+@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
 @_handle_error
 def attachment_download(
     manifests: list[str],
-    s3_root_path: str,
+    s3_root_uri: str,
     path_mapping_rules: str,
     json: bool,
     **args,
@@ -60,6 +62,7 @@ def attachment_download(
     Synchronize files of manifest root(s) to a machine.
     The input of the CLI is a path to a Job Attachments manifest file to download assets.
     """
+    logger: ClickLogger = ClickLogger(is_json=json)
 
     # Setup config
     config = _apply_cli_options_to_config(**args)
@@ -85,14 +88,95 @@ def attachment_download(
         if not s3_settings:
             raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
 
-        s3_root_path = s3_settings.to_root_path()
+        s3_root_uri = s3_settings.to_root_path()
 
-    if not s3_root_path:
+    if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
 
     attachment_api.attachment_download(
         manifests=manifests,
-        s3_root_path=s3_root_path,
+        s3_root_uri=s3_root_uri,
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
+        logger=logger,
+    )
+
+
+@cli_attachment.command(name="upload", help="BETA")
+@click.option(
+    "-m",
+    "--manifests",
+    multiple=True,
+    required=True,
+    help="File path(s) to manifest formatted file(s).",
+)
+@click.option(
+    "-r",
+    "--root-dirs",
+    multiple=True,
+    help="The root directory of assets to upload.",
+)
+@click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
+@click.option(
+    "--s3-root-uri", help="Job Attachments S3 root uri including bucket name and root prefix."
+)
+@click.option(
+    "--upload-manifest-path", default=None, help="File path for uploading the manifests to CAS."
+)
+@click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
+@click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
+@_handle_error
+def attachment_upload(
+    manifests: list[str],
+    root_dirs: list[str],
+    path_mapping_rules: str,
+    s3_root_uri: str,
+    upload_manifest_path: str,
+    json: bool,
+    **args,
+):
+    """
+    Upload output files to s3. The files always include data files, optionally upload manifests prefixed by given path.
+    """
+    logger: ClickLogger = ClickLogger(is_json=json)
+
+    # Setup config
+    config = _apply_cli_options_to_config(**args)
+
+    # Assuming when passing with config, session constructs from the profile id
+    # TODO - add type for profile, if queue type, get queue sesson directly
+    boto3_session: boto3.session = api.get_boto3_session(config=config)
+
+    if not args.pop("profile", None):
+        queue_id: str = config_file.get_setting("defaults.queue_id", config=config)
+        farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
+
+        deadline_client = boto3_session.client("deadline")
+        boto3_session = api.get_queue_user_boto3_session(
+            deadline=deadline_client,
+            config=None,
+            farm_id=farm_id,
+            queue_id=queue_id,
+        )
+        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
+            farm_id=farm_id, queue_id=queue_id
+        ).jobAttachmentSettings
+        if not s3_settings:
+            raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
+
+        s3_root_uri = s3_settings.to_s3_root_uri()
+
+    if not s3_root_uri:
+        raise MissingJobAttachmentSettingsError("No valid s3 root path available")
+
+    attachment_api.attachment_upload(
+        root_dirs=root_dirs,
+        manifests=manifests,
+        s3_root_uri=s3_root_uri,
+        boto3_session=boto3_session,
+        path_mapping_rules=path_mapping_rules,
+        upload_manifest_path=upload_manifest_path,
+        logger=logger,
     )

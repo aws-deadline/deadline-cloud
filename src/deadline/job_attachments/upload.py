@@ -141,12 +141,14 @@ class S3AssetUploader:
         self,
         job_attachment_settings: JobAttachmentS3Settings,
         manifest: BaseAssetManifest,
-        partial_manifest_prefix: str,
         source_root: Path,
+        partial_manifest_prefix: Optional[str] = None,
         file_system_location_name: Optional[str] = None,
         progress_tracker: Optional[ProgressTracker] = None,
         s3_check_cache_dir: Optional[str] = None,
         manifest_write_dir: Optional[str] = None,
+        manifest_name_suffix: str = "input",
+        asset_root: Optional[Path] = None,
     ) -> tuple[str, str]:
         """
         Uploads assets based off of an asset manifest, uploads the asset manifest.
@@ -159,6 +161,8 @@ class S3AssetUploader:
             source_root: The local root path of the assets.
             job_attachment_settings: The settings for the job attachment configured in Queue.
             progress_tracker: Optional progress tracker to track progress.
+            manifest_name_suffix: Suffix for given manifest naming.
+            asset_root: The root in which asset actually in to facilitate path mapping.
 
         Returns:
             A tuple of (the partial key for the manifest on S3, the hash of input manifest).
@@ -166,7 +170,10 @@ class S3AssetUploader:
 
         # Upload asset manifest
         (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
-            manifest, source_root, file_system_location_name
+            manifest=manifest,
+            source_root=source_root,
+            file_system_location_name=file_system_location_name,
+            manifest_name_suffix=manifest_name_suffix,
         )
 
         if partial_manifest_prefix:
@@ -186,20 +193,21 @@ class S3AssetUploader:
                 manifest,
             )
 
-        self.upload_bytes_to_s3(
-            bytes=BytesIO(manifest_bytes),
-            bucket=job_attachment_settings.s3BucketName,
-            key=full_manifest_key,
-        )
+        if partial_manifest_prefix:
+            self.upload_bytes_to_s3(
+                bytes=BytesIO(manifest_bytes),
+                bucket=job_attachment_settings.s3BucketName,
+                key=full_manifest_key,
+            )
 
         # Upload assets
         self.upload_input_files(
-            manifest,
-            job_attachment_settings.s3BucketName,
-            source_root,
-            job_attachment_settings.full_cas_prefix(),
-            progress_tracker,
-            s3_check_cache_dir,
+            manifest=manifest,
+            s3_bucket=job_attachment_settings.s3BucketName,
+            source_root=asset_root if asset_root else source_root,
+            s3_cas_prefix=job_attachment_settings.full_cas_prefix(),
+            progress_tracker=progress_tracker,
+            s3_check_cache_dir=s3_check_cache_dir,
         )
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
@@ -208,6 +216,7 @@ class S3AssetUploader:
     def _gather_upload_metadata(
         manifest: BaseAssetManifest,
         source_root: Path,
+        manifest_name_suffix: str,
         file_system_location_name: Optional[str] = None,
     ) -> tuple[HashAlgorithm, bytes, str]:
         """
@@ -218,7 +227,7 @@ class S3AssetUploader:
         manifest_name_prefix = hash_data(
             f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
         )
-        manifest_name = f"{manifest_name_prefix}_input"
+        manifest_name = f"{manifest_name_prefix}_{manifest_name_suffix}"
 
         return (hash_alg, manifest_bytes, manifest_name)
 
