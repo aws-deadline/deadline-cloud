@@ -1,9 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # mypy: disable-error-code="attr-defined"
 
+# deadline config gui workstation config
 profile_name = "(default)"
 job_hist_dir = "~/.deadline/job_history/(default)"
 farm_name = "Deadline Cloud Squish Farm"
+farm_desc = "Squish Automation Test Framework"
 queue_name = "Squish Automation Queue"
 storage_profile = "Squish Storage Profile"
 job_attachments = "COPIED"
@@ -14,3 +16,18 @@ tooltip_text_lightbulb = "This setting determines how job attachments are loaded
 conflict_res_option = "NOT\\_SELECTED"
 conflict_res_option_expected_text = conflict_res_option.replace("\\_", "_")
 logging_level = "WARNING"
+
+# AWS Submitter dialogue job properties
+empty_desc = ""
+tooltip_text_conda_packages = 'This is a space-separated list of Conda package match specifications to install for the job. E.g. "blender=3.6" for a job that renders frames in Blender 3.6.\nSee https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/pkg-specs.html#package-match-specifications\n'
+tooltip_text_conda_channels = 'This is a space-separated list of Conda channels from which to install packages. Deadline Cloud SMF packages are installed from the "deadline-cloud" channel that is configured by Deadline Cloud.\nAdd "conda-forge" to get packages from the https://conda-forge.org/ community, and "defaults" to get packages from Anaconda Inc (make sure your usage complies with https://www.anaconda.com/terms-of-use).\n'
+conda_channel = "deadline-cloud"
+
+# blender job bundle directory
+blender_filepath = "./deadline-cloud/test/squish/deadline_cloud_samples/blender_render"
+blender_job_name = "Blender Render"
+blender_conda_package = "blender"
+blender_frames = "1-10"
+blender_output_dir = "./deadline-cloud/test/squish/deadline_cloud_samples/blender_render/output"
+blender_output_pattern = "output_####"
+blender_output_format = "JPEG"
