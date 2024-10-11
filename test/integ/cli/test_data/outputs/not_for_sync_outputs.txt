@@ -1,0 +1,1 @@
+Although it is in the output directory, it is actually an input file. It should be downloaded (to the worker's session working directory) during sync_inputs, and should not be captured as an output file when sync_outputs.

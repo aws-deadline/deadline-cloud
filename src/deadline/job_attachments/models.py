@@ -399,8 +399,8 @@ class ManifestDiff:
 class ManifestDownload:
     """Data structure to store the S3 and local paths of a manifest"""
 
-    s3_key: str = field(default_factory=str)
-    local: str = field(default_factory=str)
+    manifest_root: str = field(default_factory=str)
+    local_manifest_path: str = field(default_factory=str)
 
 
 @dataclass
@@ -408,7 +408,6 @@ class ManifestDownloadResponse:
     """Data structure to capture the response for manifest download"""
 
     downloaded: list[ManifestDownload] = field(default_factory=list)
-    failed: list[str] = field(default_factory=list)
 
 
 @dataclass
