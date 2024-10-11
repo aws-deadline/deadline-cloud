@@ -375,6 +375,68 @@ def download_files_in_directory(
     )
 
 
+def download_file_with_s3_key(
+    s3_bucket: str,
+    s3_key: str,
+    transfer_manager,
+    local_file_name: Path,
+    file_bytes: Optional[int] = 0,
+    session: Optional[boto3.Session] = None,
+    progress_tracker: Optional[ProgressTracker] = None,
+    file_conflict_resolution: Optional[FileConflictResolution] = FileConflictResolution.CREATE_COPY,
+) -> Optional[concurrent.futures.Future]:
+    """
+    Helper to download a file from the S3 bucket with a specified S3 key to the local directory.
+    Returns the asynchronous result of the downloaded file, and None if otherwise
+    """
+
+    # If the file name already exists, resolve the conflict based on the file_conflict_resolution
+    if local_file_name.is_file():
+        if file_conflict_resolution == FileConflictResolution.SKIP:
+            # if file is said to be skipped, no download will occur, and None will be returned.
+            # This allows `download_file` to return (file_bytes, None) when this function is called.
+            return None
+        elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
+            pass
+        elif file_conflict_resolution == FileConflictResolution.CREATE_COPY:
+            # This loop resolves filename conflicts by appending " (1)"
+            # to the stem of the filename until a unique name is found.
+            while local_file_name.is_file():
+                local_file_name = local_file_name.parent.joinpath(
+                    local_file_name.stem + " (1)" + local_file_name.suffix
+                )
+        else:
+            raise ValueError(
+                f"Unknown choice for file conflict resolution: {file_conflict_resolution}"
+            )
+
+    local_file_name.parent.mkdir(parents=True, exist_ok=True)
+
+    future: concurrent.futures.Future
+
+    # provides progress callback for asynchronous download from S3
+    def handler(bytes_downloaded):
+        nonlocal progress_tracker
+        nonlocal future
+
+        if progress_tracker:
+            should_continue = progress_tracker.track_progress_callback(bytes_downloaded)
+            if not should_continue:
+                future.cancel()
+
+    subscribers = [ProgressCallbackInvoker(handler)]
+
+    future = transfer_manager.download(
+        bucket=s3_bucket,
+        key=s3_key,
+        fileobj=str(local_file_name),
+        extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
+        subscribers=subscribers,
+    )
+    future.result()
+    return future
+
+
 def download_file(
     file: RelativeFilePath,
     hash_algorithm: HashAlgorithm,
