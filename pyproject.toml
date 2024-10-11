@@ -56,7 +56,7 @@ Source = "https://github.com/aws-deadline/deadline-cloud"
 [project.optional-dependencies]
 gui = [
     # If the version changes, update the version in deadline/client/ui/__init__.py
-    "PySide6-essentials == 6.6.*",
+    "PySide6-essentials >= 6.6,< 6.9",
 ]
 
 [project.scripts]
