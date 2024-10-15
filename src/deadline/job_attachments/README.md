@@ -64,3 +64,23 @@ You can install the protocol handler by running the command: `deadline handle-we
 ## Security
 
 When creating a queue, provide the name of an S3 bucket in the same account and region as the queue you are creating, and provide a 'root prefix' name for files to be uploaded to. You also must provide an IAM role that has access to the S3 bucket. See the [security best practices][ja-security] documentation for more information on securely configuring job attachments.
+
+## Job Attachments Subcommands
+
+Job Attachments provides `attachment` and `manifest` subcommand groups as part of deadline command-line interface.
+
+Attachment subcommands work with data files based on asset manifest files.
+
+```sh
+$ deadline attachment upload
+$ deadline attachment download
+```
+
+Manifest subcommands work with asset manifest files that capture local asset lifecycle. Currently only `manifest snapshot` is availble.
+
+```sh
+$ deadline manifest snapshot
+$ deadline manifest diff
+$ deadline manifest download
+$ deadline manifest upload
+```

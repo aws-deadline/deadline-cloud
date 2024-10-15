@@ -27,7 +27,7 @@ def attachment_download(
     logger: ClickLogger = ClickLogger(False),
 ):
     """
-    BETA API - This API is still evolving but will be made public in the near future.
+    BETA API - This API is still evolving.
 
     API to download job attachments based on given list of manifests.
     If path mapping rules file is given, map to corresponding destinations.
@@ -92,9 +92,9 @@ def attachment_upload(
     logger: ClickLogger = ClickLogger(False),
 ):
     """
-    BETA API - This API is still evolving but will be made public in the near future.
+    BETA API - This API is still evolving.
 
-    API to download job attachments based on given list of manifests.
+    API to upload job attachments based on given list of manifests and corresponding file directories.
     If path mapping rules file is given, map to corresponding destinations.
 
     Args:
