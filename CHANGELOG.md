@@ -1,3 +1,19 @@
+## 0.48.9 (2024-10-10)
+
+
+### Features
+* Add a simple backoff and retry utility helper (#452) ([`88a4ef6`](https://github.com/aws-deadline/deadline-cloud/commit/88a4ef6908c7bfba1b5226ea5fc3464d6e0a5438))
+* adds --storage-profile-id option to the bundle submit command (#442) ([`8c105ed`](https://github.com/aws-deadline/deadline-cloud/commit/8c105ed2129e64ca71617e6eaf0984a87f1dfd3b))
+* support --submitter-name option for bundle GUI submitter command (#416) ([`569af3b`](https://github.com/aws-deadline/deadline-cloud/commit/569af3b8be23cc09386631f472fd8bfffa4c6315))
+* update DEVELOPMENT.md on how to run integ tests. (#419) ([`3fe65e6`](https://github.com/aws-deadline/deadline-cloud/commit/3fe65e66675b94d53a64ee2b905e065f22b4f102))
+
+### Bug Fixes
+* ctypes (libffi) is no longer required on linux (#455) ([`6446b66`](https://github.com/aws-deadline/deadline-cloud/commit/6446b66d2038bc62f8b7bc393e2629ed2a488f2d))
+* running parallel bundle submits no longer clobbers config file (#444) ([`609e027`](https://github.com/aws-deadline/deadline-cloud/commit/609e0277675e2bb3d3fd57e94345bcd0a4be754d))
+* improve help text (#436) ([`343bf7b`](https://github.com/aws-deadline/deadline-cloud/commit/343bf7b18e1d32cb50445f0a9f28d8ad4825dbae))
+* credential caching improvements (#431) ([`2a0c487`](https://github.com/aws-deadline/deadline-cloud/commit/2a0c4878d4e85042103ee15070fa5d384891f8a7))
+* use devnull for stderr pipe to dcm process handle (#421) ([`c333452`](https://github.com/aws-deadline/deadline-cloud/commit/c3334521322c59c8875ff3f313441ace0558b97d))
+
 ## 0.48.8 (2024-07-24)
 
 
