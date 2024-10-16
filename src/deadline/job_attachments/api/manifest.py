@@ -213,6 +213,15 @@ def _manifest_diff(
 
     output: ManifestDiff = ManifestDiff()
 
+    # Helper function to update output datastructure.
+    def process_output(status: FileStatus, path: str, output_diff: ManifestDiff):
+        if status == FileStatus.MODIFIED:
+            output_diff.modified.append(path)
+        elif status == FileStatus.NEW:
+            output_diff.new.append(path)
+        elif status == FileStatus.DELETED:
+            output_diff.deleted.append(path)
+
     if force_rehash:
         # hash and create manifest of local directory
         cache_config = config_file.get_cache_directory()
@@ -227,12 +236,7 @@ def _manifest_diff(
         )
         # Map to output datastructure.
         for item in differences:
-            if item[0] == FileStatus.MODIFIED:
-                output.modified.append(item[1].path)
-            elif item[0] == FileStatus.NEW:
-                output.new.append(item[1].path)
-            elif item[0] == FileStatus.DELETED:
-                output.deleted.append(item[1].path)
+            process_output(item[0], item[1].path, output)
 
     else:
         # File based comparisons.
@@ -240,11 +244,6 @@ def _manifest_diff(
             root=root, current_files=input_files, diff_manifest=local_manifest_object, logger=logger
         )
         for fast_diff_item in fast_diff:
-            if fast_diff_item[1] == FileStatus.MODIFIED:
-                output.modified.append(fast_diff_item[0])
-            elif fast_diff_item[1] == FileStatus.NEW:
-                output.new.append(fast_diff_item[0])
-            elif fast_diff_item[1] == FileStatus.DELETED:
-                output.deleted.append(fast_diff_item[0])
+            process_output(fast_diff_item[1], fast_diff_item[0], output)
 
     return output

@@ -15,7 +15,6 @@ import tempfile
 from deadline_test_fixtures.job_attachment_manager import JobAttachmentManager
 
 from deadline.client.cli import main
-from deadline.client.cli._groups.attachment_group import cli_attachment
 from deadline.job_attachments.asset_manifests import (
     HashAlgorithm,
     hash_data,
@@ -107,8 +106,6 @@ class TestAttachment:
 
         # When - test upload the local asset file
         runner = CliRunner()
-        # Temporary, always add cli_attachment until launched.
-        main.add_command(cli_attachment)
 
         result = runner.invoke(
             main,
@@ -168,8 +165,6 @@ class TestAttachment:
         s3_root_uri = f"s3://{job_attachment_resources.bucket_name}/{job_attachment_resources.bucket_root_prefix}"
 
         runner = CliRunner()
-        # Temporary, always add cli_attachment until launched.
-        main.add_command(cli_attachment)
 
         # When - test upload the local asset file
         result = runner.invoke(
@@ -255,8 +250,6 @@ class TestAttachment:
         s3_root_uri = f"s3://{job_attachment_resources.bucket_name}/{job_attachment_resources.bucket_root_prefix}"
 
         runner = CliRunner()
-        # Temporary, always add cli_attachment until launched.
-        main.add_command(cli_attachment)
 
         # When - test upload the local asset file with path mapping
         result = runner.invoke(

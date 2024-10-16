@@ -136,10 +136,7 @@ def _fast_file_list_to_manifest_diff(
 
     # Select either relative or absolut path for results.
     def select_path(full_path: str, relative_path: str, return_root_relative_path: bool):
-        if return_root_relative_path:
-            return relative_path
-        else:
-            return full_path
+        return relative_path if return_root_relative_path else full_path
 
     changed_paths: List[Tuple[str, FileStatus]] = []
     input_files_map: Dict[str, BaseManifestPath] = {}
