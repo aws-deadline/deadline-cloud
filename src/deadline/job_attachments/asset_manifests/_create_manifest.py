@@ -11,7 +11,9 @@ from deadline.job_attachments.upload import S3AssetManager
 
 
 def _create_manifest_for_single_root(
-    files: List[str], root: str, logger: ClickLogger
+    files: List[str],
+    root: str,
+    logger: ClickLogger,
 ) -> Optional[BaseAssetManifest]:
     """
     Shared logic to create a manifest file from a single root.
@@ -38,7 +40,9 @@ def _create_manifest_for_single_root(
             total_input_files=upload_group.total_input_files,
             total_input_bytes=upload_group.total_input_bytes,
             print_function_callback=logger.echo,
-            hashing_progress_callback=hash_callback_manager.callback,
+            hashing_progress_callback=(
+                hash_callback_manager.callback if not logger.is_json() else None
+            ),
         )
 
     if not manifests or len(manifests) == 0:

@@ -186,7 +186,6 @@ class TestSnapshot:
         mock_prepare_paths_for_upload.return_value = mock_upload_group
 
         runner = CliRunner()
-        main.add_command(manifest_group.cli_manifest)
         result = runner.invoke(main, ["manifest", "snapshot", "--root", root_dir])
 
         assert result.exit_code == 0
@@ -202,7 +201,6 @@ class TestSnapshot:
         invalid_root_dir = str(tmp_path / "invalid_dir")
 
         runner = CliRunner()
-        main.add_command(manifest_group.cli_manifest)
         result = runner.invoke(main, ["manifest", "snapshot", "--root", invalid_root_dir])
 
         assert result.exit_code != 0
@@ -224,7 +222,6 @@ class TestSnapshot:
         mock_prepare_paths_for_upload.return_value = mock_upload_group
 
         runner = CliRunner()
-        main.add_command(manifest_group.cli_manifest)
         result = runner.invoke(
             main,
             [
@@ -249,7 +246,6 @@ class TestSnapshot:
         invalid_manifest_out = str(tmp_path / "nonexistent_dir")
 
         runner = CliRunner()
-        main.add_command(manifest_group.cli_manifest)
         result = runner.invoke(
             main,
             ["manifest", "snapshot", "--root", root_dir, "--destination", invalid_manifest_out],
@@ -276,7 +272,6 @@ class TestSnapshot:
         mock_prepare_paths_for_upload.return_value = mock_upload_group
 
         runner = CliRunner()
-        main.add_command(manifest_group.cli_manifest)
         result = runner.invoke(main, ["manifest", "snapshot", "--root", root_dir])
 
         assert result.exit_code == 0
