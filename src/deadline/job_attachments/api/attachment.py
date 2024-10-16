@@ -14,9 +14,10 @@ from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.download import download_files_from_manifests
 from deadline.job_attachments.models import JobAttachmentS3Settings, PathMappingRule
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
-from deadline.client.exceptions import NonValidInputError
 from deadline.job_attachments.upload import S3AssetUploader
 from deadline.client.cli._groups.click_logger import ClickLogger
+from deadline.client.config import config_file
+from deadline.client.exceptions import NonValidInputError
 
 
 def attachment_download(
@@ -146,6 +147,7 @@ def attachment_upload(
             partial_manifest_prefix=upload_manifest_path,
             source_root=Path(rule.source_path),
             asset_root=Path(rule.destination_path),
+            s3_check_cache_dir=config_file.get_cache_directory(),
         )
         logger.echo(
             f"Uploaded assets from {rule.source_path}, to {s3_settings.to_s3_root_uri()}/{key}, hashed data {data}"
