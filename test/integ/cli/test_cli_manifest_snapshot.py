@@ -27,7 +27,8 @@ TEST_SUB_DIR_1 = "subdir1"
 TEST_SUB_DIR_2 = "subdir2"
 
 
-class TestSnapshot:
+@pytest.mark.integ
+class TestManifestSnapshot:
 
     @pytest.fixture
     def temp_dir(self):
