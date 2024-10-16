@@ -15,6 +15,12 @@ class ClickLogger:
     def __init__(self, is_json: bool):
         self._is_json = is_json
 
+    def is_json(self) -> bool:
+        """
+        Is logging in JSON mode.
+        """
+        return self._is_json
+
     def echo(
         self,
         message: t.Optional[t.Any] = None,

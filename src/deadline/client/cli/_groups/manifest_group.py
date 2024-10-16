@@ -72,6 +72,12 @@ def cli_manifest():
     help="Include and exclude config of files and directories to include and exclude. Can be a json file or json string.",
     multiple=True,
 )
+@click.option(
+    "--force-rehash",
+    default=False,
+    is_flag=True,
+    help="Rehash all files to compare using file hashes.",
+)
 @click.option("--diff", default=None, help="File Path to Asset Manifest to diff against.")
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
 @_handle_error
@@ -83,6 +89,7 @@ def manifest_snapshot(
     exclude: List[str],
     include_exclude_config: str,
     diff: str,
+    force_rehash: bool,
     json: bool,
     **args,
 ):
@@ -107,6 +114,7 @@ def manifest_snapshot(
         exclude=exclude,
         include_exclude_config=include_exclude_config,
         diff=diff,
+        force_rehash=force_rehash,
         logger=logger,
     )
     if manifest_out:
