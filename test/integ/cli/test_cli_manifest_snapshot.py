@@ -7,15 +7,13 @@ import json
 import os
 from pathlib import Path
 from click.testing import CliRunner
-from deadline.client.cli._groups.manifest_group import cli_manifest
 import pytest
 import tempfile
 
 from deadline.client.cli import main
 
 
-@pytest.mark.skip("Random Failure with no credentials on Github")
-class TestSnapshot:
+class TestManifestSnapshot:
 
     @pytest.fixture
     def temp_dir(self):
@@ -41,7 +39,6 @@ class TestSnapshot:
 
         # When snapshot is called.
         runner = CliRunner()
-        main.add_command(cli_manifest)
         result = runner.invoke(
             main,
             [
@@ -91,7 +88,6 @@ class TestSnapshot:
 
         # When
         runner = CliRunner()
-        main.add_command(cli_manifest)
         args = ["manifest", "diff", "--root", root_dir, "--manifest", manifest]
         if json_output:
             args.append("--json")
