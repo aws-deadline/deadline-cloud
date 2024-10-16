@@ -91,7 +91,9 @@ class TestAttachment:
 
         yield deploy_job_attachment_resources
 
-    def test_attachment_s3_cross_account_access_denied(self, temp_dir):
+    @pytest.mark.cross_account
+    @pytest.mark.integ
+    def test_attachment_s3_cross_account_access_denied(self, external_bucket, temp_dir):
         # Given
         file_name: str = f"{hash_data(temp_dir.encode('utf-8'), HashAlgorithm.XXH128)}_output"
         manifest_path: str = os.path.join(temp_dir, file_name)
@@ -120,14 +122,14 @@ class TestAttachment:
                 "--profile",
                 "default",
                 "--s3-root-uri",
-                "s3://cross-account-bucket/test",
+                f"s3://{external_bucket}/test",
             ],
         )
         assert (
             result.exit_code != 0
         ), f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
-        assert "Error uploading file" in result.output
+        assert "HTTP Status Code: 403, Access denied." in result.output
 
         result = runner.invoke(
             main,
@@ -139,15 +141,16 @@ class TestAttachment:
                 "--profile",
                 "default",
                 "--s3-root-uri",
-                "s3://cross-account-bucket/test",
+                f"s3://{external_bucket}/test",
             ],
         )
         assert (
             result.exit_code != 0
         ), f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
-        assert "Error downloading file" in result.output
+        assert "HTTP Status Code: 403, Forbidden or Access denied." in result.output
 
+    @pytest.mark.integ
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
     def test_attachment_basic_flow(self, temp_dir, job_attachment_resources, manifest_case_key):
 
@@ -213,6 +216,7 @@ class TestAttachment:
         asset_files = os.listdir(os.path.join(os.getcwd(), file_name, "files"))
         assert len(asset_files) == 1
 
+    @pytest.mark.integ
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
     def test_attachment_path_mapping_flow(
         self, temp_dir, job_attachment_resources, manifest_case_key

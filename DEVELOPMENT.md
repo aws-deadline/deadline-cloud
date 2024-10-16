@@ -167,7 +167,7 @@ Notes:
 * If you are adding/changing code related to the Job Attachments' file-upload interactions with S3, then if you have a second
   AWS account then we request that you also ensure that the tests marked with the `pytest.mark.cross_account` marker also pass.
   If you don't have a second account, then don't worry about it. These tests will run in our CI. To run these tests:
-  1. Create an S3 bucket in the same region as your testing resources but in your second AWS Account.
+  1. Create an S3 bucket in the same region as your testing resources but in your second AWS Account. If the bucket doesn't exist, you may see S3 PermanentRedirect error.
   2. Set the access policy of that S3 bucket to allow your first AWS Account to perform all operations on the bucket. Do
      NOT open the bucket up to the world for reading/writing!
   3. `export INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET=<your-bucket-name-in-the-second-account>`
