@@ -15,8 +15,9 @@ import json
 import deadline
 
 from deadline.client import api
-from deadline.job_attachments import api as attachment_api
+from deadline.client.config import config_file
 from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments import api as attachment_api
 from deadline.job_attachments.exceptions import MalformedAttachmentSettingError
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
 from deadline.job_attachments.asset_manifests import HashAlgorithm, hash_data
@@ -268,6 +269,7 @@ class TestAttachmentUpload:
             partial_manifest_prefix="test",
             source_root=Path(PATH_MAPPING["source_path"]),
             asset_root=Path(PATH_MAPPING["destination_path"]),
+            s3_check_cache_dir=config_file.get_cache_directory(),
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -298,6 +300,7 @@ class TestAttachmentUpload:
             partial_manifest_prefix="test",
             source_root=Path(temp_assets_dir),
             asset_root=Path(temp_assets_dir),
+            s3_check_cache_dir=config_file.get_cache_directory(),
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
