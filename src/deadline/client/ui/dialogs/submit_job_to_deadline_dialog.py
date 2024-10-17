@@ -67,6 +67,13 @@ class SubmitJobToDeadlineDialog(QDialog):
         attachments: (FlatAssetReferences): The job attachments that have been added to the job by the user.
         on_create_job_bundle_callback: A function to call when the dialog needs to create a Job Bundle. It
             is called with arguments (widget, job_bundle_dir, settings, queue_parameters, asset_references)
+        on_pre_submit_callback: A function to call just prior to the dialog submitting the Job Bundle. It is
+            called with arguments (widget, job_bundle_dir, settings, queue_parameters, asset_references, requirements).
+            This callback can be used to validate or modify a scene file before submitting.
+        on_post_submit_callback: A function to call just after the dialog has submitted the Job Bundle. It is
+            called with arguments (widget, job_bundle_dir, settings, queue_parameters, asset_references, requirements).
+            This callback may may be required if the `on_pre_submit_callback` modifies the scene file to
+            prepare it for submission and work needs to be done to modify the scene back to a working state.
         parent: parent of the widget
         f: Qt Window Flags
         show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
@@ -83,6 +90,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
         on_create_job_bundle_callback,
+        on_pre_submit_callback=None,
+        on_post_submit_callback=None,
         parent=None,
         f=Qt.WindowFlags(),
         show_host_requirements_tab=False,
@@ -96,6 +105,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.submitter_name = submitter_name or self.job_settings_type().submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
+        self.on_pre_submit_callback = on_pre_submit_callback
+        self.on_post_submit_callback = on_post_submit_callback
         self.create_job_response: Optional[Dict[str, Any]] = None
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
@@ -415,6 +426,18 @@ class SubmitJobToDeadlineDialog(QDialog):
 
             if self.show_host_requirements_tab:
                 requirements = self.host_requirements.get_requirements()
+                # Execute any PreSubmission function defined.
+                if self.on_pre_submit_callback:
+                    self.on_pre_submit_callback(
+                        self,
+                        job_history_bundle_dir,
+                        settings,
+                        queue_parameters,
+                        asset_references,
+                        requirements,
+                        purpose=JobBundlePurpose.SUBMISSION,
+                    )
+
                 self.on_create_job_bundle_callback(
                     self,
                     self.job_history_bundle_dir,
@@ -425,6 +448,16 @@ class SubmitJobToDeadlineDialog(QDialog):
                     purpose=JobBundlePurpose.SUBMISSION,
                 )
             else:
+                # Execute any PreSubmission function defined.
+                if self.on_pre_submit_callback:
+                    self.on_pre_submit_callback(
+                        self,
+                        job_history_bundle_dir,
+                        settings,
+                        queue_parameters,
+                        asset_references,
+                        purpose=JobBundlePurpose.SUBMISSION,
+                    )
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
                 self.on_create_job_bundle_callback(
                     self,
@@ -484,6 +517,18 @@ class SubmitJobToDeadlineDialog(QDialog):
                 auto_accept=str2bool(get_setting("settings.auto_accept")),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
             )
+
+            # Execute any PostSubmission function defined.
+            if self.on_post_submit_callback:
+                self.on_post_submit_callback(
+                    self,
+                    job_history_bundle_dir,
+                    settings,
+                    queue_parameters,
+                    asset_references,
+                    requirements,
+                    purpose=JobBundlePurpose.SUBMISSION,
+                )
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
             QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))
