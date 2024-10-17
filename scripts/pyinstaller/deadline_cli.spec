@@ -21,7 +21,7 @@ datas, binaries, hiddenimports = collect_all('deadline')
 datas += [
     (b_module_path + '/job_attachments/asset_manifests/schemas/*.json',
      'deadline_job_attachments/asset_manifests/schemas'),
-    (b_module_path + '/../../THIRD_PARTY_LICENSES',
+    ('../../THIRD_PARTY_LICENSES',
      '.')
 ]
 
