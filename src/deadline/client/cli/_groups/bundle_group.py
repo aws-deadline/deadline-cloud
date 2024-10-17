@@ -107,9 +107,14 @@ def validate_parameters(ctx, param, value):
     type=click.Choice([e.value for e in JobAttachmentsFileSystem]),
 )
 @click.option(
-    "--yes",
+    "--upload",
     is_flag=True,
-    help="Skip any confirmation prompts",
+    help="Indicates that files will be uploaded to S3 if needed",
+)
+@click.option(
+    "--trust",
+    is_flag=True,
+    help="Indicates the job bundle is trusted to not perform malicious activities",
 )
 @click.option(
     "--require-paths-exist",
@@ -127,7 +132,8 @@ def bundle_submit(
     job_bundle_dir,
     job_attachments_file_system,
     parameter,
-    yes,
+    upload,
+    trust,
     name,
     priority,
     max_failed_tasks_count,
@@ -148,55 +154,64 @@ def bundle_submit(
     def _check_create_job_wait_canceled() -> bool:
         return sigint_handler.continue_operation
 
-    def _decide_cancel_submission(upload_group: AssetUploadGroup) -> bool:
-        """
-        Callback to decide if submission should be cancelled or not. Return 'True' to cancel.
-        Prints a warning that requires confirmation if paths are found outside of configured storage profile locations.
-        """
-        warning_message = ""
+    def _does_user_trust_bundle(upload_group: AssetUploadGroup) -> bool:
+        locations_outside_trust = set()
+        trust_default = False
+
+        # If the user has indicated they trust the bundle, return early
+        if trust:
+            return True
+
+        if config_file.str2bool(get_setting("settings.auto_accept", config=config)):
+            # default option is to not trust the bundle, so auto_accept respects that and does not trust the bundle
+            return trust_default
+
         for group in upload_group.asset_groups:
             if not group.file_system_location_name:
-                warning_message += f"\n\nUnder the directory '{group.root_path}':"
-                warning_message += (
-                    f"\n\t{len(group.inputs)} input file{'' if len(group.inputs) == 1 else 's'}"
-                    if len(group.inputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.outputs)} output director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.outputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.references)} referenced file{'' if len(group.references) == 1 else 's'} and/or director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.references) > 0
-                    else ""
-                )
+                locations_outside_trust.add(group.root_path)
 
-        # Exit early if there are no warnings and we've either set auto accept or there's no files to confirm
-        if not warning_message and (
-            yes
+        if not locations_outside_trust:
+            return True
+
+        locations = "\n\t".join(locations_outside_trust)
+        trust_prompt = (
+            f"This job bundle is attempting to upload files outside of the job bundle and storage profile locations from the following directories:"
+            f"\n\t{locations}"
+            f"\n\Do you trust this job bundle?"
+        )
+        return click.confirm(trust_prompt, default=trust_default)
+
+    def _does_user_want_to_upload(upload_group: AssetUploadGroup) -> bool:
+        upload_default = True
+
+        if (
+            upload
             or config_file.str2bool(get_setting("settings.auto_accept", config=config))
             or upload_group.total_input_files == 0
         ):
-            return False
+            return True
 
-        message_text = (
-            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}. "
-            " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
+        upload_prompt = (
+            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}."
+            f" All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
+            f"\n\nDo you wish to proceed?"
         )
-        if warning_message:
-            message_text += (
-                f"\n\nFiles were specified outside of the configured storage profile location(s). "
-                " Please confirm that you intend to submit a job that uses files from the following directories:"
-                f"{warning_message}\n\n"
-                "To permanently remove this warning you must only use files located within a storage profile location."
-            )
-        message_text += "\n\nDo you wish to proceed?"
-        return not click.confirm(
-            message_text,
-            default=not warning_message,
-        )
+        return click.confirm(upload_prompt, default=upload_default)
+
+    def _decide_cancel_submission(upload_group: AssetUploadGroup) -> bool:
+        """Callback to decide if submission should be cancelled or not. Return 'True' to cancel.
+
+        Currently there are two prompts:
+            1. Prompt user if they trust the bundle if paths are found outside the bundle or configured storage profile locations.
+            2. Prompt user if they want to upload files to S3
+        """
+        if not _does_user_trust_bundle(upload_group):
+            return True
+
+        if not _does_user_want_to_upload(upload_group):
+            return True
+
+        return False
 
     try:
         job_id = api.create_job_from_job_bundle(
