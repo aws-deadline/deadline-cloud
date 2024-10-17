@@ -45,6 +45,7 @@ from .exceptions import (
     AssetSyncCancelledError,
     AssetSyncError,
     JobAttachmentS3BotoCoreError,
+    JobAttachmentsError,
     JobAttachmentsS3ClientError,
     MisconfiguredInputsError,
     MissingS3BucketError,
@@ -744,25 +745,26 @@ class S3AssetManager:
 
     def __init__(
         self,
-        farm_id: str,
-        queue_id: str,
-        job_attachment_settings: JobAttachmentS3Settings,
+        farm_id: Optional[str] = None,
+        queue_id: Optional[str] = None,
+        job_attachment_settings: Optional[JobAttachmentS3Settings] = None,
         asset_uploader: Optional[S3AssetUploader] = None,
         session: Optional[boto3.Session] = None,
         asset_manifest_version: ManifestVersion = ManifestVersion.v2023_03_03,
     ) -> None:
         self.farm_id = farm_id
         self.queue_id = queue_id
-        self.job_attachment_settings: JobAttachmentS3Settings = job_attachment_settings
+        self.job_attachment_settings: Optional[JobAttachmentS3Settings] = job_attachment_settings
 
-        if not self.job_attachment_settings.s3BucketName:
-            raise MissingS3BucketError(
-                "To use Job Attachments, the 's3BucketName' must be set in your queue's JobAttachmentSettings"
-            )
-        if not self.job_attachment_settings.rootPrefix:
-            raise MissingS3RootPrefixError(
-                "To use Job Attachments, the 'rootPrefix' must be set in your queue's JobAttachmentSettings"
-            )
+        if self.job_attachment_settings:
+            if not self.job_attachment_settings.s3BucketName:
+                raise MissingS3BucketError(
+                    "To use Job Attachments, the 's3BucketName' must be set in your queue's JobAttachmentSettings"
+                )
+            if not self.job_attachment_settings.rootPrefix:
+                raise MissingS3RootPrefixError(
+                    "To use Job Attachments, the 'rootPrefix' must be set in your queue's JobAttachmentSettings"
+                )
 
         if asset_uploader is None:
             asset_uploader = S3AssetUploader(session=session)
@@ -1241,6 +1243,11 @@ class S3AssetManager:
             a tuple with (1) the summary statistics of the upload operation, and
             (2) the S3 path to the asset manifest file.
         """
+        # This is a programming error if the user did not construct the object with Farm and Queue IDs.
+        if not self.farm_id or not self.queue_id:
+            logger.error("upload_assets: Farm or Fleet ID is missing.")
+            raise JobAttachmentsError("upload_assets: Farm or Fleet ID is missing.")
+
         # Sets up progress tracker to report upload progress back to the caller.
         (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
         progress_tracker = ProgressTracker(
@@ -1269,9 +1276,9 @@ class S3AssetManager:
 
             if asset_root_manifest.asset_manifest:
                 (partial_manifest_key, asset_manifest_hash) = self.asset_uploader.upload_assets(
-                    job_attachment_settings=self.job_attachment_settings,
+                    job_attachment_settings=self.job_attachment_settings,  # type: ignore[arg-type]
                     manifest=asset_root_manifest.asset_manifest,
-                    partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(
+                    partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(  # type: ignore[union-attr]
                         self.farm_id, self.queue_id
                     ),
                     source_root=Path(asset_root_manifest.root_path),
