@@ -184,7 +184,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             # Apply the initial queue parameter values
             for parameter in queue_parameters:
                 if parameter["name"] in self.initial_shared_parameter_values:
-                    parameter["value"] = self.initial_shared_parameter_values[parameter["name"]]
+                    if parameter["default"] == "":
+                        parameter["value"] = self.initial_shared_parameter_values[parameter["name"]]
             self.queue_parameters_box.rebuild_ui(parameter_definitions=queue_parameters)
 
     def _load_queue_parameters_thread_function(self, refresh_id: int, farm_id: str, queue_id: str):
