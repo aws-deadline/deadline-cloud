@@ -14,9 +14,13 @@ import os
 from typing import List
 import click
 
+from deadline.job_attachments._diff import pretty_print_cli
 from deadline.job_attachments.api.manifest import (
+    _glob_files,
+    _manifest_diff,
     _manifest_snapshot,
 )
+from deadline.job_attachments.models import ManifestDiff
 
 from ...exceptions import NonValidInputError
 from .._common import _handle_error
@@ -139,6 +143,12 @@ def manifest_snapshot(
     default=None,
     help="Include and exclude config of files and directories to include and exclude. Can be a json file or json string.",
 )
+@click.option(
+    "--force-rehash",
+    default=False,
+    is_flag=True,
+    help="Rehash all files to compare using file hashes.",
+)
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
 @_handle_error
 def manifest_diff(
@@ -147,13 +157,43 @@ def manifest_diff(
     include: List[str],
     exclude: List[str],
     include_exclude_config: str,
+    force_rehash: bool,
     json: bool,
     **args,
 ):
     """
     Check file differences between a directory and specified manifest.
     """
-    raise NotImplementedError("This CLI is being implemented.")
+    logger: ClickLogger = ClickLogger(is_json=json)
+    if not os.path.isfile(manifest):
+        raise NonValidInputError(f"Specified manifest file {manifest} does not exist. ")
+
+    if not os.path.isdir(root):
+        raise NonValidInputError(f"Specified root directory {root} does not exist. ")
+
+    # Perform the diff.
+    differences: ManifestDiff = _manifest_diff(
+        manifest=manifest,
+        root=root,
+        include=include,
+        exclude=exclude,
+        include_exclude_config=include_exclude_config,
+        force_rehash=force_rehash,
+        logger=logger,
+    )
+
+    # Print results to console.
+    if json:
+        logger.json(dataclasses.asdict(differences), indent=4)
+    else:
+        logger.echo(f"Manifest Diff of root directory: {root}")
+        all_files = _glob_files(
+            root=root,
+            include=include,
+            exclude=exclude,
+            include_exclude_config=include_exclude_config,
+        )
+        pretty_print_cli(root=root, all_files=all_files, manifest_diff=differences)
 
 
 @cli_manifest.command(

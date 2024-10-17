@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 import concurrent.futures
 
+import logging
 import os
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Tuple
@@ -12,7 +13,7 @@ from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseManifestPath,
 )
 from deadline.job_attachments.caches.hash_cache import HashCache
-from deadline.job_attachments.models import AssetRootManifest, FileStatus
+from deadline.job_attachments.models import AssetRootManifest, FileStatus, ManifestDiff
 from deadline.job_attachments.upload import S3AssetManager
 
 
@@ -117,16 +118,30 @@ def compare_manifest(
 
 
 def _fast_file_list_to_manifest_diff(
-    root: str, current_files: List[str], diff_manifest: BaseAssetManifest, logger: ClickLogger
-) -> List[str]:
+    root: str,
+    current_files: List[str],
+    diff_manifest: BaseAssetManifest,
+    logger: ClickLogger,
+    return_root_relative_path: bool = True,
+) -> List[Tuple[str, FileStatus]]:
     """
     Perform a fast difference of the current list of files to a previous manifest to diff against using time stamps and file sizes.
     :param root: Root folder of files to diff against.
     :param current_files: List of files to compare with.
     :param diff_manifest: Manifest containing files to diff against.
-    :return List[str]: List of files that are new, or modified.
+    :param return_root_relative_path: File Path to return, either relative to root or full.
+    :param logger: logger.
+    :return List[Tuple[str, FileStatus]]: List of Tuple containing the file path and FileStatus pair.
     """
-    changed_paths: List[str] = []
+
+    # Select either relative or absolut path for results.
+    def select_path(full_path: str, relative_path: str, return_root_relative_path: bool):
+        if return_root_relative_path:
+            return relative_path
+        else:
+            return full_path
+
+    changed_paths: List[Tuple[str, FileStatus]] = []
     input_files_map: Dict[str, BaseManifestPath] = {}
     for input_file in diff_manifest.paths:
         # Normalize paths so we can compare different OSes
@@ -134,6 +149,7 @@ def _fast_file_list_to_manifest_diff(
         input_files_map[normalized_path] = input_file
 
     # Iterate for each file that we found in glob.
+    root_relative_paths: List[str] = []
     for local_file in current_files:
         # Get the file's time stamp and size. We want to compare both.
         # From enabling CRT, sometimes timestamp update can fail.
@@ -141,23 +157,146 @@ def _fast_file_list_to_manifest_diff(
         file_stat = local_file_path.stat()
 
         # Compare the glob against the relative path we store in the manifest.
+        # Save it to a list so we can look for deleted files.
         root_relative_path = str(PurePosixPath(*local_file_path.relative_to(root).parts))
+        root_relative_paths.append(root_relative_path)
+
+        return_path = select_path(
+            full_path=local_file,
+            relative_path=root_relative_path,
+            return_root_relative_path=return_root_relative_path,
+        )
         if root_relative_path not in input_files_map:
             # This is a new file
             logger.echo(f"Found difference at: {root_relative_path}, Status: FileStatus.NEW")
-            changed_paths.append(local_file)
+            changed_paths.append((return_path, FileStatus.NEW))
         else:
             # This is a modified file, compare with manifest relative timestamp.
             input_file = input_files_map[root_relative_path]
             # Check file size first as it is easier to test. Usually modified files will also have size diff.
             if file_stat.st_size != input_file.size:
-                changed_paths.append(local_file)
+                changed_paths.append((return_path, FileStatus.MODIFIED))
                 logger.echo(
                     f"Found size difference at: {root_relative_path}, Status: FileStatus.MODIFIED"
                 )
             elif int(file_stat.st_mtime_ns // 1000) != input_file.mtime:
-                changed_paths.append(local_file)
+                changed_paths.append((return_path, FileStatus.MODIFIED))
                 logger.echo(
                     f"Found time difference at: {root_relative_path}, Status: FileStatus.MODIFIED"
                 )
+
+    # Find deleted files. Manifest store files in relative form.
+    for manifest_file_path in diff_manifest.paths:
+        if manifest_file_path.path not in root_relative_paths:
+            full_path = os.path.join(root, manifest_file_path.path)
+            return_path = select_path(
+                full_path=full_path,
+                relative_path=manifest_file_path.path,
+                return_root_relative_path=return_root_relative_path,
+            )
+            changed_paths.append((return_path, FileStatus.DELETED))
     return changed_paths
+
+
+def pretty_print_cli(root: str, all_files: List[str], manifest_diff: ManifestDiff):
+    """
+    Prints to command line a formatted file tree structure with corresponding file statuses
+    """
+
+    # ASCII characters for the tree structure
+    PIPE = "│"
+    HORIZONTAL = "──"
+    ELBOW = "└"
+    TEE = "├"
+    SPACE = "    "
+
+    # ANSI escape sequences for colors
+    COLORS = {
+        "MODIFIED": "\033[93m",  # yellow
+        "NEW": "\033[92m",  # green
+        "DELETED": "\033[91m",  # red
+        "UNCHANGED": "\033[90m",  # grey
+        "RESET": "\033[0m",  # base color
+        "DIRECTORY": "\033[80m",  # grey
+    }
+
+    # Tooltips:
+    TOOLTIPS = {
+        FileStatus.NEW: " +",  # added files
+        FileStatus.DELETED: " -",  # deleted files
+        FileStatus.MODIFIED: " M",  # modified files
+        FileStatus.UNCHANGED: "",  # unchanged files
+    }
+
+    class ColorFormatter(logging.Formatter):
+        def format(self, record):
+            message = super().format(record)
+            return f"{message}"
+
+    # Configure logger
+    formatter = ColorFormatter("")
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(__name__)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    def print_tree(directory_tree, prefix=""):
+        sorted_entries = sorted(directory_tree.items())
+
+        for i, (entry, subtree) in enumerate(sorted_entries, start=1):
+            is_last_entry = i == len(sorted_entries)
+            symbol = ELBOW + HORIZONTAL if is_last_entry else TEE + HORIZONTAL
+            is_dir = isinstance(subtree, dict)
+            color = COLORS["DIRECTORY"] if is_dir else COLORS[subtree.name]
+            tooltip = TOOLTIPS[FileStatus.UNCHANGED] if is_dir else TOOLTIPS[subtree]
+
+            message = f"{prefix}{symbol}{color}{entry}{tooltip}{COLORS['RESET']}{os.path.sep if is_dir else ''}"
+            logger.info(message)
+
+            if is_dir:
+                new_prefix = prefix + (SPACE if is_last_entry else PIPE + SPACE)
+                print_tree(subtree, new_prefix)
+
+        if not directory_tree:
+            symbol = ELBOW + HORIZONTAL
+            message = f"{prefix}{symbol}{COLORS['UNCHANGED']}. {COLORS['RESET']}"
+            logger.info(message)
+
+    def get_file_status(file: str, manifest_diff: ManifestDiff):
+        print(file)
+        if file in manifest_diff.new:
+            return FileStatus.NEW
+        elif file in manifest_diff.modified:
+            return FileStatus.MODIFIED
+        elif file in manifest_diff.deleted:
+            return FileStatus.DELETED
+        else:
+            # Default, not in any diff list.
+            return FileStatus.UNCHANGED
+
+    def build_directory_tree(all_files: List[str]) -> Dict[str, dict]:
+        directory_tree: dict = {}
+
+        def add_to_tree(path, status):
+            parts = str(path).split(os.path.sep)
+            current_level = directory_tree
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    current_level[part] = status
+                else:
+                    current_level = current_level.setdefault(part, {})
+
+        for file in all_files:
+            print(f"{file} {root}")
+            relative_path = str(Path(file).relative_to(root))
+            add_to_tree(
+                relative_path,
+                get_file_status(relative_path, manifest_diff),
+            )
+        return directory_tree
+
+    directory_tree = build_directory_tree(all_files)
+    print_tree(directory_tree)
+    logger.info("")

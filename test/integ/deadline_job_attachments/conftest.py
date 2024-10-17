@@ -1,7 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import getpass
-import os
 import json
 import sys
 import pytest
@@ -92,14 +91,6 @@ def default_job_template_one_task_one_step() -> str:
             ],
         }
     )
-
-
-@pytest.fixture()
-def external_bucket() -> str:
-    """
-    Return a bucket that all developers and test accounts have access to, but isn't in the testers account.
-    """
-    return os.environ.get("INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET", "job-attachment-bucket-snipe-test")
 
 
 def is_windows_non_admin():
