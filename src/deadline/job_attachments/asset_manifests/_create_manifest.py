@@ -7,7 +7,6 @@ from deadline.client.cli._common import _ProgressBarCallbackManager
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.exceptions import ManifestCreationException
-from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.upload import S3AssetManager
 
 
@@ -22,9 +21,7 @@ def _create_manifest_for_single_root(
     :return
     """
     # Placeholder Asset Manager
-    asset_manager = S3AssetManager(
-        farm_id=" ", queue_id=" ", job_attachment_settings=JobAttachmentS3Settings(" ", " ")
-    )
+    asset_manager = S3AssetManager()
 
     hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
 
