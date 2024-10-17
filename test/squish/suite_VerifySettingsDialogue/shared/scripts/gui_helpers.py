@@ -24,7 +24,7 @@ def launch_deadline_config_gui():
 
 
 def close_deadline_config_gui():
-    test.log("Hitting `OK` button to close Deadline Config GUI.")
+    test.log("Hitting `OK` button to close Deadline Settings.")
     # hit 'OK' button to close Deadline Config GUI
     squish.clickButton(squish.waitForObject(gui_locators.deadlinedialog_ok_button))
 
