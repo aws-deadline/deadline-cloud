@@ -27,20 +27,20 @@ from deadline.job_attachments.models import JobAttachmentS3Settings
 @_handle_error
 def cli_attachment():
     """
-    Commands to work with Job Attachments.
+    Commands to work with Deadline Cloud Job Attachments.
     """
 
 
 @cli_attachment.command(
     name="download",
-    help="BETA",
+    help="BETA - Download Job Attachment data files for given manifest(s).",
 )
 @click.option(
     "-m",
     "--manifests",
     multiple=True,
     required=True,
-    help="File path(s) to manifest formatted file(s).",
+    help="File path(s) to manifest formatted file(s). File name has to contain the hash of corresponding source path.",
 )
 @click.option(
     "--s3-root-uri", help="Job Attachments S3 root uri including bucket name and root prefix."
@@ -48,7 +48,9 @@ def cli_attachment():
 @click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
-@click.option("--profile", help="The AWS profile to use.")
+@click.option(
+    "--profile", help="The AWS profile to use for interacting with Job Attachments S3 bucket."
+)
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
 @_handle_error
 def attachment_download(
@@ -59,15 +61,14 @@ def attachment_download(
     **args,
 ):
     """
-    Synchronize files of manifest root(s) to a machine.
-    The input of the CLI is a path to a Job Attachments manifest file to download assets.
+    Download data files of manifest root(s) to a machine for given manifest(s) from S3.
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 
     # Setup config
     config = _apply_cli_options_to_config(**args)
 
-    # Assuming when passing with config, session constructs from the profile id
+    # Assuming when passing with config, session constructs from the profile id for S3 calls
     # TODO - add type for profile, if queue type, get queue sesson directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
@@ -102,13 +103,16 @@ def attachment_download(
     )
 
 
-@cli_attachment.command(name="upload", help="BETA")
+@cli_attachment.command(
+    name="upload",
+    help="BETA - Upload Job Attachment data files for given manifest(s).",
+)
 @click.option(
     "-m",
     "--manifests",
     multiple=True,
     required=True,
-    help="File path(s) to manifest formatted file(s).",
+    help="File path(s) to manifest formatted file(s). File name has to contain the hash of corresponding source path.",
 )
 @click.option(
     "-r",
@@ -125,7 +129,9 @@ def attachment_download(
 )
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
-@click.option("--profile", help="The AWS profile to use.")
+@click.option(
+    "--profile", help="The AWS profile to use for interacting with Job Attachments S3 bucket."
+)
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
 @_handle_error
 def attachment_upload(
@@ -145,7 +151,7 @@ def attachment_upload(
     # Setup config
     config = _apply_cli_options_to_config(**args)
 
-    # Assuming when passing with config, session constructs from the profile id
+    # Assuming when passing with config, session constructs from the profile id for S3 calls
     # TODO - add type for profile, if queue type, get queue sesson directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
