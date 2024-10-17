@@ -12,7 +12,7 @@ from deadline.client.cli import main
 
 def test_cli_attachment_existence(fresh_deadline_config):
     """
-    Confirm that the CLI is not availble for environment with no JOB_ATTACHMENT_CLI variable
+    Confirm that the subcommand group is availble for environment with no JOB_ATTACHMENT_CLI
     """
 
     assert not os.environ.get("JOB_ATTACHMENT_CLI")
@@ -20,4 +20,4 @@ def test_cli_attachment_existence(fresh_deadline_config):
     runner = CliRunner()
     response = runner.invoke(main, ["attachment"])
 
-    assert "Error: No such command 'attachment'" in response.output
+    assert "Usage: main attachment" in response.output

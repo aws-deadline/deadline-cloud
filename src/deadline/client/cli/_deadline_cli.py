@@ -8,7 +8,6 @@ import logging
 from logging import getLogger
 
 import click
-import os
 
 from .. import version
 from ..config import get_setting, get_setting_default
@@ -80,6 +79,5 @@ main.add_command(cli_job)
 main.add_command(cli_queue)
 main.add_command(cli_worker)
 
-if os.environ.get("JOB_ATTACHMENT_CLI") is not None:
-    main.add_command(cli_attachment)
-    main.add_command(cli_manifest)
+main.add_command(cli_attachment)
+main.add_command(cli_manifest)
