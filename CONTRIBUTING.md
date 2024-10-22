@@ -14,6 +14,8 @@ Table of contents:
     * [Talk with us first](#talk-with-us-first)
     * [Contributing via Pull Requests](#contributing-via-pull-requests)
     * [Conventional Commits](#conventional-commits)
+    * [Digital Certificate of Origin](#digital-certificate-of-origin)
+    * [Conventional Commit & DCO Automation](#automating-conventional-commits-and-dco)
 * [Licensing](#licensing)
 
 ## Reporting Bugs/Feature Requests
@@ -106,6 +108,58 @@ the command-line interface, or the like.
 If you need change a commit message, then please see the
 [GitHub documentation on the topic](https://docs.github.com/en/pull-requests/committing-changes-to-your-project/creating-and-editing-commits/changing-a-commit-message)
 to guide you.
+
+### Digital Certificate of Origin.
+
+This repository enforces the Developer Certificate of Origin (DCO) on Pull Requests. It requires all commit messages to contain the `Signed-off-by` line with an email address that matches the commit author.
+
+To generate the `Signed-off-by` line, make sure `git commit` is passed with the `-s` flag.
+
+### Automating Conventional Commits and DCO.
+
+To simplify Conventional Commit and DCO, it is recommended to setup a Git hook for the repository. Add the following as a git hook:
+
+- Edit `{repository}/.git/hooks/commit-msg`
+- `chmod +x {repository}/.git/hooks/commit-msg`
+- Paste in the following shell script, customize as necessary.
+```
+#!/bin/sh
+SIGNATURE="Signed-off-by: `git config --global --get user.name` <`git config --global --get user.email`>"
+grep -qs "^${SIGNATURE}" "$1" || echo "\n${SIGNATURE}" >> "$1"
+
+commitTitle="$(cat $1 | head -n1)"
+
+# ignore merge requests
+if echo "$commitTitle" | grep -qE "Merge branch"; then
+	echo "Commit hook: ignoring branch merge"
+	exit 0
+fi
+
+# check semantic versioning scheme
+if ! echo "$commitTitle" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([a-z0-9\s\-\_\,]+\))?!?:\s\w'; then
+	echo "Your commit message did not follow semantic versioning: $commitTitle"
+	echo ""
+	echo "Format:   <type>(<optional-scope>): <subject>"
+	echo "Example:  feat(api): add endpoint"
+	echo ""
+	echo "Valid types: build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test"
+	echo ""
+	echo "Please see"
+	echo "- https://www.conventionalcommits.org/en/v1.0.0/#summary"
+	exit 1
+fi
+```
+
+If you want to create this hook automatically on every new git repository you will create from now on (using git init, git clone...) you can use git-templates; to do so, just save the script described above into (duplicate files):
+
+```
+~/.git-templates/hooks/commit-msg
+```
+
+Configure the Git default as follows:
+```
+git config --global init.templatedir ~/.git-templates
+```
 
 ## Licensing
 
