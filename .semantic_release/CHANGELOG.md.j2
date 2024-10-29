@@ -8,16 +8,16 @@
         {% endfor %}
     {% endif %}
 
-    {% if "feature" in release["elements"] %}
+    {% if "features" in release["elements"] %}
 ### Features
-        {% for commit in release["elements"]["feature"] %}
+        {% for commit in release["elements"]["features"] %}
 * {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(": ")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
         {% endfor %}
     {% endif %}
 
-    {% if "fix" in release["elements"] %}
+    {% if "bug fixes" in release["elements"] %}
 ### Bug Fixes
-        {% for commit in release["elements"]["fix"] %}
+        {% for commit in release["elements"]["bug fixes"] %}
 * {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(":")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
         {% endfor %}
     {% endif %}
