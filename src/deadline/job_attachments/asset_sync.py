@@ -329,14 +329,14 @@ class AssetSync:
     def _check_and_write_local_manifests(
         self, merged_manifests_by_root: dict[str, BaseAssetManifest], manifest_write_dir: str
     ) -> list[str]:
-        """Write manifests to the session directory and check disk capacity is sufficient for the assets
+        """Write manifests to the directory and check disk capacity is sufficient for the assets.
 
         Args:
             merged_manifests_by_root (dict[str, BaseAssetManifest]): manifest file to its stored root.
-            session_dir (str): local directory to write to
+            manifest_write_dir (str): local directory to write to.
 
         Returns:
-            list[str]: file paths the manifests are written to
+            list[str]: file paths the manifests are written to.
         """
 
         total_input_size: int = 0
