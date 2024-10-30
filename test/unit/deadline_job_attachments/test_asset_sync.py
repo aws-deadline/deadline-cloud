@@ -1248,7 +1248,7 @@ class TestAssetSync:
             ("default_job_attachment_s3_settings"),
         ],
     )
-    def test_sync_attachment_inputs_with_step_dependencies(
+    def test_attachment_sync_inputs_with_step_dependencies(
         self,
         tmp_path: Path,
         default_queue: Queue,
@@ -1470,6 +1470,75 @@ class TestAssetSync:
                 "Total file size required for download (300.0 PB) is larger than available disk space"
                 in str(ase)
             )
+
+    def test_aggregate_asset_root_manifests_and_write(
+        self,
+        default_queue: Queue,
+        default_job: Job,
+        default_job_attachment_s3_settings: JobAttachmentS3Settings,
+        test_manifest_one: dict,
+        tmp_path: Path,
+    ):
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        dest_dir = "assetroot"
+
+        default_job.attachments = Attachments(
+            manifests=[
+                ManifestProperties(
+                    rootPath="/root/tmp",
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="manifest_input",
+                    inputManifestHash="manifesthash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+                ManifestProperties(
+                    fileSystemLocationName="Movie 1",
+                    rootPath="/home/user/movie1",
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="manifest-movie1_input",
+                    inputManifestHash="manifestmovie1hash",
+                    outputRelativeDirectories=["test/outputs"],
+                ),
+            ],
+        )
+        manifest_count = len(default_job.attachments.manifests)
+        storage_profiles_path_mapping_rules = {
+            "/home/user/movie1": "/root/tmp/movie1",
+        }
+
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ) as mock_get_manifest_from_s3, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.merge_asset_manifests",
+            return_value=test_manifest,
+        ) as mock_merge_asset_manifests, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.S3AssetUploader._write_local_input_manifest",
+            return_value=tmp_path.joinpath("manifest/hasn_manifest"),
+        ) as mock__write_local_input_manifest:
+
+            merged_manifests_by_root = self.default_asset_sync._aggregate_asset_root_manifests(
+                session_dir=tmp_path,
+                s3_settings=default_job_attachment_s3_settings,
+                queue_id=default_queue.queueId,
+                job_id=default_job.jobId,
+                attachments=default_job.attachments,
+                dynamic_mapping_rules=self.default_asset_sync.generate_dynamic_path_mapping(
+                    session_dir=tmp_path, attachments=default_job.attachments
+                ),
+                storage_profiles_path_mapping_rules=storage_profiles_path_mapping_rules,
+            )
+            assert mock_merge_asset_manifests.call_count == manifest_count
+            assert mock_get_manifest_from_s3.call_count == manifest_count
+
+            paths = self.default_asset_sync._check_and_write_local_manifests(
+                merged_manifests_by_root=merged_manifests_by_root, manifest_write_dir=str(tmp_path)
+            )
+            assert mock__write_local_input_manifest.call_count == manifest_count
+            assert len(paths) == manifest_count
 
     def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
         self,

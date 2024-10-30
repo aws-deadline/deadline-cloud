@@ -166,7 +166,7 @@ class AssetSync:
                 f"No path mapping rule found for the source path {manifest_properties.rootPath}"
             )
 
-    def aggregate_asset_root_manifests(
+    def _aggregate_asset_root_manifests(
         self,
         session_dir: Path,
         s3_settings: JobAttachmentS3Settings,
@@ -176,7 +176,7 @@ class AssetSync:
         step_dependencies: Optional[list[str]] = None,
         dynamic_mapping_rules: dict[str, PathMappingRule] = {},
         storage_profiles_path_mapping_rules: dict[str, str] = {},
-    ) -> DefaultDict[str, list[BaseAssetManifest]]:
+    ) -> dict[str, BaseAssetManifest]:
         """
          Args:
             session_dir: the directory that the session is going to use.
@@ -187,7 +187,7 @@ class AssetSync:
             step_dependencies: the list of Step IDs whose output should be downloaded over the input job attachments.
             dynamic_mapping_rules: manifest root path to worker host destination mapping relative to local session.
             storage_profiles_path_mapping_rules: manifest root path to worker host destination mapping given storage profile.
-        Returns: a dictionary of manifest files stored in the session directory.
+        Returns: a dictionary of manifest file stored in the session directory.
         """
         grouped_manifests_by_root: DefaultDict[str, list[BaseAssetManifest]] = DefaultDict(list)
 
@@ -225,7 +225,15 @@ class AssetSync:
                     local_root = str(session_dir.joinpath(dir_name))
                     grouped_manifests_by_root[local_root].extend(manifests)
 
-        return grouped_manifests_by_root
+        # Merge the manifests in each root into a single manifest
+        merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
+        for root, manifests in grouped_manifests_by_root.items():
+            merged_manifest = merge_asset_manifests(manifests)
+
+            if merged_manifest:
+                merged_manifests_by_root[root] = merged_manifest
+
+        return merged_manifests_by_root
 
     def _launch_vfs(
         self,
@@ -242,7 +250,7 @@ class AssetSync:
             fs_permission_settings: An instance defining group ownership and permission modes
                                     to be set on the downloaded (synchronized) input files and directories.
             merged_manifests_by_root: Merged manifests produced by
-                                    aggregate_asset_root_manifests()
+                                    _aggregate_asset_root_manifests()
         Returns: None
         Raises: VFSExecutableMissingError If VFS is not startable.
         """
@@ -278,7 +286,7 @@ class AssetSync:
             session_dir: the directory that the session is going to use.
             fs_permission_settings: An instance defining group ownership and permission modes
                                     to be set on the downloaded (synchronized) input files and directories.
-            merged_manifests_by_root: Merged manifests produced by aggregate_asset_root_manifests()
+            merged_manifests_by_root: Merged manifests produced by _aggregate_asset_root_manifests()
             on_downloading_files: Callback when download files from S3.
 
         Returns:
@@ -288,6 +296,11 @@ class AssetSync:
             JobAttachmentsS3ClientError if any issue is encountered while downloading.
         """
         try:
+            total_input_size: int = 0
+            for merged_manifest in merged_manifests_by_root.values():
+                total_input_size += merged_manifest.totalSize  # type: ignore[attr-defined]
+            self._ensure_disk_capacity(Path(session_dir), total_input_size)
+
             return download_files_from_manifests(
                 s3_bucket=s3_settings.s3BucketName,
                 manifests_by_root=merged_manifests_by_root,
@@ -312,6 +325,41 @@ class AssetSync:
                 ) from exc
             else:
                 raise
+
+    def _check_and_write_local_manifests(
+        self, merged_manifests_by_root: dict[str, BaseAssetManifest], manifest_write_dir: str
+    ) -> list[str]:
+        """Write manifests to the directory and check disk capacity is sufficient for the assets.
+
+        Args:
+            merged_manifests_by_root (dict[str, BaseAssetManifest]): manifest file to its stored root.
+            manifest_write_dir (str): local directory to write to.
+
+        Returns:
+            list[str]: file paths the manifests are written to.
+        """
+
+        total_input_size: int = 0
+        manifest_paths: list[str] = list()
+
+        for root, manifest in merged_manifests_by_root.items():
+            (_, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
+                manifest=manifest,
+                source_root=Path(root),
+                manifest_name_suffix="manifest",
+            )
+
+            local_manifest_file = S3AssetUploader._write_local_input_manifest(
+                manifest_write_dir=manifest_write_dir,
+                manifest_name=manifest_name,
+                manifest=manifest,
+            )
+
+            total_input_size += manifest.totalSize  # type: ignore[attr-defined]
+            manifest_paths.append(local_manifest_file.as_posix())
+
+        self._ensure_disk_capacity(Path(manifest_write_dir), total_input_size)
+        return manifest_paths
 
     def attachment_sync_inputs(
         self,
@@ -375,9 +423,9 @@ class AssetSync:
             attachments=attachments,
         )
 
-        # Aggregate manifests (with step step dependency handling)
-        grouped_manifests_by_root: DefaultDict[str, list[BaseAssetManifest]] = (
-            self.aggregate_asset_root_manifests(
+        # Aggregate and merge manifests (with step step dependency handling) in each root into a single manifest
+        merged_manifests_by_root: dict[str, BaseAssetManifest] = (
+            self._aggregate_asset_root_manifests(
                 session_dir=session_dir,
                 s3_settings=s3_settings,
                 queue_id=queue_id,
@@ -388,16 +436,6 @@ class AssetSync:
                 storage_profiles_path_mapping_rules=storage_profiles_path_mapping_rules,
             )
         )
-
-        # Merge the manifests in each root into a single manifest
-        merged_manifests_by_root: dict[str, BaseAssetManifest] = dict()
-        total_input_size: int = 0
-        for root, manifests in grouped_manifests_by_root.items():
-            merged_manifest = merge_asset_manifests(manifests)
-
-            if merged_manifest:
-                merged_manifests_by_root[root] = merged_manifest
-                total_input_size += merged_manifest.totalSize  # type: ignore[attr-defined]
 
         # Download
         summary_statistics: SummaryStatistics = SummaryStatistics()
@@ -419,7 +457,6 @@ class AssetSync:
             )
         else:
             # Copied Download flow
-            self._ensure_disk_capacity(session_dir, total_input_size)
             summary_statistics = self.copied_download(
                 s3_settings=s3_settings,
                 session_dir=session_dir,

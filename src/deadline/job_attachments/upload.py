@@ -248,13 +248,13 @@ class S3AssetUploader:
 
         self._write_local_manifest_s3_mapping(manifest_write_dir, manifest_name, full_manifest_key)
 
+    @staticmethod
     def _write_local_input_manifest(
-        self,
         manifest_write_dir: str,
         manifest_name: str,
         manifest: BaseAssetManifest,
         root_dir_name: Optional[str] = None,
-    ):
+    ) -> Path:
         """
         Creates 'manifests' sub-directory and writes a local input manifest file
         """
@@ -267,6 +267,8 @@ class S3AssetUploader:
         local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(local_manifest_file, "w") as file:
             file.write(manifest.encode())
+
+        return local_manifest_file
 
     def _write_local_manifest_s3_mapping(
         self,
