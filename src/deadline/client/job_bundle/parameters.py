@@ -501,23 +501,22 @@ def merge_queue_job_parameters(
         if job_parameter_name in collected_parameters:
             # Check for type mismatch between queue and job bundle
 
-            # Job parameters will only provide a value and will not have a definition fields if the
-            # parameter is defined on the queue
-            if {"name", "value"} == job_parameter.keys():
-                collected_parameters[job_parameter_name]["value"] = job_parameter["value"]
-                continue
+            collected_parameter = collected_parameters[job_parameter_name]
 
-            queue_parameter = collected_parameters[job_parameter_name]
-            differences = parameter_definition_difference(queue_parameter, job_parameter)
+            # If the job parameter includes a value, always copy it to the collected parameter
+            if "value" in job_parameter:
+                collected_parameter["value"] = job_parameter["value"]
+                # If the job parameter doesn't include a definition, there's nothing more to merge
+                if {"name", "value"} == set(job_parameter.keys()):
+                    continue
 
-            # Ignore differing defaults
-            try:
-                differences.remove("default")
-            except ValueError:
-                # Job bundle's default value for a parameter takes priority over queue's parameter
-                # default
-                if "default" in job_parameter:
-                    collected_parameters[job_parameter_name]["default"] = job_parameter["default"]
+            # If the job parameter includes a default, always copy it to the collected parameter
+            if "default" in job_parameter:
+                collected_parameter["default"] = job_parameter["default"]
+
+            differences = parameter_definition_difference(collected_parameter, job_parameter)
+            # Ignore any differences in the default value
+            differences = [name for name in differences if name != "default"]
 
             if differences:
                 param_mismatches.append(

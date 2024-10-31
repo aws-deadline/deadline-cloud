@@ -204,6 +204,75 @@ class TestMergeQueueJobParameters:
         assert merged_param["default"] == expected_merged_default
 
     @pytest.mark.parametrize(
+        argnames=("queue_parameter", "job_parameter", "expected_merged_parameter"),
+        argvalues=(
+            # If the job parameter only specifies the name and value, its
+            # value is used with the queue's definition
+            pytest.param(
+                {
+                    "name": "foo",
+                    "type": "STRING",
+                    "default": "queue_default",
+                },
+                {
+                    "name": "foo",
+                    "value": "job_override",
+                },
+                {
+                    "name": "foo",
+                    "type": "STRING",
+                    "default": "queue_default",
+                    "value": "job_override",
+                },
+                id="job_param_value_no_definition",
+            ),
+            # If the job parameter specifies a value, and both the
+            # job and queue parameter have definitions, merge them
+            # while using the job's value
+            pytest.param(
+                {
+                    "name": "foo",
+                    "type": "STRING",
+                    "default": "queue_default",
+                },
+                {
+                    "name": "foo",
+                    "type": "STRING",
+                    "default": "job_default",
+                    "value": "job_override",
+                },
+                {
+                    "name": "foo",
+                    "type": "STRING",
+                    "default": "job_default",
+                    "value": "job_override",
+                },
+                id="job_param_value_with_definition",
+            ),
+        ),
+    )
+    def test_merge_queue_job_parameters_cases(
+        self, queue_parameter, job_parameter, expected_merged_parameter
+    ) -> None:
+        """Tests that when the job bundle provides a parameter value only but the queue defines it,
+        the value is is used from the job parameter."""
+
+        # GIVEN
+        queue_id = "queue-123"
+        queue_parameters: list[parameters.JobParameter] = [queue_parameter]
+        job_bundle_parameters: list[parameters.JobParameter] = [job_parameter]
+
+        # WHEN
+        merged = parameters.merge_queue_job_parameters(
+            queue_id=queue_id,
+            job_parameters=job_bundle_parameters,
+            queue_parameters=queue_parameters,
+        )
+
+        # THEN
+        assert merged == [expected_merged_parameter]
+
+    @pytest.mark.parametrize(
         argnames="queue_id",
         argvalues=(
             pytest.param("queue-12345", id="with-queue-id"),
@@ -256,7 +325,7 @@ class TestMergeQueueJobParameters:
             == f'The target {expected_queue_str} and job bundle have conflicting parameter definitions:\n\n\tfoo: differences for fields "{["type"]}"'
         )
 
-    def test_merge_queue_job_parameters_value_only(self) -> None:
+    def test_merge_queue_job_parameters_missing_definition(self) -> None:
         """Tests that when the job bundle provides a parameter value without a definition and there
         is no corresponding parameter definition from the queue that a DeadlineOperationError is
         raised"""
