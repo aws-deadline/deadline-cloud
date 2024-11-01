@@ -4,7 +4,6 @@
 Integ tests for the CLI manifest download commands.
 """
 import json
-import os
 import tempfile
 import time
 from typing import List
@@ -198,9 +197,9 @@ class TestManifestDownload:
 
                 # Create a list of files we know should be in the input paths.
                 files: List[str] = [path.path for path in manifest.paths]
-                assert os.path.join("inputs", "textures", "brick.png") in files
-                assert os.path.join("inputs", "textures", "brick.png") in files
-                assert os.path.join("inputs", "scene.ma") in files
+                assert "inputs/textures/brick.png" in files
+                assert "inputs/textures/cloth.png" in files
+                assert "inputs/scene.ma" in files
 
     @pytest.mark.parametrize(
         "json_output",
@@ -268,8 +267,8 @@ class TestManifestDownload:
 
                 # Create a list of files we know should be in the input paths.
                 files: List[str] = [path.path for path in manifest.paths]
-                assert os.path.join("inputs", "textures", "brick.png") in files
-                assert os.path.join("inputs", "textures", "brick.png") in files
-                assert os.path.join("inputs", "scene.ma") in files
-                assert os.path.join("output_file") in files
-                assert os.path.join("output", "nested_output_file") in files
+                assert "inputs/textures", "brick.png" in files
+                assert "inputs/textures", "cloth.png" in files
+                assert "inputs/scene.ma" in files
+                assert "output_file" in files
+                assert "output/nested_output_file" in files
