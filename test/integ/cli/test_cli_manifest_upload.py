@@ -9,6 +9,7 @@ from typing import Optional
 import boto3
 from click.testing import CliRunner
 from deadline.client.cli._groups.manifest_group import cli_manifest
+from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.api.manifest import _manifest_snapshot
 from deadline.job_attachments.models import ManifestSnapshot
 import pytest
@@ -97,9 +98,6 @@ class TestManifestUpload:
         # Cleanup.
         s3_client.delete_object(Bucket=s3_bucket, Key=manifest_s3_path)
 
-    @pytest.mark.skip(
-        "Skipping for Test Failure. Disable to unblock integration since this is a BETA API."
-    )
     def test_manifest_upload_by_farm_queue(self, temp_dir):
         """
         Simple test to generate a manifest, and then call the upload CLI to upoad to S3.
@@ -111,28 +109,31 @@ class TestManifestUpload:
         manifest_file = self.create_manifest_file(temp_dir)
         manifest_file_name = Path(manifest_file).name
 
+        # Input:
+        farm_id = os.environ.get("FARM_ID", "")
+        queue_id = os.environ.get("QUEUE_ID", "")
+
         # Now that we have a manifest file, execute the CLI and upload it to S3
         # The manifest file name is unique, so it will not collide with prior test runs.
         s3_bucket = os.environ.get("JOB_ATTACHMENTS_BUCKET", "")
         runner = CliRunner()
-        # Temporary, always add cli_manifest until launched.
-        main.add_command(cli_manifest)
         result = runner.invoke(
             main,
             [
                 "manifest",
                 "upload",
                 "--farm-id",
-                os.environ.get("FARM_ID", ""),
+                farm_id,
                 "--queue-id",
-                os.environ.get("QUEUE_ID", ""),
+                queue_id,
                 manifest_file,
             ],
         )
         assert result.exit_code == 0, f"Non-Zeo exit code, CLI output {result.output}"
 
         # Then validate the Manifest file is uploaded to S3 by checking the file actually exists.
-        manifest_s3_path = f"DeadlineCloud/Manifests/{manifest_file_name}"
+        root_prefix = get_queue(farm_id=farm_id, queue_id=queue_id).jobAttachmentSettings.rootPrefix  # type: ignore[union-attr]
+        manifest_s3_path = f"{root_prefix}/Manifests/{manifest_file_name}"
         s3_client = boto3.client("s3")
         try:
             s3_client.head_object(Bucket=s3_bucket, Key=manifest_s3_path)

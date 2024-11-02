@@ -142,7 +142,7 @@ def _fast_file_list_to_manifest_diff(
     input_files_map: Dict[str, BaseManifestPath] = {}
     for input_file in diff_manifest.paths:
         # Normalize paths so we can compare different OSes
-        normalized_path = os.path.normpath(input_file.path)
+        normalized_path = Path(os.path.normpath(input_file.path)).as_posix()
         input_files_map[normalized_path] = input_file
 
     # Iterate for each file that we found in glob.
@@ -155,7 +155,7 @@ def _fast_file_list_to_manifest_diff(
 
         # Compare the glob against the relative path we store in the manifest.
         # Save it to a list so we can look for deleted files.
-        root_relative_path = str(PurePosixPath(*local_file_path.relative_to(root).parts))
+        root_relative_path = str(PurePosixPath(*local_file_path.relative_to(root).parts).as_posix())
         root_relative_paths.append(root_relative_path)
 
         return_path = select_path(
