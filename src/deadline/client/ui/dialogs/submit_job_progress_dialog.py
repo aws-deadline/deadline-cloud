@@ -589,7 +589,7 @@ class SubmitJobProgressDialog(QDialog):
         self.summary_edit.setText(f"Error occurred: {str(e)}")
         self.summary_edit.setVisible(True)
         self.adjustSize()
-        logger.error(str(e))
+        logger.exception(e, exc_info=(type(e), e, e.__traceback__))
 
     def _confirm_asset_references_outside_storage_profile(
         self, upload_group: AssetUploadGroup

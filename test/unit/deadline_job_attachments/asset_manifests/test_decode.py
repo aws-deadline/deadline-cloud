@@ -102,10 +102,14 @@ def test_decode_manifest_v2023_03_03(default_manifest_str_v2023_03_03: str):
             Path_v2023_03_03(path="test_file", hash="a", size=1, mtime=167907934333848),
             Path_v2023_03_03(path="\u0080", hash="Control", size=1, mtime=1679079344833348),
             Path_v2023_03_03(
+                path="\u00c3\u00b1", hash="UserTestCase", size=1, mtime=1679579344833848
+            ),
+            Path_v2023_03_03(
                 path="ö", hash="LatinSmallLetterOWithDiaeresis", size=1, mtime=1679079344833848
             ),
             Path_v2023_03_03(path="€", hash="EuroSign", size=1, mtime=1679079344836848),
             Path_v2023_03_03(path="😀", hash="EmojiGrinningFace", size=1, mtime=1679579344833848),
+            Path_v2023_03_03(path="\ude0a", hash="EmojiTestCase", size=1, mtime=1679579344833848),
             Path_v2023_03_03(
                 path="דּ", hash="HebrewLetterDaletWithDagesh", size=1, mtime=1679039344833848
             ),
