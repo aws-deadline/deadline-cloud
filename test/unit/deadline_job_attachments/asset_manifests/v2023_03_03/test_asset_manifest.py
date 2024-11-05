@@ -73,11 +73,13 @@ def test_decode(default_manifest_str_v2023_03_03: str):
             ManifestPath(path="test_dir/test_file", hash="b", size=1, mtime=1479079344833848),
             ManifestPath(path="test_file", hash="a", size=1, mtime=167907934333848),
             ManifestPath(path="\u0080", hash="Control", size=1, mtime=1679079344833348),
+            ManifestPath(path="\u00c3\u00b1", hash="UserTestCase", size=1, mtime=1679579344833848),
             ManifestPath(
                 path="ö", hash="LatinSmallLetterOWithDiaeresis", size=1, mtime=1679079344833848
             ),
             ManifestPath(path="€", hash="EuroSign", size=1, mtime=1679079344836848),
             ManifestPath(path="😀", hash="EmojiGrinningFace", size=1, mtime=1679579344833848),
+            ManifestPath(path="\ude0a", hash="EmojiTestCase", size=1, mtime=1679579344833848),
             ManifestPath(
                 path="דּ", hash="HebrewLetterDaletWithDagesh", size=1, mtime=1679039344833848
             ),

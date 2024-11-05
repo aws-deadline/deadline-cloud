@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import time
+import json
 from io import BytesIO
 from logging import Logger, LoggerAdapter, getLogger
 from math import trunc
@@ -527,7 +528,16 @@ class AssetSync:
             full_output_prefix,
             f"{manifest_name_prefix}_output",
         )
-        metadata = {"Metadata": {"asset-root": root_path}}
+        metadata = {"Metadata": {"asset-root": json.dumps(root_path, ensure_ascii=True)}}
+        # S3 metadata must be ASCII, so use either 'asset-root' or 'asset-root-json' depending
+        # on whether the value is ASCII.
+        try:
+            # Add the 'asset-root' metadata if the path is ASCII
+            root_path.encode(encoding="ascii")
+            metadata["Metadata"]["asset-root"] = root_path
+        except UnicodeEncodeError:
+            # Add the 'asset-root-json' metadata encoded to ASCII as a JSON string
+            metadata["Metadata"]["asset-root-json"] = json.dumps(root_path, ensure_ascii=True)
         if file_system_location_name:
             metadata["Metadata"]["file-system-location-name"] = file_system_location_name
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import io
+import json
 import os
 import re
 import sys
@@ -640,7 +641,7 @@ def _get_asset_root_from_s3(
 ) -> Optional[str]:
     """
     Gets asset root from metadata (of output manifest) stored in S3.
-    If the key "asset-root" does not exist in the metadata, returns None.
+    If neither of the keys "asset-root-json" or "asset-root" exist in the metadata, returns None.
     """
     s3_client = get_s3_client(session=session)
     try:
@@ -670,7 +671,10 @@ def _get_asset_root_from_s3(
     except Exception as e:
         raise AssetSyncError(e) from e
 
-    return head["Metadata"].get("asset-root", None)
+    if "asset-root-json" in head["Metadata"]:
+        return json.loads(head["Metadata"]["asset-root-json"])
+    else:
+        return head["Metadata"].get("asset-root", None)
 
 
 def get_job_output_paths_by_asset_root(

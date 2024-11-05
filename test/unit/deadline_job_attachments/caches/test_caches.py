@@ -86,14 +86,25 @@ class TestHashCache:
             hc = HashCache()
             assert hc.cache_dir == tmpdir.join(f"{HashCache.CACHE_NAME}.db")
 
-    def test_get_entry_returns_valid_entry(self, tmpdir):
+    @pytest.mark.parametrize(
+        "file_path",
+        [
+            # Simple ascii filename
+            pytest.param("file", id="ascii_name"),
+            # Name from test case that was failing on Windows for a user
+            pytest.param("ñ/\u00c3\u00b1.txt", id="regression_test_filename"),
+            # Name from a generated emoji filename on Windows
+            pytest.param("\ude0a.txt", id="surrogate_emoji_example"),
+        ],
+    )
+    def test_get_entry_returns_valid_entry(self, tmpdir, file_path):
         """
         Tests that a valid entry is returned when it exists in the cache already
         """
         # GIVEN
         cache_dir = tmpdir.mkdir("cache")
         expected_entry = HashCacheEntry(
-            file_path="file",
+            file_path=file_path,
             hash_algorithm=HashAlgorithm.XXH128,
             file_hash="hash",
             last_modified_time="1234.5678",
@@ -102,7 +113,7 @@ class TestHashCache:
         # WHEN
         with HashCache(cache_dir) as hc:
             hc.put_entry(expected_entry)
-            actual_entry = hc.get_entry("file", HashAlgorithm.XXH128)
+            actual_entry = hc.get_entry(file_path, HashAlgorithm.XXH128)
 
             # THEN
             assert actual_entry == expected_entry

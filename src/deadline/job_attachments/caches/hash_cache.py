@@ -19,6 +19,8 @@ logger = logging.getLogger("Deadline")
 class HashCacheEntry:
     """Represents an entry in the local hash-cache database"""
 
+    # The file_path is stored as a BLOB in sqlite, encoded with utf-8 and the "surrogatepass"
+    # error handler, as file names encountered in practice require this.
     file_path: str
     hash_algorithm: HashAlgorithm
     file_hash: str
@@ -45,12 +47,12 @@ class HashCache(CacheDB):
     """
 
     CACHE_NAME = "hash_cache"
-    CACHE_DB_VERSION = 2
+    CACHE_DB_VERSION = 3
 
     def __init__(self, cache_dir: Optional[str] = None) -> None:
         table_name: str = f"hashesV{self.CACHE_DB_VERSION}"
         create_query: str = (
-            f"CREATE TABLE hashesV{self.CACHE_DB_VERSION}(file_path text primary key, hash_algorithm text secondary key, file_hash text, last_modified_time timestamp)"
+            f"CREATE TABLE hashesV{self.CACHE_DB_VERSION}(file_path blob primary key, hash_algorithm text secondary key, file_hash text, last_modified_time timestamp)"
         )
         super().__init__(
             cache_name=self.CACHE_NAME,
@@ -71,11 +73,14 @@ class HashCache(CacheDB):
         with self.db_lock, self.db_connection:
             entry_vals = self.db_connection.execute(
                 f"SELECT * FROM {self.table_name} WHERE file_path=? AND hash_algorithm=?",
-                [file_path_key, hash_algorithm.value],
+                [
+                    file_path_key.encode(encoding="utf-8", errors="surrogatepass"),
+                    hash_algorithm.value,
+                ],
             ).fetchone()
             if entry_vals:
                 return HashCacheEntry(
-                    file_path=entry_vals[0],
+                    file_path=str(entry_vals[0], encoding="utf-8", errors="surrogatepass"),
                     hash_algorithm=HashAlgorithm(entry_vals[1]),
                     file_hash=entry_vals[2],
                     last_modified_time=str(entry_vals[3]),
@@ -87,7 +92,11 @@ class HashCache(CacheDB):
         """Inserts or replaces an entry into the hash cache database after acquiring the lock."""
         if self.enabled:
             with self.db_lock, self.db_connection:
+                entry_dict = entry.to_dict()
+                entry_dict["file_path"] = entry_dict["file_path"].encode(
+                    encoding="utf-8", errors="surrogatepass"
+                )
                 self.db_connection.execute(
                     f"INSERT OR REPLACE INTO {self.table_name} VALUES(:file_path, :hash_algorithm, :file_hash, :last_modified_time)",
-                    entry.to_dict(),
+                    entry_dict,
                 )

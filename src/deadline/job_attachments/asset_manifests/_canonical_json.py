@@ -15,7 +15,9 @@ def canonical_path_comparator(path: BaseManifestPath):
     """
     # Sort by UTF-16 values as per the spec
     # https://www.rfc-editor.org/rfc/rfc8785.html#name-sorting-of-object-propertie
-    return path.path.encode("utf-16_be")
+    # Use the "surrogatepass" error handler because filenames encountered in the wild
+    # include surrogates.
+    return path.path.encode("utf-16_be", errors="surrogatepass")
 
 
 def manifest_to_canonical_json_string(manifest: BaseAssetManifest) -> str:
