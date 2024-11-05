@@ -121,6 +121,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         job_settings: Optional[Any] = None,
         auto_detected_attachments: Optional[AssetReferences] = None,
         attachments: Optional[AssetReferences] = None,
+        load_new_bundle: bool = False,
     ):
         # Refresh the UI components
         self.refresh_deadline_settings()
@@ -130,7 +131,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         if job_settings is not None:
             self.job_settings_type = type(job_settings)
             # Refresh shared job settings
-            self.shared_job_settings.refresh_ui(job_settings)
+            self.shared_job_settings.refresh_ui(job_settings, load_new_bundle)
             # Refresh job specific settings
             if hasattr(self.job_settings, "refresh_ui"):
                 self.job_settings.refresh_ui(job_settings)

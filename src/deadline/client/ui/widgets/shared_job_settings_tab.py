@@ -109,27 +109,40 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         ):
             self.__refresh_queue_parameters_thread.join()
 
-    def refresh_ui(self, job_settings: Any):
+    def refresh_ui(self, job_settings: Any, load_new_bundle: bool = False):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
-        self.refresh_queue_parameters()
 
-    def refresh_queue_parameters(self):
+        if load_new_bundle:
+            # Update the initial shared parameter values corresponding to the new job bundle
+            self.initial_shared_parameter_values = {}
+            for parameter in job_settings.parameters:
+                if "default" in parameter or "value" in parameter:
+                    self.initial_shared_parameter_values[parameter["name"]] = parameter.get(
+                        "value", parameter.get("default")
+                    )
+        self.refresh_queue_parameters(load_new_bundle)
+
+    def refresh_queue_parameters(self, load_new_bundle: bool = False):
         """
-        If the default queue id has changed, refresh the queue parameters.
+        If the default queue id or job bundle has changed, refresh the queue parameters.
         """
         farm_id = get_setting("defaults.farm_id")
         queue_id = get_setting("defaults.queue_id")
         if not farm_id or not queue_id:
             self.queue_parameters_box.rebuild_ui(async_loading_state="")
             return  # If the user has not selected a farm or queue ID, don't try to load
-        if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id:
+        if (
+            self.queue_parameters_box.async_loading_state
+            or queue_id != self.queue_id
+            or load_new_bundle
+        ):
             self.queue_parameters_box.rebuild_ui(
                 async_loading_state="Reloading Queue Environments..."
             )
-            # Join the thread if the queue id has changed and the thread is running
+            # Join the thread if the queue id or job bundle has changed and the thread is running
             if (
-                queue_id != self.queue_id
+                (queue_id != self.queue_id or load_new_bundle)
                 and self.__refresh_queue_parameters_thread
                 and self.__refresh_queue_parameters_thread.is_alive()
             ):
