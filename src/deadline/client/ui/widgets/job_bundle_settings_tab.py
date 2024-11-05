@@ -127,6 +127,7 @@ class JobBundleSettingsWidget(QWidget):
                 job_settings=job_settings,
                 auto_detected_attachments=asset_references,
                 attachments=None,
+                load_new_bundle=True,
             )
 
     def update_settings(self, settings: JobBundleSettings):
