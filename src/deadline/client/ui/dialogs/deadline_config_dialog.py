@@ -484,9 +484,10 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.aws_profiles_box.addItems(list(self.aws_profile_names))
 
     def refresh_lists(self):
-        self.default_farm_box.refresh_list()
-        self.default_queue_box.refresh_list()
-        self.default_storage_profile_box.refresh_list()
+        if api.check_deadline_api_available():
+            self.default_farm_box.refresh_list()
+            self.default_queue_box.refresh_list()
+            self.default_storage_profile_box.refresh_list()
 
     def refresh(self):
         """
