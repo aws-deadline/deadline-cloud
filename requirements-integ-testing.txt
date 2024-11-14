@@ -1,1 +1,1 @@
-deadline-cloud-test-fixtures == 0.14.*
+deadline-cloud-test-fixtures == 0.17.*
