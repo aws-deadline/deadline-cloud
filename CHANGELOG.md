@@ -1,3 +1,23 @@
+## 0.49.0 (2024-11-18)
+
+
+### BREAKING CHANGES
+* Refactor manifest aggregation, add helper to persist manifests and check disk capacity. Removes `aggregate_asset_root_manifests` public interface. (#483) ([`f57f637`](https://github.com/aws-deadline/deadline-cloud/commit/f57f637d78c2b5643a39b1c3b6190cbae745c079))
+
+### Features
+* **JA**: Add manifest upload and download to complete the JA standalone API+CLI featureset. ([`b5b203b`](https://github.com/aws-deadline/deadline-cloud/commit/b5b203bf5b370cb5e51b3e60f6b052e87e11d6d7))
+* refactor manifest aggregation, add helper to persist manifests and check disk capacity (#483) ([`f57f637`](https://github.com/aws-deadline/deadline-cloud/commit/f57f637d78c2b5643a39b1c3b6190cbae745c079))
+* **JA**: Add force-rehash option to snapshot command. Move Integ Tsts for Diff and Snapshot to Integ ([`276edae`](https://github.com/aws-deadline/deadline-cloud/commit/276edaea9cc11f8a0800a9f336f9e0d2057ff53b))
+* **JA**: Implementation for Job Attachments diff command (#465) ([`97e8bc4`](https://github.com/aws-deadline/deadline-cloud/commit/97e8bc45a21b3e88bc37ecefb42b92055ecd7ecf))
+
+### Bug Fixes
+* state upperbound (3.12) for python version support (#501) ([`f35765f`](https://github.com/aws-deadline/deadline-cloud/commit/f35765ff294e4af8d9e12c6b19897bb079d3355b))
+* De-duplicate error messages on expired credentials ([`cfc7759`](https://github.com/aws-deadline/deadline-cloud/commit/cfc77592edc472442950d0539ee1093cee534a59))
+* Refresh queue parameter defaults when loading a new job bundle ([`5abcef1`](https://github.com/aws-deadline/deadline-cloud/commit/5abcef1b2b88bcf189786ed7fa6ca826ee536ed6))
+* The hash_cache fails with filenames including surrogates (#492) ([`39c285d`](https://github.com/aws-deadline/deadline-cloud/commit/39c285d2e8bc3638a9f88f14ccd8c234b49cb2c7))
+* Job parameter values dropped when merging with queue parameter ([`73e1b24`](https://github.com/aws-deadline/deadline-cloud/commit/73e1b2494883885dda0752a7b514235edabdb2a4))
+* pass in cache directory for attachment upload (#476) ([`1f776f6`](https://github.com/aws-deadline/deadline-cloud/commit/1f776f6fbe6643094ee565f75a4bd1eb06d3c89c))
+
 ## 0.48.9 (2024-10-10)
 
 
