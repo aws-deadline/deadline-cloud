@@ -84,7 +84,7 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
                 sys.exit(1)
 
         # this should match what's in the pyproject.toml
-        pyside6_pypi = "PySide6-essentials==6.6.*"
+        pyside6_pypi = "PySide6-essentials >= 6.6,< 6.9"
         if "deadline" in basename(sys.executable).lower():
             # running with a deadline executable, not standard python.
             # So exit the deadline folder into the main deps dir
