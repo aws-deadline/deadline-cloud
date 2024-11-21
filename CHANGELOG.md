@@ -1,3 +1,9 @@
+## 0.49.2 (2024-11-21)
+
+### Bug Fixes
+* Updated PySide-essentials range. (#511) ([`4f6134e`](https://github.com/aws-deadline/deadline-cloud/commit/4f6134ed50ea7f127316dea754974c2426f34929))
+
+
 ## 0.49.1 (2024-11-19)
 
 ### Bug Fixes
