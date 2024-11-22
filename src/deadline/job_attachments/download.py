@@ -183,7 +183,7 @@ def _get_tasks_manifests_keys_from_s3(
             Prefix=manifest_prefix,
         )
 
-        # 1. Find all files that match the pattern: task-{any}/{any}/{any}-output
+        # 1. Find all files that match the pattern: task-{any}/{any}/{any}output{any}
         task_prefixes = defaultdict(list)
         for page in page_iterator:
             contents = page.get("Contents", None)
@@ -192,7 +192,7 @@ def _get_tasks_manifests_keys_from_s3(
                     f"Unable to find asset manifest in s3://{s3_bucket}/{manifest_prefix}"
                 )
             for content in contents:
-                if re.search(r"task-.*/.*/.*_output", content["Key"]):
+                if re.search(r"task-.*/.*/.*output.*", content["Key"]):
                     parts = content["Key"].split("/")
                     for i, part in enumerate(parts):
                         if "task-" in part:

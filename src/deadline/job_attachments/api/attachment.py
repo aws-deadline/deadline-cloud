@@ -104,7 +104,7 @@ def attachment_upload(
         boto3_session (boto3.Session): Boto3 session for interacting with customer s3.
         root_dirs (List[str]): List of root directories holding attachments. Defaults to empty.
         path_mapping_rules (Optional[str], optional): Optional file path to a JSON file contains list of path mapping. Defaults to None.
-        upload_manifest_path (Optional[str], optional): Optional prefix for uploading given manifests. Defaults to None.
+        upload_manifest_path (Optional[str], optional): Optional path prefix for uploading given manifests. Defaults to None.
         logger (ClickLogger, optional): Logger to provide visibility. Defaults to ClickLogger(False).
 
     Raises:
@@ -140,17 +140,34 @@ def attachment_upload(
                 f"No valid root defined for given manifest {file_name}, please check input root dirs and path mapping rule."
             )
 
+        metadata = {"Metadata": {"asset-root": json.dumps(rule.source_path, ensure_ascii=True)}}
+        # S3 metadata must be ASCII, so use either 'asset-root' or 'asset-root-json' depending
+        # on whether the value is ASCII.
+        try:
+            # Add the 'asset-root' metadata if the path is ASCII
+            rule.source_path.encode(encoding="ascii")
+            metadata["Metadata"]["asset-root"] = rule.source_path
+        except UnicodeEncodeError:
+            # Add the 'asset-root-json' metadata encoded to ASCII as a JSON string
+            metadata["Metadata"]["asset-root-json"] = json.dumps(
+                rule.source_path, ensure_ascii=True
+            )
+        if rule.source_path_format:
+            metadata["Metadata"]["file-system-location-name"] = rule.source_path_format
+
         # Uploads all files to a CAS in the manifest, optionally upload manifest file
         key, data = asset_uploader.upload_assets(
             job_attachment_settings=s3_settings,
             manifest=manifest,
             partial_manifest_prefix=upload_manifest_path,
+            manifest_file_name=file_name,
+            manifest_metadata=metadata,
             source_root=Path(rule.source_path),
             asset_root=Path(rule.destination_path),
             s3_check_cache_dir=config_file.get_cache_directory(),
         )
         logger.echo(
-            f"Uploaded assets from {rule.source_path}, to {s3_settings.to_s3_root_uri()}/{key}, hashed data {data}"
+            f"Uploaded assets from {rule.destination_path}, to {s3_settings.to_s3_root_uri()}/Manifests/{key}, hashed data {data}"
         )
 
 
@@ -179,7 +196,12 @@ def _process_path_mapping(
                 f"Specified path mapping file {path_mapping_rules} is not valid."
             )
         with open(path_mapping_rules, encoding="utf8") as f:
-            path_mapping_rule_list.extend([PathMappingRule(**mapping) for mapping in json.load(f)])
+            data = json.load(f)
+            if "path_mapping_rules" in data:
+                data = data["path_mapping_rules"]
+
+            assert isinstance(data, list), "Path mapping rules have to be a list of dict."
+            path_mapping_rule_list.extend([PathMappingRule(**mapping) for mapping in data])
 
     if nonvalid_dirs := [root for root in root_dirs if not os.path.isdir(root)]:
         raise NonValidInputError(f"Specified root dir {nonvalid_dirs} are not valid.")
