@@ -78,6 +78,19 @@ def config_set(setting_name, value):
     config_file.set_setting(setting_name, value)
 
 
+@cli_config.command(name="clear")
+@click.argument("setting_name")
+@_handle_error
+def config_clear(setting_name):
+    """
+    Sets a workstation configuration setting back to the default value.
+
+    For example `deadline config clear defaults.farm_id`.
+    Run `deadline config --help` to show available settings.
+    """
+    config_file.clear_setting(setting_name)
+
+
 @cli_config.command(name="get")
 @click.argument("setting_name")
 @_handle_error

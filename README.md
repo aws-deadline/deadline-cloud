@@ -138,7 +138,7 @@ You can see the current configuration by running:
 ```sh
 $ deadline config show
 ```
-and change the settings by running the associated `get` and `set` commands.
+and change the settings by running the associated `get`, `set` and `clear` commands.
 
 To see a list of settings that can be configured, run:
 ```sh
