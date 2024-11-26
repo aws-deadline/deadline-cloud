@@ -56,7 +56,7 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default profile, and check the next layer of the onion
-    config.set_setting("defaults.aws_profile_name", "(default)")
+    config.clear_setting("defaults.aws_profile_name")
     assert config.get_setting("defaults.farm_id") == "farm-for-profile-default"
     # The queue id is still default
     assert config.get_setting("defaults.queue_id") == ""
@@ -64,13 +64,13 @@ def test_config_settings_hierarchy(fresh_deadline_config):
     assert config.get_setting("settings.storage_profile_id") == ""
 
     # Switch back to the default farm
-    config.set_setting("defaults.farm_id", "")
+    config.clear_setting("defaults.farm_id")
     assert config.get_setting("defaults.queue_id") == "queue-for-farm-default"
     # Storage profile needs "profile - farm_id" so it should be back to the original
     assert config.get_setting("settings.storage_profile_id") == "storage-profile-for-farm-default"
 
     # Switch to default farm and default queue
-    config.set_setting("defaults.queue_id", "")
+    config.clear_setting("defaults.queue_id")
     assert config.get_setting("settings.storage_profile_id") == "storage-profile-for-farm-default"
 
 
@@ -112,6 +112,27 @@ def test_config_set_setting_nonexistant(fresh_deadline_config):
     # Section is good, but no setting
     with pytest.raises(DeadlineOperationError) as excinfo:
         config.set_setting("settings.aws_porfile_name", "value")
+    assert "has no setting" in str(excinfo.value)
+    assert "aws_porfile_name" in str(excinfo.value)
+
+
+def test_config_clear_setting_nonexistant(fresh_deadline_config):
+    """Test the error from clear_setting when a setting doesn't exist."""
+    # Setting name without the '.'
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.clear_setting("setting_name_bad_format")
+    assert "is not valid" in str(excinfo.value)
+    assert "setting_name_bad_format" in str(excinfo.value)
+
+    # Section name is wrong
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.clear_setting("setitngs.aws_profile_name")
+    assert "has no setting" in str(excinfo.value)
+    assert "setitngs" in str(excinfo.value)
+
+    # Section is good, but no setting
+    with pytest.raises(DeadlineOperationError) as excinfo:
+        config.clear_setting("settings.aws_porfile_name")
     assert "has no setting" in str(excinfo.value)
     assert "aws_porfile_name" in str(excinfo.value)
 

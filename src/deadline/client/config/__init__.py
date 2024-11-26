@@ -11,6 +11,7 @@ __all__ = [
     "get_setting_default",
     "get_setting",
     "set_setting",
+    "clear_setting",
     "get_best_profile_for_farm",
     "str2bool",
     "DEFAULT_DEADLINE_ENDPOINT_URL",
@@ -22,5 +23,6 @@ from .config_file import (
     get_setting,
     get_setting_default,
     set_setting,
+    clear_setting,
     str2bool,
 )
