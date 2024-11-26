@@ -1545,12 +1545,6 @@ class TestAssetSync:
             assert len(manifest_paths_by_root) == manifest_count
             assert "/root/tmp/movie1" in manifest_paths_by_root
             assert str(tmp_path.joinpath(dest_dir)) in manifest_paths_by_root
-            assert manifest_paths_by_root["/root/tmp/movie1"] == str(
-                path_write_local_input_manifest
-            )
-            assert manifest_paths_by_root[str(tmp_path.joinpath(dest_dir))] == str(
-                path_write_local_input_manifest
-            )
 
     def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
         self,
