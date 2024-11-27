@@ -108,6 +108,8 @@ class AssetSync:
 
         self.hash_alg: HashAlgorithm = self.manifest_model.AssetManifest.get_default_hash_alg()
 
+        self._local_root_to_src_map: dict[str, str] = dict()
+
     @staticmethod
     def generate_dynamic_path_mapping(
         session_dir: Path,
@@ -203,11 +205,13 @@ class AssetSync:
                 manifest_s3_key = s3_settings.add_root_and_manifest_folder_prefix(
                     manifest_properties.inputManifestPath
                 )
+                # s3 call to get manifests
                 manifest = get_manifest_from_s3(
                     manifest_key=manifest_s3_key,
                     s3_bucket=s3_settings.s3BucketName,
                     session=self.session,
                 )
+                self._local_root_to_src_map[local_root] = manifest_properties.rootPath
                 grouped_manifests_by_root[local_root].append(manifest)
 
         # Handle step-step dependencies.
@@ -222,8 +226,12 @@ class AssetSync:
                     session=self.session,
                 )
                 for root, manifests in manifests_by_root.items():
+                    # this implicitly put the step dependency files to the same asset root (if no storage profile),
+                    # since the job is submitted from the same root
                     dir_name = _get_unique_dest_dir_name(root)
                     local_root = str(session_dir.joinpath(dir_name))
+
+                    self._local_root_to_src_map[local_root] = root
                     grouped_manifests_by_root[local_root].extend(manifests)
 
         # Merge the manifests in each root into a single manifest
@@ -329,7 +337,7 @@ class AssetSync:
 
     def _check_and_write_local_manifests(
         self, merged_manifests_by_root: dict[str, BaseAssetManifest], manifest_write_dir: str
-    ) -> list[str]:
+    ) -> dict[str, str]:
         """Write manifests to the directory and check disk capacity is sufficient for the assets.
 
         Args:
@@ -337,16 +345,16 @@ class AssetSync:
             manifest_write_dir (str): local directory to write to.
 
         Returns:
-            list[str]: file paths the manifests are written to.
+            dict[str, str]: map of local root to file paths the manifests are written to.
         """
 
         total_input_size: int = 0
-        manifest_paths: list[str] = list()
+        manifest_paths_by_root: dict[str, str] = dict()
 
         for root, manifest in merged_manifests_by_root.items():
             (_, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
                 manifest=manifest,
-                source_root=Path(root),
+                source_root=Path(self._local_root_to_src_map[root]),
                 manifest_name_suffix="manifest",
             )
 
@@ -357,10 +365,10 @@ class AssetSync:
             )
 
             total_input_size += manifest.totalSize  # type: ignore[attr-defined]
-            manifest_paths.append(local_manifest_file.as_posix())
+            manifest_paths_by_root[root] = local_manifest_file.as_posix()
 
         self._ensure_disk_capacity(Path(manifest_write_dir), total_input_size)
-        return manifest_paths
+        return manifest_paths_by_root
 
     def attachment_sync_inputs(
         self,

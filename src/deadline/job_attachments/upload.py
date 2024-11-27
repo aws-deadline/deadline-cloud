@@ -149,6 +149,8 @@ class S3AssetUploader:
         s3_check_cache_dir: Optional[str] = None,
         manifest_write_dir: Optional[str] = None,
         manifest_name_suffix: str = "input",
+        manifest_metadata: dict[str, dict[str, str]] = dict(),
+        manifest_file_name: Optional[str] = None,
         asset_root: Optional[Path] = None,
     ) -> tuple[str, str]:
         """
@@ -163,6 +165,8 @@ class S3AssetUploader:
             job_attachment_settings: The settings for the job attachment configured in Queue.
             progress_tracker: Optional progress tracker to track progress.
             manifest_name_suffix: Suffix for given manifest naming.
+            manifest_metadata: File metadata for given manifest to be uploaded.
+            manifest_file_name: Optional file name for given manifest to be uploaded, otherwise use default name.
             asset_root: The root in which asset actually in to facilitate path mapping.
 
         Returns:
@@ -176,6 +180,7 @@ class S3AssetUploader:
             file_system_location_name=file_system_location_name,
             manifest_name_suffix=manifest_name_suffix,
         )
+        manifest_name = manifest_file_name if manifest_file_name else manifest_name
 
         if partial_manifest_prefix:
             partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
@@ -199,6 +204,7 @@ class S3AssetUploader:
                 bytes=BytesIO(manifest_bytes),
                 bucket=job_attachment_settings.s3BucketName,
                 key=full_manifest_key,
+                extra_args=manifest_metadata,
             )
 
         # Upload assets

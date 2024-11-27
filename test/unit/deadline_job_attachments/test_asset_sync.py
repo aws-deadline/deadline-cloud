@@ -1505,6 +1505,7 @@ class TestAssetSync:
         storage_profiles_path_mapping_rules = {
             "/home/user/movie1": "/root/tmp/movie1",
         }
+        path_write_local_input_manifest = tmp_path.joinpath("manifest/hash_manifest")
 
         with patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
@@ -1517,7 +1518,7 @@ class TestAssetSync:
             side_effect=[dest_dir],
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.S3AssetUploader._write_local_input_manifest",
-            return_value=tmp_path.joinpath("manifest/hasn_manifest"),
+            return_value=path_write_local_input_manifest,
         ) as mock__write_local_input_manifest:
 
             merged_manifests_by_root = self.default_asset_sync._aggregate_asset_root_manifests(
@@ -1534,11 +1535,16 @@ class TestAssetSync:
             assert mock_merge_asset_manifests.call_count == manifest_count
             assert mock_get_manifest_from_s3.call_count == manifest_count
 
-            paths = self.default_asset_sync._check_and_write_local_manifests(
+            manifest_paths_by_root = self.default_asset_sync._check_and_write_local_manifests(
                 merged_manifests_by_root=merged_manifests_by_root, manifest_write_dir=str(tmp_path)
             )
             assert mock__write_local_input_manifest.call_count == manifest_count
-            assert len(paths) == manifest_count
+            assert len(self.default_asset_sync._local_root_to_src_map) == len(
+                manifest_paths_by_root
+            )
+            assert len(manifest_paths_by_root) == manifest_count
+            assert "/root/tmp/movie1" in manifest_paths_by_root
+            assert str(tmp_path.joinpath(dest_dir)) in manifest_paths_by_root
 
     def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
         self,
