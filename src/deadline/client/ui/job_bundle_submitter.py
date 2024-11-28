@@ -102,6 +102,12 @@ def show_job_bundle_submitter(
             file_contents, file_type, settings.input_job_bundle_dir, "template"
         )
         template["name"] = settings.name
+        if settings.description:
+            template["description"] = settings.description
+        else:
+            # remove description field since it can't be empty
+            # ignore if description is missing from template
+            template.pop("description", None)
 
         # If "HostRequirements" is provided, inject it into each of the "Step"
         if host_requirements:
