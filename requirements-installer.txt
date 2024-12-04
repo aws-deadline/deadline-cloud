@@ -1,1 +1,1 @@
-pyinstaller == 6.11.*
+pyinstaller == 5.13.*
