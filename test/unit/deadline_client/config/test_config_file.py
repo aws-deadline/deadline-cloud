@@ -262,6 +262,13 @@ def test_str2bool():
         config_file.str2bool("")
 
 
+def test_default_log_level():
+    # To avoid excessive logging, the log level should not be DEBUG by default.
+    assert config.get_setting("settings.log_level") != "DEBUG"
+    # Verify the default log level exists and is less verbose than DEBUG
+    assert config.get_setting("settings.log_level") == "WARNING"
+
+
 @pytest.mark.skipif(
     platform.system() != "Windows",
     reason="This test is for testing file permission changes in Windows.",
