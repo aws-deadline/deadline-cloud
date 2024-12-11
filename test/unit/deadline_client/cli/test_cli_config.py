@@ -147,15 +147,13 @@ def test_config_settings_via_cli_roundtrip(
     assert result.exit_code == 0
     assert result.output.strip() == str(alternate_value)
 
+    result = runner.invoke(main, ["config", "clear", setting_name])
+    assert result.exit_code == 0
+    assert result.output.strip() == ""
 
-def test_config_get_setting_nonexistant(fresh_deadline_config):
-    """Test that we get an error with a non-existent setting."""
-    runner = CliRunner()
-
-    result = runner.invoke(main, ["config", "get", "settings.doesnt_exist"])
-
-    assert result.exit_code == 1
-    assert "doesnt_exist" in result.output
+    result = runner.invoke(main, ["config", "get", setting_name])
+    assert result.exit_code == 0
+    assert result.output.strip() == str(default_value)
 
 
 def test_config_set_setting_nonexistant(fresh_deadline_config):
@@ -163,6 +161,29 @@ def test_config_set_setting_nonexistant(fresh_deadline_config):
     runner = CliRunner()
 
     result = runner.invoke(main, ["config", "set", "settings.doesnt_exist", "value"])
+
+    assert result.exit_code == 1
+    assert "doesnt_exist" in result.output
+
+
+@pytest.mark.parametrize(
+    "config_command",
+    [
+        pytest.param(
+            "get",
+            id="config get nonexistant setting",
+        ),
+        pytest.param(
+            "clear",
+            id="config clear nonexistant setting",
+        ),
+    ],
+)
+def test_config_command_setting_nonexistant(config_command, fresh_deadline_config):
+    """Test that we get an error with a non-existent setting."""
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["config", config_command, "settings.doesnt_exist"])
 
     assert result.exit_code == 1
     assert "doesnt_exist" in result.output

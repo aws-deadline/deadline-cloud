@@ -76,7 +76,7 @@ $ deadline attachment upload
 $ deadline attachment download
 ```
 
-Manifest subcommands work with asset manifest files that capture local asset lifecycle. Currently only `manifest snapshot` is availble.
+Manifest subcommands work with asset manifest files that capture local asset lifecycle.
 
 ```sh
 $ deadline manifest snapshot

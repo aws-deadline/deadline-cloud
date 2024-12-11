@@ -72,24 +72,23 @@ def attachment_download(
     # TODO - add type for profile, if queue type, get queue sesson directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
+    # If profile is not provided via args, default to use local config file
     if not args.pop("profile", None):
         queue_id: str = config_file.get_setting("defaults.queue_id", config=config)
         farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
-        deadline_client = boto3_session.client("deadline")
-        boto3_session = api.get_queue_user_boto3_session(
-            deadline=deadline_client,
-            config=None,
+        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
             farm_id=farm_id,
             queue_id=queue_id,
-        )
-        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
-            farm_id=farm_id, queue_id=queue_id
+            session=boto3_session,
         ).jobAttachmentSettings
         if not s3_settings:
             raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
 
-        s3_root_uri = s3_settings.to_root_path()
+        s3_root_uri = s3_settings.to_s3_root_uri()
+
+        deadline_client = boto3_session.client("deadline")
+        boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
 
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
@@ -155,24 +154,23 @@ def attachment_upload(
     # TODO - add type for profile, if queue type, get queue sesson directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
+    # If profile is not provided via args, default to use local config file
     if not args.pop("profile", None):
         queue_id: str = config_file.get_setting("defaults.queue_id", config=config)
         farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
-        deadline_client = boto3_session.client("deadline")
-        boto3_session = api.get_queue_user_boto3_session(
-            deadline=deadline_client,
-            config=None,
+        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
             farm_id=farm_id,
             queue_id=queue_id,
-        )
-        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
-            farm_id=farm_id, queue_id=queue_id
+            session=boto3_session,
         ).jobAttachmentSettings
         if not s3_settings:
             raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
 
         s3_root_uri = s3_settings.to_s3_root_uri()
+
+        deadline_client = boto3_session.client("deadline")
+        boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
 
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")

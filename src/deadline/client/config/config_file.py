@@ -8,6 +8,7 @@ __all__ = [
     "get_setting_default",
     "get_setting",
     "set_setting",
+    "clear_setting",
     "get_best_profile_for_farm",
     "str2bool",
 ]
@@ -418,6 +419,20 @@ def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = 
     config.set(section, name, value)
     if save_config:
         write_config(config)
+
+
+def clear_setting(setting_name: str, config: Optional[ConfigParser] = None):
+    """
+    Sets the value of the specified setting back to the default value.
+
+    Args:
+        setting_name (str): The full setting name, like `section.setting`.
+        config (Optional[ConfigParser]): If provided clears the setting in the parser and does not save to disk.
+    """
+    if "." not in setting_name:
+        raise DeadlineOperationError(f"The setting name {setting_name!r} is not valid.")
+
+    set_setting(setting_name, get_setting_default(setting_name, config=config), config=config)
 
 
 def get_best_profile_for_farm(farm_id: str, queue_id: Optional[str] = None) -> str:
