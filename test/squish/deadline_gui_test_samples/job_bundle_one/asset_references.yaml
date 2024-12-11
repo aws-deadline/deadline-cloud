@@ -1,0 +1,10 @@
+assetReferences:
+  inputs:
+    directories:
+    - ./test_directory
+    filenames:
+    - ./mock_test_scene/squish_anim_test.txt
+  outputs:
+    directories:
+    - ./output_images
+  referencedPaths: []

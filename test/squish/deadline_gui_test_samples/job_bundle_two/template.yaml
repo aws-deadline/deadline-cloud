@@ -1,0 +1,135 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: GUI Submitter Testing - Job Bundle Two
+description: |
+  This is a custom job bundle created for the Squish Automated Test Suite which verifies the GUI Submitter UI. 
+  It is two of two custom job bundles created for the Squish Automated Test Suite. 
+  This is not intended for general use other than testing the GUI Submitter UI in Deadline Cloud CLI.
+ 
+parameterDefinitions:
+# Input/Output Details
+- name: MockJobName
+  type: PATH
+  default: "gui_submitter_test.txt"
+  objectType: FILE
+  dataFlow: IN
+  userInterface:
+    control: CHOOSE_INPUT_FILE
+    label: GUI Submitter Test File
+    groupLabel: Render Parameters
+  description: Select the mock scene file for running GUI Submitter Tests.
+- name: ResolutionX
+  type: INT
+  default: 1920
+  userInterface:
+    control: SPIN_BOX
+    label: Resolution X
+    groupLabel: Render Parameters
+  description: Enter the X resolution value 
+- name: ResolutionY
+  type: INT
+  default: 1080
+  userInterface:
+    control: SPIN_BOX
+    label: Resolution Y
+    groupLabel: Render Parameters
+  description: Enter the Y resolution value 
+- name: OutputDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: OUT
+  userInterface:
+    control: CHOOSE_DIRECTORY
+    label: Output Directory
+    groupLabel: Output Details
+  default: "./output_images"
+  description: Choose the GUI Submitter test output directory.  
+# Mock Settings - Float
+- name: FloatSpinner
+  type: FLOAT
+  userInterface:
+    control: SPIN_BOX
+    label: Depth of Field
+    groupLabel: Depth of Field
+  description: Mock Depth of Field Setting
+  default: 100
+- name: FloatSizeMaximum
+  type: FLOAT
+  userInterface:
+    control: SPIN_BOX
+    label: Maximum
+    groupLabel: Depth of Field
+    decimals: 1
+  description: Maximum float setting.
+  default: 0.0
+- name: FloatSizeMinimum
+  type: FLOAT
+  userInterface:
+    control: SPIN_BOX
+    label: Minimum
+    groupLabel: Depth of Field
+    decimals: 1
+  description: Minimum float setting
+  default: 0.0
+- name: FloatDropdown
+  type: FLOAT
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Intensity
+    groupLabel: Depth of Field
+  description: Float values representing intensity.
+  default: 0.0
+  allowedValues: [.25, .50, .75, 0.0, 1.0]
+# Other Mock Settingss
+- name: CameraFiltersStringDropdown
+  type: STRING
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Camera Filters
+    groupLabel: Other Settings
+  description: Apply a camera filter
+  default: ""
+  allowedValues: ["", UV, POLARIZER, NEUTRAL DENSITY, DIFFUSION, INFRARED, DIOPTER]
+- name: MaskStringDropdown
+  type: STRING
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Mask
+    groupLabel: Other Settings
+  description: Mask
+  default: ""
+  allowedValues: ["", rgba.red, rgba.green, rgba.blue, rgba.alpha]
+# Label
+- name: Label
+  type: STRING
+  userInterface:
+    control: MULTILINE_EDIT
+    label: Label
+    groupLabel: Node
+  default: ""
+# Steps
+steps:
+- name: GUISubmitterTesting
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ['{{Task.File.runScript}}']
+    embeddedFiles:
+      - name: runScript
+        type: TEXT
+        data: |
+          #!/usr/bin/env bash
+
+          echo 'MockJobName value:'
+          echo '{{Param.MockJobName}}'
+
+          echo 'ResolutionX value:'
+          echo '{{Param.ResolutionX}}'
+
+          echo 'ResolutionY value:'
+          echo '{{Param.ResolutionY}}'
+
+          echo 'OutputDir value:'
+          echo '{{Param.OutputDir}}'
+
+          echo 'This completes the GUI Submitter Testing for Job Bundle Two.'
