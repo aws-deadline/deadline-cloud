@@ -13,8 +13,6 @@ import test
 def init():
     # launch deadline config gui
     gui_helpers.launch_deadline_config_gui()
-    # check for refresh error dialogues and close if present
-    loginout_helpers.check_and_close_refresh_error_dialogues()
     # using aws credential/non-DCM profile, set aws profile name to `(default)`
     loginout_helpers.set_aws_profile_name_and_verify_auth(config.profile_name)
     # verify correct aws profile name is set
