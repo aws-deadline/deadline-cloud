@@ -2,7 +2,9 @@
 # mypy: disable-error-code="attr-defined"
 
 import loginout_locators
-import gui_locators
+import workstation_config_locators
+import workstation_config_helpers
+import config
 import squish
 
 import test
@@ -47,16 +49,18 @@ def check_and_close_refresh_error_dialogues():
 def set_aws_profile_name_and_verify_auth(profile_name: str):
     # open AWS profile drop down menu
     squish.mouseClick(
-        squish.waitForObjectExists(gui_locators.globalsettings_awsprofile_dropdown),
+        squish.waitForObjectExists(workstation_config_locators.globalsettings_awsprofile_dropdown),
     )
     test.log("Opened AWS profile drop down menu.")
     test.compare(
-        squish.waitForObjectExists(gui_locators.profile_name_locator(profile_name)).text,
+        squish.waitForObjectExists(
+            workstation_config_locators.profile_name_locator(profile_name)
+        ).text,
         profile_name,
         "Expect AWS profile name to be present in drop down.",
     )
     # select AWS profile
-    squish.mouseClick(gui_locators.profile_name_locator(profile_name))
+    squish.mouseClick(workstation_config_locators.profile_name_locator(profile_name))
     test.log("Selected AWS profile name.")
     # verify user is authenticated - confirm statuses appear and text is correct
     test.log("Verifying user is authenticated...")
@@ -98,3 +102,12 @@ def set_aws_profile_name_and_verify_auth(profile_name: str):
         "<b style='color:green;'>AUTHORIZED</b>",
         "Expect `AWS Deadline Cloud API: AUTHORIZED` text to be correct.",
     )
+
+
+def authenticate_submitter_settings_dialogue():
+    # hit Settings button to open Deadline Settings dialogue
+    workstation_config_helpers.open_settings_dialogue()
+    # authenticate in settings dialogue (using default aws profile) if not authenticated before running tests
+    set_aws_profile_name_and_verify_auth(config.profile_name)
+    # close Settings dialogue
+    workstation_config_helpers.close_deadline_config_gui()

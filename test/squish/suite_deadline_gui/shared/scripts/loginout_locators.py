@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # encoding: UTF-8
 
-import gui_locators
+import workstation_config_locators
 
 # authentication status
 credential_source_auth_group = {
@@ -9,21 +9,21 @@ credential_source_auth_group = {
     "type": "AuthenticationStatusGroup",
     "unnamed": 1,
     "visible": 1,
-    "window": gui_locators.deadline_config_dialog,
+    "window": workstation_config_locators.deadline_config_dialog,
 }
 authentication_status_auth_group = {
     "title": "Authentication status",
     "type": "AuthenticationStatusGroup",
     "unnamed": 1,
     "visible": 1,
-    "window": gui_locators.deadline_config_dialog,
+    "window": workstation_config_locators.deadline_config_dialog,
 }
 deadlinecloud_api_auth_group = {
     "title": "AWS Deadline Cloud API",
     "type": "AuthenticationStatusGroup",
     "unnamed": 1,
     "visible": 1,
-    "window": gui_locators.deadline_config_dialog,
+    "window": workstation_config_locators.deadline_config_dialog,
 }
 credential_source_hostprovided_label = {
     "container": credential_source_auth_group,
