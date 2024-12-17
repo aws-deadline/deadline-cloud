@@ -460,7 +460,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._refresh_callbacks.append(refresh_combo_box)
 
     def handle_background_exception(self, title, e):
-        QMessageBox.warning(self, title, f"Encountered an error:\n{e}")
+        QMessageBox.warning(self, title, f"Encountered an error:\n{e}")  # type: ignore[call-arg]
 
     def _fill_aws_profiles_box(self):
         # Use boto3 directly with no profile, so we don't get an error
@@ -555,7 +555,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         for setting_name, value in self.changes.items():
             if value.startswith(NOT_VALID_MARKER):
-                QMessageBox.warning(
+                QMessageBox.warning(  # type: ignore[call-arg]
                     self,
                     "Apply changes",
                     f"Cannot apply changes, {value} is not valid for setting {setting_name}",

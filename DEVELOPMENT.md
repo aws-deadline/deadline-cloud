@@ -114,6 +114,9 @@ You can run unit tests by running:
 * `hatch run test` - To run the unit tests with your default Python runtime.
 * `hatch run all:test` - To run the unit tests with all of the supported Python runtime versions that you have installed.
 
+Notes: 
+* If you are running unit tests on Linux, you may encounter errors such as `INTERNALERROR> ImportError: libEGL.so.1: cannot open shared object file: No such file or directory`. This is because some Qt dependencies are missed on Linux. Please install these [Qt dependencies](https://github.com/aws-deadline/.github/blob/mainline/.github/workflows/reusable_python_build.yml#L46-L49) to resolve this issue.
+
 #### Running Docker-based Unit Tests
 
 Some of the unit tests in this package require a docker environment to run. These tests are marked with `@pytest.mark.docker`.
