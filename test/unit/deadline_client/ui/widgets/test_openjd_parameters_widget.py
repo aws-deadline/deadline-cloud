@@ -1,11 +1,17 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from deadline.client.ui.widgets.openjd_parameters_widget import (
-    _JobTemplateLineEditWidget,
-    _JobTemplateIntSpinBoxWidget,
-    _JobTemplateFloatSpinBoxWidget,
-)
+import pytest
 from conftest import STRING_FIELD_MAX_LENGHTH
+
+try:
+    from deadline.client.ui.widgets.openjd_parameters_widget import (
+        _JobTemplateLineEditWidget,
+        _JobTemplateIntSpinBoxWidget,
+        _JobTemplateFloatSpinBoxWidget,
+    )
+except ImportError:
+    # The tests in this file should be skipped if Qt UI related modules cannot be loaded
+    pytest.importorskip("deadline.client.ui.widgets.openjd_parameters_widget")
 
 
 def test_input_in_line_edit_widget_should_be_truncated(qtbot):

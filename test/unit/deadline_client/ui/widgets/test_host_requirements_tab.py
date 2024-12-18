@@ -1,17 +1,23 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from deadline.client.ui.widgets.host_requirements_tab import (
-    HardwareRequirementsWidget,
-    CustomAmountWidget,
-    CustomAttributeWidget,
-    CustomAttributeValueWidget,
-    CustomRequirementsWidget,
-    ATTRIBUTE_CAPABILITY_PREFIX,
-    AMOUNT_CAPABILITY_PREFIX,
-    MIN_INT_VALUE,
-    MAX_INT_VALUE,
-)
+import pytest
 from unittest.mock import MagicMock
+
+try:
+    from deadline.client.ui.widgets.host_requirements_tab import (
+        HardwareRequirementsWidget,
+        CustomAmountWidget,
+        CustomAttributeWidget,
+        CustomAttributeValueWidget,
+        CustomRequirementsWidget,
+        ATTRIBUTE_CAPABILITY_PREFIX,
+        AMOUNT_CAPABILITY_PREFIX,
+        MIN_INT_VALUE,
+        MAX_INT_VALUE,
+    )
+except ImportError:
+    # The tests in this file should be skipped if Qt UI related modules cannot be loaded
+    pytest.importorskip("deadline.client.ui.widgets.host_requirements_tab")
 
 
 AMOUNT_NAME_MAX_LENGTH = 100 - len(AMOUNT_CAPABILITY_PREFIX)

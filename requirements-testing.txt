@@ -5,10 +5,10 @@ pytest == 7.*
 pytest-cov == 5.*
 pytest-timeout == 2.*
 pytest-xdist == 3.*
-pytest-qt == 4.*
-pytest-xvfb == 3.*
-PySide6-essentials < 6.6.2; python_version == '3.8'
-PySide6-essentials >= 6.7.1; python_version > '3.8'
+pytest-qt == 4.*; sys_platform != "linux"
+pytest-xvfb == 3.*; sys_platform != "linux" 
+PySide6-essentials < 6.6.2; python_version == '3.8' and sys_platform != "linux"
+PySide6-essentials >= 6.7.1; python_version > '3.8' and sys_platform != "linux"
 freezegun == 1.*
 types-pyyaml == 6.*
 twine == 4.*; python_version == '3.7'
