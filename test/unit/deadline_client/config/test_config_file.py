@@ -6,7 +6,8 @@ tests the deadline.client.config settings
 
 import os
 import platform
-import subprocess
+import getpass
+import tempfile
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
@@ -273,32 +274,92 @@ def test_default_log_level():
     platform.system() != "Windows",
     reason="This test is for testing file permission changes in Windows.",
 )
-def test_windows_config_file_permissions(fresh_deadline_config) -> None:
-    config_file_path = config_file.get_config_file_path()
-    parent_dir = config_file_path.parent
-    subprocess.run(
-        [
-            "icacls",
-            str(parent_dir),
-            "/grant",
-            "Everyone:(OI)(CI)(F)",
-            "/T",
-        ],
-        check=True,
-    )
+def test_reset_directory_permissions_windows() -> None:
+    """
+    Asserts the _reset_directory_permissions_windows configures the provided
+    folder with access only to the active user, the domain admin, and SYSTEM.
+    """
+    # GIVEN
+    import ntsecuritycon
+    import win32security
 
-    config_file.set_setting("defaults.aws_profile_name", "goodguyprofile")
+    path = Path(tempfile.gettempdir())
+    system_sid = win32security.ConvertStringSidToSid("S-1-5-18")
+    admin_sid = win32security.ConvertStringSidToSid("S-1-5-32-544")
+    user_sid, _, _ = win32security.LookupAccountName(None, getpass.getuser())
+    sids = [system_sid, admin_sid, user_sid]
 
-    result = subprocess.run(
-        [
-            "icacls",
-            str(config_file_path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
+    # WHEN
+    config_file._reset_directory_permissions_windows(path)
+
+    # THEN
+    sd = win32security.GetFileSecurity(str(path.resolve()), win32security.DACL_SECURITY_INFORMATION)
+    dacl = sd.GetSecurityDescriptorDacl()
+    assert dacl.GetAceCount() == 3
+    assert dacl.GetAclRevision() == win32security.ACL_REVISION
+    for i in range(3):
+        (acetype, aceflags), access, sid = dacl.GetAce(i)
+        assert acetype == win32security.ACCESS_ALLOWED_ACE_TYPE
+        assert aceflags == ntsecuritycon.OBJECT_INHERIT_ACE | ntsecuritycon.CONTAINER_INHERIT_ACE
+        assert access == ntsecuritycon.FILE_ALL_ACCESS
+        try:
+            sids.remove(sid)
+        except ValueError:
+            assert False, f"Unexpected SID: {win32security.ConvertSidToStringSid(sid)}"
+
+
+@pytest.mark.skipif(
+    platform.system() != "Windows",
+    reason="This test is for testing file permission changes in Windows.",
+)
+@patch.object(config_file, "get_config_file_path")
+def test_write_config_directory_permission_windows(
+    mock_get_config_file_path,
+):
+    """
+    Tests that the config directory permissions are not modified when writing to the config file
+    """
+    # GIVEN
+    path = Path(tempfile.gettempdir())
+    config_path = path / "config"
+    mock_get_config_file_path.return_value = config_path
+
+    # ----------------------------------------------------------------------------------------------
+    # Sets up a directory with an added full access entry for domain guests. Since this is not a
+    # typically expected entry, it can be used to validate existing permissions were not overwritten
+    import win32security
+    import ntsecuritycon
+
+    sd = win32security.GetFileSecurity(str(path.resolve()), win32security.DACL_SECURITY_INFORMATION)
+    guest_sid = win32security.ConvertStringSidToSid("S-1-5-32-546")  # Domain Guests
+    dacl = sd.GetSecurityDescriptorDacl()
+    dacl.AddAccessAllowedAceEx(
+        win32security.ACL_REVISION,
+        ntsecuritycon.OBJECT_INHERIT_ACE | ntsecuritycon.CONTAINER_INHERIT_ACE,
+        ntsecuritycon.FILE_ALL_ACCESS,
+        guest_sid,
     )
-    assert "Everyone" not in result.stdout
+    sd.SetSecurityDescriptorDacl(1, dacl, 0)
+    win32security.SetFileSecurity(str(path.resolve()), win32security.DACL_SECURITY_INFORMATION, sd)
+    # ----------------------------------------------------------------------------------------------
+
+    # WHEN
+    config_file.write_config(MagicMock())
+
+    # THEN
+    new_dacl = win32security.GetFileSecurity(
+        str(path.resolve()), win32security.DACL_SECURITY_INFORMATION
+    ).GetSecurityDescriptorDacl()
+
+    assert new_dacl.GetAceCount() == dacl.GetAceCount()
+    for i in range(dacl.GetAceCount()):
+        # Assert the access control entries are identical
+        (acetype, aceflags), access, sid = dacl.GetAce(i)
+        (new_acetype, new_aceflags), new_access, new_sid = new_dacl.GetAce(i)
+        assert acetype == new_acetype
+        assert aceflags == new_aceflags
+        assert access == new_access
+        assert sid == new_sid
 
 
 @pytest.mark.skipif(

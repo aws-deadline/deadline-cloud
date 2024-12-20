@@ -16,7 +16,6 @@ __all__ = [
 import getpass
 import os
 import platform
-import subprocess
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -26,7 +25,6 @@ import boto3
 from deadline.job_attachments.models import FileConflictResolution
 
 from ..exceptions import DeadlineOperationError
-import re
 
 # Default path where AWS Deadline Cloud's configuration lives
 CONFIG_FILE_PATH = os.path.join("~", ".deadline", "config")
@@ -182,80 +180,50 @@ def read_config() -> ConfigParser:
     return __config
 
 
-def _get_grant_args(principal: str, permissions: str) -> List[str]:
-    return [
-        "/grant",
-        f"{principal}:{permissions}",
-        # Apply recursively
-        "/T",
-    ]
-
-
-RE_ICACLS_OUTPUT = re.compile(r"^(.+?(?=\\))?(?:\\)?(.+?(?=:)):(.*)$")
-
-
-def _reset_directory_permissions_windows(directory: Path, username: str, permissions: str) -> None:
+def _reset_directory_permissions_windows(directory: Path) -> None:
     if platform.system() != "Windows":
         return
+    import win32security
+    import ntsecuritycon
 
-    result = subprocess.run(
-        [
-            "icacls",
-            str(directory),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    # We don't want to propagate existing permissions, so create a new DACL
+    dacl = win32security.ACL()
 
-    icacls_output = result.stdout
+    # On Windows, both SYSTEM and the Administrators group normally
+    # have Full Access to files in the user's home directory.
+    # Use SIDs to represent the Administrators and SYSTEM to
+    # support multi-language operating systems
+    # Administrator(S-1-5-32-544), SYSTEM(S-1-5-18)
+    # https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+    system_sid = win32security.ConvertStringSidToSid("S-1-5-18")
+    admin_sid = win32security.ConvertStringSidToSid("S-1-5-32-544")
 
-    principals_to_remove = []
+    username = getpass.getuser()
+    user_sid, _, _ = win32security.LookupAccountName(None, username)
 
-    for line in icacls_output.splitlines():
-        if line.startswith(str(directory)):
-            permission_line = line[len(str(directory)) :].strip()
-        else:
-            permission_line = line.strip()
-
-        permissions_match = RE_ICACLS_OUTPUT.match(permission_line)
-        if permissions_match:
-            ad_group = permissions_match.group(1)
-            ad_user = permissions_match.group(2)
-            principal = f"{ad_group}\\{ad_user}"
-            if (
-                ad_user != username
-                and principal != "BUILTIN\\Administrators"
-                and principal != "NT AUTHORITY\\SYSTEM"
-            ):
-                principals_to_remove.append(ad_user)
-
-    for principal in principals_to_remove:
-        subprocess.run(
-            [
-                "icacls",
-                str(directory),
-                "/remove",
-                principal,
-            ],
-            check=True,
+    for sid in [user_sid, admin_sid, system_sid]:
+        dacl.AddAccessAllowedAceEx(
+            win32security.ACL_REVISION,
+            ntsecuritycon.OBJECT_INHERIT_ACE | ntsecuritycon.CONTAINER_INHERIT_ACE,
+            ntsecuritycon.GENERIC_ALL,
+            sid,
         )
 
-    subprocess.run(
-        [
-            "icacls",
-            str(directory),
-            *_get_grant_args(username, permissions),
-            # On Windows, both SYSTEM and the Administrators group normally
-            # have Full Access to files in the user's home directory.
-            # Use SIDs to represent the Administrators and SYSTEM to
-            # support multi-language operating systems
-            # Administrator(S-1-5-32-544), SYSTEM(S-1-5-18)
-            *_get_grant_args("*S-1-5-32-544", permissions),
-            *_get_grant_args("*S-1-5-18", permissions),
-        ],
-        check=True,
-        capture_output=True,
+    # Get the security descriptor of the object
+    sd = win32security.GetFileSecurity(
+        str(directory.resolve()), win32security.DACL_SECURITY_INFORMATION
+    )
+
+    # Set the security descriptor's DACL to the newly-created DACL
+    # Arguments:
+    # 1. bDaclPresent = 1: Indicates that the DACL is present in the security descriptor.
+    #    If set to 0, this method ignores the provided DACL and allows access to all principals.
+    # 2. dacl: The discretionary access control list (DACL) to be set in the security descriptor.
+    # 3. bDaclDefaulted = 0: Indicates the DACL was provided and not defaulted.
+    #    If set to 1, indicates the DACL was defaulted, as in the case of permissions inherited from a parent directory.
+    sd.SetSecurityDescriptorDacl(1, dacl, 0)
+    win32security.SetFileSecurity(
+        str(directory.resolve()), win32security.DACL_SECURITY_INFORMATION, sd
     )
 
 
@@ -268,15 +236,10 @@ def write_config(config: ConfigParser) -> None:
             a modified value from what `read_config` returns.
     """
     config_file_path = get_config_file_path()
-    config_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if platform.system() == "Windows":
-        username = getpass.getuser()
-        config_file_parent_path = config_file_path.parent.absolute()
-        # OI - Contained objects will inherit
-        # CI - Sub-directories will inherit
-        # F  - Full control
-        _reset_directory_permissions_windows(config_file_parent_path, username, "(OI)(CI)(F)")
+    if not config_file_path.parent.exists():
+        config_file_path.parent.mkdir(parents=True, exist_ok=True)
+        if platform.system() == "Windows":
+            _reset_directory_permissions_windows(config_file_path.parent)
 
     # Using the config file path as the prefix ensures that the tmpfile and real file are
     # on the same filesystem. This is a requirement for os.replace to be atomic.
