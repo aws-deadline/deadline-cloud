@@ -35,7 +35,7 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
     _get_unique_dest_dir_name,
 )
-from deadline.job_attachments._utils import _is_windows_file_path_limit
+from deadline.job_attachments._utils import _is_windows_long_path_registry_enabled
 from .conftest import is_windows_non_admin
 
 
@@ -1503,7 +1503,7 @@ def test_download_outputs_bucket_wrong_account(
 
 @pytest.mark.integ
 @pytest.mark.skipif(
-    _is_windows_file_path_limit(),
+    _is_windows_long_path_registry_enabled(),
     reason="This test is for Windows max file path length error, skipping this if Windows path limit is extended",
 )
 def test_download_outputs_windows_max_file_path_length_exception(
