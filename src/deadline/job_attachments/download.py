@@ -69,7 +69,7 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths, _is_windows_file_path_limit
+from ._utils import _is_relative_to, _join_s3_paths, _is_windows_long_path_registry_enabled
 
 download_logger = getLogger("deadline.job_attachments.download")
 
@@ -532,7 +532,7 @@ def download_file(
                     "Your file path is longer than what Windows allow.\n"
                     + "This could be the error if you do not enable longer file path in Windows"
                 )
-            elif not _is_windows_file_path_limit():
+            elif not _is_windows_long_path_registry_enabled():
                 # Path start with \\?\ but do not enable registry -> Undefined error
                 raise AssetSyncError(
                     f"{e}\nUNC notation exist, but long path registry not enabled. Undefined error"

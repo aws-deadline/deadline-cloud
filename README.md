@@ -30,7 +30,7 @@ Notable features include:
 
 This library requires:
 
-1. Python 3.8 through 3.12; and
+1. Python 3.8 through 3.13; and
 2. Linux, Windows, or macOS operating system.
 
 ## Versioning

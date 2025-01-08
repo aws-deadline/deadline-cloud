@@ -118,7 +118,7 @@ class JobBundleSettingsWidget(QWidget):
 
         except Exception as e:
             msg = str(e)
-            QMessageBox.warning(self, "Could not load job bundle", msg)
+            QMessageBox.warning(self, "Could not load job bundle", msg)  # type: ignore[call-arg]
             logger.warning(msg)
             return
 

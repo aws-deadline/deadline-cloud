@@ -253,7 +253,7 @@ class JobAttachmentsWidget(QWidget):
         self.attachments.input_filenames.difference_update(selected_files)
         self._populate_attachment_lists()
         if unremoved_files:
-            QMessageBox.warning(
+            QMessageBox.warning(  # type: ignore[call-arg]
                 self,
                 "Some files were not removed",
                 f"The selected files from the auto-detected list ({len(unremoved_files)} items) were not removed.",
@@ -280,7 +280,7 @@ class JobAttachmentsWidget(QWidget):
         self.attachments.input_directories.difference_update(selected_dirs)
         self._populate_attachment_lists()
         if unremoved_dirs:
-            QMessageBox.warning(
+            QMessageBox.warning(  # type: ignore[call-arg]
                 self,
                 "Some directories were not removed",
                 f"The selected directories from the auto-detected list ({len(unremoved_dirs)} items) were not removed.",
@@ -307,7 +307,7 @@ class JobAttachmentsWidget(QWidget):
         self.attachments.output_directories.difference_update(selected_dirs)
         self._populate_attachment_lists()
         if unremoved_dirs:
-            QMessageBox.warning(
+            QMessageBox.warning(  # type: ignore[call-arg]
                 self,
                 "Some directories were not removed",
                 f"The selected directories from the auto-detected list ({len(unremoved_dirs)} items) were not removed.",

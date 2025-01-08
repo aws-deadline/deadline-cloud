@@ -159,7 +159,7 @@ class OpenJDParametersWidget(QWidget):
                         group_layout = _JobTemplateGroupLayout(self, group_label)
                         group_layout.setObjectName(group_label)
                         layout.addWidget(group_layout)
-                    group_layout.layout().addWidget(control)
+                    group_layout.layout().addWidget(control)  # type: ignore[union-attr]
                 else:
                     layout.addWidget(control)
 

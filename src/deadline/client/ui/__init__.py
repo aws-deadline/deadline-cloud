@@ -37,11 +37,11 @@ def gui_error_handler(message_title: str, parent: Any = None):
 
         yield
     except DeadlineOperationError as e:
-        QMessageBox.warning(parent, message_title, str(e))
+        QMessageBox.warning(parent, message_title, str(e))  # type: ignore[call-arg]
     except Exception:
         import traceback
 
-        QMessageBox.warning(parent, message_title, f"Exception caught:\n{traceback.format_exc()}")
+        QMessageBox.warning(parent, message_title, f"Exception caught:\n{traceback.format_exc()}")  # type: ignore[call-arg]
 
 
 @contextmanager
@@ -153,7 +153,7 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
         command = f"{os.path.basename(sys.argv[0])} " + " ".join(
             shlex.quote(v) for v in sys.argv[1:]
         )
-        QMessageBox.warning(None, f'Error running "{command}"', str(e))  # type: ignore[call-overload]
+        QMessageBox.warning(None, f'Error running "{command}"', str(e))  # type: ignore[call-overload, call-arg, arg-type]
     except Exception:
         import os
         import shlex
@@ -162,8 +162,10 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
         command = f"{os.path.basename(sys.argv[0])} " + " ".join(
             shlex.quote(v) for v in sys.argv[1:]
         )
-        QMessageBox.warning(  # type: ignore[call-overload]
-            None, f'Error running "{command}"', f"Exception caught:\n{traceback.format_exc()}"
+        QMessageBox.warning(  # type: ignore[call-overload, call-arg]
+            None,  # type: ignore[arg-type]
+            f'Error running "{command}"',
+            f"Exception caught:\n{traceback.format_exc()}",
         )
 
 

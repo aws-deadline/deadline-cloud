@@ -384,7 +384,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         except Exception as exc:
             logger.exception("Error saving bundle")
             message = str(exc)
-            QMessageBox.warning(self, f"{self.submitter_name} job submission", message)
+            QMessageBox.warning(self, f"{self.submitter_name} job submission", message)  # type: ignore[call-arg]
 
     def on_submit(self):
         """
@@ -496,7 +496,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
                 from_gui=True,
             )
-            QMessageBox.warning(self, f"{self.submitter_name} job submission", str(exc))
+            QMessageBox.warning(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
             job_progress_dialog.close()
 
         if self.create_job_response:
