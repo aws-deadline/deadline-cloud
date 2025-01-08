@@ -1,0 +1,1 @@
+This job attachment test file is a part of 'simple_ui_with_ja' job bundle. It is being used in the Squish Automated Test Suite which verifies the GUI Submitter UI.

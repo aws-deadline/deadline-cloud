@@ -1,0 +1,108 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: Simple UI with Job Attachments
+description: |
+  This is a custom job bundle created for the Squish Automated Test Suite which verifies the GUI Submitter UI. 
+  It is one of two custom job bundles created for the Squish Automated Test Suite. It is a simple UI with job attachments. 
+  This is not intended for general use other than testing the GUI Submitter UI in Deadline Cloud CLI.
+
+parameterDefinitions:
+# Input Details
+- name: SimpleUIJobName
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: Job Name
+    groupLabel: Job Details
+  default: Simple UI with Job Attachments
+  description: Enter the name of the job.
+- name: Frames
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    groupLabel: Job Details
+  default: 1-150
+  description: Enter the number of frames to test.
+- name: SimpleUISceneFile
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  userInterface:
+    control: CHOOSE_INPUT_FILE
+    label: Simple UI File
+    groupLabel: Job Details
+  default: "./simple_ui_assets/lighting/simple_ui_scene.txt"
+  description: Choose the Simple UI file to run tests against.
+# Checkboxes
+- name: CheckBoxOne
+  type: STRING
+  userInterface:
+    groupLabel: Custom Plugins
+    control: CHECK_BOX
+    label: Simple UI Plugin 
+  default: "True"
+  allowedValues: ["True", "False"]
+  description: This checkbox defaults to "True".  
+- name: CheckBoxTwo
+  type: STRING
+  userInterface:
+    groupLabel: Custom Plugins
+    control: CHECK_BOX
+    label: Additional Simple UI Plugin
+  default: "False"
+  allowedValues: ["True", "False"]
+  description: This checkbox defaults to "False".  
+# Output Details
+- name: OutputDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: OUT
+  userInterface:
+    control: CHOOSE_DIRECTORY
+    label: Output Directory
+    groupLabel: Output Details
+  default: "./output_images"
+  description: Choose the Simple UI output directory.
+- name: OutputPattern
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: Output File Pattern
+    groupLabel: Output Details
+  default: "simple_ui_output_####"
+  description: Enter the output filename pattern (without extension).
+- name: Format
+  type: STRING
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Output File Format
+    groupLabel: Output Details
+  description: Choose the file format to render as.
+  default: OPEN_EXR
+  allowedValues: [TGA, RAWTGA, JPEG, IRIS, IRIZ, PNG, HDR, TIFF, OPEN_EXR, OPEN_EXR_MULTILAYER, CINEON, DPX, DDS, JP2, WEBP]
+# Steps
+steps:
+- name: SimpleUITesting
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ['{{Task.File.runScript}}']
+    embeddedFiles:
+      - name: runScript
+        type: TEXT
+        data: |
+          #!/usr/bin/env bash
+
+          echo 'SimpleUIJobName value:'
+          echo '{{Param.SimpleUIJobName}}'
+
+          echo 'Frames value:'
+          echo '{{Param.Frames}}'
+
+          echo 'SimpleUISceneFile value:'
+          echo '{{Param.SimpleUISceneFile}}'
+
+          echo 'OutputDir value:'
+          echo '{{Param.OutputDir}}'
+
+          echo 'This completes the GUI Submitter Testing for Simple UI (with Job Attachments).'
