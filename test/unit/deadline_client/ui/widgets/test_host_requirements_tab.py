@@ -12,7 +12,6 @@ try:
         CustomRequirementsWidget,
         ATTRIBUTE_CAPABILITY_PREFIX,
         AMOUNT_CAPABILITY_PREFIX,
-        MIN_INT_VALUE,
         MAX_INT_VALUE,
     )
 except ImportError:
@@ -76,9 +75,9 @@ def test_value_in_custom_amount_widget_should_be_integer_within_range(qtbot):
     widget = CustomAmountWidget(MagicMock(), 1)
     qtbot.addWidget(widget)
 
-    assert widget.min_spin_box.min == MIN_INT_VALUE
+    assert widget.min_spin_box.min == 0
     assert widget.min_spin_box.max == MAX_INT_VALUE
-    assert widget.max_spin_box.min == MIN_INT_VALUE
+    assert widget.max_spin_box.min == 0
     assert widget.max_spin_box.max == MAX_INT_VALUE
 
 

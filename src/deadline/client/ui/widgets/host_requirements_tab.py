@@ -500,11 +500,11 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.max_label = QLabel("Max")
         self.max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.min_spin_box = OptionalDoubleSpinBox(
-            min=MIN_INT_VALUE, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
+            min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
         )
         self.min_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.max_spin_box = OptionalDoubleSpinBox(
-            min=MIN_INT_VALUE, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
+            min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
         )
         self.max_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
