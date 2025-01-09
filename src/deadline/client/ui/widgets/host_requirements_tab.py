@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
 from qtpy.QtCore import Qt  # type: ignore
-from qtpy.QtGui import QFont, QValidator, QIntValidator, QBrush, QIcon, QRegularExpressionValidator  # type: ignore
+from qtpy.QtGui import QFont, QValidator, QIntValidator, QDoubleValidator, QBrush, QIcon, QRegularExpressionValidator  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QGroupBox,
@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QRadioButton,
     QSizePolicy,
     QSpacerItem,
+    QDoubleSpinBox,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -35,6 +36,7 @@ logger = getLogger(__name__)
 
 MAX_INT_VALUE = (2**31) - 1
 MIN_INT_VALUE = -(2**31) + 1
+DECIMAL_VALUE = 2
 LABEL_FIXED_WIDTH: int = 150
 BUTTON_FIXED_WIDTH: int = 150
 
@@ -497,9 +499,13 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.min_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.max_label = QLabel("Max")
         self.max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.min_spin_box = OptionalSpinBox(min=MIN_INT_VALUE, max=MAX_INT_VALUE, parent=self)
+        self.min_spin_box = OptionalDoubleSpinBox(
+            min=MIN_INT_VALUE, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
+        )
         self.min_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.max_spin_box = OptionalSpinBox(min=MIN_INT_VALUE, max=MAX_INT_VALUE, parent=self)
+        self.max_spin_box = OptionalDoubleSpinBox(
+            min=MIN_INT_VALUE, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
+        )
         self.max_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.min_max_row = QHBoxLayout()
@@ -896,6 +902,91 @@ class OptionalSpinBox(QSpinBox):
             return super().valueFromText(text)
 
     def textFromValue(self, val: int) -> str:
+        """
+        Override textFromValue function to return placeholder text if value is no-input-value.
+        """
+        if val == self.no_input_value:
+            return PLACEHOLDER_TEXT
+        else:
+            return super().textFromValue(val)
+
+    def wheelEvent(self, event):
+        """
+        Override wheelEvent to disable scrolling from accidentally gaining focus and changing the numbers.
+        """
+        event.ignore()
+
+    def has_input(self) -> bool:
+        """
+        Custom function to indicate whether the SpinBox has received input.
+        """
+        return self.no_input_value != self.value()
+
+    def stepBy(self, steps: int) -> None:
+        current_value: int = self.value()
+        result_value = self.value() + steps
+        if (
+            result_value == self.no_input_value
+            or result_value > self.maximum()
+            or result_value < self.minimum()
+        ):
+            # If result value is not a valid value, do not go to that value
+            return
+
+        if (
+            current_value == self.no_input_value and steps == 1
+        ):  # We should allow the user to increment from null value to a valid value
+            super().setValue(max(self.min, 0))
+        else:
+            super().stepBy(steps)
+
+
+class OptionalDoubleSpinBox(QDoubleSpinBox):
+    """
+    A custom QDoubleSpinBox that set min - 1 value as "-" to represent value not set.
+    """
+
+    def __init__(
+        self,
+        min: int = MIN_INT_VALUE,
+        max: int = MAX_INT_VALUE,
+        decimal: int = DECIMAL_VALUE,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.min = min
+        self.max = max
+        self.no_input_value = min - 1
+        self.decimal = decimal
+        # Set the range to include min-1 as a valid value
+        self.setRange(self.no_input_value, MAX_INT_VALUE)
+        self.setValue(self.no_input_value)
+        self.setDecimals(decimal)
+
+    def validate(self, input: str, pos: int) -> QValidator.State:
+        """
+        Override validate function to treat empty string "" as acceptable.
+        """
+        if input == "" or input == PLACEHOLDER_TEXT:
+            return QValidator.Acceptable
+        else:
+            # Override the range that can be accepted by the validator by actual min/max values.
+            validator = QDoubleValidator()
+            validator.setBottom(self.min)
+            validator.setTop(self.max)
+            validator.setDecimals(self.decimal)
+            return validator.validate(input, pos)  # type: ignore[return-value]
+
+    def valueFromText(self, text: str) -> float:
+        """
+        Override valueFromText function to return no-input-value if input string is empty or placeholder.
+        """
+        if text == "" or text == PLACEHOLDER_TEXT:
+            return self.no_input_value
+        else:
+            return super().valueFromText(text)
+
+    def textFromValue(self, val: float) -> str:
         """
         Override textFromValue function to return placeholder text if value is no-input-value.
         """
