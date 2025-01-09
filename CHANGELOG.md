@@ -1,3 +1,15 @@
+## 0.49.4 (2025-01-09)
+
+
+### Features
+* Adds a DoubleSpinBox for custom host requirements. (#523) ([`1046924`](https://github.com/aws-deadline/deadline-cloud/commit/1046924c63a5eb042caaf40dffc7e5a826f17138))
+* add Python 3.13 support (#544) ([`503e7f8`](https://github.com/aws-deadline/deadline-cloud/commit/503e7f8162d2687055be2cba09170cfdc7309a88))
+
+### Bug Fixes
+* Sets the min for custom host requirement spinbox to 0. (#546) ([`9c35516`](https://github.com/aws-deadline/deadline-cloud/commit/9c35516d0964baff0a33522ee72509290f6b064c))
+* improve response time on windows when using deadline config GUI (#540) ([`6873156`](https://github.com/aws-deadline/deadline-cloud/commit/68731569f2fd253ee685ee9a3fbcbda5b8012387))
+* use default deadline configured profile when --profile is not specified for attachment cli (#527) ([`5efbe5c`](https://github.com/aws-deadline/deadline-cloud/commit/5efbe5c326f5cb37c91e76f72f5ed92e3a24df2d))
+
 ## 0.49.3 (2024-11-29)
 
 
