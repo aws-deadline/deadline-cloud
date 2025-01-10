@@ -2,11 +2,13 @@
 
 import json
 import os
+from pathlib import Path
 import tempfile
 from typing import List, Optional
 from deadline.job_attachments.api.manifest import _manifest_snapshot
 from deadline.job_attachments.exceptions import ManifestCreationException
 from deadline.job_attachments.models import ManifestSnapshot
+from deadline.job_attachments._utils import _retry
 import pytest
 
 
@@ -342,6 +344,9 @@ class TestSnapshotAPI:
         # Then. We should find no new manifest, there were no files to snapshot
         assert diffed_manifest is None
 
+    @_retry(
+        tries=2, delay=0.1, backoff=0.1
+    )  # os.utime may take time for the file system to stablize.
     def test_snapshot_diff_no_diff_modified_mtime(self, temp_dir):
         """
         Create a snapshot with 1 file. Modify the mtime of the snapshot to simulate the attachment download operation.
@@ -372,6 +377,7 @@ class TestSnapshotAPI:
 
         # When simulate the file timestamp override from downloaded asset
         os.utime(test_file, (modified_time_override, modified_time_override))
+        assert Path(test_file).stat().st_mtime == modified_time_override
 
         # When snapshot again.
         diffed_manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
