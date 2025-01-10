@@ -224,6 +224,7 @@ class S3AssetUploader:
         manifest: BaseAssetManifest,
         source_root: Path,
         manifest_name_suffix: str,
+        # TODO - remove file_system_location_name after ASSET_SYNC_JOB_USER_FEATURE completion
         file_system_location_name: Optional[str] = None,
     ) -> tuple[HashAlgorithm, bytes, str]:
         """
@@ -231,9 +232,7 @@ class S3AssetUploader:
         """
         hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
-        manifest_name_prefix = hash_data(
-            f"{file_system_location_name or ''}{str(source_root)}".encode(), hash_alg
-        )
+        manifest_name_prefix = hash_data(str(source_root).encode(), hash_alg)
         manifest_name = f"{manifest_name_prefix}_{manifest_name_suffix}"
 
         return (hash_alg, manifest_bytes, manifest_name)
