@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QRadioButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -291,6 +292,27 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_retries_per_task_box.setRange(0, 2147483647)
         self.layout.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
 
+        self.max_worker_count_box_label = QLabel("Maximum worker count")
+        self.max_worker_count_box_label.setToolTip("Maximum worker count of job.")
+        self.max_worker_count_box = QSpinBox()
+        self.max_worker_count_box.setRange(1, 2147483647)
+        self.unlimited_max_worker_count = QRadioButton("No max worker count")
+        self.limited_max_worker_count = QRadioButton("Set max worker count")
+        self.limited_max_worker_count.toggled.connect(
+            self.limited_max_worker_count_radio_button_toggled
+        )
+        self.max_worker_count_layout = QVBoxLayout(self)
+        self.max_worker_count_layout.addWidget(self.unlimited_max_worker_count)
+        self.max_worker_count_layout.addWidget(self.limited_max_worker_count)
+        self.max_worker_count_layout.addWidget(self.max_worker_count_box)
+        self.layout.addRow(self.max_worker_count_box_label, self.max_worker_count_layout)
+
+    def limited_max_worker_count_radio_button_toggled(self, state):
+        """
+        Enable the max worker count text box when limited max worker count radio button is enabled.
+        """
+        self.max_worker_count_box.setHidden(not state)
+
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
@@ -298,6 +320,9 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_failed_tasks_count_box.setValue(20)
         self.max_retries_per_task_box.setValue(5)
         self.priority_box.setValue(50)
+        self.unlimited_max_worker_count.setChecked(True)
+        self.limited_max_worker_count.setChecked(False)
+        self.max_worker_count_box.setHidden(True)
 
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
@@ -315,6 +340,16 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
             self.max_retries_per_task_box.setValue(parameter["value"])
         elif parameter_name == "deadline:priority":
             self.priority_box.setValue(parameter["value"])
+        elif parameter_name == "deadline:maxWorkerCount":
+            if parameter["value"] == -1:
+                self.unlimited_max_worker_count.setChecked(True)
+                self.limited_max_worker_count.setChecked(False)
+                self.max_worker_count_box.setHidden(True)
+            else:
+                self.unlimited_max_worker_count.setChecked(False)
+                self.limited_max_worker_count.setChecked(True)
+                self.max_worker_count_box.setHidden(False)
+                self.max_worker_count_box.setValue(parameter["value"])
         else:
             raise KeyError(parameter_name)
 
@@ -323,7 +358,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         Returns a list of OpenJD parameter definition dicts with
         a "value" key filled from the widget.
         """
-        return [
+        job_parameters = [
             {
                 "name": "deadline:targetTaskRunStatus",
                 "type": "STRING",
@@ -358,6 +393,15 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
             },
             {"name": "deadline:priority", "type": "INT", "value": self.priority_box.value()},
         ]
+        if not self.unlimited_max_worker_count.isChecked():
+            job_parameters.append(
+                {
+                    "name": "deadline:maxWorkerCount",
+                    "type": "INT",
+                    "value": self.max_worker_count_box.value(),
+                }
+            )
+        return job_parameters
 
     def update_settings(self, settings):
         """

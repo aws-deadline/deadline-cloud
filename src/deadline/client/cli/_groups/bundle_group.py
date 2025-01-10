@@ -99,6 +99,11 @@ def validate_parameters(ctx, param, value):
     help="The maximum number of times to retry a task before it is marked as failed.",
 )
 @click.option(
+    "--max-worker-count",
+    type=int,
+    help="The max worker count of the job.",
+)
+@click.option(
     "--job-attachments-file-system",
     help="The method workers use to access job attachments. "
     "COPIED means to copy files to the worker and VIRTUAL means to load "
@@ -132,6 +137,7 @@ def bundle_submit(
     priority,
     max_failed_tasks_count,
     max_retries_per_task,
+    max_worker_count,
     require_paths_exist,
     submitter_name,
     **args,
@@ -208,6 +214,7 @@ def bundle_submit(
             priority=priority,
             max_failed_tasks_count=max_failed_tasks_count,
             max_retries_per_task=max_retries_per_task,
+            max_worker_count=max_worker_count,
             hashing_progress_callback=hash_callback_manager.callback,
             upload_progress_callback=upload_callback_manager.callback,
             create_job_result_callback=_check_create_job_wait_canceled,

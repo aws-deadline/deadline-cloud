@@ -20,6 +20,7 @@ DEFAULT_SUPPORTED_APP_PARAMETER_NAMES = [
     "priority",
     "maxFailedTasksCount",
     "maxRetriesPerTask",
+    "maxWorkerCount",
 ]
 
 
