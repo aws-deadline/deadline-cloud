@@ -13,6 +13,6 @@ black == 24.8.*; python_version == '3.8'
 black == 24.10.*; python_version > '3.8'
 mypy == 1.13.*; python_version == '3.7'
 mypy == 1.*; python_version > '3.7'
-ruff == 0.8.*
+ruff == 0.9.*
 moto == 5.*
 jsondiff == 2.*
