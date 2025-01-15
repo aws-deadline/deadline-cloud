@@ -170,7 +170,9 @@ def _manifest_snapshot(
         # Encode the root path as
         root_hash: str = hash_data(root.encode("utf-8"), output_manifest.get_default_hash_alg())
         timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        manifest_name = name if name else root.replace("/", "_")
+        manifest_name = (
+            name if name else root.replace("/", "_").replace("\\", "_").replace(":", "_")
+        )
         manifest_name = manifest_name[1:] if manifest_name[0] == "_" else manifest_name
         manifest_name = f"{manifest_name}-{root_hash}-{timestamp}.manifest"
 
