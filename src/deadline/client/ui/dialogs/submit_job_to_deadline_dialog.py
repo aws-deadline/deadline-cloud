@@ -86,7 +86,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         on_create_job_bundle_callback,
         parent=None,
         f=Qt.WindowFlags(),
-        show_host_requirements_tab=True,
+        show_host_requirements_tab=False,
         host_requirements: Optional[HostRequirements] = None,
         submitter_name: Optional[str] = None,
     ):
