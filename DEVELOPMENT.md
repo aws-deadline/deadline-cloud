@@ -10,6 +10,7 @@ Table of Contents:
    * [Writing tests](#writing-tests)
    * [Unit tests](#unit-tests)
    * [Integration tests](#integration-tests)
+   * [Squish GUI Submitter tests](#squish-tests)
 * [Things to Know](#things-to-know)
    * [Public contracts](#public-contracts)
    * [Library Dependencies](#dependencies)
@@ -60,6 +61,7 @@ process along the lines of the following as a starting point:
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
+4. Add Squish GUI tests for your changes if applicable. Ensure that all Squish GUI tests pass. (See [Squish GUI tests](#squish-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -79,13 +81,14 @@ functionality in the package. As such, we strive to have high test coverage of t
 that the package contains. Code coverage metrics are not the goal, but rather are a guide to help identify places
 where there may be gaps in testing coverage.
 
-The tests for this package have two forms:
+The tests for this package have three forms:
 
 1. Unit tests - Small tests that are narrowly focused on ensuring that function-level behavior
    of the implementation behaves as it is expected to. These can always be run locally on your workstation
    without requiring an AWS account.
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
+3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license. 
 
 ### Writing Tests
 
@@ -178,6 +181,14 @@ Notes:
 * AWS Developers note: If testing with a non-production deployment of AWS Deadline Cloud then you will have to
 define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
 production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
+
+### Squish GUI Submitter Tests
+
+Squish GUI tests are located under the `test/squish` directory of this repository. New tests can be added for the Deadline GUI when necessary (ie: new functionality is introduced and a test can be added for coverage, or existing functionality is modified). When changes are made, Squish automated tests should be run to ensure changes are not breaking Deadline CLI and GUI functionality. 
+
+#### Running Squish GUI Submitter Tests
+
+A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes. 
 
 ## Things to Know
 
