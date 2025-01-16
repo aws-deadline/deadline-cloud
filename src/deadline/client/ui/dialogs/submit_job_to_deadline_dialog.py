@@ -27,6 +27,7 @@ from deadline.client.ui.dialogs.submit_job_progress_dialog import SubmitJobProgr
 from deadline.job_attachments.models import JobAttachmentS3Settings
 from deadline.job_attachments.upload import S3AssetManager
 
+from ..dataclasses import HostRequirements
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .. import block_signals
@@ -86,6 +87,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         parent=None,
         f=Qt.WindowFlags(),
         show_host_requirements_tab=False,
+        host_requirements: Optional[HostRequirements] = None,
         submitter_name: Optional[str] = None,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
@@ -107,6 +109,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             initial_shared_parameter_values,
             auto_detected_attachments,
             attachments,
+            host_requirements,
         )
 
         self.gui_update_counter: Any = None
@@ -143,6 +146,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         initial_shared_parameter_values,
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
+        host_requirements: Optional[HostRequirements],
     ):
         self.lyt = QVBoxLayout(self)
         self.lyt.setContentsMargins(5, 5, 5, 5)
@@ -158,7 +162,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         # Show host requirements only if requested by the constructor
         if self.show_host_requirements_tab:
-            self._build_host_requirements_tab()
+            self._build_host_requirements_tab(host_requirements)
 
         self.auth_status_box = DeadlineAuthenticationStatusWidget(self)
         self.lyt.addWidget(self.auth_status_box)
@@ -272,12 +276,14 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_attachments_tab.setWidget(self.job_attachments)
         self.job_attachments_tab.setWidgetResizable(True)
 
-    def _build_host_requirements_tab(self):
+    def _build_host_requirements_tab(self, host_requirements: Optional[HostRequirements]):
         self.host_requirements = HostRequirementsWidget()
         self.host_requirements_tab = QScrollArea()
         self.tabs.addTab(self.host_requirements_tab, "Host requirements")
         self.host_requirements_tab.setWidget(self.host_requirements)
         self.host_requirements_tab.setWidgetResizable(True)
+        if host_requirements:
+            self.host_requirements.set_requirements(host_requirements)
 
     def on_shared_job_parameter_changed(self, parameter: dict[str, Any]):
         """

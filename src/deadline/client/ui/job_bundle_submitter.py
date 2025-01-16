@@ -187,7 +187,7 @@ def show_job_bundle_submitter(
     submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=JobBundleSettingsWidget,
         initial_job_settings=initial_settings,
-        # show_host_requirements_tab=True,  // Enable when we want to show the host requirement tab
+        show_host_requirements_tab=True,
         initial_shared_parameter_values=initial_shared_parameter_values,
         auto_detected_attachments=asset_references,
         attachments=AssetReferences(),
