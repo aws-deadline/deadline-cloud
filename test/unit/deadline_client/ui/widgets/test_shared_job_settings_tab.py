@@ -1,7 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import pytest
-from conftest import STRING_FIELD_MAX_LENGHTH
 
 try:
     from deadline.client.ui.widgets.shared_job_settings_tab import SharedJobSettingsWidget
@@ -22,21 +21,27 @@ def shared_job_settings_tab(qtbot, temp_job_bundle_dir) -> SharedJobSettingsWidg
     return widget
 
 
-def test_name_should_be_truncated(shared_job_settings_tab: SharedJobSettingsWidget):
-    invalid_str = "a" * (STRING_FIELD_MAX_LENGHTH + 1)
+def test_name_should_be_truncated_to_openjd_spec_128_chars(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    expected_max_job_name_length = 128
+    invalid_str = "a" * (expected_max_job_name_length + 1)
     shared_job_settings_tab.shared_job_properties_box.sub_name_edit.setText(invalid_str)
     assert (
         shared_job_settings_tab.shared_job_properties_box.sub_name_edit.text()
-        == invalid_str[:STRING_FIELD_MAX_LENGHTH]
+        == invalid_str[:expected_max_job_name_length]
     )
 
 
-def test_description_should_be_truncated(shared_job_settings_tab: SharedJobSettingsWidget):
-    invalid_str = "a" * (STRING_FIELD_MAX_LENGHTH + 1)
+def test_description_should_be_truncated_to_openjd_spec_2048_chars(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    expected_max_job_description_length = 2048
+    invalid_str = "a" * (expected_max_job_description_length + 1)
     shared_job_settings_tab.shared_job_properties_box.desc_edit.setText(invalid_str)
     assert (
         shared_job_settings_tab.shared_job_properties_box.desc_edit.text()
-        == invalid_str[:STRING_FIELD_MAX_LENGHTH]
+        == invalid_str[:expected_max_job_description_length]
     )
 
 
