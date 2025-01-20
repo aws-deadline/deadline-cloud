@@ -258,10 +258,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
         self.sub_name_edit = QLineEdit()
+        self.sub_name_edit.setMaxLength(128)
         self.layout.addRow("Name", self.sub_name_edit)
 
         self.desc_label = QLabel("Description")
         self.desc_edit = QLineEdit()
+        self.desc_edit.setMaxLength(2048)
         self.layout.addRow(self.desc_label, self.desc_edit)
 
         self.priority_box_label = QLabel("Priority")
