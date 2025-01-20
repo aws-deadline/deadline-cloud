@@ -32,7 +32,7 @@ class TestMergeAPI:
         assert manifest_merge.manifest_root == temp_dir
         assert merge_dir in manifest_merge.local_manifest_path
 
-    def test_diff_new_files(self, temp_dir, test_manifest_one, test_manifest_two):
+    def test_merge_different_files(self, temp_dir, test_manifest_one, test_manifest_two):
         """
         Merge two different manifest files
         """

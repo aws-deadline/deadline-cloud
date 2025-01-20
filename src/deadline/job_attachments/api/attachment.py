@@ -43,7 +43,9 @@ def attachment_download(
         NonValidInputError: raise when any of the input is not valid.
     """
 
-    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(manifests=manifests)
+    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(
+        manifest_paths=manifests
+    )
     path_mapping_rule_list: List[PathMappingRule] = _process_path_mapping(
         path_mapping_rules=path_mapping_rules
     )
@@ -110,7 +112,9 @@ def attachment_upload(
         NonValidInputError: raise when any of the input is not valid.
     """
 
-    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(manifests=manifests)
+    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(
+        manifest_paths=manifests
+    )
 
     if bool(path_mapping_rules) == bool(root_dirs):
         raise NonValidInputError("One of path mapping rule and root dir must exist, and not both.")

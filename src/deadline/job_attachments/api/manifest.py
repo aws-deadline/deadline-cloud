@@ -176,7 +176,7 @@ def _manifest_snapshot(
             name=name,
         )
         # Output results.
-        logger.echo(f"Manifest generated at {local_manifest_file}\n")
+        logger.echo(f"Manifest generated at {local_manifest_file}")
         return ManifestSnapshot(manifest=local_manifest_file)
     else:
         # No manifest generated.
@@ -225,7 +225,7 @@ def _manifest_diff(
     :param include: Include glob to look for files to add to the manifest.
     :param exclude: Exclude glob to exclude files from the manifest.
     :param include_exclude_config: Config JSON or file containeing input and exclude config.
-    :param logger: Click Logger instance to print to CLI as test or JSON.
+    :param logger: Click Logger instance to print to CLI as text or JSON.
     :returns: ManifestDiff object containing all new changed, deleted files.
     """
 
@@ -299,7 +299,7 @@ def _manifest_upload(
     boto_session: S3 Content Addressable Storage prefix.
     s3_key_prefix: [Optional] S3 prefix path to the Content Addressable Storge.
     boto_session: Boto3 session.
-    logger: Click Logger instance to print to CLI as test or JSON.
+    logger: Click Logger instance to print to CLI as text or JSON.
     """
     # S3 metadata
 
@@ -344,7 +344,7 @@ def _manifest_download(
     job_id: Job Id to download.
     boto_session: Boto3 session.
     step_id: Optional[str]: Optional, download manifest for a step
-    logger: Click Logger instance to print to CLI as test or JSON.
+    logger: Click Logger instance to print to CLI as text or JSON.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
 
@@ -483,11 +483,13 @@ def _manifest_merge(
     manifest_files: List of manifest files to merge.
     destination: Destination directory for the merged manifest.
     name: Name of the merged manifest.
-    logger: Click Logger instance to print to CLI as test or JSON.
+    logger: Click Logger instance to print to CLI as text or JSON.
     return ManifestMerge object containing the merged manifest.
     """
 
-    manifests: List[BaseAssetManifest] = list(_read_manifests(manifests=manifest_files).values())
+    manifests: List[BaseAssetManifest] = list(
+        _read_manifests(manifest_paths=manifest_files).values()
+    )
 
     merged_manifest = merge_asset_manifests(manifests)
 
@@ -497,6 +499,6 @@ def _manifest_merge(
     local_manifest_file = _write_manifest(
         root=root, manifest=merged_manifest, destination=destination, name=name
     )
-    logger.echo(f"Manifest generated at {local_manifest_file}\n")
+    logger.echo(f"Manifest generated at {local_manifest_file}")
 
     return ManifestMerge(manifest_root=root, local_manifest_path=local_manifest_file)

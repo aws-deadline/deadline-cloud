@@ -269,7 +269,7 @@ class S3AssetUploader:
             input_manifest_folder_name = root_dir_name + "_" + input_manifest_folder_name
 
         local_manifest_file = Path(manifest_write_dir, input_manifest_folder_name, manifest_name)
-        logger.info(f"Creating local manifest file: {local_manifest_file}\n")
+        logger.debug(f"Creating local manifest file: {local_manifest_file}")
         local_manifest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(local_manifest_file, "w") as file:
             file.write(manifest.encode())
