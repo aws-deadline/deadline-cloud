@@ -404,6 +404,14 @@ class ManifestDownload:
 
 
 @dataclass
+class ManifestMerge:
+    """Data structure to store the S3 and local paths of a manifest"""
+
+    manifest_root: str = field(default_factory=str)
+    local_manifest_path: str = field(default_factory=str)
+
+
+@dataclass
 class ManifestDownloadResponse:
     """Data structure to capture the response for manifest download"""
 
