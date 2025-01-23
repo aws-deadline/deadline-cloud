@@ -1,7 +1,7 @@
 name: "\U0001F680 Feature Request"
 description: Request a new feature
 title: "Feature request: (short description of the feature)"
-labels: ["feature", "needs triage"]
+labels: ["enhancement", "needs triage"]
 body:
   - type: textarea
     id: problem
@@ -33,5 +33,3 @@ body:
         you have proposed it.
     validations:
       required: true
-
-

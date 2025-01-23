@@ -33,6 +33,16 @@ from deadline.job_attachments.models import (  # noqa: E402 isort:skip
 
 
 @pytest.fixture(scope="function")
+def temp_dir():
+    """
+    Fixture to provide a temporary directory.
+    """
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield temp_dir
+
+
+@pytest.fixture(scope="function")
 def temp_assets_dir():
     """
     Fixture to provide a temporary directory for asset files.

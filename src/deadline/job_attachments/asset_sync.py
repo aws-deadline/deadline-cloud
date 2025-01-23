@@ -336,7 +336,10 @@ class AssetSync:
                 raise
 
     def _check_and_write_local_manifests(
-        self, merged_manifests_by_root: dict[str, BaseAssetManifest], manifest_write_dir: str
+        self,
+        merged_manifests_by_root: dict[str, BaseAssetManifest],
+        manifest_write_dir: str,
+        manifest_name_suffix: str = "manifest",
     ) -> dict[str, str]:
         """Write manifests to the directory and check disk capacity is sufficient for the assets.
 
@@ -355,7 +358,7 @@ class AssetSync:
             (_, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
                 manifest=manifest,
                 source_root=Path(self._local_root_to_src_map[root]),
-                manifest_name_suffix="manifest",
+                manifest_name_suffix=manifest_name_suffix,
             )
 
             local_manifest_file = S3AssetUploader._write_local_input_manifest(

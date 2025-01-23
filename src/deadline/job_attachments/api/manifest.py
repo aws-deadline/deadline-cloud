@@ -12,6 +12,7 @@ from deadline.client.api._session import _get_queue_user_boto3_session, get_defa
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.job_attachments._diff import _fast_file_list_to_manifest_diff, compare_manifest
 from deadline.job_attachments._glob import _process_glob_inputs, _glob_paths
+from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests._create_manifest import (
     _create_manifest_for_single_root,
 )
@@ -37,6 +38,7 @@ from deadline.job_attachments.models import (
     ManifestDownload,
     ManifestDownloadResponse,
     ManifestSnapshot,
+    ManifestMerge,
     default_glob_all,
 )
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
@@ -167,27 +169,43 @@ def _manifest_snapshot(
 
     # Write created manifest into local file, at the specified location at destination
     if output_manifest is not None:
-        # Encode the root path as
-        root_hash: str = hash_data(root.encode("utf-8"), output_manifest.get_default_hash_alg())
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        manifest_name = (
-            name if name else root.replace("/", "_").replace("\\", "_").replace(":", "_")
+        local_manifest_file = _write_manifest(
+            root=root,
+            manifest=output_manifest,
+            destination=destination,
+            name=name,
         )
-        manifest_name = manifest_name[1:] if manifest_name[0] == "_" else manifest_name
-        manifest_name = f"{manifest_name}-{root_hash}-{timestamp}.manifest"
-
-        local_manifest_file = os.path.join(destination, manifest_name)
-        os.makedirs(os.path.dirname(local_manifest_file), exist_ok=True)
-        with open(local_manifest_file, "w") as file:
-            file.write(output_manifest.encode())
-
         # Output results.
-        logger.echo(f"Manifest Generated at {local_manifest_file}\n")
+        logger.echo(f"Manifest generated at {local_manifest_file}")
         return ManifestSnapshot(manifest=local_manifest_file)
     else:
         # No manifest generated.
         logger.echo("No manifest generated")
         return None
+
+
+def _write_manifest(
+    root: str,
+    manifest: BaseAssetManifest,
+    destination: str,
+    name: Optional[str] = None,
+) -> str:
+    """
+    Write a manifest to a destination.
+    """
+    # Write created manifest into local file, at the specified location at destination
+    root_hash: str = hash_data(root.encode("utf-8"), manifest.get_default_hash_alg())
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    manifest_name = name if name else root.replace("/", "_").replace("\\", "_").replace(":", "_")
+    manifest_name = manifest_name[1:] if manifest_name[0] == "_" else manifest_name
+    manifest_name = f"{manifest_name}-{root_hash}-{timestamp}.manifest"
+
+    local_manifest_path = os.path.join(destination, manifest_name)
+    os.makedirs(os.path.dirname(local_manifest_path), exist_ok=True)
+    with open(local_manifest_path, "w") as file:
+        file.write(manifest.encode())
+
+    return local_manifest_path
 
 
 def _manifest_diff(
@@ -207,7 +225,7 @@ def _manifest_diff(
     :param include: Include glob to look for files to add to the manifest.
     :param exclude: Exclude glob to exclude files from the manifest.
     :param include_exclude_config: Config JSON or file containeing input and exclude config.
-    :param logger: Click Logger instance to print to CLI as test or JSON.
+    :param logger: Click Logger instance to print to CLI as text or JSON.
     :returns: ManifestDiff object containing all new changed, deleted files.
     """
 
@@ -281,7 +299,7 @@ def _manifest_upload(
     boto_session: S3 Content Addressable Storage prefix.
     s3_key_prefix: [Optional] S3 prefix path to the Content Addressable Storge.
     boto_session: Boto3 session.
-    logger: Click Logger instance to print to CLI as test or JSON.
+    logger: Click Logger instance to print to CLI as text or JSON.
     """
     # S3 metadata
 
@@ -326,7 +344,7 @@ def _manifest_download(
     job_id: Job Id to download.
     boto_session: Boto3 session.
     step_id: Optional[str]: Optional, download manifest for a step
-    logger: Click Logger instance to print to CLI as test or JSON.
+    logger: Click Logger instance to print to CLI as text or JSON.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
 
@@ -450,3 +468,37 @@ def _manifest_download(
     # JSON output at the end.
     output = ManifestDownloadResponse(downloaded=successful_downloads)
     return output
+
+
+def _manifest_merge(
+    root: str,
+    manifest_files: List[str],
+    destination: str,
+    name: Optional[str],
+    logger: ClickLogger = ClickLogger(False),
+) -> Optional[ManifestMerge]:
+    """
+    BETA API - API to merge multiple manifests into one.
+    root: Root path for the manifest.
+    manifest_files: List of manifest files to merge.
+    destination: Destination directory for the merged manifest.
+    name: Name of the merged manifest.
+    logger: Click Logger instance to print to CLI as text or JSON.
+    return ManifestMerge object containing the merged manifest.
+    """
+
+    manifests: List[BaseAssetManifest] = list(
+        _read_manifests(manifest_paths=manifest_files).values()
+    )
+
+    merged_manifest = merge_asset_manifests(manifests)
+
+    if not merged_manifest:
+        return None
+
+    local_manifest_file = _write_manifest(
+        root=root, manifest=merged_manifest, destination=destination, name=name
+    )
+    logger.echo(f"Manifest generated at {local_manifest_file}")
+
+    return ManifestMerge(manifest_root=root, local_manifest_path=local_manifest_file)

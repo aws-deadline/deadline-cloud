@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import pytest
-from conftest import STRING_FIELD_MAX_LENGHTH
+from conftest import STRING_FIELD_MAX_LENGTH
 
 try:
     from deadline.client.ui.widgets.openjd_parameters_widget import (
@@ -21,9 +21,9 @@ def test_input_in_line_edit_widget_should_be_truncated(qtbot):
     widget = _JobTemplateLineEditWidget(None, {"type": "STRING", "name": "test-name"})
     qtbot.addWidget(widget)
 
-    invalid_str = "a" * (STRING_FIELD_MAX_LENGHTH + 1)
+    invalid_str = "a" * (STRING_FIELD_MAX_LENGTH + 1)
     widget.set_value(invalid_str)
-    assert widget.value() == invalid_str[:STRING_FIELD_MAX_LENGHTH]
+    assert widget.value() == invalid_str[:STRING_FIELD_MAX_LENGTH]
 
 
 def test_input_in_int_spin_box_widget_should_be_integer_within_range(qtbot):

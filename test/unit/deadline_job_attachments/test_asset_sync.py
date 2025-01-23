@@ -1536,7 +1536,9 @@ class TestAssetSync:
             assert mock_get_manifest_from_s3.call_count == manifest_count
 
             manifest_paths_by_root = self.default_asset_sync._check_and_write_local_manifests(
-                merged_manifests_by_root=merged_manifests_by_root, manifest_write_dir=str(tmp_path)
+                merged_manifests_by_root=merged_manifests_by_root,
+                manifest_write_dir=str(tmp_path),
+                manifest_name_suffix="test",
             )
             assert mock__write_local_input_manifest.call_count == manifest_count
             assert len(self.default_asset_sync._local_root_to_src_map) == len(
@@ -1544,6 +1546,7 @@ class TestAssetSync:
             )
             assert len(manifest_paths_by_root) == manifest_count
             assert "/root/tmp/movie1" in manifest_paths_by_root
+            assert "test" in manifest_paths_by_root["/root/tmp/movie1"]
             assert str(tmp_path.joinpath(dest_dir)) in manifest_paths_by_root
 
     def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
