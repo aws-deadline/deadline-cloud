@@ -1,8 +1,7 @@
-
 name: "📕 Documentation Issue"
 description: Issue in the documentation
 title: "Docs: (short description of the issue)"
-labels: ["documenation", "needs triage"]
+labels: ["documentation", "needs triage"]
 body:
   - type: textarea
     id: documentation_issue
