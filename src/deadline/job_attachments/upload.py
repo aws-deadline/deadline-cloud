@@ -853,7 +853,14 @@ class S3AssetManager:
         }:
             paths: list[base_manifest.BaseManifestPath] = []
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
+            # The [ThreadPoolExecutor](https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor)
+            # has a different number of workers by default depending on the Python version, but as of Python 3.11,
+            # the default number of workers is `min(32, os.cpu_count() + 4)`. Hashing is a CPU-intensive operation,
+            # and we've previously encountered hanging processes when using the default number of workers.
+            # So we limit it to most N - 2 threads, where N is the number of CPUs on the computer.
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max(1, (os.cpu_count() or 1) - 2)
+            ) as executor:
                 futures = {
                     executor.submit(
                         self._process_input_path, path, root_path, hash_cache, progress_tracker
