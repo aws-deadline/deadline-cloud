@@ -46,6 +46,14 @@ def make_exe(exe_zipfile: Path, cleanup=True) -> None:
     os.environ["PYINSTALLER_DEADLINE_CLI_DIST_PATH"] = str(DEADLINE_CLI_DIST_PATH)
     pyinstaller(str(DEADLINE_SPEC_PATH))
 
+    # Sometimes the files output by pyinstaller have a last modified
+    # date of the unix epoch. This causes make_archive to fail.
+    # Touch each file in the directory we are archiving to make
+    # sure they all have non-epoch modified dates.
+    for dirpath, _, filenames in os.walk(DEADLINE_DIST_PATH):
+        for filename in filenames:
+            (Path(dirpath) / filename).touch(exist_ok=True)
+
     # Zip up the Deadline CLI wrapper to the final output path
     shutil.make_archive(exe_zipfile.with_suffix(""), "zip", DEADLINE_DIST_PATH)
 
