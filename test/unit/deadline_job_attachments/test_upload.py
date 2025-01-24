@@ -48,6 +48,8 @@ from deadline.job_attachments.models import (
     PathFormat,
     StorageProfile,
 )
+from deadline.job_attachments.asset_manifests.v2023_03_03 import AssetManifest
+
 from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
     SummaryStatistics,
@@ -2639,6 +2641,26 @@ class TestUpload:
                 bucket,
                 expected_files={"prefix/test-hash.xxh128"},
             )
+
+    def test_gather_upload_metadata(self):
+        # Given
+        manifest = AssetManifest(
+            hash_alg=HashAlgorithm("xxh128"),
+            total_size=10,
+            paths=[
+                BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
+                BaseManifestPath(
+                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                ),
+            ],
+        )
+        # When
+        (hash_alg, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
+            manifest, Path("mocksourcerootpath"), "suffix"
+        )
+        # Then
+        assert hash_alg == HashAlgorithm.XXH128
+        assert manifest_name == "73addc7c69ddec53bd8d9df653add3c4_suffix"
 
 
 def assert_progress_report_last_callback(
