@@ -73,3 +73,10 @@ def test_max_retries_per_task_should_be_integer_within_range(
 ):
     shared_job_settings_tab.shared_job_properties_box.max_retries_per_task_box.setValue(-1)
     assert shared_job_settings_tab.shared_job_properties_box.max_retries_per_task_box.value() == 0
+
+
+def test_max_worker_count_should_be_integer_within_range(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.setValue(-1)
+    assert shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.value() == 1

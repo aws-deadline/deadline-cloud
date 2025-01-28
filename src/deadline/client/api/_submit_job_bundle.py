@@ -59,6 +59,7 @@ def create_job_from_job_bundle(
     priority: Optional[int] = None,
     max_failed_tasks_count: Optional[int] = None,
     max_retries_per_task: Optional[int] = None,
+    max_worker_count: Optional[int] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
     decide_cancel_submission_callback: Callable[
         [AssetUploadGroup], bool
@@ -121,6 +122,7 @@ def create_job_from_job_bundle(
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
         priority (int, optional): explicit value for the priority of the job.
+        max_worker_count (int, optional): explicit value for the max worker count of the job.
         max_failed_tasks_count (int, optional): explicit value for the maximum allowed failed tasks.
         max_retries_per_task (int, optional): explicit value for the maximum retries per task.
         print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
@@ -308,6 +310,8 @@ def create_job_from_job_bundle(
 
     if priority is not None:
         create_job_args["priority"] = priority
+    if max_worker_count is not None:
+        create_job_args["maxWorkerCount"] = max_worker_count
     if max_failed_tasks_count is not None:
         create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
     if max_retries_per_task is not None:

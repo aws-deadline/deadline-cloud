@@ -201,7 +201,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
 
 def test_cli_bundle_priority_retries(fresh_deadline_config):
     """
-    Confirm that --priority, --max-failed-tasks-count, and --max-retries-per-task get passed in from the CLI.
+    Confirm that --priority, --max-failed-tasks-count, --max_worker_count and --max-retries-per-task get passed in from the CLI.
     """
     # Use a temporary directory for the job bundle
     with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
@@ -230,6 +230,8 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
                 "12",
                 "--max-retries-per-task",
                 "4",
+                "--max-worker-count",
+                "123",
             ],
         )
 
@@ -244,6 +246,7 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
         priority=25,
         maxFailedTasksCount=12,
         maxRetriesPerTask=4,
+        maxWorkerCount=123,
     )
     assert result.exit_code == 0
 
