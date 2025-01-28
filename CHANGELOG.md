@@ -1,3 +1,20 @@
+## 0.50.0 (2025-01-28)
+
+
+### Features
+* Add maxWorkerCount support for jobs (#573) ([`e101473`](https://github.com/aws-deadline/deadline-cloud/commit/e101473c656491a860e41efe957c3c13879517ac))
+* remove optionally using file system system location name in the manifest file name hash (#552) ([`ed5c0cb`](https://github.com/aws-deadline/deadline-cloud/commit/ed5c0cbeada46cbb0d273bda62c1f0e550ded2d8))
+* add manifests merge functionality and pass in suffix for local manifests write (#563) ([`5e167b5`](https://github.com/aws-deadline/deadline-cloud/commit/5e167b558cada2f4ee0268031b80d3ad20b79b42))
+* show host requirements tab in default bundle gui submitter (#558) ([`78cf4eb`](https://github.com/aws-deadline/deadline-cloud/commit/78cf4ebc1c88d919b185c8e9e9186949af02cc78))
+* Allow submitters to prepopulate HostRequirementsWidget (#538) ([`486df0a`](https://github.com/aws-deadline/deadline-cloud/commit/486df0ad02cce1c0affd14e4ed8b90e5efc4d103))
+
+### Bug Fixes
+* Revert limit number of hashing threads. This PR requires additional testing (#576) ([`0a33af6`](https://github.com/aws-deadline/deadline-cloud/commit/0a33af666369f318214fb0fd4c004ca1df06a521))
+* limit number of hashing threads (#570) ([`4d72563`](https://github.com/aws-deadline/deadline-cloud/commit/4d7256350c4bc085dfe8f7dac50b55918c84040b))
+* limit the length of name and description fields to match OpenJD spec (#564) ([`0c72b7e`](https://github.com/aws-deadline/deadline-cloud/commit/0c72b7e9fc35be894aad7f71ae75c2e65fd7c215))
+* remove default host requirements tab from DCCs that don't support it (#560) ([`e49965b`](https://github.com/aws-deadline/deadline-cloud/commit/e49965b85ae16c969b59d495b91b759c4f4738b4))
+* manifest destination directory not being used when path uses backslashes (#559) ([`30b8099`](https://github.com/aws-deadline/deadline-cloud/commit/30b80990e95074a4e4e1845e6ec34e29100a79f9))
+
 ## 0.49.4 (2025-01-09)
 
 
