@@ -3,44 +3,45 @@
 """
 UI widgets for the host requirements tab.
 """
-from typing import Any, Dict, List, Optional, Union, Literal
+import re
+from logging import getLogger
 from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from qtpy.QtCore import Qt  # type: ignore
 from qtpy.QtGui import (  # type: ignore
-    QFont,
-    QValidator,
-    QIntValidator,
-    QDoubleValidator,
     QBrush,
+    QDoubleValidator,
+    QFont,
     QIcon,
+    QIntValidator,
     QRegularExpressionValidator,
     QStandardItem,
+    QValidator,
 )
 from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
+    QDoubleSpinBox,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
     QRadioButton,
     QSizePolicy,
     QSpacerItem,
-    QDoubleSpinBox,
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QPushButton,
-    QListWidget,
-    QListWidgetItem,
-    QFrame,
-    QLineEdit,
-    QListView,
 )
 
 from deadline.client.exceptions import NonValidInputError
-from ..dataclasses import HostRequirements, CustomRequirements, OsRequirements, HardwareRequirements
 
-from logging import getLogger
+from ..dataclasses import CustomRequirements, HardwareRequirements, HostRequirements, OsRequirements
 
 logger = getLogger(__name__)
 
@@ -72,11 +73,19 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
 )
 
 CUSTOM_CAPABILITY_NAME_REGEX = "^(\\.[a-zA-Z][a-zA-Z0-9]{0,63})+$"
-
 ATTRIBUTE_CAPABILITY_VALUE_REGEX = "^[a-zA-Z_]([a-zA-Z0-9_\\-]{0,99})$"
 
-ATTRIBUTE_CAPABILITY_PREFIX = "attr.worker."
-AMOUNT_CAPABILITY_PREFIX = "amount.worker."
+ATTRIBUTE_CAPABILITY_PREFIX = "attr."
+AMOUNT_CAPABILITY_PREFIX = "amount."
+
+RESERVED_FIRST_IDENTIFIERS = ["worker", "job", "step", "task"]
+
+# An attribute name needs to be <= 100 characters. Each Identifier must start with a letter or underscore and can
+# be a maximum of 64 characters long. Periods separate each Identifier.
+IDENTIFIER_REGEX = "[a-zA-Z_][a-zA-Z0-9_]{0,63}"
+
+ATTRIBUTE_CAPABILITY_NAME_REGEX = rf"^({IDENTIFIER_REGEX})(\.{IDENTIFIER_REGEX})*$"
+AMOUNT_CAPABILITY_NAME_REGEX = rf"^({IDENTIFIER_REGEX})(\.{IDENTIFIER_REGEX})*$"
 
 
 class AddIcon(QIcon):
@@ -557,9 +566,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.name_line_edit.setValidator(
-            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
-        )
+        self.name_line_edit.setValidator(QRegularExpressionValidator(AMOUNT_CAPABILITY_NAME_REGEX))
         assert (100 - len(AMOUNT_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_PREFIX))
 
@@ -611,7 +618,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_line_edit.setText(name)
 
     @property
-    def minimum(self) -> Optional[int]:
+    def minimum(self) -> Optional[float]:
         if self.min_spin_box.has_input():
             return self.min_spin_box.value()
         return None
@@ -621,7 +628,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.min_spin_box.setValue(minimum)
 
     @property
-    def maximum(self) -> Optional[int]:
+    def maximum(self) -> Optional[float]:
         if self.max_spin_box.has_input():
             return self.max_spin_box.value()
         return None
@@ -639,6 +646,9 @@ class CustomAmountWidget(CustomCapabilityWidget):
         """
         requirement: Dict[str, Any] = {}
         if self.name_line_edit.text():
+            if self.name[-1] == ".":
+                raise NonValidInputError("Your requirement name cannot end with a period.")
+
             requirement = {"name": AMOUNT_CAPABILITY_PREFIX + self.name}
             minimum = self.minimum
             maximum = self.maximum
@@ -656,6 +666,13 @@ class CustomAmountWidget(CustomCapabilityWidget):
             elif maximum:
                 requirement["max"] = maximum
 
+            parsed_name_match = re.match(AMOUNT_CAPABILITY_NAME_REGEX, self.name)
+
+            if parsed_name_match and parsed_name_match.group(1) in RESERVED_FIRST_IDENTIFIERS:
+                raise NonValidInputError(
+                    "Please make sure that the first identifier in your name is not a reserved identifier. "
+                    + str(RESERVED_FIRST_IDENTIFIERS)
+                )
         else:
             raise NonValidInputError(
                 "Please fill out all custom amount names in the custom host requirement options!"
@@ -690,7 +707,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         assert (100 - len(ATTRIBUTE_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
         self.name_line_edit.setValidator(
-            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
+            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_NAME_REGEX)
         )
         self.add_value_button = None
 
@@ -876,6 +893,16 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         requirements_are_valid = True
 
         if self.name_line_edit.text():
+            if self.name[-1] == ".":
+                raise NonValidInputError("Your requirement name cannot end with a period.")
+
+            parsed_name_match = re.match(AMOUNT_CAPABILITY_NAME_REGEX, self.name)
+            if parsed_name_match and parsed_name_match.group(1) in RESERVED_FIRST_IDENTIFIERS:
+                raise NonValidInputError(
+                    "Please make sure that the first identifier in your name is not a reserved identifier. "
+                    + str(RESERVED_FIRST_IDENTIFIERS)
+                )
+
             try:
                 values = self.values
             except ValueError:
@@ -893,6 +920,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             raise NonValidInputError(
                 "Please fill out all custom attribute names and values in the custom host requirements options!"
             )
+
         return requirement
 
 
@@ -1051,7 +1079,7 @@ class OptionalComboBox(QComboBox):
         self.addItems(items)
 
     def has_input(self) -> bool:
-        return PLACEHOLDER_TEXT != self.currentText()
+        return self.currentText() != PLACEHOLDER_TEXT
 
 
 class OptionalMultiSelectComboBox(QComboBox):
