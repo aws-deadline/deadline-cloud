@@ -116,7 +116,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.refresh_deadline_settings()
 
     def sizeHint(self):
-        return QSize(540, 600)
+        return QSize(540, 700)
 
     def refresh(
         self,
