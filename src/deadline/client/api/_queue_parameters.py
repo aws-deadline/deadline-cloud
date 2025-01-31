@@ -5,6 +5,7 @@ __all__ = ["get_queue_parameter_definitions"]
 
 import yaml
 
+from .. import api
 from ._list_apis import _call_paginated_deadline_list_api
 from ._session import get_boto3_client
 from ..exceptions import DeadlineOperationError
@@ -16,6 +17,7 @@ from ..job_bundle.parameters import (
 )
 
 
+@api.record_function_latency_telemetry_event()
 def get_queue_parameter_definitions(
     *, farmId: str, queueId: str, config=None
 ) -> list[JobParameter]:

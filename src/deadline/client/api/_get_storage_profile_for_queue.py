@@ -8,6 +8,7 @@ from typing import Optional
 from botocore.client import BaseClient  # type: ignore[import]
 
 from ._session import get_boto3_client
+from .. import api
 from ...job_attachments.models import (
     FileSystemLocation,
     FileSystemLocationType,
@@ -16,6 +17,7 @@ from ...job_attachments.models import (
 )
 
 
+@api.record_function_latency_telemetry_event()
 def get_storage_profile_for_queue(
     farm_id: str,
     queue_id: str,

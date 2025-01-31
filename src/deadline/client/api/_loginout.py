@@ -11,7 +11,6 @@ from typing import Callable, Optional
 import subprocess
 import sys
 
-
 from ._session import (
     get_credentials_source,
     check_authentication_status,
@@ -19,6 +18,7 @@ from ._session import (
     AwsAuthenticationStatus,
 )
 from . import _session
+from .. import api
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
 import time
@@ -85,6 +85,7 @@ def _login_deadline_cloud_monitor(
         time.sleep(0.5)
 
 
+@api.record_function_latency_telemetry_event()
 def login(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
@@ -111,6 +112,7 @@ def login(
     )
 
 
+@api.record_function_latency_telemetry_event()
 def logout(config: Optional[ConfigParser] = None) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor, logs out of Deadline Cloud.

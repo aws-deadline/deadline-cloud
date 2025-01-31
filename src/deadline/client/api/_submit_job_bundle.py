@@ -48,6 +48,7 @@ from ._session import session_context
 logger = logging.getLogger(__name__)
 
 
+@api.record_function_latency_telemetry_event()
 def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
