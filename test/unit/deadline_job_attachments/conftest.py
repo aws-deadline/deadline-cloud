@@ -4,7 +4,6 @@
 Common fixtures for deadline tests.
 """
 from __future__ import annotations
-
 import dataclasses
 import json
 import os
@@ -12,7 +11,6 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Generator
-from unittest.mock import patch
 
 import pytest
 from moto import mock_aws
@@ -52,15 +50,18 @@ def temp_assets_dir():
         yield assets_dir
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="function", autouse=True)
 def boto_config() -> Generator[None, None, None]:
-    updated_environment = {
-        "AWS_ACCESS_KEY_ID": "ACCESSKEY",
-        "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-        "AWS_DEFAULT_REGION": "us-west-2",
-    }
-    with patch.dict("os.environ", updated_environment):
-        yield
+    os.environ["AWS_ACCESS_KEY_ID"] = "ACCESSKEY"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
+
+    mock = mock_aws()
+    mock.start()
+    yield
+    mock.stop()
 
 
 @pytest.fixture(scope="function", name="s3")
@@ -68,13 +69,11 @@ def s3_fixture(boto_config) -> Generator[BaseClient, None, None]:
     """
     Fixture to get a mock S3 client.
     """
-
-    with mock_aws():
-        yield aws_clients.get_s3_client()
+    yield aws_clients.get_s3_client()
 
 
 @pytest.fixture(scope="function")
-def create_s3_bucket(s3) -> Callable[[str], None]:  # pylint: disable=invalid-name
+def create_s3_bucket(boto_config, s3) -> Callable[[str], None]:  # pylint: disable=invalid-name
     """
     Fixture that returns a function that creates moto S3 buckets.
     """

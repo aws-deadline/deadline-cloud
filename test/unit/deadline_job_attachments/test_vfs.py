@@ -357,6 +357,8 @@ class TestVFSProcessmanager:
         local_root: str = f"{session_dir}/{dest_dir}"
         manifest_path: str = f"{local_root}/manifest.json"
         # Note that env variable not set
+        if DEADLINE_VFS_ENV_VAR in os.environ:
+            os.environ.pop(DEADLINE_VFS_ENV_VAR)
 
         # Create process manager without CAS prefix
         process_manager: VFSProcessManager = VFSProcessManager(
