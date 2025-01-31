@@ -6,7 +6,16 @@ from deadline.job_attachments import upload
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm, hash_file
 from deadline.job_attachments.asset_manifests.versions import ManifestVersion
-from .test_utils import JobAttachmentTest, UploadInputFilesOneAssetInCasOutputs
+from .test_utils import JobAttachmentTest, UploadInputFilesOneAssetInCasOutputs, DeadlineCliTest
+
+
+@pytest.fixture(scope="session")
+def deadline_cli_test() -> DeadlineCliTest:
+    """
+    Fixture to get the sessions DeadlineCliTest object.
+    """
+
+    return DeadlineCliTest()
 
 
 @pytest.fixture(scope="session")
