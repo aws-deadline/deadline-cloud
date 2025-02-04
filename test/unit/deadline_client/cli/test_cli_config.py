@@ -127,6 +127,24 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert "(default)" not in result.output
 
 
+def test_cli_config_show_json_output(fresh_deadline_config):
+    """
+    Confirm that the CLI interface prints out all the configuration
+    file data, when the configuration is default
+    """
+    runner = CliRunner()
+    result = runner.invoke(main, ["config", "show", "--output", "json"])
+
+    assert result.exit_code == 0
+
+    expected_output = {}
+    for setting_name in config.config_file.SETTINGS.keys():
+        expected_output[setting_name] = config.config_file.get_setting(setting_name)
+    expected_output["settings.config_file_path"] = str(config.config_file.get_config_file_path())
+
+    assert json.loads(result.output) == expected_output
+
+
 @pytest.mark.parametrize("setting_name,default_value,alternate_value", CONFIG_SETTING_ROUND_TRIP)
 def test_config_settings_via_cli_roundtrip(
     fresh_deadline_config, setting_name, default_value, alternate_value
