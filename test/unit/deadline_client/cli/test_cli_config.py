@@ -5,6 +5,7 @@ Tests for the CLI config command.
 """
 
 import importlib
+import json
 import logging
 from unittest.mock import patch
 
