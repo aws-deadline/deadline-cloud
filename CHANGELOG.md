@@ -1,3 +1,13 @@
+## 0.49.6 (2025-02-06)
+
+
+### Features
+* add latency telemetry (#577) ([`82aa2f9`](https://github.com/aws-deadline/deadline-cloud/commit/82aa2f9842e311d1c786272cc39f83cddb6d9d18))
+
+### Bug Fixes
+* fix host requirements combo box checkability on Linux and macOS (#590) ([`c4e6cdc`](https://github.com/aws-deadline/deadline-cloud/commit/c4e6cdc9c346289578d16048fcaff9d156ee4154))
+* increase submit job to deadline dialog height sizehint (#582) ([`a99033a`](https://github.com/aws-deadline/deadline-cloud/commit/a99033a9067563c7e8bafa8823af4f6cb73d9dff))
+
 ## 0.49.5 (2025-01-29)
 
 

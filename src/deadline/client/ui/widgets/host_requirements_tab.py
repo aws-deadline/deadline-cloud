@@ -1089,18 +1089,10 @@ class OptionalMultiSelectComboBox(QComboBox):
 
     def __init__(self, items: List[str], parent=None):
         super().__init__(parent=parent)
-        self.view().pressed.connect(self.handleItemPressed)
         self.model().itemChanged.connect(self.handleModelChanged)
         self.setPlaceholderText("-")
         self.addItems(items)
         self._updateLineEdit()
-
-    def handleItemPressed(self, index):
-        item = self.model().itemFromIndex(index)
-        if item.checkState() == Qt.Checked:
-            item.setCheckState(Qt.Unchecked)
-        else:
-            item.setCheckState(Qt.Checked)
 
     def handleModelChanged(self, item):
         self._updateLineEdit()

@@ -35,20 +35,20 @@ This library requires:
 
 ## Versioning
 
-This package's version follows [Semantic Versioning 2.0](https://semver.org/), but is still considered to be in its 
+This package's version follows [Semantic Versioning 2.0](https://semver.org/), but is still considered to be in its
 initial development, thus backwards incompatible versions are denoted by minor version bumps. To help illustrate how
 versions will increment during this initial development stage, they are described below:
 
-1. The MAJOR version is currently 0, indicating initial development. 
-2. The MINOR version is currently incremented when backwards incompatible changes are introduced to the public API. 
-3. The PATCH version is currently incremented when bug fixes or backwards compatible changes are introduced to the public API. 
+1. The MAJOR version is currently 0, indicating initial development.
+2. The MINOR version is currently incremented when backwards incompatible changes are introduced to the public API.
+3. The PATCH version is currently incremented when bug fixes or backwards compatible changes are introduced to the public API.
 
 ## Contributing
 
 We welcome all contributions. Please see [CONTRIBUTING.md](https://github.com/aws-deadline/deadline-cloud/blob/mainline/CONTRIBUTING.md)
 for guidance on how to contribute. Please report issues such as bugs, inaccurate or confusing information, and so on,
 by making feature requests in the [issue tracker](https://github.com/aws-deadline/deadline-cloud/issues). We encourage
-code contributions in the form of [pull requests](https://github.com/aws-deadline/deadline-cloud/pulls). 
+code contributions in the form of [pull requests](https://github.com/aws-deadline/deadline-cloud/pulls).
 
 ## Getting Started
 
@@ -79,7 +79,7 @@ api.list_farms()
 ```
 
 ## Job-related Files
-For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.  
+For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.
 
 ### Job attachments
 
@@ -140,6 +140,15 @@ $ deadline config show
 ```
 and change the settings by running the associated `get`, `set` and `clear` commands.
 
+If you need to parse the settings as json, you can specify the output by running:
+```sh
+$ deadline config show --output json
+```
+Which will output:
+```sh
+{"settings.config_file_path": "~/.deadline/config", "deadline-cloud-monitor.path": "", "defaults.aws_profile_name": "(default)", "settings.job_history_dir": "~/.deadline/job_history/(default)", "defaults.farm_id": "", "settings.storage_profile_id": "", "defaults.queue_id": "", "defaults.job_id": "", "settings.auto_accept": "false", "settings.conflict_resolution": "NOT_SELECTED", "settings.log_level": "WARNING", "telemetry.opt_out": "false", "telemetry.identifier": "00000000-0000-0000-0000-000000000000", "defaults.job_attachments_file_system": "COPIED", "settings.s3_max_pool_connections": "50", "settings.small_file_threshold_multiplier": "20"}
+```
+
 To see a list of settings that can be configured, run:
 ```sh
 $ deadline config --help
@@ -185,18 +194,18 @@ opensource-codeofconduct@amazon.com with any additional questions or comments.
 
 ## Security Issue Notifications
 
-We take all security reports seriously. When we receive such reports, we will 
-investigate and subsequently address any potential vulnerabilities as quickly 
-as possible. If you discover a potential security issue in this project, please 
+We take all security reports seriously. When we receive such reports, we will
+investigate and subsequently address any potential vulnerabilities as quickly
+as possible. If you discover a potential security issue in this project, please
 notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/)
-or directly via email to [AWS Security](mailto:aws-security@amazon.com). Please do not 
+or directly via email to [AWS Security](mailto:aws-security@amazon.com). Please do not
 create a public GitHub issue in this project.
 
 ## Telemetry
 
 See [telemetry](https://github.com/aws-deadline/deadline-cloud/blob/release/docs/telemetry.md) for more information.
 
-## License 
+## License
 
 This project is licensed under the Apache-2.0 License.
 
