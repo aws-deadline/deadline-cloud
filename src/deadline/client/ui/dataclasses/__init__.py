@@ -3,6 +3,7 @@
 """
 Contains dataclasses for holding UI parameter values, used by the widgets.
 """
+
 from __future__ import annotations
 
 import os
@@ -290,7 +291,7 @@ class CustomRequirements:
 
     @staticmethod
     def _validate_attribute(
-        attribute: Union[dict, CustomAttributeRequirement]
+        attribute: Union[dict, CustomAttributeRequirement],
     ) -> CustomAttributeRequirement:
         if isinstance(attribute, dict):
             attribute = CustomAttributeRequirement(**attribute)

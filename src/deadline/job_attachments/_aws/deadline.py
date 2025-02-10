@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Functions for interfacing with Deadline API calls."""
+
 from typing import Optional
 
 import boto3

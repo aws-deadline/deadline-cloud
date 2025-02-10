@@ -2,7 +2,6 @@
 
 """Test cases for deadline.client.job_bundle.parameters.validate_user_interface_spec"""
 
-
 from __future__ import annotations
 import re
 from typing import Any, Dict, cast

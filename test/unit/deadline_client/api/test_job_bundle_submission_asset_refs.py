@@ -251,9 +251,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         _submit_job_bundle.api, "get_boto3_client"
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
-        S3AssetManager, "prepare_paths_for_upload"
-    ) as mock_prepare_paths, patch.object(
+    ), patch.object(S3AssetManager, "prepare_paths_for_upload") as mock_prepare_paths, patch.object(
         S3AssetManager, "hash_assets_and_create_manifest"
     ) as mock_hash_assets, patch.object(
         S3AssetManager, "upload_assets"

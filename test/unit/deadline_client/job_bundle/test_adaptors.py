@@ -64,7 +64,7 @@ def _get_inclusive_range(start, end, step):
     "frame_string,result",
     [
         (
-            f"{start}{('-'+str(end)) if end is not None else ''}{(':'+str(step)) if step is not None else ''}",
+            f"{start}{('-' + str(end)) if end is not None else ''}{(':' + str(step)) if step is not None else ''}",
             _get_inclusive_range(start, end, step),
         )
         for start in (-20, 0, 20)

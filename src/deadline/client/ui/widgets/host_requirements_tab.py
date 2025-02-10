@@ -3,6 +3,7 @@
 """
 UI widgets for the host requirements tab.
 """
+
 import re
 from logging import getLogger
 from pathlib import Path

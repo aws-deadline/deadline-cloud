@@ -9,8 +9,6 @@ freezegun == 1.*
 types-pyyaml == 6.*
 twine == 4.*; python_version == '3.7'
 twine == 6.*; python_version > '3.7'
-black == 24.8.*; python_version == '3.8'
-black == 24.10.*; python_version > '3.8'
 mypy == 1.13.*; python_version == '3.7'
 mypy == 1.*; python_version > '3.7'
 ruff == 0.9.*

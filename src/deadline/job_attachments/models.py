@@ -3,6 +3,7 @@
 """
 Data classes for AWS objects.
 """
+
 from __future__ import annotations
 
 import sys

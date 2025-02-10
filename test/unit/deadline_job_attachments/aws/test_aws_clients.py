@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Tests for aws clients"""
+
 from unittest.mock import Mock, patch
 from deadline.job_attachments._aws.aws_clients import (
     get_deadline_client,

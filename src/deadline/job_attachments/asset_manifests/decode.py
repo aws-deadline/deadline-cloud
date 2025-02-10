@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Contains methods for decoding and validating Asset Manifests. """
+"""Contains methods for decoding and validating Asset Manifests."""
+
 from __future__ import annotations
 
 import json

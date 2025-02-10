@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """UI Components for the Render Submitter"""
+
 from __future__ import annotations
 
 import logging

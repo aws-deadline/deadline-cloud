@@ -6,6 +6,7 @@ All the `deadline auth` commands:
     * logout
     * status
 """
+
 import click
 import json
 import logging

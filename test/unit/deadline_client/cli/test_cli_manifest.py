@@ -171,7 +171,6 @@ MOCK_QUEUE = {
 
 @pytest.mark.skip("Random Failure with no credentials on Github")
 class TestSnapshot:
-
     def test_snapshot_root_directory_only(
         self, tmp_path, mock_prepare_paths_for_upload, mock_hash_attachments, mock_upload_group
     ):

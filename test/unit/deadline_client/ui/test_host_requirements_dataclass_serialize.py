@@ -3,6 +3,7 @@
 """
 tests the deadline.client.ui.dataclasses functions relating to serializing.
 """
+
 import pytest
 
 from deadline.client.ui.dataclasses import (

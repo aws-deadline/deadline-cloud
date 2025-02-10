@@ -106,7 +106,6 @@ def session_mock():
 
 
 class TestAttachmentDownload:
-
     @pytest.fixture
     def mock_download_files_from_manifests(self):
         with patch(
@@ -254,7 +253,6 @@ class TestAttachmentDownload:
 
 
 class TestAttachmentUpload:
-
     @pytest.fixture
     def mock_upload_assets(self):
         with patch.object(

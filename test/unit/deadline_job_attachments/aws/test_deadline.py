@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Tests for Deadline AWS calls."""
+
 import pytest
 from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError

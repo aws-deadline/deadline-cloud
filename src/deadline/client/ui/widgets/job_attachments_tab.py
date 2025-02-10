@@ -3,6 +3,7 @@
 """
 UI widgets for the job attachments tab.
 """
+
 from __future__ import annotations
 import os
 from logging import getLogger

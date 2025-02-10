@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Functions for downloading output from the Job Attachment CAS."""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -1024,7 +1025,8 @@ def mount_vfs_from_manifests(
     for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.
         _ensure_paths_within_directory(
-            mount_point, [path.path for path in manifest.paths]  # type: ignore
+            mount_point,
+            [path.path for path in manifest.paths],  # type: ignore
         )
         final_manifest: BaseAssetManifest = handle_existing_vfs(
             manifest=manifest,

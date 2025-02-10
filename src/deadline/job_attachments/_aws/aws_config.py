@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """AWS configuration."""
+
 VENDOR_CODE: str = "deadline"
 
 # S3 related

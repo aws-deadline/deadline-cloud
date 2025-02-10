@@ -3,6 +3,7 @@
 """
 Integ tests for the CLI manifest download commands.
 """
+
 import json
 import tempfile
 import time
@@ -25,7 +26,6 @@ from .test_utils import JobAttachmentTest, UploadInputFilesOneAssetInCasOutputs
 
 @pytest.mark.integ
 class TestManifestDownload:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:
@@ -181,9 +181,9 @@ class TestManifestDownload:
         result = runner.invoke(main, args)
 
         # Then
-        assert (
-            result.exit_code == 0
-        ), f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        assert result.exit_code == 0, (
+            f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        )
         if json_output:
             # If JSON mode was specified, make sure the output is JSON and contains the downloaded manifest file.
             download = json.loads(result.output)
@@ -216,7 +216,6 @@ class TestManifestDownload:
         default_job_template_step_step_dependency: str,
         job_attachment_test: JobAttachmentTest,
     ):
-
         # Create a job, with step step dependency.
         job_id: str = self._setup_create_job(
             upload_input_files_one_asset_in_cas,
@@ -251,9 +250,9 @@ class TestManifestDownload:
         result = runner.invoke(main, args)
 
         # Then
-        assert (
-            result.exit_code == 0
-        ), f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        assert result.exit_code == 0, (
+            f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        )
         if json_output:
             # If JSON mode was specified, make sure the output is JSON and contains the downloaded manifest file.
             download = json.loads(result.output)

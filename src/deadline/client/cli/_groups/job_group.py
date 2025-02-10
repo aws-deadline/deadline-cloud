@@ -500,7 +500,7 @@ def _get_summary_of_files_to_download_message(
             f"{os.path.commonpath([os.path.join(directory, p) for p in output_paths])} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
             for directory, output_paths in output_paths_by_root.items()
         )
-        return "\n" "Summary of files to download:\n" f"{paths_message_joined}" "\n"
+        return f"\nSummary of files to download:\n{paths_message_joined}\n"
 
 
 def _get_roots_list_message(asset_roots: list[str], is_json_format: bool) -> str:

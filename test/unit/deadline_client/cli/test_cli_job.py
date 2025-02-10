@@ -3,6 +3,7 @@
 """
 Tests for the CLI job commands.
 """
+
 import datetime
 import json
 import os
@@ -351,9 +352,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(
         job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(
-        job_group, "round", return_value=0
-    ), patch.object(
+    ), patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
@@ -459,9 +458,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(
         job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(
-        job_group, "round", return_value=0
-    ), patch.object(
+    ), patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
@@ -556,9 +553,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(
         job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(
-        job_group, "round", return_value=0
-    ), patch.object(
+    ), patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
@@ -648,9 +643,7 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(
         job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(
-        job_group, "round", return_value=0
-    ), patch.object(
+    ), patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
@@ -713,9 +706,7 @@ def test_cli_job_download_output_stdout_with_json_format(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
         job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(
-        job_group, "_assert_valid_path", return_value=None
-    ), patch.object(
+    ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()

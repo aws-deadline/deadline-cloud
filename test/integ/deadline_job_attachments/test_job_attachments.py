@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Integration tests for Job Attachments."""
+
 import logging
 import os
 import shutil
