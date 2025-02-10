@@ -80,3 +80,24 @@ def worker_get(fleet_id, worker_id, **args):
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))
+
+@cli_worker.command(name="delete")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--fleet-id", help="The fleet to use.", required=True)
+@click.option("--worker-id", help="The worker to delete.", required=True)
+@_handle_error
+def worker_delete(fleet_id, worker_id, **args):
+    """
+    Deletes a worker.
+    """
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+
+    deadline = api.get_boto3_client("deadline", config=config)
+    response = deadline.delete_worker(farmId=farm_id, fleetId=fleet_id, workerId=worker_id)
+    response.pop("ResponseMetadata", None)
+
+    click.echo(_cli_object_repr(response))
