@@ -315,7 +315,7 @@ def _download_job_output(
                 )[0]
                 _assert_valid_path(new_root)
 
-            job_output_downloader.set_root_path(asset_root, new_root)
+            job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
     output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
