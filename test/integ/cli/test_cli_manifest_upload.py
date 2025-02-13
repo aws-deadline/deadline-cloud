@@ -3,6 +3,7 @@
 """
 Integ tests for the CLI manifest upload commands.
 """
+
 import math
 import os
 from pathlib import Path

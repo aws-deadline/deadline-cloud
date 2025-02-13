@@ -1110,7 +1110,6 @@ class OutputDownloader:
                 and sys.platform == "win32"
                 and not _is_windows_long_path_registry_enabled()
             ):
-
                 for output_path in all_paths_in_root:
                     if len(root + output_path) >= WINDOWS_MAX_PATH_LENGTH:
                         long_path_file_found = True

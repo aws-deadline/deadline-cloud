@@ -121,9 +121,9 @@ class TestAttachment:
                 f"s3://{external_bucket}/test",
             ],
         )
-        assert result.exit_code != 0, (
-            f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
-        )
+        assert (
+            result.exit_code != 0
+        ), f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
         assert "HTTP Status Code: 403, Access denied." in result.output
 
@@ -140,9 +140,9 @@ class TestAttachment:
                 f"s3://{external_bucket}/test",
             ],
         )
-        assert result.exit_code != 0, (
-            f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
-        )
+        assert (
+            result.exit_code != 0
+        ), f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
         assert "HTTP Status Code: 403, Forbidden or Access denied." in result.output
 
@@ -203,9 +203,9 @@ class TestAttachment:
         assert json.loads(result.output)["processed_bytes"] == len(
             MOCK_FILE_CASE[manifest_case_key]
         )
-        assert file_name in os.listdir(os.getcwd()), (
-            "Expecting downloaded folder named with data hash created in the working directory with downloaded files but not."
-        )
+        assert (
+            file_name in os.listdir(os.getcwd())
+        ), "Expecting downloaded folder named with data hash created in the working directory with downloaded files but not."
         asset_files = os.listdir(os.path.join(os.getcwd(), file_name, "files"))
         assert len(asset_files) == 1
 
@@ -291,6 +291,6 @@ class TestAttachment:
         )
 
         asset_files = os.listdir(os.path.join(destination_path, "files"))
-        assert len(asset_files) == 3, (
-            f"Expecting 3 asset files, 2 from upload and 1 from download, but got {len(asset_files)}."
-        )
+        assert (
+            len(asset_files) == 3
+        ), f"Expecting 3 asset files, 2 from upload and 1 from download, but got {len(asset_files)}."

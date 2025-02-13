@@ -58,9 +58,9 @@ class TestManifestSnapshot:
         assert result.exit_code == 0, result.output
 
         manifest_files = os.listdir(manifest_dir)
-        assert len(manifest_files) == 1, (
-            f"Expected exactly one manifest file, but got {len(manifest_files)}"
-        )
+        assert (
+            len(manifest_files) == 1
+        ), f"Expected exactly one manifest file, but got {len(manifest_files)}"
         manifest = manifest_files[0]
         assert "test" in manifest, f"Expected test in manifest file name, got {manifest}"
 
