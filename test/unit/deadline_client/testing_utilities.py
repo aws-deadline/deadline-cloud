@@ -7,7 +7,7 @@ A set of utilities developed for this set of tests.
 import contextlib
 import os
 import tempfile
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple
 
 if os.name == "nt":
 
@@ -126,84 +126,3 @@ def program_that_prints_output(
         yield temp.name
     finally:
         os.remove(temp.name)
-
-
-def create_sample_job_template(
-    num_of_job_env: int,
-    num_of_step_env_per_step: int,
-    num_of_steps: int,
-    num_of_tasks_per_step: int,
-    on_enter_timeout: Optional[int] = None,
-    on_exit_timeout: Optional[int] = None,
-    on_task_run_timeout: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    This function creates simple job templates.
-    Optionally adds the timeouts if explicitly added.
-    """
-
-    SAMPLE_ENVIRONMENT_SCRIPT = {
-        "actions": {
-            "onEnter": {"command": "/usr/bin/sleep", "args": ["1"]},
-            "onExit": {"command": "/usr/bin/sleep", "args": ["1"]},
-        }
-    }
-
-    job_template: Dict[str, Any] = {
-        "specificationVersion": "2022-09-01",
-        "name": "DEFAULT_JOB_NAME",
-        "description": "DEFAULT_DESC",
-    }
-
-    job_envs = []
-    for job_env_id in range(num_of_job_env):
-        job_env_dict: Dict[str, Any] = {
-            "name": f"DEFAULT_JOB_ENVIRONMENT_NAME-{job_env_id}",
-            "script": SAMPLE_ENVIRONMENT_SCRIPT,
-        }
-        if on_enter_timeout:
-            job_env_dict["script"]["actions"]["onEnter"]["timeout"] = on_enter_timeout
-        if on_exit_timeout:
-            job_env_dict["script"]["actions"]["onExit"]["timeout"] = on_exit_timeout
-        job_envs.append(job_env_dict)
-
-    job_template["jobEnvironments"] = job_envs
-
-    steps = []
-    for stepIndex in range(num_of_steps):
-        step_dict: Dict[str, Any]
-        step_dict = {
-            "name": f"Step{stepIndex}",
-            "description": "DEFAULT_STEP_DESCRIPTION",
-            "parameterSpace": {
-                "taskParameterDefinitions": [
-                    {
-                        "name": "DEFAULT_PARAMETER_NAME",
-                        "type": "INT",
-                        "range": f"1-{num_of_tasks_per_step}",
-                    },
-                ],
-            },
-            "script": {
-                "embeddedFiles": [{"name": "initData", "type": "TEXT", "data": "data1"}],
-                "actions": {"onRun": {"command": "/usr/bin/sleep", "args": ["1"]}},
-            },
-        }
-        if on_task_run_timeout:
-            step_dict["script"]["actions"]["onRun"]["timeout"] = on_task_run_timeout
-        step_envs = []
-        for step_env_id in range(num_of_step_env_per_step):
-            step_env_dict: Dict[str, Any] = {
-                "name": f"DEFAULT_STEP_ENVIRONMENT_NAME-{step_env_id}",
-                "script": SAMPLE_ENVIRONMENT_SCRIPT,
-            }
-            if on_enter_timeout:
-                step_env_dict["script"]["actions"]["onEnter"]["timeout"] = on_enter_timeout
-            if on_exit_timeout:
-                step_env_dict["script"]["actions"]["onExit"]["timeout"] = on_exit_timeout
-            step_envs.append(step_env_dict)
-        step_dict["stepEnvironments"] = step_envs
-        steps.append(step_dict)
-
-    job_template["steps"] = steps
-    return job_template
