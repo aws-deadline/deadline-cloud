@@ -39,10 +39,7 @@ def add_timeouts_to_job_template(
     Args:
         template (Dict[str, Any]): The job template to modify.
         timeout_settings (Optional[TimeoutSettings]): Configuration for timeout values. If None,
-            default timeout settings will be used. If is_deactivated is True, no timeouts will be added.
-
-    Raises:
-        ValueError: If timeout values in TimeoutSettings are negative.
+            default timeout settings will be used. If activated is False, no timeouts will be added.
 
     Example:
         >>> template = {
