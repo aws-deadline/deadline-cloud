@@ -279,9 +279,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -450,9 +448,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -613,9 +609,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             expected_files = set(
@@ -792,9 +786,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -931,9 +923,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -1669,9 +1659,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1707,9 +1695,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             caplog.set_level(INFO)
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1790,9 +1776,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1947,9 +1931,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -2632,9 +2614,7 @@ class TestUpload:
             assert file_size == 5
             s3_cache.put_entry.assert_called_once_with(expected_new_entry)
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(

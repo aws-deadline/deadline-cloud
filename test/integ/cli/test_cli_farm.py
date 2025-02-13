@@ -7,7 +7,6 @@ from click.testing import CliRunner
 
 
 def test_farm_get(deadline_cli_test: DeadlineCliTest) -> None:
-
     runner = CliRunner()
 
     result = runner.invoke(
@@ -25,7 +24,6 @@ def test_farm_get(deadline_cli_test: DeadlineCliTest) -> None:
 
 
 def test_farm_list(deadline_cli_test: DeadlineCliTest) -> None:
-
     runner = CliRunner()
 
     result = runner.invoke(

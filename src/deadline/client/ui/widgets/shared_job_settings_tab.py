@@ -3,6 +3,7 @@
 """
 A UI Widget containing the render setup tab
 """
+
 from __future__ import annotations
 
 import sys

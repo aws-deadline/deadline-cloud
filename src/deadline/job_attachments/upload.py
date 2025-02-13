@@ -3,6 +3,7 @@
 """
 Classes for handling uploading of assets.
 """
+
 from __future__ import annotations
 
 import concurrent.futures

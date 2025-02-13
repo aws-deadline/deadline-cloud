@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Tests for downloading files from the Job Attachment CAS."""
+
 from __future__ import annotations
 
 import os
@@ -1912,9 +1913,7 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
             return_value=mock_transfer_manager,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(AssetSyncError) as exc:
                 download_file(
                     file_path,
@@ -1959,9 +1958,7 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
             return_value=mock_transfer_manager,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(AssetSyncError) as exc:
                 download_file(
                     file_path,
@@ -2001,9 +1998,7 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_transfer_manager",
             return_value=mock_transfer_manager,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(AssetSyncError) as exc:
                 download_file(
                     file_path,
@@ -2045,9 +2040,7 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments._utils._is_windows_long_path_registry_enabled",
             return_value=False,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(AssetSyncError) as exc:
                 download_file(
                     file_path,
@@ -2089,9 +2082,7 @@ class TestFullDownload:
         ), patch(
             f"{deadline.__package__}.job_attachments._utils._is_windows_long_path_registry_enabled",
             return_value=True,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.download.Path.mkdir"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.download.Path.mkdir"):
             with pytest.raises(AssetSyncError) as exc:
                 download_file(
                     file_path,

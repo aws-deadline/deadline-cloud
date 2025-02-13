@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Contains the base asset manifest and entities that are part of the Asset Manifest """
+"""Contains the base asset manifest and entities that are part of the Asset Manifest"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -3,6 +3,7 @@
 """
 Tests for the CLI auth commands.
 """
+
 import json
 import subprocess
 import sys
@@ -36,9 +37,7 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         api._session._get_queue_user_boto3_session, "cache_clear"
     ) as mock_queue_session_cache_clear, patch.object(
         api, "get_boto3_session", new=session_mock
-    ), patch.object(
-        subprocess, "Popen"
-    ) as popen_mock, patch.object(
+    ), patch.object(subprocess, "Popen") as popen_mock, patch.object(
         subprocess, "check_output"
     ) as check_output_mock:
         # The profile name

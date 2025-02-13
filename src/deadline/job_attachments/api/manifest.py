@@ -93,7 +93,6 @@ def _manifest_snapshot(
     force_rehash: bool = False,
     logger: ClickLogger = ClickLogger(False),
 ) -> Optional[ManifestSnapshot]:
-
     # Get all files in the root.
     glob_config: GlobConfig
     if include or exclude:

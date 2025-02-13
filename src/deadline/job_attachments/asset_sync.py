@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module for File Attachment synching """
+"""Module for File Attachment synching"""
+
 from __future__ import annotations
 from dataclasses import asdict
 import os

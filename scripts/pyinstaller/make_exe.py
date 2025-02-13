@@ -12,6 +12,7 @@ $ pip install pyinstaller
 $ pip install -e .
 $ python scripts/pyinstaller/make_exe.py
 """
+
 import argparse
 import os
 import shutil

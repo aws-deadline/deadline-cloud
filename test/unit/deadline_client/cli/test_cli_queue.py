@@ -3,6 +3,7 @@
 """
 Tests for the CLI queue commands.
 """
+
 from unittest.mock import patch
 
 import boto3  # type: ignore[import]

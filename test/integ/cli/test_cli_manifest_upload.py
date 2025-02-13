@@ -37,7 +37,6 @@ TEST_SUB_DIR_2 = "subdir2"
 
 @pytest.mark.integ
 class TestManifestUpload:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:

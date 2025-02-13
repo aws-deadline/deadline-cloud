@@ -10,7 +10,6 @@ from deadline.job_attachments.models import ManifestMerge
 
 
 class TestMergeAPI:
-
     def test_merge_same_file(self, temp_dir, test_manifest_one):
         """
         Merge with one manifest file

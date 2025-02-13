@@ -14,7 +14,6 @@ TEST_FILE = "test_file"
 
 
 class TestDiffAPI:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:

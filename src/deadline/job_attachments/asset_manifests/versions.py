@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module that defines the asset manifest versions. """
+"""Module that defines the asset manifest versions."""
 
 from enum import Enum
 

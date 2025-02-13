@@ -4,6 +4,7 @@
 Tests the deadline.client.job_bundle.submission functions for building up the
 arguments to call CreateJob with.
 """
+
 from __future__ import annotations
 from typing import Any, Dict
 

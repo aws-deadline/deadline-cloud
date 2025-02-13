@@ -13,7 +13,6 @@ import pytest
 
 
 class TestSnapshotAPI:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:

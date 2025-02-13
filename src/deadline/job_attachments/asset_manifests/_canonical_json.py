@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module that defines the second iteration of the asset manifest """
+"""Module that defines the second iteration of the asset manifest"""
+
 from __future__ import annotations
 
 import dataclasses

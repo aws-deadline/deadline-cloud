@@ -2,7 +2,6 @@
 
 """Tests for the Asset Synching class for task-level attachments."""
 
-
 import os
 import stat
 import sys
@@ -540,9 +539,7 @@ class TestVFSProcessmanager:
         ), patch(
             f"{deadline.__package__}.job_attachments.vfs.os.path.exists",
             return_value=True,
-        ), patch(
-            f"{deadline.__package__}.job_attachments.vfs.log"
-        ) as mock_logger, patch(
+        ), patch(f"{deadline.__package__}.job_attachments.vfs.log") as mock_logger, patch(
             f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ):
@@ -738,9 +735,7 @@ class TestVFSProcessmanager:
             f"{deadline.__package__}.job_attachments.vfs.shutil.chown",
         ) as mock_chown, patch(
             f"{deadline.__package__}.job_attachments.vfs.os.chmod",
-        ) as mock_chmod, patch(
-            f"{deadline.__package__}.job_attachments.vfs.subprocess.run"
-        ), patch(
+        ) as mock_chmod, patch(f"{deadline.__package__}.job_attachments.vfs.subprocess.run"), patch(
             f"{deadline.__package__}.job_attachments.vfs.VFSProcessManager.get_launch_environ",
             return_value=os.environ,
         ), patch(

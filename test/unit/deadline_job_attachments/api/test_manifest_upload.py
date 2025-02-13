@@ -18,7 +18,6 @@ TEST_KEY_PREFIX = "far/far/away"
 
 
 class TestManifestUpload:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:

@@ -4,6 +4,7 @@
 Provides functionality for boto3 Sessions, Clients, and properties
 of the Deadline-configured IAM credentials.
 """
+
 from __future__ import annotations
 
 import logging

@@ -10,10 +10,10 @@ test_docker = "./scripts/run_sudo_tests.sh --build"
 typing = "mypy {args:src test} --always-false=PYQT5 --always-false=PYSIDE2 --always-false=PYQT6 --always-true=PYSIDE6"
 style = [
   "ruff check {args:.}",
-  "black --check --diff {args:.}",
+  "ruff format --check --diff {args:.}",
 ]
 fmt = [
-  "black {args:.}",
+  "ruff format {args:.}",
   "style",
 ]
 lint = [
@@ -21,7 +21,7 @@ lint = [
   "typing",
 ]
 quality = [
-  "black {args:.}",
+  "ruff format {args:.}",
   "typing",
   "style",
 ]

@@ -3,6 +3,7 @@
 """
 Tests for the CLI handle-web-url command.
 """
+
 import os
 import sys
 from typing import Dict, List
