@@ -136,7 +136,7 @@ def create_sample_job_template(
     on_enter_timeout: Optional[int] = None,
     on_exit_timeout: Optional[int] = None,
     on_task_run_timeout: Optional[int] = None,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """
     This function creates simple job templates.
     Optionally adds the timeouts if explicitly added.
@@ -149,7 +149,7 @@ def create_sample_job_template(
         }
     }
 
-    job_template: dict[str, Any] = {
+    job_template: Dict[str, Any] = {
         "specificationVersion": "2022-09-01",
         "name": "DEFAULT_JOB_NAME",
         "description": "DEFAULT_DESC",
@@ -157,7 +157,7 @@ def create_sample_job_template(
 
     job_envs = []
     for job_env_id in range(num_of_job_env):
-        job_env_dict: dict[str, Any] = {
+        job_env_dict: Dict[str, Any] = {
             "name": f"DEFAULT_JOB_ENVIRONMENT_NAME-{job_env_id}",
             "script": SAMPLE_ENVIRONMENT_SCRIPT,
         }
@@ -171,7 +171,7 @@ def create_sample_job_template(
 
     steps = []
     for stepIndex in range(num_of_steps):
-        step_dict: dict[str, Any]
+        step_dict: Dict[str, Any]
         step_dict = {
             "name": f"Step{stepIndex}",
             "description": "DEFAULT_STEP_DESCRIPTION",
@@ -193,7 +193,7 @@ def create_sample_job_template(
             step_dict["script"]["actions"]["onRun"]["timeout"] = on_task_run_timeout
         step_envs = []
         for step_env_id in range(num_of_step_env_per_step):
-            step_env_dict: dict[str, Any] = {
+            step_env_dict: Dict[str, Any] = {
                 "name": f"DEFAULT_STEP_ENVIRONMENT_NAME-{step_env_id}",
                 "script": SAMPLE_ENVIRONMENT_SCRIPT,
             }

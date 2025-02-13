@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 from dataclasses import dataclass
 
 SECONDS_IN_A_MINUTE = 60
@@ -27,7 +27,7 @@ class TimeoutSettings:
 
 
 def add_timeouts_to_job_template(
-    template: dict[str, Any], timeout_settings: Optional[TimeoutSettings] = None
+    template: Dict[str, Any], timeout_settings: Optional[TimeoutSettings] = None
 ) -> None:
     """
     Adds timeout values to actions in a job template.
@@ -37,7 +37,7 @@ def add_timeouts_to_job_template(
     timeouts must be hard-coded in the job template.
 
     Args:
-        template (dict[str, Any]): The job template to modify.
+        template (Dict[str, Any]): The job template to modify.
         timeout_settings (Optional[TimeoutSettings]): Configuration for timeout values. If None,
             default timeout settings will be used. If is_deactivated is True, no timeouts will be added.
 
@@ -70,14 +70,14 @@ def add_timeouts_to_job_template(
     if not timeout_settings.is_activated:
         return
 
-    def _apply_timeouts_to_environment(environment: dict):
+    def _apply_timeouts_to_environment(environment: Dict):
         if "script" in environment:
             actions = environment["script"]["actions"]
             actions["onEnter"]["timeout"] = timeout_settings.on_enter_timeout_seconds
             if "onExit" in actions:
                 actions["onExit"]["timeout"] = timeout_settings.on_exit_timeout_seconds
 
-    def _apply_timeouts_to_step(step: dict):
+    def _apply_timeouts_to_step(step: Dict):
         for environment in step.get("stepEnvironments", []):
             _apply_timeouts_to_environment(environment)
 

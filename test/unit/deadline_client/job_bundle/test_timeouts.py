@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 import pytest
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 from deadline.client.job_bundle.timeouts import TimeoutSettings, add_timeouts_to_job_template
 from ..testing_utilities import create_sample_job_template
 
@@ -132,9 +132,9 @@ SAMPLE_JOB_WITH_MULTIPLE_JOB_ENV_STEP_ENVS_WITH_CUSTOM_TIMEOUTS = create_sample_
     ],
 )
 def test_add_timeouts_to_job_template(
-    template: dict[str, Any],
+    template: Dict[str, Any],
     timeout_settings: Optional[TimeoutSettings],
-    expected_template: dict[str, Any],
+    expected_template: Dict[str, Any],
 ):
     """Test adding timeouts to job templates."""
     add_timeouts_to_job_template(template, timeout_settings)
