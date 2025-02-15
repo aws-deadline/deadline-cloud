@@ -29,6 +29,7 @@ from ...config import get_setting
 from .. import CancelationFlag
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...api import get_queue_parameter_definitions
+from .shared_job_timeout_settings_widget import SharedJobTimeoutSettingsWidget
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
@@ -63,7 +64,11 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     _queue_parameters_update = Signal(int, list)
 
     def __init__(
-        self, *, initial_settings, initial_shared_parameter_values: dict[str, Any], parent=None
+        self,
+        *,
+        initial_settings,
+        initial_shared_parameter_values: dict[str, Any],
+        parent=None,
     ):
         super().__init__(parent=parent)
         layout = QVBoxLayout(self)
@@ -76,6 +81,13 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             initial_settings=initial_settings, parent=self
         )
         layout.addWidget(self.shared_job_properties_box)
+
+        # Only show timeout settings if render settings has 'timeout_settings'.
+        if hasattr(initial_settings, "timeout_settings"):
+            self.shared_timeout_settings_box = SharedJobTimeoutSettingsWidget(
+                initial_settings=initial_settings, parent=self
+            )
+            layout.addWidget(self.shared_timeout_settings_box)
 
         self.deadline_cloud_settings_box = DeadlineCloudSettingsWidget(parent=self)
         layout.addWidget(self.deadline_cloud_settings_box)
@@ -216,6 +228,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
     def update_settings(self, settings):
         self.shared_job_properties_box.update_settings(settings)
+        if hasattr(settings, "timeout_settings"):
+            self.shared_timeout_settings_box.update_settings(settings)
 
     def get_parameters(self):
         """

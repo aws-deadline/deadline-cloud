@@ -25,6 +25,42 @@ class TimeoutSettings:
             if timeout <= 0:
                 raise ValueError(f"Timeout value cannot be negative or zero: {timeout}")
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the object to a dict for serialization.
+        """
+        return {
+            "is_activated": self.is_activated,
+            "on_enter_timeout_seconds": self.on_enter_timeout_seconds,
+            "on_exit_timeout_seconds": self.on_exit_timeout_seconds,
+            "on_run_timeout_seconds": self.on_run_timeout_seconds,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        default_is_activated: bool = True,
+        default_on_enter_timeout_seconds: int = SECONDS_IN_A_DAY,
+        default_on_exit_timeout_seconds: int = SECONDS_IN_A_DAY,
+        default_on_run_timeout_seconds: int = 5 * SECONDS_IN_A_DAY,
+    ) -> "TimeoutSettings":
+        """
+        Convert a dict to a TimeoutSettings object.
+        """
+        return cls(
+            is_activated=data.get("is_activated", default_is_activated),
+            on_enter_timeout_seconds=data.get(
+                "on_enter_timeout_seconds", default_on_enter_timeout_seconds
+            ),
+            on_exit_timeout_seconds=data.get(
+                "on_exit_timeout_seconds", default_on_exit_timeout_seconds
+            ),
+            on_run_timeout_seconds=data.get(
+                "on_run_timeout_seconds", default_on_run_timeout_seconds
+            ),
+        )
+
 
 def add_timeouts_to_job_template(
     template: Dict[str, Any], timeout_settings: Optional[TimeoutSettings] = None
@@ -66,6 +102,24 @@ def add_timeouts_to_job_template(
 
     if not timeout_settings.is_activated:
         return
+
+    if (
+        timeout_settings.on_enter_timeout_seconds == 0
+        or timeout_settings.on_exit_timeout_seconds == 0
+        or timeout_settings.on_run_timeout_seconds == 0
+    ):
+        msg = "The following timeout value(s) must be greater than 0: \n"
+        zero_timeouts = []
+        if not timeout_settings.on_enter_timeout_seconds:
+            zero_timeouts.append("Setup Timeout")
+        if not timeout_settings.on_exit_timeout_seconds:
+            zero_timeouts.append("Teardown Timeout")
+        if not timeout_settings.on_run_timeout_seconds:
+            zero_timeouts.append("Render Timeout")
+
+        msg += ", ".join(zero_timeouts)
+        msg += "\n\nPlease configure these value(s) in the 'Shared Job Settings' tab."
+        raise ValueError(msg)
 
     def _apply_timeouts_to_environment(environment: Dict):
         if "script" in environment:
