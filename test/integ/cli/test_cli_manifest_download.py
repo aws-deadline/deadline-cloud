@@ -181,9 +181,9 @@ class TestManifestDownload:
         result = runner.invoke(main, args)
 
         # Then
-        assert (
-            result.exit_code == 0
-        ), f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        assert result.exit_code == 0, (
+            f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        )
         if json_output:
             # If JSON mode was specified, make sure the output is JSON and contains the downloaded manifest file.
             download = json.loads(result.output)
@@ -250,9 +250,9 @@ class TestManifestDownload:
         result = runner.invoke(main, args)
 
         # Then
-        assert (
-            result.exit_code == 0
-        ), f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        assert result.exit_code == 0, (
+            f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        )
         if json_output:
             # If JSON mode was specified, make sure the output is JSON and contains the downloaded manifest file.
             download = json.loads(result.output)

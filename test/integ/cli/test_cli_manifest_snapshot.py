@@ -58,9 +58,9 @@ class TestManifestSnapshot:
         assert result.exit_code == 0, result.output
 
         manifest_files = os.listdir(manifest_dir)
-        assert (
-            len(manifest_files) == 1
-        ), f"Expected exactly one manifest file, but got {len(manifest_files)}"
+        assert len(manifest_files) == 1, (
+            f"Expected exactly one manifest file, but got {len(manifest_files)}"
+        )
         manifest = manifest_files[0]
         assert "test" in manifest, f"Expected test in manifest file name, got {manifest}"
 
@@ -161,13 +161,13 @@ class TestManifestSnapshot:
         assert len(files) == 1, f"Expected exactly one manifest file, but got {len(files)}"
 
         manifest: str = files[0]
-        assert (
-            "testLongPath" in manifest
-        ), f"Expected testLongPath in manifest file name, got {manifest}"
+        assert "testLongPath" in manifest, (
+            f"Expected testLongPath in manifest file name, got {manifest}"
+        )
 
-        assert (
-            len(os.path.join(manifest_directory, manifest)) > 260
-        ), f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        assert len(os.path.join(manifest_directory, manifest)) > 260, (
+            f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        )
 
     @pytest.mark.integ
     @pytest.mark.skipif(
@@ -229,10 +229,10 @@ class TestManifestSnapshot:
         assert len(files) == 1, f"Expected exactly one manifest file, but got {len(files)}"
 
         manifest: str = files[0]
-        assert (
-            "testLongPath" in manifest
-        ), f"Expected testLongPath in manifest file name, got {manifest}"
+        assert "testLongPath" in manifest, (
+            f"Expected testLongPath in manifest file name, got {manifest}"
+        )
 
-        assert (
-            len(os.path.join(manifest_directory, manifest)) > 260
-        ), f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        assert len(os.path.join(manifest_directory, manifest)) > 260, (
+            f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        )
