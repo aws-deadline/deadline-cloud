@@ -3,6 +3,7 @@
 """
 Provides the function to submit a job bundle to AWS Deadline Cloud.
 """
+
 from __future__ import annotations
 
 import json
@@ -48,6 +49,7 @@ from ._session import session_context
 logger = logging.getLogger(__name__)
 
 
+@api.record_function_latency_telemetry_event()
 def create_job_from_job_bundle(
     job_bundle_dir: str,
     job_parameters: list[dict[str, Any]] = [],
@@ -59,6 +61,7 @@ def create_job_from_job_bundle(
     priority: Optional[int] = None,
     max_failed_tasks_count: Optional[int] = None,
     max_retries_per_task: Optional[int] = None,
+    max_worker_count: Optional[int] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
     decide_cancel_submission_callback: Callable[
         [AssetUploadGroup], bool
@@ -121,6 +124,7 @@ def create_job_from_job_bundle(
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
         priority (int, optional): explicit value for the priority of the job.
+        max_worker_count (int, optional): explicit value for the max worker count of the job.
         max_failed_tasks_count (int, optional): explicit value for the maximum allowed failed tasks.
         max_retries_per_task (int, optional): explicit value for the maximum retries per task.
         print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
@@ -308,6 +312,8 @@ def create_job_from_job_bundle(
 
     if priority is not None:
         create_job_args["priority"] = priority
+    if max_worker_count is not None:
+        create_job_args["maxWorkerCount"] = max_worker_count
     if max_failed_tasks_count is not None:
         create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
     if max_retries_per_task is not None:

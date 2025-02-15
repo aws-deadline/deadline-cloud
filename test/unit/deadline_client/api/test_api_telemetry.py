@@ -15,6 +15,7 @@ from deadline.client.api._telemetry import (
     TelemetryEvent,
     get_deadline_cloud_library_telemetry_client,
     record_success_fail_telemetry_event,
+    record_function_latency_telemetry_event,
 )
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
@@ -348,6 +349,35 @@ def test_record_decorator_fails():
         # WHEN
         with pytest.raises(RuntimeError):
             fails()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_latency_decorator():
+    """Tests that the latency recording decorator works"""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ), patch.object(time, "perf_counter_ns", return_value=0):
+        # GIVEN
+        queue_mock = MagicMock()
+        expected_summary: Dict[str, Any] = dict()
+        expected_summary["latency"] = 0
+        expected_summary["function_call"] = "test_call"
+        expected_summary["usage_mode"] = "CLI"
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.latency",
+            event_details=expected_summary,
+        )
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def test_call():
+            return
+
+        # WHEN
+        test_call()  # type:ignore
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)

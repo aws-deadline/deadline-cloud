@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Tests for the v2023-03-03 version of the manifest file. """
+"""Tests for the v2023-03-03 version of the manifest file."""
+
 import json
 
 from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (

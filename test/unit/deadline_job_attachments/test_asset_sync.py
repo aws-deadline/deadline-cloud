@@ -229,9 +229,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
@@ -362,9 +360,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
             side_effect=[{step_output_root: {}}],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
@@ -448,13 +444,9 @@ class TestAssetSync:
         ) as disk_capacity_mock, patch(
             f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
             return_value="tmp_manifest",
-        ), patch(
-            "sys.platform", "linux"
-        ), patch(
+        ), patch("sys.platform", "linux"), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
-        ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
@@ -535,9 +527,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             with pytest.raises(AssetSyncError) as ase:
@@ -889,9 +879,7 @@ class TestAssetSync:
         ) as mock_download_files_from_manifests, patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (summary_statistics, result_pathmap_rules) = self.default_asset_sync.sync_inputs(
@@ -974,9 +962,7 @@ class TestAssetSync:
             side_effect=VFSExecutableMissingError,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
-        ) as mock_mount_vfs, patch(
-            "sys.platform", "linux"
-        ), patch.object(
+        ) as mock_mount_vfs, patch("sys.platform", "linux"), patch.object(
             Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)
@@ -1153,9 +1139,7 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
@@ -1281,9 +1265,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.get_output_manifests_by_asset_root",
             side_effect=[{step_output_root: {}}],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
@@ -1364,13 +1346,9 @@ class TestAssetSync:
         ) as disk_capacity_mock, patch(
             f"{deadline.__package__}.job_attachments.download._write_manifest_to_temp_file",
             return_value="tmp_manifest",
-        ), patch(
-            "sys.platform", "linux"
-        ), patch(
+        ), patch("sys.platform", "linux"), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
-        ), patch(
-            f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.asset_sync.VFSProcessManager.find_vfs"):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (_, result_pathmap_rules) = self.default_asset_sync.attachment_sync_inputs(
@@ -1448,9 +1426,7 @@ class TestAssetSync:
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             with pytest.raises(AssetSyncError) as ase:
@@ -1520,7 +1496,6 @@ class TestAssetSync:
             f"{deadline.__package__}.job_attachments.asset_sync.S3AssetUploader._write_local_input_manifest",
             return_value=path_write_local_input_manifest,
         ) as mock__write_local_input_manifest:
-
             merged_manifests_by_root = self.default_asset_sync._aggregate_asset_root_manifests(
                 session_dir=tmp_path,
                 s3_settings=default_job_attachment_s3_settings,
@@ -1536,7 +1511,9 @@ class TestAssetSync:
             assert mock_get_manifest_from_s3.call_count == manifest_count
 
             manifest_paths_by_root = self.default_asset_sync._check_and_write_local_manifests(
-                merged_manifests_by_root=merged_manifests_by_root, manifest_write_dir=str(tmp_path)
+                merged_manifests_by_root=merged_manifests_by_root,
+                manifest_write_dir=str(tmp_path),
+                manifest_name_suffix="test",
             )
             assert mock__write_local_input_manifest.call_count == manifest_count
             assert len(self.default_asset_sync._local_root_to_src_map) == len(
@@ -1544,6 +1521,7 @@ class TestAssetSync:
             )
             assert len(manifest_paths_by_root) == manifest_count
             assert "/root/tmp/movie1" in manifest_paths_by_root
+            assert "test" in manifest_paths_by_root["/root/tmp/movie1"]
             assert str(tmp_path.joinpath(dest_dir)) in manifest_paths_by_root
 
     def test_attachment_sync_inputs_with_storage_profiles_path_mapping_rules(
@@ -1595,9 +1573,7 @@ class TestAssetSync:
         ) as mock_download_files_from_manifests, patch(
             f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
             side_effect=[dest_dir],
-        ), patch.object(
-            Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
-        ):
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
             mock_on_downloading_files = MagicMock(return_value=True)
 
             (summary_statistics, result_pathmap_rules) = (
@@ -1682,9 +1658,7 @@ class TestAssetSync:
             side_effect=VFSExecutableMissingError,
         ), patch(
             f"{deadline.__package__}.job_attachments.asset_sync.mount_vfs_from_manifests"
-        ) as mock_mount_vfs, patch(
-            "sys.platform", "linux"
-        ), patch.object(
+        ) as mock_mount_vfs, patch("sys.platform", "linux"), patch.object(
             Path, "stat", MagicMock(st_mtime_ns=1234512345123451)
         ):
             mock_on_downloading_files = MagicMock(return_value=True)

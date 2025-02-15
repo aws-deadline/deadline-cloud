@@ -2,6 +2,7 @@
 """
 UI widgets for the Scene Settings tab.
 """
+
 from __future__ import annotations
 
 import os

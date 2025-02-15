@@ -1,5 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+# https://docs.getmoto.org/en/latest/docs/getting_started.html#pesky-imports-section
+from moto import mock_aws  # noqa: F401
 import getpass
 import sys
 import pytest

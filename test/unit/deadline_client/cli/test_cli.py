@@ -3,6 +3,7 @@
 """
 Tests for the CLI generally.
 """
+
 import subprocess
 import sys
 from unittest.mock import patch

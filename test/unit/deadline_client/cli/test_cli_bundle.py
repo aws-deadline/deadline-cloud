@@ -3,6 +3,7 @@
 """
 Tests for the CLI job bundle commands.
 """
+
 import os
 import sys
 import tempfile
@@ -121,13 +122,9 @@ def test_cli_bundle_submit(fresh_deadline_config, temp_job_bundle_dir):
         _queue_parameters, "get_boto3_client"
     ) as qp_boto3_client_mock, patch.object(
         _submit_job_bundle, "_hash_attachments", return_value=[]
-    ), patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
+    ), patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"), patch.object(
         _submit_job_bundle, "_upload_attachments"
-    ), patch.object(
-        bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ):
+    ), patch.object(bundle_group.api, "get_deadline_cloud_library_telemetry_client"):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         get_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
         qp_boto3_client_mock().list_queue_environments.return_value = (
@@ -201,7 +198,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config):
 
 def test_cli_bundle_priority_retries(fresh_deadline_config):
     """
-    Confirm that --priority, --max-failed-tasks-count, and --max-retries-per-task get passed in from the CLI.
+    Confirm that --priority, --max-failed-tasks-count, --max_worker_count and --max-retries-per-task get passed in from the CLI.
     """
     # Use a temporary directory for the job bundle
     with tempfile.TemporaryDirectory() as tmpdir, patch.object(boto3, "Session") as session_mock:
@@ -230,6 +227,8 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
                 "12",
                 "--max-retries-per-task",
                 "4",
+                "--max-worker-count",
+                "123",
             ],
         )
 
@@ -244,6 +243,7 @@ def test_cli_bundle_priority_retries(fresh_deadline_config):
         priority=25,
         maxFailedTasksCount=12,
         maxRetriesPerTask=4,
+        maxWorkerCount=123,
     )
     assert result.exit_code == 0
 
@@ -390,17 +390,11 @@ def test_cli_bundle_asset_load_method(fresh_deadline_config, temp_job_bundle_dir
         _queue_parameters, "get_boto3_client"
     ) as qp_boto3_client_mock, patch.object(
         _submit_job_bundle, "_hash_attachments", return_value=(attachment_mock, {})
-    ), patch.object(
-        _submit_job_bundle, "_upload_attachments", return_value={}
-    ), patch.object(
+    ), patch.object(_submit_job_bundle, "_upload_attachments", return_value={}), patch.object(
         _submit_job_bundle.api, "get_boto3_session"
-    ), patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
+    ), patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"), patch.object(
         bundle_group.api, "get_deadline_cloud_library_telemetry_client"
-    ), patch.object(
-        S3AssetManager, "prepare_paths_for_upload", return_value=upload_group_mock
-    ):
+    ), patch.object(S3AssetManager, "prepare_paths_for_upload", return_value=upload_group_mock):
         bundle_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
         bundle_boto3_client_mock().get_job.return_value = MOCK_GET_JOB_RESPONSE
         bundle_boto3_client_mock().get_queue.return_value = {
@@ -695,15 +689,11 @@ def test_cli_bundle_accept_upload_confirmation(fresh_deadline_config, temp_job_b
         _submit_job_bundle.api, "get_boto3_client"
     ) as get_boto3_client_mock, patch.object(
         _submit_job_bundle, "_hash_attachments", return_value=[SummaryStatistics(), "test"]
-    ), patch.object(
-        _submit_job_bundle, "_upload_attachments"
-    ), patch.object(
+    ), patch.object(_submit_job_bundle, "_upload_attachments"), patch.object(
         _submit_job_bundle.api, "get_boto3_session"
     ), patch.object(
         _submit_job_bundle.api, "get_queue_parameter_definitions", return_value=[]
-    ), patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
+    ), patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"), patch.object(
         bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         get_boto3_client_mock().create_job.return_value = MOCK_CREATE_JOB_RESPONSE
@@ -777,9 +767,7 @@ def test_cli_bundle_reject_upload_confirmation(fresh_deadline_config, temp_job_b
         _submit_job_bundle, "_upload_attachments"
     ) as upload_attachments_mock, patch.object(
         _submit_job_bundle.api, "get_boto3_session"
-    ), patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
+    ), patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"), patch.object(
         bundle_group.api, "get_deadline_cloud_library_telemetry_client"
     ):
         get_boto3_client_mock().get_queue.return_value = {

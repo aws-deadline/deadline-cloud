@@ -3,6 +3,7 @@
 """
 UI widgets for the Scene Settings tab.
 """
+
 import os
 
 from qtpy.QtCore import Qt  # type: ignore

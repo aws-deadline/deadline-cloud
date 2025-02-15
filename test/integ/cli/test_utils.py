@@ -13,6 +13,20 @@ from deadline.job_attachments.models import Attachments, JobAttachmentS3Settings
 from deadline_test_fixtures.deadline import DeadlineClient
 
 
+class DeadlineCliTest:
+    """
+    Hold information used across all Deadline CLI integration tests.
+    """
+
+    def __init__(self):
+        """
+        Sets up resources that the integ tests will need
+        """
+
+        self.farm_id: str = os.environ["FARM_ID"]
+        self.queue_id: str = os.environ["QUEUE_ID"]
+
+
 class JobAttachmentTest:
     """
     Hold information used across all job attachment integration tests.

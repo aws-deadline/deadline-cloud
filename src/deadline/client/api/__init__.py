@@ -24,6 +24,7 @@ __all__ = [
     "get_deadline_cloud_library_telemetry_client",
     "get_storage_profile_for_queue",
     "record_success_fail_telemetry_event",
+    "record_function_latency_telemetry_event",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -34,6 +35,15 @@ from configparser import ConfigParser
 from logging import getLogger
 from typing import Any, Dict, Optional
 
+
+# Telemetry must be imported before Submit Job Bundle to avoid circular dependencies.
+from ._telemetry import (
+    get_telemetry_client,
+    get_deadline_cloud_library_telemetry_client,
+    TelemetryClient,
+    record_success_fail_telemetry_event,
+    record_function_latency_telemetry_event,
+)
 from ._loginout import login, logout
 from ._session import (
     AwsAuthenticationStatus,
@@ -53,14 +63,6 @@ from ._list_apis import (
     list_storage_profiles_for_queue,
 )
 from ._queue_parameters import get_queue_parameter_definitions
-
-# Telemetry must be imported before Submit Job Bundle to avoid circular dependencies.
-from ._telemetry import (
-    get_telemetry_client,
-    get_deadline_cloud_library_telemetry_client,
-    TelemetryClient,
-    record_success_fail_telemetry_event,
-)
 from ._submit_job_bundle import (
     create_job_from_job_bundle,
     wait_for_create_job_to_complete,

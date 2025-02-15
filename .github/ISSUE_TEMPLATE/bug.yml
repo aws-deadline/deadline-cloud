@@ -54,9 +54,9 @@ body:
       description: Please provide information on the environment and software versions that you are using to reproduce the bug.
       value: |
         At minimum:
-        1. Operating system: (e.g. Windows Server 2022; Amazon Linux 2023; etc.) 
-        2. Output of `python3 --version`: 
-        3. Output of `deadline --version`: 
+        1. Operating system (e.g. Windows Server 2022; Amazon Linux 2023; etc.)
+        2. Output of `python3 --version`
+        3. Output of `deadline --version`
         4. If this is from a version installed by the Deadline Cloud Submitter installer, then what version of the submitter installer?
 
         Please share other details about your environment that you think might be relevant to reproducing the bug.

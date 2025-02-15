@@ -3,6 +3,7 @@
 """
 This file makes "python -m deadline ..." equivalent to "deadline ..."
 """
+
 import sys
 from .client.cli import main
 

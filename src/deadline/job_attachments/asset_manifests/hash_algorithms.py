@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module that defines the hashing algorithms supported by this library. """
+"""Module that defines the hashing algorithms supported by this library."""
 
 import io
 

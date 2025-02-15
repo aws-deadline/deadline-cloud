@@ -5,6 +5,7 @@ import logging
 import os
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Tuple
+from math import trunc
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.client.config import config_file
 from deadline.client.exceptions import NonValidInputError
@@ -176,7 +177,9 @@ def _fast_file_list_to_manifest_diff(
                 logger.echo(
                     f"Found size difference at: {root_relative_path}, Status: FileStatus.MODIFIED"
                 )
-            elif int(file_stat.st_mtime_ns // 1000) != input_file.mtime:
+            # Check file mtime, allow 1 microsecond diff to prevent false positive
+            # utime set from microsecond to nanosecond conversion could create 1 microsecond diff upon division
+            elif abs(trunc(file_stat.st_mtime_ns / 1000) - input_file.mtime) > 1:
                 changed_paths.append((return_path, FileStatus.MODIFIED))
                 logger.echo(
                     f"Found time difference at: {root_relative_path}, Status: FileStatus.MODIFIED"

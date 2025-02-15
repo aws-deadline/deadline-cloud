@@ -3,6 +3,7 @@
 Provides a modal dialog box for the submission progress when submitting to
 AWS Deadline Cloud
 """
+
 from __future__ import annotations
 
 import json

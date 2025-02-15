@@ -1,3 +1,44 @@
+## 0.49.6 (2025-02-06)
+
+
+### Features
+* add latency telemetry (#577) ([`82aa2f9`](https://github.com/aws-deadline/deadline-cloud/commit/82aa2f9842e311d1c786272cc39f83cddb6d9d18))
+
+### Bug Fixes
+* fix host requirements combo box checkability on Linux and macOS (#590) ([`c4e6cdc`](https://github.com/aws-deadline/deadline-cloud/commit/c4e6cdc9c346289578d16048fcaff9d156ee4154))
+* increase submit job to deadline dialog height sizehint (#582) ([`a99033a`](https://github.com/aws-deadline/deadline-cloud/commit/a99033a9067563c7e8bafa8823af4f6cb73d9dff))
+
+## 0.49.5 (2025-01-29)
+
+
+### Features
+* Add maxWorkerCount support for jobs (#573) ([`e101473`](https://github.com/aws-deadline/deadline-cloud/commit/e101473c656491a860e41efe957c3c13879517ac))
+* Allow submitters to prepopulate HostRequirementsWidget (#538) ([`486df0a`](https://github.com/aws-deadline/deadline-cloud/commit/486df0ad02cce1c0affd14e4ed8b90e5efc4d103))
+
+### Bug Fixes
+* Allow Identifier's in custom host requirements. (#565) ([`519888b`](https://github.com/aws-deadline/deadline-cloud/commit/519888bff50e0b1bd518b598f63b72e0f90a8044))
+* limit the length of name and description fields to match OpenJD spec (#564) ([`0c72b7e`](https://github.com/aws-deadline/deadline-cloud/commit/0c72b7e9fc35be894aad7f71ae75c2e65fd7c215))
+
+### Experimental
+
+These changes are experimental and are subject to change.
+
+* remove optionally using file system system location name in the manifest file name hash (#552) ([`ed5c0cb`](https://github.com/aws-deadline/deadline-cloud/commit/ed5c0cbeada46cbb0d273bda62c1f0e550ded2d8))
+* add manifests merge functionality and pass in suffix for local manifests write (#563) ([`5e167b5`](https://github.com/aws-deadline/deadline-cloud/commit/5e167b558cada2f4ee0268031b80d3ad20b79b42))
+* manifest destination directory not being used when path uses backslashes (#559) ([`30b8099`](https://github.com/aws-deadline/deadline-cloud/commit/30b80990e95074a4e4e1845e6ec34e29100a79f9))
+
+## 0.49.4 (2025-01-09)
+
+
+### Features
+* Adds a DoubleSpinBox for custom host requirements. (#523) ([`1046924`](https://github.com/aws-deadline/deadline-cloud/commit/1046924c63a5eb042caaf40dffc7e5a826f17138))
+* add Python 3.13 support (#544) ([`503e7f8`](https://github.com/aws-deadline/deadline-cloud/commit/503e7f8162d2687055be2cba09170cfdc7309a88))
+
+### Bug Fixes
+* Sets the min for custom host requirement spinbox to 0. (#546) ([`9c35516`](https://github.com/aws-deadline/deadline-cloud/commit/9c35516d0964baff0a33522ee72509290f6b064c))
+* improve response time on windows when using deadline config GUI (#540) ([`6873156`](https://github.com/aws-deadline/deadline-cloud/commit/68731569f2fd253ee685ee9a3fbcbda5b8012387))
+* use default deadline configured profile when --profile is not specified for attachment cli (#527) ([`5efbe5c`](https://github.com/aws-deadline/deadline-cloud/commit/5efbe5c326f5cb37c91e76f72f5ed92e3a24df2d))
+
 ## 0.49.3 (2024-11-29)
 
 

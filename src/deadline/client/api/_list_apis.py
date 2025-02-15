@@ -4,6 +4,7 @@ from ._session import (
     get_boto3_client,
     get_user_and_identity_store_id,
 )
+from .. import api
 
 
 def _call_paginated_deadline_list_api(list_api, list_property_name, **kwargs):
@@ -29,6 +30,7 @@ def _call_paginated_deadline_list_api(list_api, list_property_name, **kwargs):
     return result
 
 
+@api.record_function_latency_telemetry_event()
 def list_farms(config=None, **kwargs):
     """
     Calls the deadline:ListFarms API call, applying the filter for user membership
@@ -44,6 +46,7 @@ def list_farms(config=None, **kwargs):
     return _call_paginated_deadline_list_api(deadline.list_farms, "farms", **kwargs)
 
 
+@api.record_function_latency_telemetry_event()
 def list_queues(config=None, **kwargs):
     """
     Calls the deadline:ListQueues API call, applying the filter for user membership
@@ -59,6 +62,7 @@ def list_queues(config=None, **kwargs):
     return _call_paginated_deadline_list_api(deadline.list_queues, "queues", **kwargs)
 
 
+@api.record_function_latency_telemetry_event()
 def list_jobs(config=None, **kwargs):
     """
     Calls the deadline:ListJobs API call, applying the filter for user membership
@@ -74,6 +78,7 @@ def list_jobs(config=None, **kwargs):
     return _call_paginated_deadline_list_api(deadline.list_jobs, "jobs", **kwargs)
 
 
+@api.record_function_latency_telemetry_event()
 def list_fleets(config=None, **kwargs):
     """
     Calls the deadline:ListFleets API call, applying the filter for user membership
@@ -89,6 +94,7 @@ def list_fleets(config=None, **kwargs):
     return _call_paginated_deadline_list_api(deadline.list_fleets, "fleets", **kwargs)
 
 
+@api.record_function_latency_telemetry_event()
 def list_storage_profiles_for_queue(config=None, **kwargs):
     """
     Calls the deadline:ListStorageProfilesForQueue API call, applying the filter for user membership

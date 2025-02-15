@@ -4,13 +4,12 @@ import os
 import boto3
 import json
 
-from contextlib import ExitStack
 from typing import Optional, List, Dict
 from pathlib import Path
 from dataclasses import asdict
 
+from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
-from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.download import download_files_from_manifests
 from deadline.job_attachments.models import JobAttachmentS3Settings, PathMappingRule
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
@@ -44,7 +43,9 @@ def attachment_download(
         NonValidInputError: raise when any of the input is not valid.
     """
 
-    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(manifests=manifests)
+    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(
+        manifest_paths=manifests
+    )
     path_mapping_rule_list: List[PathMappingRule] = _process_path_mapping(
         path_mapping_rules=path_mapping_rules
     )
@@ -111,7 +112,9 @@ def attachment_upload(
         NonValidInputError: raise when any of the input is not valid.
     """
 
-    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(manifests=manifests)
+    file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(
+        manifest_paths=manifests
+    )
 
     if bool(path_mapping_rules) == bool(root_dirs):
         raise NonValidInputError("One of path mapping rule and root dir must exist, and not both.")
@@ -212,31 +215,3 @@ def _process_path_mapping(
     )
 
     return path_mapping_rule_list
-
-
-def _read_manifests(manifests: List[str]) -> Dict[str, BaseAssetManifest]:
-    """
-    Read in manfiests from the give file path list, and produce file name to manifest mapping.
-
-    Args:
-        manifests (List[str]): List of file paths to manifest file.
-
-    Raises:
-        NonValidInputError: Raise when any of the file is not valid.
-
-    Returns:
-        Dict[str, BaseAssetManifest]: File name to encoded manifest mapping
-    """
-
-    if nonvalid_files := [manifest for manifest in manifests if not os.path.isfile(manifest)]:
-        raise NonValidInputError(f"Specified manifests {nonvalid_files} are not valid.")
-
-    with ExitStack() as stack:
-        file_name_manifest_dict: Dict[str, BaseAssetManifest] = {
-            os.path.basename(file_path): decode_manifest(
-                stack.enter_context(open(file_path)).read()
-            )
-            for file_path in manifests
-        }
-
-    return file_name_manifest_dict

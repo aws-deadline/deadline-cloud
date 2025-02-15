@@ -7,6 +7,7 @@ By default, configuration is stored in `~/.deadline/config`. If a user sets
 the environment variable DEADLINE_CONFIG_FILE_PATH, it is used as the configuration
 file path instead.
 """
+
 __all__ = [
     "get_setting_default",
     "get_setting",

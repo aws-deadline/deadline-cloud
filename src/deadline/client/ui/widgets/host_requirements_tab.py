@@ -3,34 +3,46 @@
 """
 UI widgets for the host requirements tab.
 """
-from typing import Any, Dict, List, Optional, Union
+
+import re
+from logging import getLogger
 from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from qtpy.QtCore import Qt  # type: ignore
-from qtpy.QtGui import QFont, QValidator, QIntValidator, QDoubleValidator, QBrush, QIcon, QRegularExpressionValidator  # type: ignore
+from qtpy.QtGui import (  # type: ignore
+    QBrush,
+    QDoubleValidator,
+    QFont,
+    QIcon,
+    QIntValidator,
+    QRegularExpressionValidator,
+    QStandardItem,
+    QValidator,
+)
 from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
+    QDoubleSpinBox,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
     QRadioButton,
     QSizePolicy,
     QSpacerItem,
-    QDoubleSpinBox,
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QPushButton,
-    QListWidget,
-    QListWidgetItem,
-    QFrame,
-    QLineEdit,
-    QListView,
 )
 
 from deadline.client.exceptions import NonValidInputError
 
-from logging import getLogger
+from ..dataclasses import CustomRequirements, HardwareRequirements, HostRequirements, OsRequirements
 
 logger = getLogger(__name__)
 
@@ -62,11 +74,19 @@ CUSTOM_REQUIREMENT_TOOL_TIP = (
 )
 
 CUSTOM_CAPABILITY_NAME_REGEX = "^(\\.[a-zA-Z][a-zA-Z0-9]{0,63})+$"
-
 ATTRIBUTE_CAPABILITY_VALUE_REGEX = "^[a-zA-Z_]([a-zA-Z0-9_\\-]{0,99})$"
 
-ATTRIBUTE_CAPABILITY_PREFIX = "attr.worker."
-AMOUNT_CAPABILITY_PREFIX = "amount.worker."
+ATTRIBUTE_CAPABILITY_PREFIX = "attr."
+AMOUNT_CAPABILITY_PREFIX = "amount."
+
+RESERVED_FIRST_IDENTIFIERS = ["worker", "job", "step", "task"]
+
+# An attribute name needs to be <= 100 characters. Each Identifier must start with a letter or underscore and can
+# be a maximum of 64 characters long. Periods separate each Identifier.
+IDENTIFIER_REGEX = "[a-zA-Z_][a-zA-Z0-9_]{0,63}"
+
+ATTRIBUTE_CAPABILITY_NAME_REGEX = rf"^({IDENTIFIER_REGEX})(\.{IDENTIFIER_REGEX})*$"
+AMOUNT_CAPABILITY_NAME_REGEX = rf"^({IDENTIFIER_REGEX})(\.{IDENTIFIER_REGEX})*$"
 
 
 class AddIcon(QIcon):
@@ -83,7 +103,7 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, requirements: Optional[HostRequirements] = None, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
@@ -107,6 +127,8 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
         self.mode_selection_box.use_custom_button.toggled.connect(
             self._on_mode_selection_use_custom_button_toggled
         )
+        if requirements is not None:
+            self.set_requirements(requirements)
 
     def _on_mode_selection_use_custom_button_toggled(self, state):
         """
@@ -147,6 +169,16 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
             requirements.setdefault("attributes", []).extend(custom_requirements["attributes"])  # type: ignore
 
         return requirements
+
+    def set_requirements(self, requirements: HostRequirements):
+        if requirements.custom_requirements:
+            self.custom_requirements_box.set_requirements(requirements.custom_requirements)
+        if requirements.os_requirements:
+            self.os_requirements_box.set_requirements(requirements.os_requirements)
+        if requirements.hardware_requirements:
+            self.hardware_requirements_box.set_requirements(requirements.hardware_requirements)
+        self.mode_selection_box.use_default_button.setChecked(False)
+        self.mode_selection_box.use_custom_button.setChecked(True)
 
 
 class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
@@ -201,14 +233,17 @@ class OSRequirementsWidget(QGroupBox):
         parent: The parent Qt Widget.
     """
 
+    OS_ROW_OPTIONS = ["linux", "macos", "windows"]
+    CPU_ROW_OPTIONS = ["x86_64", "arm64"]
+
     def __init__(self, parent=None):
         super().__init__("", parent=parent)
         self.layout = QVBoxLayout(self)
         self._build_ui()
 
     def _build_ui(self):
-        self.os_row = OSRequirementRowWidget("Operating system", ["linux", "macos", "windows"])
-        self.cpu_row = OSRequirementRowWidget("CPU architecture", ["x86_64", "arm64"])
+        self.os_row = OSRequirementRowWidget("Operating system", self.OS_ROW_OPTIONS)
+        self.cpu_row = OSRequirementRowWidget("CPU architecture", self.CPU_ROW_OPTIONS)
 
         self.layout.addWidget(self.os_row)
         self.layout.addWidget(self.cpu_row)
@@ -225,21 +260,25 @@ class OSRequirementsWidget(QGroupBox):
 
         # TODO: currently only supports "AnyOf" from the UI
         requirements: List[dict] = []
-        if self.os_row.combo_box.has_input():
+        if self.os_row.combo_box.checkedItems():
             requirements.append(
                 {
                     "name": "attr.worker.os.family",
-                    "anyOf": [self.os_row.combo_box.currentText()],
+                    "anyOf": self.os_row.combo_box.checkedItems(),
                 }
             )
-        if self.cpu_row.combo_box.has_input():
+        if self.cpu_row.combo_box.checkedItems():
             requirements.append(
                 {
                     "name": "attr.worker.cpu.arch",
-                    "anyOf": [self.cpu_row.combo_box.currentText()],
+                    "anyOf": self.cpu_row.combo_box.checkedItems(),
                 }
             )
         return requirements
+
+    def set_requirements(self, requirements: OsRequirements):
+        self.os_row.combo_box.setChecked(requirements.operating_systems)  # type: ignore
+        self.cpu_row.combo_box.setChecked(requirements.cpu_archs)  # type: ignore
 
 
 class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-methods
@@ -292,6 +331,28 @@ class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         # Disk Scratch capability has unit in GiB
         self.scratch_space_row.add_requirement(requirements, "amount.worker.disk.scratch")
         return requirements
+
+    def set_requirements(self, requirements: HardwareRequirements):
+        self.cpu_row.clear()
+        self.memory_row.clear()
+        self.gpu_row.clear()
+        self.gpu_memory_row.clear()
+        self.scratch_space_row.clear()
+
+        self.cpu_row.minimum = requirements.cpu_min
+        self.cpu_row.maximum = requirements.cpu_max
+
+        self.memory_row.minimum = requirements.memory_min // 1024
+        self.memory_row.maximum = requirements.memory_max // 1024
+
+        self.gpu_row.minimum = requirements.acceleration_min
+        self.gpu_row.maximum = requirements.acceleration_max
+
+        self.gpu_memory_row.minimum = requirements.acceleration_memory_min // 1024
+        self.gpu_memory_row.maximum = requirements.acceleration_memory_max // 1024
+
+        self.scratch_space_row.minimum = requirements.scratch_space_min
+        self.scratch_space_row.maximum = requirements.scratch_space_max
 
 
 class CustomRequirementsWidget(QGroupBox):
@@ -357,11 +418,13 @@ class CustomRequirementsWidget(QGroupBox):
         self.layout.addWidget(self.list_widget)
         self.layout.addLayout(self.buttons_row)
 
-    def _add_new_custom_amount(self):
-        self._add_new_item(AMOUNT)
+    def _add_new_custom_amount(self):  # type: ignore
+        # Return type CustomAmountWidget is not yet defined
+        return self._add_new_item(AMOUNT)
 
-    def _add_new_custom_attr(self):
-        self._add_new_item(ATTRIBUTE)
+    def _add_new_custom_attr(self):  # type: ignore
+        # Return type CustomAttributeWidget is not yet defined
+        return self._add_new_item(ATTRIBUTE)
 
     def _add_new_item(self, type):
         list_item = QListWidgetItem(self.list_widget)
@@ -382,6 +445,7 @@ class CustomRequirementsWidget(QGroupBox):
         self.list_widget.addItem(list_item)
         self.list_widget.setItemWidget(list_item, item)
         self.resize_list_to_fit()
+        return item
 
     def remove_widget_item(self, custom_capability_widget):
         # remove the ListWidgetItem from list
@@ -432,6 +496,21 @@ class CustomRequirementsWidget(QGroupBox):
                     )
 
         return requirements
+
+    def set_requirements(self, requirements: CustomRequirements):
+        self.list_widget.clear()
+
+        for requirement in requirements.amounts:
+            amount_widget: CustomAmountWidget = self._add_new_custom_amount()
+            amount_widget.name = requirement.name
+            amount_widget.minimum = requirement.min
+            amount_widget.maximum = requirement.max
+
+        for requirement in requirements.attributes:
+            attribute_widget: CustomAttributeWidget = self._add_new_custom_attr()
+            attribute_widget.name = requirement.name
+            attribute_widget.option = requirement.option
+            attribute_widget.values = requirement.values
 
 
 class CustomCapabilityWidget(QGroupBox):
@@ -488,9 +567,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.name_line_edit.setValidator(
-            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
-        )
+        self.name_line_edit.setValidator(QRegularExpressionValidator(AMOUNT_CAPABILITY_NAME_REGEX))
         assert (100 - len(AMOUNT_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_PREFIX))
 
@@ -533,6 +610,34 @@ class CustomAmountWidget(CustomCapabilityWidget):
         # LineEdit  / LineEdit / Optional [X]
         self.layout.addLayout(self.columns)
 
+    @property
+    def name(self) -> str:
+        return self.name_line_edit.text()
+
+    @name.setter
+    def name(self, name: str):
+        self.name_line_edit.setText(name)
+
+    @property
+    def minimum(self) -> Optional[float]:
+        if self.min_spin_box.has_input():
+            return self.min_spin_box.value()
+        return None
+
+    @minimum.setter
+    def minimum(self, minimum: int):
+        self.min_spin_box.setValue(minimum)
+
+    @property
+    def maximum(self) -> Optional[float]:
+        if self.max_spin_box.has_input():
+            return self.max_spin_box.value()
+        return None
+
+    @maximum.setter
+    def maximum(self, maximum: int):
+        self.max_spin_box.setValue(maximum)
+
     def get_requirement(self) -> Dict[str, Any]:
         """
         Returns an OpenJD parameter definition dict with
@@ -542,26 +647,33 @@ class CustomAmountWidget(CustomCapabilityWidget):
         """
         requirement: Dict[str, Any] = {}
         if self.name_line_edit.text():
-            requirement = {"name": AMOUNT_CAPABILITY_PREFIX + self.name_line_edit.text()}
+            if self.name[-1] == ".":
+                raise NonValidInputError("Your requirement name cannot end with a period.")
 
-            if self.min_spin_box.has_input() and self.max_spin_box.has_input():
-                minimum = self.min_spin_box.value()
+            requirement = {"name": AMOUNT_CAPABILITY_PREFIX + self.name}
+            minimum = self.minimum
+            maximum = self.maximum
+
+            if minimum and maximum:
                 requirement["min"] = minimum
-
-                maximum = self.max_spin_box.value()
                 requirement["max"] = maximum
 
                 if minimum > maximum:
                     raise NonValidInputError(
                         "Please make sure that the custom amounts in the custom host requirement options have valid min/max ranges!"
                     )
-            elif self.min_spin_box.has_input():
-                minimum = self.min_spin_box.value()
+            elif minimum:
                 requirement["min"] = minimum
-            elif self.max_spin_box.has_input():
-                maximum = self.max_spin_box.value()
+            elif maximum:
                 requirement["max"] = maximum
 
+            parsed_name_match = re.match(AMOUNT_CAPABILITY_NAME_REGEX, self.name)
+
+            if parsed_name_match and parsed_name_match.group(1) in RESERVED_FIRST_IDENTIFIERS:
+                raise NonValidInputError(
+                    "Please make sure that the first identifier in your name is not a reserved identifier. "
+                    + str(RESERVED_FIRST_IDENTIFIERS)
+                )
         else:
             raise NonValidInputError(
                 "Please fill out all custom amount names in the custom host requirement options!"
@@ -573,6 +685,9 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     """
     UI element to hold a single custom attribute.
     """
+
+    ANY_OF = "anyOf"
+    ALL_OF = "allOf"
 
     def __init__(
         self, list_item: QListWidgetItem, item_number: int, parent=CustomRequirementsWidget
@@ -593,7 +708,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         assert (100 - len(ATTRIBUTE_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
         self.name_line_edit.setValidator(
-            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX)
+            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_NAME_REGEX)
         )
         self.add_value_button = None
 
@@ -640,7 +755,8 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.layout.addWidget(self.columns_widget)
         self._add_value()
 
-    def _add_value(self):
+    def _add_value(self):  # type: ignore
+        # Return type CustomAttributeValueWidget is not yet defined
         value_list_item = QListWidgetItem(self.value_list_widget)
         value = CustomAttributeValueWidget(value_list_item, self)
         value_list_item.setSizeHint(value.sizeHint())
@@ -649,6 +765,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self._resize_value_list_to_fit(1)
         self._move_add_button_to_last_item()
         self._set_remove_button_for_first_item()
+        return value
 
     def remove_value_item(self, value):
         # remove the ListWidgetItem from value_list_item
@@ -699,6 +816,73 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             first_item = self.value_list_widget.itemWidget(self.value_list_widget.item(0))
             first_item.remove_button.setEnabled(True)
 
+    @property
+    def name(self) -> str:
+        return self.name_line_edit.text()
+
+    @name.setter
+    def name(self, name: str):
+        self.name_line_edit.setText(name)
+
+    @property
+    def option(self) -> Literal[ANY_OF, ALL_OF]:  # type: ignore
+        return self.ANY_OF if self.any_of_button.isChecked() else self.ALL_OF
+
+    @option.setter
+    def option(self, option: Literal[ANY_OF, ALL_OF]):  # type: ignore
+        if option == self.ANY_OF:
+            self.all_of_button.setChecked(False)
+            self.any_of_button.setChecked(True)
+        else:
+            self.all_of_button.setChecked(True)
+            self.any_of_button.setChecked(False)
+
+    @property
+    def values(self) -> List[str]:
+        values = []
+        for i in range(self.value_list_widget.count()):
+            value: CustomAttributeValueWidget = self.value_list_widget.itemWidget(
+                self.value_list_widget.item(i)
+            )
+            if value.line_edit.text():
+                values.append(value.line_edit.text())
+            else:
+                raise ValueError("All values must have input")
+        return values
+
+    @values.setter
+    def values(self, values: List[str]):
+        value_widgets_by_value = {}
+        for i in range(self.value_list_widget.count()):
+            value_widget: CustomAttributeValueWidget = self.value_list_widget.itemWidget(
+                self.value_list_widget.item(i)
+            )
+            if value_widget.line_edit.text():
+                value_widgets_by_value[value_widget.line_edit.text()] = value_widget
+            else:
+                value_widgets_by_value["EMPTY"] = value_widget
+
+        has_only_empty_value = False
+        if (
+            len(value_widgets_by_value.keys()) == 1
+            and list(value_widgets_by_value.keys())[0] == "EMPTY"
+        ):
+            has_only_empty_value = True
+
+        for value in values:
+            if has_only_empty_value:
+                value_widget = value_widgets_by_value["EMPTY"]
+                value_widget.line_edit.setText(value)
+                value_widgets_by_value[value] = value_widget
+                del value_widgets_by_value["EMPTY"]
+                has_only_empty_value = False
+            if value in value_widgets_by_value:
+                value_widget = value_widgets_by_value[value]
+                value_widget.line_edit.setText(value)
+            else:
+                value_widget = self._add_value()
+                value_widget.line_edit.setText(value)
+
     def get_requirement(self) -> Dict[str, Any]:
         """
         Return an OpenJD parameter definition dict with
@@ -710,18 +894,25 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         requirements_are_valid = True
 
         if self.name_line_edit.text():
-            option = "anyOf" if self.any_of_button.isChecked() else "allOf"
-            values = []
-            for i in range(self.value_list_widget.count()):
-                value = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
-                if value.line_edit.text():
-                    values.append(value.line_edit.text())
-                else:
-                    requirements_are_valid = False
+            if self.name[-1] == ".":
+                raise NonValidInputError("Your requirement name cannot end with a period.")
+
+            parsed_name_match = re.match(AMOUNT_CAPABILITY_NAME_REGEX, self.name)
+            if parsed_name_match and parsed_name_match.group(1) in RESERVED_FIRST_IDENTIFIERS:
+                raise NonValidInputError(
+                    "Please make sure that the first identifier in your name is not a reserved identifier. "
+                    + str(RESERVED_FIRST_IDENTIFIERS)
+                )
+
+            try:
+                values = self.values
+            except ValueError:
+                values = []
+                requirements_are_valid = False
             if values:
                 requirement = {
                     "name": ATTRIBUTE_CAPABILITY_PREFIX + self.name_line_edit.text(),
-                    f"{option}": values,
+                    f"{self.option}": values,
                 }
         else:
             requirements_are_valid = False
@@ -730,6 +921,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             raise NonValidInputError(
                 "Please fill out all custom attribute names and values in the custom host requirements options!"
             )
+
         return requirement
 
 
@@ -785,7 +977,7 @@ class OSRequirementRowWidget(QWidget):
     def _build_ui(self, label: str, items: List[str]):
         self.label = QLabel(label)
         self.label.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.combo_box = OptionalComboBox(items, parent=self)
+        self.combo_box = OptionalMultiSelectComboBox(items, parent=self)
         self.layout.addWidget(self.label)
         self.layout.addWidget(self.combo_box)
 
@@ -849,6 +1041,32 @@ class HardwareRequirementsRowWidget(QWidget):
                 requirement["max"] = self.max_spin_box.value() * scaling_factor
             requirements.append(requirement)
 
+    def clear(self):
+        self.min_spin_box.setValue(self.min_spin_box.no_input_value)
+        self.max_spin_box.setValue(self.max_spin_box.no_input_value)
+
+    @property
+    def minimum(self):
+        return self.min_spin_box.value()
+
+    @minimum.setter
+    def minimum(self, minimum_value: int):
+        if minimum_value == self.min_spin_box.no_input_value:
+            self.min_spin_box.setValue(self.min_spin_box.no_input_value)
+        else:
+            self.min_spin_box.setValue(minimum_value)
+
+    @property
+    def maximum(self):
+        return self.max_spin_box.value()
+
+    @maximum.setter
+    def maximum(self, maximum_value: int):
+        if maximum_value == self.max_spin_box.no_input_value:
+            self.max_spin_box.setValue(self.max_spin_box.no_input_value)
+        else:
+            self.max_spin_box.setValue(maximum_value)
+
 
 class OptionalComboBox(QComboBox):
     """
@@ -862,7 +1080,49 @@ class OptionalComboBox(QComboBox):
         self.addItems(items)
 
     def has_input(self) -> bool:
-        return PLACEHOLDER_TEXT != self.currentText()
+        return self.currentText() != PLACEHOLDER_TEXT
+
+
+class OptionalMultiSelectComboBox(QComboBox):
+    """
+    A custom QComboBox that always have a grayed out placeholder option and supports multiselect.
+    """
+
+    def __init__(self, items: List[str], parent=None):
+        super().__init__(parent=parent)
+        self.model().itemChanged.connect(self.handleModelChanged)
+        self.setPlaceholderText("-")
+        self.addItems(items)
+        self._updateLineEdit()
+
+    def handleModelChanged(self, item):
+        self._updateLineEdit()
+
+    def _updateLineEdit(self):
+        text = ", ".join(self.checkedItems())
+        self.setPlaceholderText(text or "-")
+
+    def setChecked(self, items: List[str]):  # type: ignore
+        for item in items:
+            for i in range(self.model().rowCount()):
+                model_item = self.model().item(i)
+                if model_item.text().lstrip(" ") == item:
+                    model_item.setData(Qt.Checked, Qt.CheckStateRole)
+
+    def checkedItems(self):
+        items = []
+        for i in range(self.model().rowCount()):
+            item = self.model().item(i)
+            if item.checkState() == Qt.Checked:
+                items.append(item.text().lstrip(" "))
+        return items
+
+    def addItems(self, items):
+        for item in items:
+            model_item = QStandardItem("    " + item)
+            model_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            model_item.setData(Qt.Unchecked, Qt.CheckStateRole)
+            self.model().appendRow([model_item])
 
 
 class OptionalSpinBox(QSpinBox):

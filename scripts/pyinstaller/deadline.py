@@ -8,6 +8,7 @@ the actual `deadline` package.
 This file should be built with PyInstaller into its own executable which depends on the actual `deadline` package's
 PyInstaller executable.
 """
+
 import pathlib
 import subprocess
 import sys

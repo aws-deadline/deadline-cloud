@@ -4,7 +4,6 @@
 Exceptions that the Deadline Job Attachments library can raise.
 """
 
-
 from typing import Optional
 
 from deadline.job_attachments.progress_tracker import SummaryStatistics

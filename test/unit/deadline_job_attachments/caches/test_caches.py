@@ -51,9 +51,9 @@ class TestCacheDB:
             cdb = CacheDB("name", "table", "query", tmpdir)
             cdb.cache_dir = "/some/bad/path"
             with cdb:
-                assert (
-                    False
-                ), "Context manager should throw a JobAttachmentsError, this assert should not be reached"
+                assert False, (
+                    "Context manager should throw a JobAttachmentsError, this assert should not be reached"
+                )
         assert isinstance(err.value.__cause__, OperationalError)
 
     @pytest.mark.parametrize(

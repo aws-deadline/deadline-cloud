@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Provides an object that can be used to track current status of AWS Deadline Cloud 
+Provides an object that can be used to track current status of AWS Deadline Cloud
 authentication.
 
 The object emits the following Qt Signals:
@@ -20,6 +20,7 @@ The status includes three parts:
      This is checked by looking for the relevant properties
      in the AWS profile configuration.
 """
+
 import os
 import threading
 from configparser import ConfigParser

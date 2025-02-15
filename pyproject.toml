@@ -22,6 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: POSIX :: Linux",
   "Operating System :: Microsoft :: Windows",
   "Operating System :: MacOS",
@@ -35,7 +36,7 @@ classifiers = [
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-    "boto3 >= 1.34.75",
+    "boto3 >= 1.36.8",
     "click >= 8.1.7",
     "pyyaml >= 6.0",
     # Job Attachments
@@ -148,8 +149,6 @@ known-first-party = [
 # This causes imports to come after regular Python statements causing flake8 rule E402 to be flagged
 "src/deadline/job_attachments/_windows/*.py" = ["E402"]
 
-[tool.black]
-line-length = 100
 
 # Configuration for pytest; enable coverage for deadline_worker_agent, emit
 # XML, HTML, and terminal reports.

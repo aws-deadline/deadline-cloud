@@ -62,7 +62,9 @@ def show_job_bundle_submitter(
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
         main_windows = [
-            widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)  # type: ignore[union-attr]
+            widget
+            for widget in app.topLevelWidgets()
+            if isinstance(widget, QMainWindow)  # type: ignore[union-attr]
         ]
         if main_windows:
             parent = main_windows[0]
@@ -187,7 +189,7 @@ def show_job_bundle_submitter(
     submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=JobBundleSettingsWidget,
         initial_job_settings=initial_settings,
-        # show_host_requirements_tab=True,  // Enable when we want to show the host requirement tab
+        show_host_requirements_tab=True,
         initial_shared_parameter_values=initial_shared_parameter_values,
         auto_detected_attachments=asset_references,
         attachments=AssetReferences(),

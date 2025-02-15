@@ -1,1 +1,7 @@
-* @aws-deadline/Developers
+# default ownership for deadline-cloud-developers
+* @aws-deadline/deadline-cloud-developers
+
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# overriding directories for job attachments
+src/deadline/job_attachments/ @aws-deadline/job-attachments-developers
+test/*/deadline_job_attachments/ @aws-deadline/job-attachments-developers

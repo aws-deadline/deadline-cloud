@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module for the base Manifest Model. """
+"""Module for the base Manifest Model."""
+
 from __future__ import annotations
 
 from typing import Type

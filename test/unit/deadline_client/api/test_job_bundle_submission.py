@@ -204,6 +204,10 @@ parameterValues: []
     {
         "name": "deadline:maxRetriesPerTask",
         "value": 5
+    },
+    {
+        "name": "deadline:maxWorkerCount",
+        "value": 10
     }
  ]
 }
@@ -213,6 +217,7 @@ parameterValues: []
             "targetTaskRunStatus": "SUSPENDED",
             "maxFailedTasksCount": 20,
             "maxRetriesPerTask": 5,
+            "maxWorkerCount": 10,
         },
     ),
     "DEADLINE_ONLY_YAML": (
@@ -227,12 +232,15 @@ parameterValues:
   value: 250
 - name: "deadline:maxRetriesPerTask"
   value: 15
+- name: "deadline:maxWorkerCount"
+  value: 10
 """,
         {
             "priority": 45,
             "targetTaskRunStatus": "SUSPENDED",
             "maxFailedTasksCount": 250,
             "maxRetriesPerTask": 15,
+            "maxWorkerCount": 10,
         },
     ),
     # A parameter_values.json/yaml file with just job template values

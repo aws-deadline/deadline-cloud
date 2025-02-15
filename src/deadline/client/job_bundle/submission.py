@@ -3,6 +3,7 @@
 """
 Helper functions to enable submission of a Job Bundle to CreateJob
 """
+
 from __future__ import annotations
 import dataclasses
 import logging
@@ -20,6 +21,7 @@ DEFAULT_SUPPORTED_APP_PARAMETER_NAMES = [
     "priority",
     "maxFailedTasksCount",
     "maxRetriesPerTask",
+    "maxWorkerCount",
 ]
 
 

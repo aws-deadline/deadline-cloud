@@ -48,6 +48,8 @@ from deadline.job_attachments.models import (
     PathFormat,
     StorageProfile,
 )
+from deadline.job_attachments.asset_manifests.v2023_03_03 import AssetManifest
+
 from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
     SummaryStatistics,
@@ -277,9 +279,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -448,9 +448,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -611,9 +609,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             expected_files = set(
@@ -790,9 +786,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -929,9 +923,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -1667,9 +1659,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1705,9 +1695,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             caplog.set_level(INFO)
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1788,9 +1776,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1945,9 +1931,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -2630,15 +2614,33 @@ class TestUpload:
             assert file_size == 5
             s3_cache.put_entry.assert_called_once_with(expected_new_entry)
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
                 bucket,
                 expected_files={"prefix/test-hash.xxh128"},
             )
+
+    def test_gather_upload_metadata(self):
+        # Given
+        manifest = AssetManifest(
+            hash_alg=HashAlgorithm("xxh128"),
+            total_size=10,
+            paths=[
+                BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
+                BaseManifestPath(
+                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                ),
+            ],
+        )
+        # When
+        (hash_alg, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
+            manifest, Path("mocksourcerootpath"), "suffix"
+        )
+        # Then
+        assert hash_alg == HashAlgorithm.XXH128
+        assert manifest_name == "73addc7c69ddec53bd8d9df653add3c4_suffix"
 
 
 def assert_progress_report_last_callback(

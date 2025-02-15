@@ -139,6 +139,7 @@ class TelemetryClient:
                 f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
                 TelemetryClient.ENDPOINT_PREFIX,
             )
+
             # Some environments might not have SSL, so we'll use the vendored botocore SSL context
             from botocore.httpsession import create_urllib3_context, get_cert_path
 
@@ -380,6 +381,38 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> C
                     event_type=f"com.amazon.rum.deadline.{event_name}",
                     event_details={"is_success": success},
                 )
+
+        return cast(F, wrapper)
+
+    return inner
+
+
+def record_function_latency_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> Callable[[F], F]:
+    """
+    Decorator to time a function. Sends a latency telemetry event.
+    :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
+    """
+
+    def inner(function: F) -> F:
+        def wrapper(*args: List[Any], **kwargs: Dict[str, Any]) -> Any:
+            """
+            Wrapper to time a function for latency telemetry
+            :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
+            :param ** Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
+            """
+            start_t = time.perf_counter_ns()
+            ret_val = function(*args, **kwargs)
+            end_t = time.perf_counter_ns()
+
+            latency = end_t - start_t
+
+            event_name = decorator_kwargs.get("metric_name", function.__name__)
+            get_deadline_cloud_library_telemetry_client().record_event(
+                event_type="com.amazon.rum.deadline.latency",
+                event_details={"latency": latency, "function_call": event_name},
+            )
+
+            return ret_val
 
         return cast(F, wrapper)
 

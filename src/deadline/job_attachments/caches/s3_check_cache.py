@@ -48,9 +48,7 @@ class S3CheckCache(CacheDB):
 
     def __init__(self, cache_dir: Optional[str] = None) -> None:
         table_name: str = f"s3checkV{self.CACHE_DB_VERSION}"
-        create_query: str = (
-            f"CREATE TABLE s3checkV{self.CACHE_DB_VERSION}(s3_key text primary key, last_seen_time timestamp)"
-        )
+        create_query: str = f"CREATE TABLE s3checkV{self.CACHE_DB_VERSION}(s3_key text primary key, last_seen_time timestamp)"
         super().__init__(
             cache_name=self.CACHE_NAME,
             table_name=table_name,

@@ -3,6 +3,7 @@
 """
 Integ tests for the CLI manifest upload commands.
 """
+
 import os
 from pathlib import Path
 from typing import Optional
@@ -34,7 +35,6 @@ TEST_SUB_DIR_2 = "subdir2"
 
 @pytest.mark.integ
 class TestManifestUpload:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:

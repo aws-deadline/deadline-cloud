@@ -35,7 +35,7 @@ def default_job_template() -> str:
                         "embeddedFiles": [
                             {
                                 "name": "run",
-                                "data": "#!/bin/env bash\n" "set -ex\n" "echo 'First Step'",
+                                "data": "#!/bin/env bash\nset -ex\necho 'First Step'",
                                 "runnable": True,
                                 "type": "TEXT",
                             }
@@ -54,7 +54,7 @@ def default_job_template() -> str:
                         "embeddedFiles": [
                             {
                                 "name": "run",
-                                "data": "#!/bin/env bash\n" "set -ex\n" "echo 'Second step'",
+                                "data": "#!/bin/env bash\nset -ex\necho 'Second step'",
                                 "runnable": True,
                                 "type": "TEXT",
                             }
@@ -88,7 +88,7 @@ def default_job_template_step_step_dependency() -> str:
                         "embeddedFiles": [
                             {
                                 "name": "run",
-                                "data": "#!/bin/env bash\n" "set -ex\n" "echo 'First Step'",
+                                "data": "#!/bin/env bash\nset -ex\necho 'First Step'",
                                 "runnable": True,
                                 "type": "TEXT",
                             }
@@ -108,7 +108,7 @@ def default_job_template_step_step_dependency() -> str:
                         "embeddedFiles": [
                             {
                                 "name": "run",
-                                "data": "#!/bin/env bash\n" "set -ex\n" "echo 'Second step'",
+                                "data": "#!/bin/env bash\nset -ex\necho 'Second step'",
                                 "runnable": True,
                                 "type": "TEXT",
                             }
@@ -142,7 +142,7 @@ def default_job_template_one_task_one_step() -> str:
                         "embeddedFiles": [
                             {
                                 "name": "run",
-                                "data": "#!/bin/env bash\n" "set -ex\n" "echo 'First Step'",
+                                "data": "#!/bin/env bash\nset -ex\necho 'First Step'",
                                 "runnable": True,
                                 "type": "TEXT",
                             }
