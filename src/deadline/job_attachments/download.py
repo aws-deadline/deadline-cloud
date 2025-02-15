@@ -23,7 +23,6 @@ import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
-import click
 
 from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
 from .asset_manifests.hash_algorithms import HashAlgorithm
@@ -1095,9 +1094,10 @@ class OutputDownloader:
             session=session,
         )
 
-    def get_output_paths_by_root(self, is_json: bool = False) -> dict[str, list[str]]:
+    def get_output_paths_by_root(self) -> Tuple[dict[str, list[str]], bool]:
         """
-        Returns a dict of asset root paths to lists of output paths.
+        Returns a dict of asset root paths to lists of output paths,
+        also returns a bool indicating if there were any paths that exceed Windows path length limit
         """
         output_paths_by_root: dict[str, list[str]] = {}
         long_path_file_found = False
@@ -1114,17 +1114,8 @@ class OutputDownloader:
                     if len(root + output_path) >= WINDOWS_MAX_PATH_LENGTH:
                         long_path_file_found = True
                         break
-        if long_path_file_found:
-            if not is_json:
-                click.secho(
-                    """
-    WARNING: Found downloaded file paths that exceed Windows path length limit. This may cause unexpected issues.
-    For details and a fix using the registry, see: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
-    """,
-                    fg="yellow",
-                )
 
-        return output_paths_by_root
+        return output_paths_by_root, long_path_file_found
 
     def set_root_path(self, original_root: str, new_root: str) -> None:
         """

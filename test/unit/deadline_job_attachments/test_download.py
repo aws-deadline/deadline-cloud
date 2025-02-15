@@ -1168,24 +1168,27 @@ class TestFullDownload:
                 task_id=None,
             )
 
-        assert output_downloader.get_output_paths_by_root() == {
-            str(tmp_path.resolve()): [
-                "test/test12.txt",
-                "test/test14.txt",
-                "test/test2.txt",
-                "test/test3.txt",
-                "test/test6.txt",
-                "test/test8.txt",
-                "test/test9.txt",
-                "test1.txt",
-                "test10.txt",
-                "test11.txt",
-                "test13.txt",
-                "test4.txt",
-                "test5.txt",
-                "test7.txt",
-            ]
-        }
+        assert output_downloader.get_output_paths_by_root() == (
+            {
+                str(tmp_path.resolve()): [
+                    "test/test12.txt",
+                    "test/test14.txt",
+                    "test/test2.txt",
+                    "test/test3.txt",
+                    "test/test6.txt",
+                    "test/test8.txt",
+                    "test/test9.txt",
+                    "test1.txt",
+                    "test10.txt",
+                    "test11.txt",
+                    "test13.txt",
+                    "test4.txt",
+                    "test5.txt",
+                    "test7.txt",
+                ]
+            },
+            False,
+        )
 
     def test_OutputDownloader_set_root_path(self, farm_id, queue_id, tmp_path: Path):
         with patch(
@@ -1207,24 +1210,27 @@ class TestFullDownload:
             original_root=str(tmp_path.resolve()), new_root=new_root_path
         )
 
-        assert output_downloader.get_output_paths_by_root() == {
-            new_root_path: [
-                "test/test12.txt",
-                "test/test14.txt",
-                "test/test2.txt",
-                "test/test3.txt",
-                "test/test6.txt",
-                "test/test8.txt",
-                "test/test9.txt",
-                "test1.txt",
-                "test10.txt",
-                "test11.txt",
-                "test13.txt",
-                "test4.txt",
-                "test5.txt",
-                "test7.txt",
-            ]
-        }
+        assert output_downloader.get_output_paths_by_root() == (
+            {
+                new_root_path: [
+                    "test/test12.txt",
+                    "test/test14.txt",
+                    "test/test2.txt",
+                    "test/test3.txt",
+                    "test/test6.txt",
+                    "test/test8.txt",
+                    "test/test9.txt",
+                    "test1.txt",
+                    "test10.txt",
+                    "test11.txt",
+                    "test13.txt",
+                    "test4.txt",
+                    "test5.txt",
+                    "test7.txt",
+                ]
+            },
+            False,
+        )
 
     @pytest.mark.skipif(
         is_windows_non_admin(),
@@ -1257,14 +1263,17 @@ class TestFullDownload:
             original_root=str(tmp_path.resolve()), new_root=str(sym_path)
         )
 
-        assert output_downloader.get_output_paths_by_root() == {
-            str(tmp_path / "symlink_folder"): [
-                "test/test2.txt",
-                "test/test3.txt",
-                "test1.txt",
-                "test4.txt",
-            ]
-        }
+        assert output_downloader.get_output_paths_by_root() == (
+            {
+                str(tmp_path / "symlink_folder"): [
+                    "test/test2.txt",
+                    "test/test3.txt",
+                    "test1.txt",
+                    "test4.txt",
+                ]
+            },
+            False,
+        )
 
     def test_OutputDownloader_set_root_path_wrong_root_throws_exception(
         self, farm_id, queue_id, tmp_path: Path
@@ -2373,7 +2382,7 @@ def test_download_files_from_manifests(
 
     assert merged_manifest
 
-    downloaded_files: List[str] = []
+    downloaded_files: list[str] = []
 
     def download_file(*args):
         nonlocal downloaded_files

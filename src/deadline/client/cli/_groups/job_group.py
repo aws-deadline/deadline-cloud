@@ -44,6 +44,7 @@ JSON_MSG_TYPE_PATHCONFIRM = "pathconfirm"
 JSON_MSG_TYPE_PROGRESS = "progress"
 JSON_MSG_TYPE_SUMMARY = "summary"
 JSON_MSG_TYPE_ERROR = "error"
+JSON_MSG_TYPE_WARNING = "warning"
 
 
 # Set up the signal handler for handling Ctrl + C interruptions.
@@ -285,8 +286,12 @@ def _download_job_output(
         session=queue_role_session,
     )
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-
+    output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
+    if long_path_found:
+        click.secho(
+            _get_long_path_found_message(is_json_format),
+            fg="yellow",
+        )
     # If no output paths were found, log a message and exit.
     if output_paths_by_root == {}:
         click.echo(_get_no_output_message(is_json_format))
@@ -317,7 +322,7 @@ def _download_job_output(
 
             job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+    output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
 
     # Prompt users to confirm local root paths where they will download outputs to,
     # and allow users to select different location to download files to if they want.
@@ -352,7 +357,11 @@ def _download_job_output(
                     job_output_downloader.set_root_path(
                         asset_roots[index_to_change], str(Path(new_root))
                     )
-                    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                    output_paths_by_root, long_path_found = (
+                        job_output_downloader.get_output_paths_by_root()
+                    )
+                    if long_path_found:
+                        click.secho(_get_long_path_found_message(is_json_format), fg="yellow")
         else:
             click.echo(
                 _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
@@ -366,7 +375,12 @@ def _download_job_output(
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
                 job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+            output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
+            if long_path_found:
+                click.secho(
+                    _get_long_path_found_message(is_json_format),
+                    fg="yellow",
+                )
 
     # If the conflict resolution option was not specified, auto-accept is false, and
     # if there are any conflicting files in local, prompt users to select a resolution method.
@@ -545,6 +559,18 @@ def _get_download_summary_message(
             f" at {_human_readable_file_size(int(download_summary.transfer_rate))}/s.\n"
             f"    Download locations (total file counts):\n        {paths_joined}"
         )
+
+
+def _get_long_path_found_message(is_json_format: bool) -> str:
+    message = """
+WARNING: Found downloaded file paths that exceed Windows path length limit. This may cause unexpected issues.
+For details and a fix using the registry, see: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+"""
+    if is_json_format:
+        return _get_json_line(JSON_MSG_TYPE_WARNING, message)
+
+    else:
+        return message
 
 
 def _get_conflicting_filenames(filenames_by_root: dict[str, list[str]]) -> list[str]:
