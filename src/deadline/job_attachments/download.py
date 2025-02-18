@@ -9,7 +9,6 @@ import io
 import json
 import os
 import re
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -73,7 +72,6 @@ from .os_file_permission import (
 from ._utils import (
     _get_long_path_compatible_path,
     _is_relative_to,
-    _is_windows_long_path_registry_enabled,
     _join_s3_paths,
 )
 
@@ -1094,28 +1092,15 @@ class OutputDownloader:
             session=session,
         )
 
-    def get_output_paths_by_root(self) -> Tuple[dict[str, list[str]], bool]:
+    def get_output_paths_by_root(self) -> dict[str, list[str]]:
         """
-        Returns a dict of asset root paths to lists of output paths,
-        also returns a bool indicating if there were any paths that exceed Windows path length limit
+        Returns a dict of asset root paths to lists of output paths.
         """
         output_paths_by_root: dict[str, list[str]] = {}
-        long_path_file_found = False
 
         for root, path_group in self.outputs_by_root.items():
-            all_paths_in_root = path_group.get_all_paths()
-            output_paths_by_root[root] = all_paths_in_root
-            if (
-                not long_path_file_found
-                and sys.platform == "win32"
-                and not _is_windows_long_path_registry_enabled()
-            ):
-                for output_path in all_paths_in_root:
-                    if len(root + output_path) >= WINDOWS_MAX_PATH_LENGTH:
-                        long_path_file_found = True
-                        break
-
-        return output_paths_by_root, long_path_file_found
+            output_paths_by_root[root] = path_group.get_all_paths()
+        return output_paths_by_root
 
     def set_root_path(self, original_root: str, new_root: str) -> None:
         """

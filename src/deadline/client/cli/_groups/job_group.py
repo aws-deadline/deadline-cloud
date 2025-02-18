@@ -25,6 +25,10 @@ from deadline.job_attachments.models import (
     JobAttachmentS3Settings,
     PathFormat,
 )
+from deadline.job_attachments._utils import (
+    WINDOWS_MAX_PATH_LENGTH,
+    _is_windows_long_path_registry_enabled,
+)
 from deadline.job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
@@ -286,12 +290,19 @@ def _download_job_output(
         session=queue_role_session,
     )
 
-    output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
-    if long_path_found:
-        click.secho(
-            _get_long_path_found_message(is_json_format),
-            fg="yellow",
-        )
+    def _check_and_warn_long_output_paths(output_paths_by_root: dict[str, list[str]]) -> None:
+        if sys.platform == "win32" and not _is_windows_long_path_registry_enabled():
+            for root, paths in output_paths_by_root.items():
+                for output_path in paths:
+                    if len(root + output_path) >= WINDOWS_MAX_PATH_LENGTH:
+                        click.secho(
+                            _get_long_path_found_message(is_json_format),
+                            fg="yellow",
+                        )
+
+    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+
+    _check_and_warn_long_output_paths(output_paths_by_root)
     # If no output paths were found, log a message and exit.
     if output_paths_by_root == {}:
         click.echo(_get_no_output_message(is_json_format))
@@ -322,8 +333,9 @@ def _download_job_output(
 
             job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-    output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
+    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
 
+    _check_and_warn_long_output_paths(output_paths_by_root)
     # Prompt users to confirm local root paths where they will download outputs to,
     # and allow users to select different location to download files to if they want.
     # (If auto-accept is enabled, automatically download to the default root paths.)
@@ -357,11 +369,8 @@ def _download_job_output(
                     job_output_downloader.set_root_path(
                         asset_roots[index_to_change], str(Path(new_root))
                     )
-                    output_paths_by_root, long_path_found = (
-                        job_output_downloader.get_output_paths_by_root()
-                    )
-                    if long_path_found:
-                        click.secho(_get_long_path_found_message(is_json_format), fg="yellow")
+                    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                    _check_and_warn_long_output_paths(output_paths_by_root)
         else:
             click.echo(
                 _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
@@ -375,12 +384,8 @@ def _download_job_output(
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
                 job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            output_paths_by_root, long_path_found = job_output_downloader.get_output_paths_by_root()
-            if long_path_found:
-                click.secho(
-                    _get_long_path_found_message(is_json_format),
-                    fg="yellow",
-                )
+            output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+            _check_and_warn_long_output_paths(output_paths_by_root)
 
     # If the conflict resolution option was not specified, auto-accept is false, and
     # if there are any conflicting files in local, prompt users to select a resolution method.
