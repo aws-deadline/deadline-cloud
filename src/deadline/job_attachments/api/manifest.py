@@ -41,6 +41,7 @@ from deadline.job_attachments.models import (
     ManifestMerge,
     default_glob_all,
 )
+from deadline.job_attachments._utils import _get_long_path_compatible_path
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
 
 """
@@ -199,7 +200,11 @@ def _write_manifest(
     manifest_name = manifest_name[1:] if manifest_name[0] == "_" else manifest_name
     manifest_name = f"{manifest_name}-{root_hash}-{timestamp}.manifest"
 
-    local_manifest_path = os.path.join(destination, manifest_name)
+    local_manifest_path = str(
+        _get_long_path_compatible_path(
+            os.path.join(destination, manifest_name),
+        )
+    )
     os.makedirs(os.path.dirname(local_manifest_path), exist_ok=True)
     with open(local_manifest_path, "w") as file:
         file.write(manifest.encode())
@@ -315,6 +320,9 @@ def _manifest_upload(
 
     # S3 uploader.
     upload = S3AssetUploader(session=boto_session)
+
+    manifest_file = str(_get_long_path_compatible_path(manifest_file))
+
     with open(manifest_file) as manifest:
         upload.upload_bytes_to_s3(
             bytes=BytesIO(manifest.read().encode("utf-8")),

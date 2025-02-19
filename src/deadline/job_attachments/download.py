@@ -9,7 +9,6 @@ import io
 import json
 import os
 import re
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -70,7 +69,11 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths, _is_windows_long_path_registry_enabled
+from ._utils import (
+    _get_long_path_compatible_path,
+    _is_relative_to,
+    _join_s3_paths,
+)
 
 download_logger = getLogger("deadline.job_attachments.download")
 
@@ -407,7 +410,9 @@ def download_file(
     file_bytes = file.size
 
     # Python will handle the path separator '/' correctly on every platform.
-    local_file_name = Path(local_download_dir).joinpath(file.path)
+    local_file_name: Path = _get_long_path_compatible_path(
+        Path(local_download_dir).joinpath(file.path)
+    )
 
     s3_key = (
         f"{cas_prefix}/{file.hash}.{hash_algorithm.value}"
@@ -521,25 +526,6 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        # Add 9 to account for .Hex value when file in the middle of downloading in windows paths
-        # For example: file test.txt when download will be test.txt.H4SD9Ddj
-        if (
-            len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
-        ) and sys.platform == "win32":
-            uncPath = str(local_file_name).startswith("\\\\?\\")
-            if not uncPath:
-                # Path don't start with \\?\ -> Long path error
-                raise AssetSyncError(
-                    "Your file path is longer than what Windows allow.\n"
-                    + "This could be the error if you do not enable longer file path in Windows"
-                )
-            elif not _is_windows_long_path_registry_enabled():
-                # Path start with \\?\ but do not enable registry -> Undefined error
-                raise AssetSyncError(
-                    f"{e}\nUNC notation exist, but long path registry not enabled. Undefined error"
-                ) from e
-
-        # Path start with \\?\ and registry is enable, something else cause this error
         raise AssetSyncError(e) from e
 
     download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
@@ -1111,6 +1097,7 @@ class OutputDownloader:
         Returns a dict of asset root paths to lists of output paths.
         """
         output_paths_by_root: dict[str, list[str]] = {}
+
         for root, path_group in self.outputs_by_root.items():
             output_paths_by_root[root] = path_group.get_all_paths()
         return output_paths_by_root
