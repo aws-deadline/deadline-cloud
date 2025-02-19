@@ -8,7 +8,7 @@ If you haven't done so already, install Deadline Cloud with the GUI dependencies
 ```sh
 $ pip install "deadline[gui]"
 ```
-Verify that it was successfully installed by running `deadline config gui` and allow the Deadline Settings dialogue to load. 
+Verify that it was successfully installed by running `deadline config gui` and allow the Deadline Settings dialog to load. 
 
 ## Set Up/Install Squish Framework
 
@@ -55,11 +55,11 @@ Squish tests can be run from the IDE or the command line.
 
 Squish element locators:
 
-* Squish automatically identifies and creates all locators for you in a file called .`names.py`.
-* As the names of these locators do not necessarily have easily identifiable labels/names, all locators have been renamed and organized in it's own page. Please allow `names.py` file to be updated as new locators are identifed, and then copy/add new locators with easily identifiable labels/names into the appropriate files (ie: `workstation_config_locators.py`, `loginout_locators.py`, etc).
+* Squish automatically identifies and creates all locators for you in a file called `names.py`.
+* As the names of these locators do not necessarily have easily identifiable labels/names, all locators have been renamed and organized in their own page. Please allow `names.py` file to be updated as new locators are identified, and then copy/add new locators with easily identifiable labels/names into the appropriate files (ie: `workstation_config_locators.py`, `loginout_locators.py`, etc).
 
 ## A Final Word on Testing
 
-To ensure quality and reliability of any changes made to Deadline Client, please any necessary automated and manual tests prior to submitting changes.
+To ensure quality and reliability of any changes made to Deadline Client, please run any necessary automated and manual tests prior to submitting changes.
 
 Happy Squish testing! Any further questions about Squish API can be found in [Squish official documentation](https://doc.qt.io/squish/).
