@@ -1003,3 +1003,93 @@ Within-session Overhead Duration Per Action: 0:00:30
 """
         )
         assert result.exit_code == 0
+
+
+@pytest.mark.usefixtures("fresh_deadline_config")
+def test_cli_job_download_output_with_different_asset_root_path_format_than_job(tmp_path: Path):
+    """
+    Tests whether the output messages printed to stdout match expected messages
+    when `download-output` command is executed.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(
+        job_group.os.path,
+        "expanduser",
+        return_value=tmp_path,
+    ) as mock_expanduser:
+        mock_download = MagicMock()
+        MockOutputDownloader.return_value.download_job_output = mock_download
+        windows_root_path = "C:\\Users\\username"
+        not_windows_root_path = "/root/path"
+        mock_root_path = not_windows_root_path if sys.platform == "win32" else windows_root_path
+        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+            {
+                f"{mock_root_path}": mock_files_list,
+            },
+            {
+                f"{tmp_path}": mock_files_list,
+            },
+        ]
+
+        mock_host_path_format = PathFormat.POSIX if sys.platform == "win32" else PathFormat.WINDOWS
+
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": f"{mock_root_path}",
+                        "rootPathFormat": mock_host_path_format,
+                        "outputRelativeDirectories": ["."],
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+            input="~\ny\n",
+        )
+
+        MockOutputDownloader.assert_called_once_with(
+            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            step_id=None,
+            task_id=None,
+            session=ANY,
+        )
+
+        path_separator = "/" if sys.platform != "win32" else "\\"
+
+        assert (
+            f"""Downloading output from Job 'Mock Job'
+This root path format does not match the operating system you're using. Where would you like to save the files?
+The location was {not_windows_root_path if sys.platform == "win32" else windows_root_path}, on {"Posix" if sys.platform == "win32" else "Windows"}.
+> Please enter a new root path: ~
+
+Summary of files to download:
+    {tmp_path}{path_separator}outputs (3 files)
+
+You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
+[0] {tmp_path}
+> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
+"""
+            in result.output
+        )
+        assert "Download Summary:" in result.output
+        assert result.exit_code == 0
+        mock_expanduser.assert_any_call("~")
