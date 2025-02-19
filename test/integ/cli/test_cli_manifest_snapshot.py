@@ -8,10 +8,12 @@ import json
 import math
 import os
 from pathlib import Path, WindowsPath
-import sys
 from typing import List
 from click.testing import CliRunner
-from deadline.job_attachments._utils import WINDOWS_MAX_PATH_LENGTH
+from deadline.job_attachments._utils import (
+    WINDOWS_MAX_PATH_LENGTH,
+    _is_windows_long_path_registry_enabled,
+)
 import pytest
 import tempfile
 from deadline.client.cli import main
@@ -106,8 +108,8 @@ class TestManifestSnapshot:
 
     @pytest.mark.integ
     @pytest.mark.skipif(
-        sys.platform != "win32",
-        reason="This test is related to Windows file path length limit, skipping this if os not Windows",
+        _is_windows_long_path_registry_enabled(),
+        reason="This test is related to Windows file path length limit, skipping this if os not Windows or if the long path registry is enabled",
     )
     def test_manifest_snapshot_over_windows_path_limit(self, tmp_path: WindowsPath):
         """
@@ -171,8 +173,8 @@ class TestManifestSnapshot:
 
     @pytest.mark.integ
     @pytest.mark.skipif(
-        sys.platform != "win32",
-        reason="This test is related to Windows file path length limit, skipping this if os not Windows",
+        _is_windows_long_path_registry_enabled(),
+        reason="This test is related to Windows file path length limit, skipping this if os not Windows or if the long path registry is enabled",
     )
     def test_manifest_snapshot_over_windows_path_limit_json(self, tmp_path: WindowsPath):
         """
