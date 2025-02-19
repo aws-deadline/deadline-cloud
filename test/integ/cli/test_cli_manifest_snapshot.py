@@ -5,12 +5,15 @@ Integ tests for the CLI asset commands.
 """
 
 import json
+import math
 import os
-from pathlib import Path
+from pathlib import Path, WindowsPath
+import sys
+from typing import List
 from click.testing import CliRunner
+from deadline.job_attachments._utils import WINDOWS_MAX_PATH_LENGTH
 import pytest
 import tempfile
-
 from deadline.client.cli import main
 
 
@@ -100,3 +103,136 @@ class TestManifestSnapshot:
             diff = json.loads(result.output)
             assert len(diff["new"]) == 1
             assert new_file in diff["new"]
+
+    @pytest.mark.integ
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is related to Windows file path length limit, skipping this if os not Windows",
+    )
+    def test_manifest_snapshot_over_windows_path_limit(self, tmp_path: WindowsPath):
+        """
+        Tests that if the snapshot root directory is almost as long as the Windows path length limit,
+        the snapshot will still work despite reaching over the Windows path length limit.
+        See https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+        """
+        # Given
+
+        tmp_path_len: int = len(str(tmp_path))
+
+        # Make the file root directory
+        root_directory: str = os.path.join(tmp_path, "root")
+        os.makedirs(root_directory)
+        Path(os.path.join(root_directory, "test.txt")).touch()
+
+        # Create a manifest directory that is almost as long as the Windows path length limit.
+        manifest_directory_remaining_length: int = WINDOWS_MAX_PATH_LENGTH - tmp_path_len - 30
+        manifest_directory: str = os.path.join(
+            tmp_path,
+            *["path"]
+            * math.floor(
+                manifest_directory_remaining_length / 5
+            ),  # Create a temp path that barely does not exceed the windows path limit
+        )
+
+        os.makedirs(manifest_directory)
+
+        assert len(manifest_directory) <= WINDOWS_MAX_PATH_LENGTH - 30
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            main,
+            [
+                "manifest",
+                "snapshot",
+                "--root",
+                root_directory,
+                "--destination",
+                manifest_directory,
+                "--name",
+                "testLongPath",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "warning" in result.stdout.lower()
+        files: List[str] = os.listdir(manifest_directory)
+
+        assert len(files) == 1, f"Expected exactly one manifest file, but got {len(files)}"
+
+        manifest: str = files[0]
+        assert "testLongPath" in manifest, (
+            f"Expected testLongPath in manifest file name, got {manifest}"
+        )
+
+        assert len(os.path.join(manifest_directory, manifest)) > 260, (
+            f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        )
+
+    @pytest.mark.integ
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is related to Windows file path length limit, skipping this if os not Windows",
+    )
+    def test_manifest_snapshot_over_windows_path_limit_json(self, tmp_path: WindowsPath):
+        """
+        Tests that if the snapshot root directory is almost as long as the Windows path length limit,
+        the snapshot will still work despite reaching over the Windows path length limit.
+        This test uses json output in the cli options and verifies that the output json is expected.
+        See https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+        """
+        # Given
+
+        tmp_path_len: int = len(str(tmp_path))
+
+        # Make the file root directory
+        root_directory: str = os.path.join(tmp_path, "root")
+        os.makedirs(root_directory)
+        Path(os.path.join(root_directory, "test.txt")).touch()
+
+        # Create a manifest directory that is almost as long as the Windows path length limit.
+        manifest_directory_remaining_length: int = WINDOWS_MAX_PATH_LENGTH - tmp_path_len - 30
+        manifest_directory: str = os.path.join(
+            tmp_path,
+            *["path"]
+            * math.floor(
+                manifest_directory_remaining_length / 5
+            ),  # Create a temp path that barely does not exceed the windows path limit
+        )
+
+        os.makedirs(manifest_directory)
+
+        assert len(manifest_directory) <= WINDOWS_MAX_PATH_LENGTH - 30
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            main,
+            [
+                "manifest",
+                "snapshot",
+                "--root",
+                root_directory,
+                "--destination",
+                manifest_directory,
+                "--name",
+                "testLongPath",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout).get("warning") is not None
+
+        files: List[str] = os.listdir(manifest_directory)
+
+        assert len(files) == 1, f"Expected exactly one manifest file, but got {len(files)}"
+
+        manifest: str = files[0]
+        assert "testLongPath" in manifest, (
+            f"Expected testLongPath in manifest file name, got {manifest}"
+        )
+
+        assert len(os.path.join(manifest_directory, manifest)) > 260, (
+            f"Expected full manifest file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(os.path.join(manifest_directory, manifest))}"
+        )

@@ -3,16 +3,17 @@
 """Integration tests for Job Attachments."""
 
 import logging
+import math
 import os
 import shutil
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, WindowsPath
 from unittest.mock import MagicMock
 import sys
 
 from deadline.job_attachments.models import JobAttachmentS3Settings
-
+from deadline.job_attachments.download import WINDOWS_MAX_PATH_LENGTH
 import boto3
 import pytest
 from deadline_test_fixtures.job_attachment_manager import JobAttachmentManager
@@ -34,9 +35,9 @@ from deadline.job_attachments.models import (
 )
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 from deadline.job_attachments._utils import (
+    WINDOWS_UNC_PATH_STRING_PREFIX,
     _get_unique_dest_dir_name,
 )
-from deadline.job_attachments._utils import _is_windows_long_path_registry_enabled
 from .conftest import is_windows_non_admin
 
 
@@ -1503,51 +1504,6 @@ def test_download_outputs_bucket_wrong_account(
 
 
 @pytest.mark.integ
-@pytest.mark.skipif(
-    _is_windows_long_path_registry_enabled(),
-    reason="This test is for Windows max file path length error, skipping this if Windows path limit is extended",
-)
-def test_download_outputs_windows_max_file_path_length_exception(
-    job_attachment_test: JobAttachmentTest,
-    sync_outputs: SyncOutputsOutput,
-):
-    """
-    Test that if trying to download outputs to a file path that
-    longer than 260 chars in Windows, the correct error is thrown.
-    """
-    long_root_path = Path(__file__).parent / str("A" * 135)
-
-    job_attachment_settings = get_queue(
-        farm_id=job_attachment_test.farm_id,
-        queue_id=job_attachment_test.queue_id,
-        deadline_endpoint_url=job_attachment_test.deadline_endpoint,
-    ).jobAttachmentSettings
-
-    if job_attachment_settings is None:
-        raise Exception("Job attachment settings must be set for this test.")
-
-    job_output_downloader = download.OutputDownloader(
-        s3_settings=job_attachment_settings,
-        farm_id=job_attachment_test.farm_id,
-        queue_id=job_attachment_test.queue_id,
-        job_id=sync_outputs.job_id,
-        step_id=sync_outputs.step0_id,
-        task_id=sync_outputs.step0_task0_id,
-    )
-    job_output_downloader.set_root_path(str(job_attachment_test.ASSET_ROOT), str(long_root_path))
-
-    # WHEN
-    with pytest.raises(
-        AssetSyncError,
-        match=(
-            "Your file path is longer than what Windows allow.\n"
-            + "This could be the error if you do not enable longer file path in Windows"
-        ),
-    ):
-        job_output_downloader.download_job_output()
-
-
-@pytest.mark.integ
 def test_download_outputs_no_outputs_dir(
     job_attachment_test: JobAttachmentTest,
     sync_outputs: SyncOutputsOutput,
@@ -1595,15 +1551,26 @@ def test_download_outputs_no_outputs_dir(
     sys.platform != "win32",
     reason="This test is for Windows file path length UNC, skipping this if os not Windows",
 )
-def test_download_outputs_windows_file_path_UNC(
-    job_attachment_test: JobAttachmentTest,
-    sync_outputs: SyncOutputsOutput,
+def test_download_outputs_windows_long_file_path(
+    job_attachment_test: JobAttachmentTest, sync_outputs: SyncOutputsOutput, tmp_path: WindowsPath
 ):
     """
-    Test that if trying to download outputs to a file path that
-    longer than 260 chars in Windows but have UNC, the download is success.
+    Test that when trying to download outputs to a file path that
+    longer than 260 chars in Windows, the download is successful.
     """
-    long_root_path = Path("\\\\?\\" + __file__).parent / str("A" * 135)
+
+    tmp_path_len: int = len(str(tmp_path))
+    long_root_path_remaining_length: int = WINDOWS_MAX_PATH_LENGTH - tmp_path_len - 20
+    long_root_path: str = os.path.join(
+        tmp_path,
+        *["path"]
+        * math.floor(
+            long_root_path_remaining_length / 5
+        ),  # Create a temp path that barely does not exceed the windows path limit
+    )
+
+    os.makedirs(long_root_path)
+    assert len(long_root_path) <= WINDOWS_MAX_PATH_LENGTH - 10
 
     job_attachment_settings = get_queue(
         farm_id=job_attachment_test.farm_id,
@@ -1629,6 +1596,13 @@ def test_download_outputs_windows_file_path_UNC(
         job_output_downloader.download_job_output()
         # THEN
         # The output file should be downloaded to the current directory
-        assert Path(long_root_path / sync_outputs.step0_task0_output_file).exists()
+        # Prepend \\?\ when checking the file exists, otherwise Python will not find it
+        output_file_path = Path(
+            WINDOWS_UNC_PATH_STRING_PREFIX + long_root_path, sync_outputs.step0_task0_output_file
+        )
+        assert output_file_path.exists()
+        assert len(str(output_file_path)) > 260, (
+            f"Expected full output file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(str(output_file_path))}"
+        )
     finally:
-        shutil.rmtree(long_root_path)
+        shutil.rmtree(WINDOWS_UNC_PATH_STRING_PREFIX + long_root_path)
