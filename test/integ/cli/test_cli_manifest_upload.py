@@ -7,13 +7,15 @@ Integ tests for the CLI manifest upload commands.
 import math
 import os
 from pathlib import Path
-import sys
 from typing import Optional
 import boto3
 from click.testing import CliRunner
 from deadline.client.cli._groups.manifest_group import cli_manifest
 from deadline.job_attachments._aws.deadline import get_queue
-from deadline.job_attachments._utils import WINDOWS_MAX_PATH_LENGTH
+from deadline.job_attachments._utils import (
+    WINDOWS_MAX_PATH_LENGTH,
+    _is_windows_long_path_registry_enabled,
+)
 from deadline.job_attachments.api.manifest import _manifest_snapshot
 from deadline.job_attachments.models import ManifestSnapshot
 import pytest
@@ -147,8 +149,8 @@ class TestManifestUpload:
         s3_client.delete_object(Bucket=s3_bucket, Key=manifest_s3_path)
 
     @pytest.mark.skipif(
-        sys.platform != "win32",
-        reason="This test is related to Windows file path length limit, skipping this if os not Windows",
+        _is_windows_long_path_registry_enabled(),
+        reason="This test is related to Windows file path length limit, skipping this if os not Windows or if the long path registry is enabled",
     )
     def test_manifest_upload_over_windows_path_limit(self, tmp_path):
         """
