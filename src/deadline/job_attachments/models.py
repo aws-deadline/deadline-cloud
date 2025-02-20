@@ -134,6 +134,12 @@ class StorageProfileOperatingSystemFamily(str, Enum):
         return None
 
 
+class AssetType(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+    ALL = "all"
+
+
 class PathFormat(str, Enum):
     WINDOWS = "windows"
     POSIX = "posix"

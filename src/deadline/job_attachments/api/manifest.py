@@ -40,6 +40,7 @@ from deadline.job_attachments.models import (
     ManifestSnapshot,
     ManifestMerge,
     default_glob_all,
+    AssetType,
 )
 from deadline.job_attachments._utils import _get_long_path_compatible_path
 from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
@@ -340,6 +341,7 @@ def _manifest_download(
     job_id: str,
     boto3_session: boto3.Session,
     step_id: Optional[str] = None,
+    asset_type: AssetType = AssetType.ALL,
     logger: ClickLogger = ClickLogger(False),
 ) -> ManifestDownloadResponse:
     """
@@ -351,6 +353,7 @@ def _manifest_download(
     job_id: Job Id to download.
     boto_session: Boto3 session.
     step_id: Optional[str]: Optional, download manifest for a step
+    asset_type: Which asset manifests should be downloaded for given job (& optionally step), options are Input, Output, All. Default behaviour is All.
     logger: Click Logger instance to print to CLI as text or JSON.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
@@ -384,6 +387,14 @@ def _manifest_download(
     # Utility function to build up manifests by root.
     manifests_by_root: Dict[str, List[BaseAssetManifest]] = dict()
 
+    # Set the values of download input & output as per selected asset types in the api request
+    download_input: bool = (
+        True if asset_type is None or asset_type in (AssetType.INPUT, AssetType.ALL) else False
+    )
+    download_output: bool = (
+        True if asset_type is None or asset_type in (AssetType.OUTPUT, AssetType.ALL) else False
+    )
+
     def add_manifest_by_root(
         manifests_by_root: Dict[str, list], root: str, manifest: BaseAssetManifest
     ):
@@ -391,62 +402,105 @@ def _manifest_download(
             manifests_by_root[root] = []
         manifests_by_root[root].append(manifest)
 
-    # Get input_manifest_paths from Deadline GetJob API
+    # Get the job from deadline api
     job: dict = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
-    attachments: dict = job["attachments"] if "attachments" in job else {}
-    input_manifest_paths: List[Tuple[str, str]] = [
-        (manifest.get("inputManifestPath", ""), manifest["rootPath"])
-        for manifest in attachments["manifests"]
-    ]
 
-    # Download each input_manifest_path
-    for input_manifest_path, root_path in input_manifest_paths:
-        asset_manifest: BaseAssetManifest = get_manifest_from_s3(
-            manifest_key=(s3_prefix / input_manifest_path).as_posix(),
-            s3_bucket=queue_s3_settings.s3BucketName,
-            session=queue_role_session,
-        )
-        if asset_manifest is not None:
-            logger.echo(f"Downloaded input manifest for root: {root_path}")
-            add_manifest_by_root(
-                manifests_by_root=manifests_by_root, root=root_path, manifest=asset_manifest
+    # If input manifests need to be downloaded
+    if download_input:
+        logger.echo(f"Downloading input manifests for job: {job_id}")
+
+        # Get input_manifest_paths from Deadline GetJob API
+        attachments: dict = job["attachments"] if "attachments" in job else {}
+        input_manifest_paths: List[Tuple[str, str]] = [
+            (manifest.get("inputManifestPath", ""), manifest["rootPath"])
+            for manifest in attachments["manifests"]
+        ]
+
+        # Download each input_manifest_path
+        for input_manifest_path, root_path in input_manifest_paths:
+            asset_manifest: BaseAssetManifest = get_manifest_from_s3(
+                manifest_key=(s3_prefix / input_manifest_path).as_posix(),
+                s3_bucket=queue_s3_settings.s3BucketName,
+                session=queue_role_session,
             )
-
-    # Now handle step-step dependencies
-    if step_id is not None:
-        # Get Step-Step dependencies.
-        nextToken = ""
-        step_dep_response = deadline.list_step_dependencies(
-            farmId=farm_id,
-            queueId=queue_id,
-            jobId=job_id,
-            stepId=step_id,
-            nextToken=nextToken,
-        )
-        for dependent_step in step_dep_response["dependencies"]:
-            logger.echo(f"Found Step-Step dependency. {dependent_step['stepId']}")
-
-            # Get manifests for the step-step dependency
-            step_manifests_by_root: Dict[str, List[BaseAssetManifest]] = (
-                get_output_manifests_by_asset_root(
-                    s3_settings=queue_s3_settings,
-                    farm_id=farm_id,
-                    queue_id=queue_id,
-                    job_id=job_id,
-                    step_id=dependent_step["stepId"],
-                    session=queue_role_session,
+            if asset_manifest is not None:
+                logger.echo(f"Found input manifest for root: {root_path}")
+                add_manifest_by_root(
+                    manifests_by_root=manifests_by_root, root=root_path, manifest=asset_manifest
                 )
+
+        # Now handle step-step dependencies
+        if step_id is not None:
+            logger.echo(f"Finding step-step dependency manifests for step: {step_id}")
+
+            # Get Step-Step dependencies.
+            nextToken = ""
+            step_dep_response = deadline.list_step_dependencies(
+                farmId=farm_id,
+                queueId=queue_id,
+                jobId=job_id,
+                stepId=step_id,
+                nextToken=nextToken,
             )
-            # Merge all manifests by root.
-            for root in step_manifests_by_root.keys():
-                for manifest in step_manifests_by_root[root]:
-                    logger.echo(f"Found step-step output manifest for root: {root}")
-                    add_manifest_by_root(
-                        manifests_by_root=manifests_by_root, root=root, manifest=manifest
+            for dependent_step in step_dep_response["dependencies"]:
+                logger.echo(f"Found Step-Step dependency. {dependent_step['stepId']}")
+
+                # Get manifests for the step-step dependency
+                step_manifests_by_root: Dict[str, List[BaseAssetManifest]] = (
+                    get_output_manifests_by_asset_root(
+                        s3_settings=queue_s3_settings,
+                        farm_id=farm_id,
+                        queue_id=queue_id,
+                        job_id=job_id,
+                        step_id=dependent_step["stepId"],
+                        session=queue_role_session,
                     )
+                )
+                # Merge all manifests by root.
+                for root in step_manifests_by_root.keys():
+                    for manifest in step_manifests_by_root[root]:
+                        logger.echo(f"Found step-step output manifest for root: {root}")
+                        add_manifest_by_root(
+                            manifests_by_root=manifests_by_root, root=root, manifest=manifest
+                        )
+
+    # If output manifests need to be downloaded
+    if download_output:
+        output_manifests_by_root: Dict[str, List[BaseAssetManifest]]
+        if step_id is not None:
+            logger.echo(f"Downloading output manifests step: {step_id} of job: {job_id}")
+            # Only get the output manifests for selected step
+            output_manifests_by_root = get_output_manifests_by_asset_root(
+                s3_settings=queue_s3_settings,
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                step_id=step_id,
+                session=queue_role_session,
+            )
+
+        else:
+            logger.echo(f"Downloading output manifests for job: {job_id}")
+            # Get output manifests for all steps of the job
+            output_manifests_by_root = get_output_manifests_by_asset_root(
+                s3_settings=queue_s3_settings,
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                session=queue_role_session,
+            )
+
+        # Merge all output manifests by root.
+        for root in output_manifests_by_root.keys():
+            for manifest in output_manifests_by_root[root]:
+                logger.echo(f"Found output manifest for root: {root}")
+                add_manifest_by_root(
+                    manifests_by_root=manifests_by_root, root=root, manifest=manifest
+                )
 
     # Finally, merge all manifest paths to create unified manifests.
     # TODO: Filter outputs by path
+
     merged_manifests: Dict[str, BaseAssetManifest] = {}
     for root in manifests_by_root.keys():
         merged_manifest = merge_asset_manifests(manifests_by_root[root])
