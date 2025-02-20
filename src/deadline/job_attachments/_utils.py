@@ -10,7 +10,6 @@ from typing import Any, Callable, Optional, Tuple, Type, Union
 import uuid
 import sys
 
-
 __all__ = [
     "_join_s3_paths",
     "_generate_random_guid",
@@ -20,6 +19,25 @@ __all__ = [
     "_get_bucket_and_object_key",
     "_is_relative_to",
 ]
+
+
+TEMP_DOWNLOAD_ADDED_CHARS_LENGTH = 9
+"""
+Add 9 to path length to account for .Hex value when file is in the middle of downloading in windows.
+e.g. test.txt when downloaded becomes test.txt.H4SD9Ddj
+"""
+
+WINDOWS_MAX_PATH_LENGTH = 260
+"""
+Windows Max path length limit of 260.
+https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+"""
+
+WINDOWS_UNC_PATH_STRING_PREFIX = "\\\\?\\"
+"""
+When this is prepended to any path on Windows, 
+it becomes a UNC path and is allowed to go over the 260 max path length limit.
+"""
 
 
 def _join_s3_paths(root: str, *args: str):
@@ -103,6 +121,32 @@ def _is_windows_long_path_registry_enabled() -> bool:
     ntdll.RtlAreLongPathsEnabled.argtypes = ()
 
     return bool(ntdll.RtlAreLongPathsEnabled())
+
+
+def _get_long_path_compatible_path(original_path: Union[str, Path]) -> Path:
+    """
+    Given a Path or string representing a path,
+    make it long path compatible if needed on Windows and return the Path object
+    https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+
+    :param original_path: Original unmodified path/string representing an absolute path.
+    show
+    :param show_long_path_warning: Whether to show a warning to the user that the resulting path is in a long path.
+    :return: A Path object representing the long path compatible path.
+    """
+
+    original_path_string = str(original_path)
+    if sys.platform != "win32":
+        return Path(original_path_string)
+
+    if (
+        len(original_path_string) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
+        and not original_path_string.startswith(WINDOWS_UNC_PATH_STRING_PREFIX)
+        and not _is_windows_long_path_registry_enabled()
+    ):
+        # Prepend \\?\ to the file name to treat it as an UNC path
+        return Path(WINDOWS_UNC_PATH_STRING_PREFIX + original_path_string)
+    return Path(original_path_string)
 
 
 def _retry(
