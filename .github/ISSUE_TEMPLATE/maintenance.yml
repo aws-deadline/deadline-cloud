@@ -1,7 +1,7 @@
 name: "🛠️ Maintenance"
 description: Some type of improvement
 title: "Maintenance: (short description of the issue)"
-labels: ["needs triage"]
+labels: ["maintenance", "needs triage"]
 body:
   - type: textarea
     id: description
