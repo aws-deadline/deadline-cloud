@@ -36,6 +36,7 @@ from deadline.job_attachments.models import (
     S3_MANIFEST_FOLDER_NAME,
     JobAttachmentS3Settings,
     ManifestDiff,
+    AssetType,
 )
 
 from ...exceptions import NonValidInputError
@@ -248,6 +249,18 @@ def manifest_diff(
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
+    "--asset-type",
+    default=AssetType.ALL.value,
+    help="Which asset type to download:\n"
+    "INPUT means download only input asset files for given job/step.\n"
+    "OUTPUT means download only output asset files for given job/step.\n"
+    "ALL (default) means download all input & output asset files for given job/step.\n",
+    type=click.Choice(
+        [e.value for e in AssetType],
+        case_sensitive=False,
+    ),
+)
+@click.option(
     "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting. "
 )
 @_handle_error
@@ -255,11 +268,12 @@ def manifest_download(
     download_dir: str,
     job_id: str,
     step_id: str,
+    asset_type: str,
     json: bool,
     **args,
 ):
     """
-    Downloads input manifest of previously submitted job.
+    Downloads input/output manifests of a submitted job as per provided asset_type
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -280,6 +294,7 @@ def manifest_download(
         queue_id=queue_id,
         job_id=job_id,
         step_id=step_id,
+        asset_type=AssetType(asset_type),
         boto3_session=boto3_session,
         logger=logger,
     )
