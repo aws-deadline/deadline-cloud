@@ -6,7 +6,8 @@ A UI Widget containing the timeout settings widget.
 
 from __future__ import annotations
 
-from typing import List, Any
+from typing import Dict
+from datetime import timedelta
 
 from qtpy.QtWidgets import (  # type: ignore
     QFormLayout,
@@ -17,13 +18,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QGridLayout,
     QWidget,
 )
-
-from ...job_bundle.timeouts import (
-    TimeoutEntry,
-    SECONDS_IN_A_DAY,
-    SECONDS_IN_A_MINUTE,
-    SECONDS_IN_AN_HOUR,
-)
+from ..dataclasses.timeouts import TimeoutEntries
 
 # UI Constants
 WARNING_ICON = "⚠️"
@@ -32,7 +27,7 @@ ERROR_BG_COLOR = "#FFE4E1"  # Light red
 WARNING_BG_COLOR = "#FFF3CD"  # Light yellow
 
 
-class TimeoutRow:
+class TimeoutEntryWidget(QWidget):
     """
     A widget representing a single timeout row with checkbox, status icon, and time input fields.
 
@@ -40,7 +35,9 @@ class TimeoutRow:
     checkbox state, validation indicators, and time value calculations.
     """
 
-    def __init__(self, label: str, tooltip: str, parent: QWidget):
+    def __init__(self, label: str, tooltip: str):
+        super().__init__()
+
         self.checkbox = QCheckBox(label)
         self.checkbox.setChecked(True)
         self.checkbox.setToolTip(tooltip)
@@ -48,34 +45,32 @@ class TimeoutRow:
         self.status_icon = QLabel()
         self.status_icon.setFixedSize(16, 16)
 
-        self.days_box = QSpinBox(parent, minimum=0, maximum=365)
+        self.days_box = QSpinBox(self, minimum=0, maximum=365)
         self.days_box.setSuffix(" days")
+        self.days_box.setFixedWidth(90)
 
-        self.hours_box = QSpinBox(parent, minimum=0, maximum=23)
+        self.hours_box = QSpinBox(self, minimum=0, maximum=23)
         self.hours_box.setSuffix(" hours")
+        self.hours_box.setFixedWidth(90)
 
-        self.minutes_box = QSpinBox(parent, minimum=0, maximum=59)
+        self.minutes_box = QSpinBox(self, minimum=0, maximum=59)
         self.minutes_box.setSuffix(" minutes")
+        self.minutes_box.setFixedWidth(90)
 
-    def add_to_layout(self, layout: QGridLayout, row: int):
+        self._build_ui()
+
+    def _build_ui(self):
         """
-        Adds all components of this timeout row to the specified grid layout.
-
-        Args:
-            layout: The QGridLayout to add the components to
-            row: The row number in the grid where components should be placed
+        Builds the internal layout of the timeout row.
         """
+        layout = QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        container = QWidget()
-        container_layout = QGridLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.addWidget(self.checkbox, 0, 0)
-        container_layout.addWidget(self.status_icon, 0, 1)
-
-        layout.addWidget(container, row, 0)
-        layout.addWidget(self.days_box, row, 1)
-        layout.addWidget(self.hours_box, row, 2)
-        layout.addWidget(self.minutes_box, row, 3)
+        layout.addWidget(self.checkbox, 0, 0)
+        layout.addWidget(self.status_icon, 0, 1)
+        layout.addWidget(self.days_box, 0, 2)
+        layout.addWidget(self.hours_box, 0, 3)
+        layout.addWidget(self.minutes_box, 0, 4)
 
     def set_enabled(self, enabled: bool):
         """
@@ -95,9 +90,13 @@ class TimeoutRow:
         Args:
             seconds: Total number of seconds to be distributed across time fields
         """
-        days = seconds // SECONDS_IN_A_DAY
-        hours = (seconds % SECONDS_IN_A_DAY) // SECONDS_IN_AN_HOUR
-        minutes = (seconds % SECONDS_IN_AN_HOUR) // SECONDS_IN_A_MINUTE
+        days = seconds // int(timedelta(days=1).total_seconds())
+        hours = (seconds % int(timedelta(days=1).total_seconds())) // int(
+            timedelta(hours=1).total_seconds()
+        )
+        minutes = (seconds % int(timedelta(hours=1).total_seconds())) // int(
+            timedelta(minutes=1).total_seconds()
+        )
         self.days_box.setValue(days)
         self.hours_box.setValue(hours)
         self.minutes_box.setValue(minutes)
@@ -110,9 +109,9 @@ class TimeoutRow:
             int: Total number of seconds represented by the current time values
         """
         return (
-            self.days_box.value() * SECONDS_IN_A_DAY
-            + self.hours_box.value() * SECONDS_IN_AN_HOUR
-            + self.minutes_box.value() * SECONDS_IN_A_MINUTE
+            self.days_box.value() * int(timedelta(days=1).total_seconds())
+            + self.hours_box.value() * int(timedelta(hours=1).total_seconds())
+            + self.minutes_box.value() * int(timedelta(minutes=1).total_seconds())
         )
 
     def update_suffix(self):
@@ -135,10 +134,10 @@ class TimeoutRow:
 
     def set_error_style(self, is_error: bool):
         """
-        Applies or removes error styling from the time input fields.
+        Sets the status icon (warning or error) next to the checkbox.
 
         Args:
-            is_error: If True, applies error styling; if False, removes it
+            status: The icon to display (WARNING_ICON, ERROR_ICON, or empty string)
         """
         style = f"QSpinBox {{ background-color: {ERROR_BG_COLOR}; }}" if is_error else ""
         for box in [self.days_box, self.hours_box, self.minutes_box]:
@@ -166,18 +165,15 @@ class TimeoutRow:
 class JobTimeoutsWidget(QGroupBox):
     """
     UI element to hold timeout settings of the submission
-
-    The settings object should be a dataclass with:
-      - `timeouts: List[TimeoutEntry]`. The timeouts to be applied for the job.
     """
 
-    def __init__(self, *, settings: Any, parent=None):
+    def __init__(self, *, timeouts: TimeoutEntries, parent=None):
         super().__init__("Timeouts", parent=parent)
-        self.timeout_rows: List[TimeoutRow] = []
-        self._build_ui(settings.timeouts)
-        self.refresh_ui(settings.timeouts)
+        self.timeout_rows: Dict[str, TimeoutEntryWidget] = {}
+        self._build_ui(timeouts)
+        self.refresh_ui(timeouts)
 
-    def _build_ui(self, entries: List[TimeoutEntry]):
+    def _build_ui(self, timeouts: TimeoutEntries):
         """
         Constructs the complete UI layout with all timeout rows and message labels.
 
@@ -190,17 +186,17 @@ class JobTimeoutsWidget(QGroupBox):
         self.timeouts_box = QWidget()
         timeouts_layout = QGridLayout(self.timeouts_box)
 
-        for index, entry in enumerate(entries):
-            timeout_row = TimeoutRow(entry.label, entry.tooltip, self)
-            timeout_row.add_to_layout(timeouts_layout, index)
-            self.timeout_rows.append(timeout_row)
+        for index, (label, entry) in enumerate(timeouts.entries.items()):
+            timeout_row = TimeoutEntryWidget(label, entry.tooltip)
+            timeouts_layout.addWidget(timeout_row, index, 0, 1, 4)
+            self.timeout_rows[label] = timeout_row
             self._hookup_change_callback(timeout_row)
 
         self.error_label = self._create_message_label(ERROR_BG_COLOR)
         self.warning_label = self._create_message_label(WARNING_BG_COLOR)
 
-        timeouts_layout.addWidget(self.error_label, len(entries), 0, 1, 4)
-        timeouts_layout.addWidget(self.warning_label, len(entries) + 1, 0, 1, 4)
+        timeouts_layout.addWidget(self.error_label, len(timeouts.entries), 0, 1, 4)
+        timeouts_layout.addWidget(self.warning_label, len(timeouts.entries) + 1, 0, 1, 4)
 
         self.layout.addRow(self.timeouts_box)
 
@@ -214,7 +210,6 @@ class JobTimeoutsWidget(QGroupBox):
         Returns:
             QLabel: A configured label with appropriate styling
         """
-
         label = QLabel()
         label.setStyleSheet(f"""
             QLabel {{ 
@@ -227,7 +222,7 @@ class JobTimeoutsWidget(QGroupBox):
         label.setWordWrap(True)
         return label
 
-    def _hookup_change_callback(self, timeout_row: TimeoutRow):
+    def _hookup_change_callback(self, timeout_row: TimeoutEntryWidget):
         """
         Connects UI element signals to update handlers for a timeout row.
 
@@ -251,7 +246,8 @@ class JobTimeoutsWidget(QGroupBox):
         Updates the error message label based on validation of all timeout rows.
         """
         any_zero = any(
-            row.get_timeout_seconds() == 0 and row.checkbox.isChecked() for row in self.timeout_rows
+            row.get_timeout_seconds() == 0 and row.checkbox.isChecked()
+            for row in self.timeout_rows.values()
         )
         self.error_label.setText("Error: Timeout cannot be set to zero." if any_zero else "")
         self.error_label.setVisible(any_zero)
@@ -260,49 +256,43 @@ class JobTimeoutsWidget(QGroupBox):
         """
         Updates the warning message label based on the state of all timeout rows.
         """
-        any_disabled = any(not row.checkbox.isChecked() for row in self.timeout_rows)
+        any_deactivated = any(not row.checkbox.isChecked() for row in self.timeout_rows.values())
         warning_text = (
             "Warning: Without a specified timeout, tasks may run indefinitely if issues occur, "
             "or they will use OpenJD's default timeouts if they exist."
-            if any_disabled
+            if any_deactivated
             else ""
         )
         self.warning_label.setText(warning_text)
-        self.warning_label.setVisible(any_disabled)
+        self.warning_label.setVisible(any_deactivated)
 
     def _update_row_states(self):
         """
         Updates the state of all timeout rows.
         """
-        for row in self.timeout_rows:
+        for row in self.timeout_rows.values():
             row.update_state()
 
-    def refresh_ui(self, entries: List[TimeoutEntry]):
+    def refresh_ui(self, timeouts: TimeoutEntries):
         """
         Refreshes all UI elements to reflect the current timeout settings.
 
         Args:
             entries: List of TimeoutEntry objects containing the current settings
         """
-        for index in range(len(entries)):
-            current_row = self.timeout_rows[index]
-            current_entry = entries[index]
-
-            current_row.checkbox.setChecked(current_entry.is_activated)
-            current_row.set_timeout(current_entry.seconds)
-
+        for label, entry in timeouts.entries.items():
+            if label in self.timeout_rows:
+                row = self.timeout_rows[label]
+                row.checkbox.setChecked(entry.is_activated)
+                row.set_timeout(entry.seconds)
         self._update_ui_state()
 
-    def update_settings(self, settings):
+    def update_settings(self, settings: TimeoutEntries):
         """
         Updates the settings object with the current values from the UI.
-
-        Args:
-            settings: Settings object to update with current timeout values
         """
-        for index in range(len(settings.timeouts)):
-            current_row = self.timeout_rows[index]
-            current_entry = settings.timeouts[index]
-
-            current_entry.is_activated = current_row.checkbox.isChecked()
-            current_entry.seconds = current_row.get_timeout_seconds()
+        for label, row in self.timeout_rows.items():
+            if label in settings.entries:
+                entry = settings.entries[label]
+                entry.is_activated = row.checkbox.isChecked()
+                entry.seconds = row.get_timeout_seconds()
