@@ -18,7 +18,8 @@ from qtpy.QtWidgets import (  # type: ignore
     QGridLayout,
     QWidget,
 )
-from ..dataclasses.timeouts import TimeoutEntries
+from qtpy.QtCore import Signal
+from ..dataclasses.timeouts import TimeoutTableEntries
 
 # UI Constants
 WARNING_ICON = "⚠️"
@@ -34,6 +35,9 @@ class TimeoutEntryWidget(QWidget):
     Contains all the UI elements and logic for managing a single timeout entry including
     checkbox state, validation indicators, and time value calculations.
     """
+
+    # Signal to indicate any change in the widget
+    changed = Signal()
 
     def __init__(self, label: str, tooltip: str):
         super().__init__()
@@ -58,6 +62,7 @@ class TimeoutEntryWidget(QWidget):
         self.minutes_box.setFixedWidth(90)
 
         self._build_ui()
+        self._connect_signals()
 
     def _build_ui(self):
         """
@@ -71,6 +76,23 @@ class TimeoutEntryWidget(QWidget):
         layout.addWidget(self.days_box, 0, 2)
         layout.addWidget(self.hours_box, 0, 3)
         layout.addWidget(self.minutes_box, 0, 4)
+
+    def _connect_signals(self):
+        """
+        Connects all internal widgets to emit the changed signal.
+        """
+        self.checkbox.clicked.connect(self._on_change)
+        self.days_box.valueChanged.connect(self._on_change)
+        self.hours_box.valueChanged.connect(self._on_change)
+        self.minutes_box.valueChanged.connect(self._on_change)
+
+    def _on_change(self):
+        """
+        Handler for any changes in the widget's state.
+        Updates the widget state and emits the changed signal.
+        """
+        self.update_state()
+        self.changed.emit()
 
     def set_enabled(self, enabled: bool):
         """
@@ -134,10 +156,10 @@ class TimeoutEntryWidget(QWidget):
 
     def set_error_style(self, is_error: bool):
         """
-        Sets the status icon (warning or error) next to the checkbox.
+        Sets the error styling for the time input fields.
 
         Args:
-            status: The icon to display (WARNING_ICON, ERROR_ICON, or empty string)
+            is_error: If True, applies error styling; if False, removes it
         """
         style = f"QSpinBox {{ background-color: {ERROR_BG_COLOR}; }}" if is_error else ""
         for box in [self.days_box, self.hours_box, self.minutes_box]:
@@ -162,18 +184,35 @@ class TimeoutEntryWidget(QWidget):
         self.update_suffix()
 
 
-class JobTimeoutsWidget(QGroupBox):
+class TimeoutTableWidget(QGroupBox):
     """
-    UI element to hold timeout settings of the submission
+    A widget for managing multiple timeout settings in a tabular format.
+
+    This widget provides a user interface for configuring multiple timeout entries,
+    each consisting of a checkbox for activation/deactivation and time input fields
+    for days, hours, and minutes. It includes validation, warning indicators, and
+    error messages for invalid configurations.
+
+    Features:
+    - Individual timeout rows with checkbox activation
+    - Time input fields for days, hours, and minutes
+    - Visual indicators for warnings and errors
+    - Real-time validation and feedback
+    - Automatic suffix updates (singular/plural)
+    - Comprehensive error messaging
+
+    Args:
+        timeouts (TimeoutTableEntries): Configuration object containing timeout entries
+        parent (QWidget, optional): Parent widget. Defaults to None.
     """
 
-    def __init__(self, *, timeouts: TimeoutEntries, parent=None):
+    def __init__(self, *, timeouts: TimeoutTableEntries, parent=None):
         super().__init__("Timeouts", parent=parent)
         self.timeout_rows: Dict[str, TimeoutEntryWidget] = {}
         self._build_ui(timeouts)
         self.refresh_ui(timeouts)
 
-    def _build_ui(self, timeouts: TimeoutEntries):
+    def _build_ui(self, timeouts: TimeoutTableEntries):
         """
         Constructs the complete UI layout with all timeout rows and message labels.
 
@@ -190,7 +229,7 @@ class JobTimeoutsWidget(QGroupBox):
             timeout_row = TimeoutEntryWidget(label, entry.tooltip)
             timeouts_layout.addWidget(timeout_row, index, 0, 1, 4)
             self.timeout_rows[label] = timeout_row
-            self._hookup_change_callback(timeout_row)
+            timeout_row.changed.connect(self._update_ui_state)
 
         self.error_label = self._create_message_label(ERROR_BG_COLOR)
         self.warning_label = self._create_message_label(WARNING_BG_COLOR)
@@ -222,24 +261,12 @@ class JobTimeoutsWidget(QGroupBox):
         label.setWordWrap(True)
         return label
 
-    def _hookup_change_callback(self, timeout_row: TimeoutEntryWidget):
-        """
-        Connects UI element signals to update handlers for a timeout row.
-
-        Args:
-            timeout_row: The TimeoutRow instance to hook up callbacks for
-        """
-        timeout_row.checkbox.clicked.connect(self._update_ui_state)
-        for spinbox in [timeout_row.days_box, timeout_row.hours_box, timeout_row.minutes_box]:
-            spinbox.valueChanged.connect(self._update_ui_state)
-
     def _update_ui_state(self):
         """
-        Updates the complete UI state including all timeout rows and message labels.
+        Updates the UI state for error and warning messages.
         """
         self._update_error_states()
         self._update_warning_states()
-        self._update_row_states()
 
     def _update_error_states(self):
         """
@@ -266,14 +293,7 @@ class JobTimeoutsWidget(QGroupBox):
         self.warning_label.setText(warning_text)
         self.warning_label.setVisible(any_deactivated)
 
-    def _update_row_states(self):
-        """
-        Updates the state of all timeout rows.
-        """
-        for row in self.timeout_rows.values():
-            row.update_state()
-
-    def refresh_ui(self, timeouts: TimeoutEntries):
+    def refresh_ui(self, timeouts: TimeoutTableEntries):
         """
         Refreshes all UI elements to reflect the current timeout settings.
 
@@ -287,12 +307,12 @@ class JobTimeoutsWidget(QGroupBox):
                 row.set_timeout(entry.seconds)
         self._update_ui_state()
 
-    def update_settings(self, settings: TimeoutEntries):
+    def update_settings(self, timeouts: TimeoutTableEntries):
         """
-        Updates the settings object with the current values from the UI.
+        Updates the timeouts with the current values from the UI.
         """
         for label, row in self.timeout_rows.items():
-            if label in settings.entries:
-                entry = settings.entries[label]
+            if label in timeouts.entries:
+                entry = timeouts.entries[label]
                 entry.is_activated = row.checkbox.isChecked()
                 entry.seconds = row.get_timeout_seconds()

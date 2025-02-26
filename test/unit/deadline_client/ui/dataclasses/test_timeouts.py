@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import pytest
-from deadline.client.ui.dataclasses.timeouts import TimeoutEntry, TimeoutEntries
+from deadline.client.ui.dataclasses.timeouts import TimeoutEntry, TimeoutTableEntries
 from datetime import timedelta
 from deadline.client.exceptions import NonValidInputError
 
@@ -66,19 +66,19 @@ def test_empty_fields(tooltip, error_message):
 
 
 @pytest.fixture
-def valid_timeout_entries() -> TimeoutEntries:
-    """Fixture providing a TimeoutEntries instance with valid entries."""
+def valid_timeout_entries() -> TimeoutTableEntries:
+    """Fixture providing a TimeoutTableEntries instance with valid entries."""
     entries = {
         "entry1": TimeoutEntry(tooltip="First timeout", is_activated=True, seconds=3600),
         "entry2": TimeoutEntry(tooltip="Second timeout", is_activated=False, seconds=7200),
     }
-    return TimeoutEntries(entries=entries)
+    return TimeoutTableEntries(entries=entries)
 
 
-class TestTimeoutEntries:
-    def test_to_dict(self, valid_timeout_entries):
-        """Test conversion of TimeoutEntries to dictionary format, including value checks."""
-        result = valid_timeout_entries.to_dict()
+class TestTimeoutTableEntries:
+    def test_to_sticky_settings_dict(self, valid_timeout_entries):
+        """Test conversion of TimeoutTableEntries to dictionary format, including value checks."""
+        result = valid_timeout_entries.to_sticky_settings_dict()
 
         assert isinstance(result, dict)
         assert len(result) == 2
@@ -91,13 +91,13 @@ class TestTimeoutEntries:
         assert "entry2" in result
         assert result["entry2"] == {"is_activated": False, "seconds": 7200}
 
-    def test_update_from_dict(self, valid_timeout_entries):
-        """Test updating TimeoutEntries from dictionary data."""
+    def test_update_from_sticky_settings(self, valid_timeout_entries):
+        """Test updating TimeoutTableEntries from dictionary data."""
         update_data = {
             "entry1": {"is_activated": False, "seconds": 1800},
         }
 
-        valid_timeout_entries.update_from_dict(update_data)
+        valid_timeout_entries.update_from_sticky_settings(update_data)
 
         # Check entry1 updates
         assert valid_timeout_entries.entries["entry1"].is_activated is False
@@ -107,12 +107,12 @@ class TestTimeoutEntries:
         assert valid_timeout_entries.entries["entry2"].is_activated is False  # unchanged
         assert valid_timeout_entries.entries["entry2"].seconds == 7200
 
-    def test_update_from_dict_with_nonexistent_entry(self, valid_timeout_entries):
+    def test_update_from_sticky_settings_with_nonexistent_entry(self, valid_timeout_entries):
         """Test updating with data for non-existent entries."""
         update_data = {"nonexistent_entry": {"is_activated": False, "seconds": 1800}}
 
         # Should not raise an error, should simply ignore non-existent entries
-        valid_timeout_entries.update_from_dict(update_data)
+        valid_timeout_entries.update_from_sticky_settings(update_data)
         assert "nonexistent_entry" not in valid_timeout_entries.entries
 
     def test_validate_entries_success(self, valid_timeout_entries):
@@ -141,11 +141,10 @@ class TestTimeoutEntries:
         assert "entry1" in str(exc_info.value)
         assert "entry2" not in str(exc_info.value)
 
-        # Check that both entries are present.
         valid_timeout_entries.entries["entry2"].is_activated = True
         with pytest.raises(NonValidInputError) as exc_info:
             valid_timeout_entries.validate_entries()
 
-        # Check that only entry1 is in error.
+        # Check that both entries are in error.
         assert "entry1" in str(exc_info.value)
         assert "entry2" in str(exc_info.value)
