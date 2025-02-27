@@ -34,7 +34,7 @@ from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .. import block_signals
 from ...config import get_setting
 from ...config.config_file import str2bool
-from ...exceptions import UserInitiatedCancel
+from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.submission import AssetReferences
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
@@ -388,10 +388,14 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
             # Close the submitter window to signal the submission is done
             self.close()
+
+        except NonValidInputError as nvie:
+            QMessageBox.critical(self, "Non valid inputs detected", str(nvie))
+
         except Exception as exc:
             logger.exception("Error saving bundle")
             message = str(exc)
-            QMessageBox.warning(self, f"{self.submitter_name} job submission", message)  # type: ignore[call-arg]
+            QMessageBox.critical(self, f"{self.submitter_name} job submission", message)  # type: ignore[call-arg]
 
     def on_submit(self):
         """
@@ -496,6 +500,9 @@ class SubmitJobToDeadlineDialog(QDialog):
             logger.info("Canceling submission.")
             QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))
             job_progress_dialog.close()
+        except NonValidInputError as nvie:
+            QMessageBox.critical(self, "Non valid inputs detected", str(nvie))
+            job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
             api.get_deadline_cloud_library_telemetry_client().record_error(
@@ -503,7 +510,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
                 from_gui=True,
             )
-            QMessageBox.warning(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
+            QMessageBox.critical(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
             job_progress_dialog.close()
 
         if self.create_job_response:
