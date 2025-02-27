@@ -105,20 +105,24 @@ class TimeoutEntryWidget(QWidget):
         self.hours_box.setEnabled(enabled)
         self.minutes_box.setEnabled(enabled)
 
-    def set_timeout(self, seconds: int):
+    def set_timeout(self, total_seconds: int) -> None:
         """
         Sets the timeout value by converting seconds into days, hours, and minutes.
 
         Args:
-            seconds: Total number of seconds to be distributed across time fields
+            total_seconds: Total number of seconds to be distributed across time fields
         """
-        days = seconds // int(timedelta(days=1).total_seconds())
-        hours = (seconds % int(timedelta(days=1).total_seconds())) // int(
-            timedelta(hours=1).total_seconds()
-        )
-        minutes = (seconds % int(timedelta(hours=1).total_seconds())) // int(
-            timedelta(minutes=1).total_seconds()
-        )
+        td = timedelta(seconds=total_seconds)
+
+        # Extract days from timedelta (1 day = 86400 seconds)
+        days = td.days
+
+        # Extract hours from remaining seconds (td.seconds is always < 86400)
+        hours = td.seconds // 3600  # 3600 = 60 minutes * 60 seconds
+
+        # Extract minutes from remaining seconds after hours are removed
+        minutes = (td.seconds // 60) % 60
+
         self.days_box.setValue(days)
         self.hours_box.setValue(hours)
         self.minutes_box.setValue(minutes)
@@ -130,10 +134,12 @@ class TimeoutEntryWidget(QWidget):
         Returns:
             int: Total number of seconds represented by the current time values
         """
-        return (
-            self.days_box.value() * int(timedelta(days=1).total_seconds())
-            + self.hours_box.value() * int(timedelta(hours=1).total_seconds())
-            + self.minutes_box.value() * int(timedelta(minutes=1).total_seconds())
+        return int(
+            timedelta(
+                days=self.days_box.value(),
+                hours=self.hours_box.value(),
+                minutes=self.minutes_box.value(),
+            ).total_seconds()
         )
 
     def update_suffix(self):
