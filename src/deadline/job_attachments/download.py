@@ -74,6 +74,7 @@ from ._utils import (
     _is_relative_to,
     _join_s3_paths,
 )
+from threading import Lock
 
 download_logger = getLogger("deadline.job_attachments.download")
 
@@ -312,6 +313,34 @@ def get_job_input_output_paths_by_asset_root(
     return combined_path_groups
 
 
+def _get_new_copy_file_path(
+    local_file_name: Path,
+    collision_lock: Lock,
+    collision_file_dict: DefaultDict[str, int],
+) -> Path:
+    with collision_lock:
+        file_str: str = str(local_file_name)
+        num: int = collision_file_dict[file_str]
+        new_file_name = local_file_name
+
+        # Iterate until we find a number we don't conflict with
+        while True:
+            try:
+                # Handle multi-process locks with creating and/or opening file to verify if it exists
+                with open(new_file_name, "x"):
+                    break
+            # If file exists we go here and increment num to find a unique path
+            except FileExistsError:
+                num += 1
+                new_file_name = local_file_name.parent.joinpath(
+                    f"{local_file_name.stem} ({num}){local_file_name.suffix}"
+                )
+
+        collision_file_dict[file_str] = num
+        local_file_name = new_file_name
+    return local_file_name
+
+
 def download_files_in_directory(
     s3_settings: JobAttachmentS3Settings,
     attachments: Attachments,
@@ -384,6 +413,8 @@ def download_file(
     file: RelativeFilePath,
     hash_algorithm: HashAlgorithm,
     local_download_dir: str,
+    collision_lock: Lock,
+    collision_file_dict: DefaultDict[str, int],
     s3_bucket: str,
     cas_prefix: Optional[str],
     s3_client: Optional[BaseClient] = None,
@@ -410,7 +441,7 @@ def download_file(
     file_bytes = file.size
 
     # Python will handle the path separator '/' correctly on every platform.
-    local_file_name: Path = _get_long_path_compatible_path(
+    local_file_path: Path = _get_long_path_compatible_path(
         Path(local_download_dir).joinpath(file.path)
     )
 
@@ -421,24 +452,21 @@ def download_file(
     )
 
     # If the file name already exists, resolve the conflict based on the file_conflict_resolution
-    if local_file_name.is_file():
+    if local_file_path.is_file():
         if file_conflict_resolution == FileConflictResolution.SKIP:
             return (file_bytes, None)
         elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
             pass
         elif file_conflict_resolution == FileConflictResolution.CREATE_COPY:
-            # This loop resolves filename conflicts by appending " (1)"
-            # to the stem of the filename until a unique name is found.
-            while local_file_name.is_file():
-                local_file_name = local_file_name.parent.joinpath(
-                    local_file_name.stem + " (1)" + local_file_name.suffix
-                )
+            local_file_path = _get_new_copy_file_path(
+                local_file_path, collision_lock, collision_file_dict
+            )
         else:
             raise ValueError(
                 f"Unknown choice for file conflict resolution: {file_conflict_resolution}"
             )
 
-    local_file_name.parent.mkdir(parents=True, exist_ok=True)
+    local_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     future: concurrent.futures.Future
 
@@ -456,7 +484,7 @@ def download_file(
     future = transfer_manager.download(
         bucket=s3_bucket,
         key=s3_key,
-        fileobj=str(local_file_name),
+        fileobj=str(local_file_path),
         extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
         subscribers=subscribers,
     )
@@ -494,7 +522,7 @@ def download_file(
                 status_code=status_code,
                 bucket_name=s3_bucket,
                 key_or_prefix=s3_key,
-                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_name)})",
+                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_path)})",
             ) from exc
 
         # TODO: Temporary to prevent breaking backwards-compatibility; if file not found, try again without hash alg postfix
@@ -504,7 +532,7 @@ def download_file(
             future = transfer_manager.download(
                 bucket=s3_bucket,
                 key=s3_key,
-                fileobj=str(local_file_name),
+                fileobj=str(local_file_path),
                 extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
                 subscribers=subscribers,
             )
@@ -528,10 +556,10 @@ def download_file(
     except Exception as e:
         raise AssetSyncError(e) from e
 
-    download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
-    os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
+    download_logger.debug(f"Downloaded {file.path} to {str(local_file_path)}")
+    os.utime(local_file_path, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
 
-    return (file_bytes, local_file_name)
+    return (file_bytes, local_file_path)
 
 
 def _download_files_parallel(
@@ -552,6 +580,8 @@ def _download_files_parallel(
     Returns a list of local paths of downloaded files.
     """
     downloaded_file_names: list[str] = []
+    collision_lock: Lock = Lock()
+    collision_file_dict: DefaultDict[str, int] = DefaultDict(int)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_download_workers) as executor:
         futures = {
@@ -560,6 +590,8 @@ def _download_files_parallel(
                 file,
                 hash_algorithm,
                 local_download_dir,
+                collision_lock,
+                collision_file_dict,
                 s3_bucket,
                 cas_prefix,
                 s3_client,
