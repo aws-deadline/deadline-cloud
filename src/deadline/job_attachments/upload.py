@@ -233,6 +233,7 @@ class S3AssetUploader:
         """
         hash_alg = manifest.get_default_hash_alg()
         manifest_bytes = manifest.encode().encode("utf-8")
+        # Converting Path to str uses OS-specific separators (\ vs /), which can produce different hashes across OS
         manifest_name_prefix = hash_data(str(source_root).encode(), hash_alg)
         manifest_name = f"{manifest_name_prefix}_{manifest_name_suffix}"
 
@@ -253,6 +254,21 @@ class S3AssetUploader:
         self._write_local_input_manifest(manifest_write_dir, manifest_name, manifest, root_dir_name)
 
         self._write_local_manifest_s3_mapping(manifest_write_dir, manifest_name, full_manifest_key)
+
+    @staticmethod
+    def _get_hashed_file_name_from_root_str(
+        manifest: BaseAssetManifest,
+        source_root: str,
+        manifest_name_suffix: str,
+    ) -> tuple[HashAlgorithm, str]:
+        """
+        Gathers metadata information of manifest to be used for writing the local manifest
+        """
+        hash_alg = manifest.get_default_hash_alg()
+        manifest_name_prefix = hash_data(source_root.encode(), hash_alg)
+        manifest_name = f"{manifest_name_prefix}_{manifest_name_suffix}"
+
+        return (hash_alg, manifest_name)
 
     @staticmethod
     def _write_local_input_manifest(

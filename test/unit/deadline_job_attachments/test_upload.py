@@ -2642,6 +2642,26 @@ class TestUpload:
         assert hash_alg == HashAlgorithm.XXH128
         assert manifest_name == "73addc7c69ddec53bd8d9df653add3c4_suffix"
 
+    def test_get_hashed_file_name_from_root_str(self):
+        # Given
+        manifest = AssetManifest(
+            hash_alg=HashAlgorithm("xxh128"),
+            total_size=10,
+            paths=[
+                BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
+                BaseManifestPath(
+                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                ),
+            ],
+        )
+        # When
+        (hash_alg, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
+            manifest, "C:\\Program Files\\My App\\data.txt", "suffix"
+        )
+        # Then
+        assert hash_alg == HashAlgorithm.XXH128
+        assert manifest_name == "da20652d1ff9f1dc55050b28b3ab6d36_suffix"
+
 
 def assert_progress_report_last_callback(
     num_input_files: int,
