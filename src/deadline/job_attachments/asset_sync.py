@@ -356,9 +356,9 @@ class AssetSync:
         manifest_paths_by_root: dict[str, str] = dict()
 
         for root, manifest in merged_manifests_by_root.items():
-            (_, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
+            (_, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
                 manifest=manifest,
-                source_root=Path(self._local_root_to_src_map[root]),
+                source_root=self._local_root_to_src_map[root],
                 manifest_name_suffix=manifest_name_suffix,
             )
 
