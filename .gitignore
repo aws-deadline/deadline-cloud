@@ -1,4 +1,3 @@
-/dist
 *.egg-info/
 __pycache__/
 .mypy_cache
@@ -7,11 +6,27 @@ __pycache__/
 .tox
 .venv
 /htmlcov
-.vscode
 .attach_pid*
-/build
 *.swp
 *_version.py
 .attach_pid*
 .DS_Store
+
+# Build artifacts
+/build
+/dist
+installer/components
+
+# Misc extensions
+*.run
+*.exe
+*.zip
+*.app
+*.dmg
+
+# IDE
 .idea/
+.vscode
+
+# Install builder license
+license.xml

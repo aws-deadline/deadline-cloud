@@ -1,0 +1,549 @@
+<project>
+    <shortName>DeadlineCloudClient</shortName>
+    <fullName>AWS Deadline Cloud Client</fullName>
+    <version>1.0</version>
+    <vendor>Amazon Web Services, Inc.</vendor>
+    <!--
+        The installer filename will take one of the following forms:
+        - DeadlineCloudClient-windows-x64-installer.exe
+        - DeadlineCloudClient-linux-x64-installer.run
+        - DeadlineCloudClient-osx-x64-installer.app
+        Reference: https://clients.bitrock.com/installbuilder/docs/installbuilder-userguide.html#built_in_variables
+    -->
+    <installerFilename>${product_shortname}-${platform_name}-installer.${platform_exec_suffix}</installerFilename>
+    <enableRollback>1</enableRollback>
+    <enableTimestamp>1</enableTimestamp>
+
+    <!-- Images and icons -->
+    <logoImage>logoImage.png</logoImage>
+    <leftImage>leftImage.png</leftImage>
+    <splashImage>splashImage.png</splashImage>
+    <osxApplicationBundleIcon>icon.icns</osxApplicationBundleIcon>
+    <osxUninstallerApplicationBundleIcon>icon.icns</osxUninstallerApplicationBundleIcon>
+    <windowsExecutableIcon>icon.ico</windowsExecutableIcon>
+    <windowsUninstallerExecutableIcon>icon.ico</windowsUninstallerExecutableIcon>
+
+    <!-- Allow Windows installer to run as regular user, since running as Admin is forced by default -->
+    <requireInstallationByRootUser>0</requireInstallationByRootUser>
+    <requestedExecutionLevel>asInvoker</requestedExecutionLevel>
+
+    <readyToInstallActionList>
+        <!-- Cleanup DeadlineClient Directory Prior to Installation -->
+        <showQuestion>
+            <default>yes</default>
+            <text>The DeadlineClient directory exists and will be deleted, backup files if necessary. Do you wish to continue? </text>
+            <variable>delete_dc</variable>
+            <ruleList>
+                <fileExists>
+                    <path>${installdir}/DeadlineClient</path>
+                </fileExists>
+            </ruleList>
+        </showQuestion>
+        <actionGroup>
+            <actionList>
+                <deleteFile>
+                    <path>${installdir}/DeadlineClient</path>
+                    <ruleList>
+                        <fileExists>
+                            <path>${installdir}/DeadlineClient</path>
+                        </fileExists>
+                        <isTrue>
+                            <value>${delete_dc}</value>
+                        </isTrue>
+                    </ruleList>
+                </deleteFile>
+                <exit>
+                    <ruleList>
+                        <fileExists>
+                            <path>${installdir}/DeadlineClient</path>
+                        </fileExists>
+                        <isFalse>
+                            <value>${delete_dc}</value>
+                        </isFalse>
+                    </ruleList>
+                </exit>
+            </actionList>
+        </actionGroup>
+    </readyToInstallActionList>
+
+    <functionDefinitionList>
+        <actionDefinition name="fnRegistrySetDefault">
+            <!-- Install Builder's built in registrySet doesn't handle setting the (Default) name in a key
+            so we have to roll our own. -->
+            <actionList>
+                <runProgram>
+                    <program>REG</program>
+                    <programArguments>ADD "${key}" /ve /d "${value}" /f</programArguments>
+                </runProgram>
+            </actionList>
+            <parameterList>
+                <stringParameter name="key"/>
+                <stringParameter name="value"/>
+            </parameterList>
+        </actionDefinition>
+        <actionDefinition name="fnAddEnvironmentVariable">
+            <parameterList>
+                <stringParameter name="name"/>
+                <stringParameter name="value"/>
+                <stringParameter name="scope" default="user"/>
+            </parameterList>
+            <actionList>
+                <if>
+                    <conditionRuleList>
+                        <platformTest type="linux"/>
+                        <compareText logic="equals" text="${scope}" value="system"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <!-- InstallBuilder's system-wide Linux implementation does not work (it always writes to the user
+                        environment files like ~/.bashrc and ~/.bash_profile, even as root).
+                        Instead, we cache all environment variables in a global variable, and in the post-installation
+                        steps, we generate a file in /etc/profile.d/ that will get sourced on login. -->
+                        <globalVariables names="_fnAddEnvironmentVariable_list"/>
+                        <setInstallerVariable name="_fnAddEnvironmentVariable_list">
+                            <value>${_fnAddEnvironmentVariable_list}export ${name}=${value}&#xA;</value>
+                        </setInstallerVariable>
+                    </actionList>
+                    <elseActionList>
+                        <!-- Pass through to InstallBuilder implementation -->
+                        <addEnvironmentVariable name="${name}" value="${value}" scope="${scope}"/>
+                    </elseActionList>
+                </if>
+            </actionList>
+        </actionDefinition>
+        <actionDefinition name="fnAddPathEnvironmentVariable">
+            <!-- Adds a PATH-like environment variable with options to add to the end or beginning of the PATH -->
+            <parameterList>
+                <stringParameter name="name"/>
+                <stringParameter name="value"/>
+                <stringParameter name="scope" default="user"/>
+                <stringParameter name="insertAt" default="end">
+                    <validationActionList>
+                        <throwError>
+                            <ruleList>
+                                <regExMatch text="${insertAt}" logic="does_not_match" pattern="end|beginning"/>
+                            </ruleList>
+                        </throwError>
+                    </validationActionList>
+                </stringParameter>
+            </parameterList>
+            <actionList>
+                <if>
+                    <conditionRuleEvaluationLogic>or</conditionRuleEvaluationLogic>
+                    <conditionRuleList>
+                        <compareTextLength text="${env(${name})}"  logic="equals" length="0"/>
+                        <!-- Don't update the env var if it already has the path -->
+                        <regExMatch text="${env(${name})}" logic="matches" pattern="(?:[;:]|^)${value.escape_backslashes}(?:[;:]|$)"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <setInstallerVariable name="new_value" value="${value}"/>
+                    </actionList>
+                    <elseActionList>
+                        <setInstallerVariable name="new_value" value="${value}${platform_env_path_sep}${env(${name})}">
+                            <ruleList>
+                                <compareText text="${insertAt}" logic="equals" value="beginning"/>
+                            </ruleList>
+                        </setInstallerVariable>
+                        <setInstallerVariable name="new_value" value="${env(${name})}${platform_env_path_sep}${value}">
+                            <ruleList>
+                                <compareText text="${insertAt}" logic="equals" value="end"/>
+                            </ruleList>
+                        </setInstallerVariable>
+                    </elseActionList>
+                </if>
+                <fnAddEnvironmentVariable name="${name}" value="${new_value}" scope="${scope}"/>
+            </actionList>
+        </actionDefinition>
+        <actionDefinition name="fnAddDirectoryToPath">
+            <!-- This just exists to handle the system-wide Linux implementation (see fnAddEnvironmentVariable) -->
+            <parameterList>
+                <stringParameter name="insertAt" default="end"/>
+                <stringParameter name="path"/>
+                <stringParameter name="scope" default="system"/>
+            </parameterList>
+            <actionList>
+                <if>
+                    <conditionRuleList>
+                        <platformTest type="linux"/>
+                        <compareText logic="equals" text="${scope}" value="system"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <fnAddEnvironmentVariable name="PATH" value="$PATH:${path}" scope="${scope}"/>
+                    </actionList>
+                    <elseActionList>
+                        <addDirectoryToPath insertAt="${insertAt}" path="${path}" scope="${scope}"/>
+                    </elseActionList>
+                </if>
+            </actionList>
+        </actionDefinition>
+    </functionDefinitionList>
+
+    <componentList>
+        <component>
+            <name>deadline_client</name>
+            <description>Deadline Client</description>
+            <detailedDescription>CLI for interfacing with Deadline</detailedDescription>
+            <canBeEdited>0</canBeEdited>
+            <selected>1</selected>
+            <show>1</show>
+            <folderList>
+                <folder>
+                    <description>Program Files</description>
+                    <destination>${installdir}</destination>
+                    <name>DeadlineClient</name>
+                    <platforms>all</platforms>
+                    <distributionFileList>
+                        <distributionDirectory>
+                            <origin>components/DeadlineClient</origin>
+                        </distributionDirectory>
+                    </distributionFileList>
+                    <actionList>
+                        <if>
+                            <conditionRuleList>
+                                <compareText logic="equals" text="${installscope}" value="system"/>
+                            </conditionRuleList>
+                            <actionList>
+                                <changePermissions permissions="0755" files="${installdir}/DeadlineClient/cli/deadline_cli"/>
+                                <changePermissions permissions="0755" files="${installdir}/DeadlineClient/deadline"/>
+                            </actionList>
+                            <elseActionList>
+                                <changePermissions permissions="0750" files="${installdir}/DeadlineClient/cli/deadline_cli"/>
+                                <changePermissions permissions="0750" files="${installdir}/DeadlineClient/deadline"/>
+                            </elseActionList>
+                        </if>
+                    </actionList>
+                </folder>
+            </folderList>
+            <parameterList>
+                <stringParameter name="deadline_client_summary" ask="0" cliOptionShow="0">
+                    <value>Deadline Client
+- Installs the Deadline Client CLI application to the installation directory
+- Updates the PATH environment variable to include the path to the Deadline Client CLI
+- Installs the Deadline protocol handler to handle the "deadline" URI scheme (e.g. for downloading job output)
+- Configures the Deadline Client as specified in the installer</value>
+                </stringParameter>
+            </parameterList>
+            <postInstallationActionList>
+                <!-- =====================================
+                Add Deadline To Path
+                ====================================== -->
+                <fnAddDirectoryToPath>
+                    <progressText>Adding deadline to path</progressText>
+                    <insertAt>end</insertAt>
+                    <path>${installdir}/DeadlineClient</path>
+                    <scope>${installscope}</scope>
+                </fnAddDirectoryToPath>
+
+                <!-- =====================================s
+                Windows Protocol Handler
+                ====================================== -->
+                <actionGroup>
+                    <explanation>Windows register protocol handler</explanation>
+                    <progressText>Registering Protocol Handler</progressText>
+                    <actionList>
+                        <if>
+                            <conditionRuleList>
+                                <compareText logic="equals" text="${installscope}" value="system"/>
+                            </conditionRuleList>
+                            <actionList>
+                                <setInstallerVariable name="deadlineBaseRegistryKey" value="HKEY_LOCAL_MACHINE\SOFTWARE\Classes\deadline"/>
+                            </actionList>
+                            <elseActionList>
+                                <setInstallerVariable name="deadlineBaseRegistryKey" value="HKEY_CURRENT_USER\SOFTWARE\Classes\deadline"/>
+                            </elseActionList>
+                        </if>
+                        <fnRegistrySetDefault>
+                            <key>${deadlineBaseRegistryKey}</key>
+                            <value>URL:Deadline Protocol</value>
+                        </fnRegistrySetDefault>
+                        <registrySet>
+                            <key>${deadlineBaseRegistryKey}</key>
+                            <name>URL Protocol</name>
+                            <type>REG_SZ</type>
+                            <value></value>
+                        </registrySet>
+                        <fnRegistrySetDefault>
+                            <key>${deadlineBaseRegistryKey}\shell\open\command</key>
+                            <value>\"${installdir}\DeadlineClient\deadline.exe\" \"handle-web-url\" \"%1\"</value>
+                        </fnRegistrySetDefault>
+                    </actionList>
+                    <ruleList>
+                        <platformTest type="windows"/>
+                    </ruleList>
+                </actionGroup>
+
+                <!-- =====================================
+                Linux Protocol Handler
+                ====================================== -->
+                <actionGroup>
+                    <explanation>Linux register protocol handler</explanation>
+                    <progressText>Registering Protocol Handler</progressText>
+                    <!-- Reference: https://wiki.archlinux.org/title/XDG_MIME_Applications -->
+                    <actionList>
+                        <if>
+                            <conditionRuleList>
+                                <compareText logic="equals" text="${installscope}" value="system"/>
+                            </conditionRuleList>
+                            <actionList>
+                                <setInstallerVariable name="deadlineProtocolEntryDir" value="/usr/share/applications"/>
+                                <setInstallerVariable name="mimeappsListFile" value="/usr/share/applications/mimeapps.list"/>
+                            </actionList>
+                            <elseActionList>
+                                <setInstallerVariable name="deadlineProtocolEntryDir" value="~/.local/share/applications"/>
+                                <setInstallerVariable name="mimeappsListFile" value="~/.config/mimeapps.list"/>
+                            </elseActionList>
+                        </if>
+                        <setInstallerVariable name="deadlineProtocolEntryPath" value="${deadlineProtocolEntryDir}/deadline.desktop"/>
+                        <setInstallerVariable name="deadlineProtocolEntrySection" value="Desktop Entry"/>
+                        <createDirectory>
+                            <path>${deadlineProtocolEntryDir}</path>
+                        </createDirectory>
+                        <iniFileSet>
+                            <file>${deadlineProtocolEntryPath}</file>
+                            <key>Name</key>
+                            <section>${deadlineProtocolEntrySection}</section>
+                            <value>deadline</value>
+                        </iniFileSet>
+                        <iniFileSet>
+                            <file>${deadlineProtocolEntryPath}</file>
+                            <key>Exec</key>
+                            <section>${deadlineProtocolEntrySection}</section>
+                            <value>"${installdir}/DeadlineClient/deadline" handle-web-url %u</value>
+                        </iniFileSet>
+                        <iniFileSet>
+                            <file>${deadlineProtocolEntryPath}</file>
+                            <key>Type</key>
+                            <section>${deadlineProtocolEntrySection}</section>
+                            <value>Application</value>
+                        </iniFileSet>
+                        <iniFileSet>
+                            <file>${deadlineProtocolEntryPath}</file>
+                            <key>Terminal</key>
+                            <section>${deadlineProtocolEntrySection}</section>
+                            <value>true</value>
+                        </iniFileSet>
+                        <iniFileSet>
+                            <file>${deadlineProtocolEntryPath}</file>
+                            <key>MimeType</key>
+                            <section>${deadlineProtocolEntrySection}</section>
+                            <value>x-scheme-handler/deadline;</value>
+                        </iniFileSet>
+                        <iniFileSet>
+                            <file>${mimeappsListFile}</file>
+                            <key>x-scheme-handler/deadline</key>
+                            <section>Default Applications</section>
+                            <value>deadline.desktop</value>
+                        </iniFileSet>
+                        <runProgram>
+                            <program>update-desktop-database</program>
+                            <programArguments>${deadlineProtocolEntryDir}</programArguments>
+                            <abortOnError>0</abortOnError>
+                        </runProgram>
+                    </actionList>
+                    <ruleList>
+                        <platformTest type="linux"/>
+                        <programTest>
+                            <condition>is_in_path</condition>
+                            <name>update-desktop-database</name>
+                        </programTest>
+                    </ruleList>
+                </actionGroup>
+            </postInstallationActionList>
+        </component>
+    </componentList>
+
+    <!-- Installer-wide parameters. These are displayed before component parameters -->
+    <parameterList>
+        <stringParameter name="installdirprefix" ask="0" cliOptionShow="0" allowEmptyValue="0" default="${user_home_directory}"/>
+        <choiceParameter>
+            <name>installscope</name>
+            <title>Installation Scope</title>
+            <description>Select the scope of the installation</description>
+            <ask>yes</ask>
+            <displayType>radiobuttons</displayType>
+            <insertBefore>installdir</insertBefore>
+            <default>user</default>
+            <optionList>
+                <option text="User (${system_username})" value="user"/>
+                <option text="System (all users)" value="system">
+                    <description>Requires administrative privileges</description>
+                </option>
+            </optionList>
+            <validationActionList>
+                <throwError text="The installer must be run as an administrator for a system-wide install">
+                    <ruleList>
+                        <compareText logic="equals" text="${installscope}" value="system"/>
+                        <isFalse value="${installer_is_root_install}"/>
+                    </ruleList>
+                </throwError>
+            </validationActionList>
+            <postShowPageActionList>
+                <if>
+                    <conditionRuleList>
+                        <compareText logic="equals" text="${installscope}" value="user"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <setInstallerVariable name="installdirprefix" value="${user_home_directory}"/>
+                    </actionList>
+                    <elseActionList>
+                        <setInstallerVariable name="installdirprefix" value="${platform_install_prefix}"/>
+                    </elseActionList>
+                </if>
+            </postShowPageActionList>
+        </choiceParameter>
+        <directoryParameter>
+            <name>installdir</name>
+            <description>Installer.Parameter.installdir.description</description>
+            <explanation>Installer.Parameter.installdir.explanation</explanation>
+            <value></value>
+            <default>${installdirprefix}/${product_shortname}</default>
+            <allowEmptyValue>0</allowEmptyValue>
+            <ask>yes</ask>
+            <cliOptionName>prefix</cliOptionName>
+            <mustBeWritable>yes</mustBeWritable>
+            <mustExist>0</mustExist>
+            <width>40</width>
+        </directoryParameter>
+    </parameterList>
+
+    <preInitializationActionList>
+        <setInstallerVariable name="_fnAddEnvironmentVariable_list" value=""/>
+        <if>
+            <conditionRuleList>
+                <platformTest type="windows"/>
+            </conditionRuleList>
+            <actionList>
+                <setInstallerVariable name="platform_env_path_sep" value=";"/>
+            </actionList>
+            <elseActionList>
+                <setInstallerVariable name="platform_env_path_sep" value=":"/>
+            </elseActionList>
+        </if>
+    </preInitializationActionList>
+
+    <postInstallationActionList>
+        <setInstallerVariable name="installscope" value="${installscope}" persist="1"/>
+        <writeFile>
+            <ruleList>
+                <compareTextLength text="${_fnAddEnvironmentVariable_list}" logic="greater" length="0"/>
+            </ruleList>
+            <progressText>Writing environment variables to /etc/profile.d/deadline.sh</progressText>
+            <path>/etc/profile.d/deadline.sh</path>
+            <text>### THIS FILE IS GENERATED BY THE AWS DEADLINE CLOUD CLIENT INSTALLER ###
+### ANY MANUAL CHANGES TO THIS FILE WILL BE OVERWRITTEN BY THE AWS DEADLINE CLOUD CLIENT INSTALLER ###
+
+# Deadline Cloud client initialization script
+${_fnAddEnvironmentVariable_list}
+            </text>
+        </writeFile>
+        <writeFile>
+            <progressText>Writing version file</progressText>
+            <path>${installdir}/installer_version.txt</path>
+            <text>${project.version}</text>
+        </writeFile>
+        <changePermissions permissions="0644" files="${installdir}/installer_version.txt"/>
+        <addFilesToUninstaller>
+          <files>${installdir}/DeadlineClient/</files>
+        </addFilesToUninstaller>
+    </postInstallationActionList>
+
+    <preUninstallationActionList>
+        <!-- Throw an error if this is was a system install (requires admin), otherwise the uninstaller does not actually delete the files -->
+        <actionGroup>
+            <actionList>
+                <showWarning text="Cannot uninstall a system-wide installation as a non-administrator user. Please run the uninstaller as an administrator."/>
+                <exit exitCode="1"/>
+            </actionList>
+            <ruleList>
+                <compareText text="system" logic="equals" value="${installscope}"/>
+                <isFalse value="${installer_is_root_install}"/>
+            </ruleList>
+        </actionGroup>
+        <deleteFile path="${installdir}/installer_version.txt"/>
+    </preUninstallationActionList>
+
+    <postUninstallationActionList>
+        <!-- =====================================s
+        Uninstalling Windows Protocol Handler
+        ====================================== -->
+        <actionGroup>
+            <explanation>Windows register protocol handler</explanation>
+            <progressText>Un-registering Protocol Handler</progressText>
+            <actionList>
+                <if>
+                    <conditionRuleList>
+                        <compareText logic="equals" text="${installscope}" value="system"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <setInstallerVariable name="deadlineBaseRegistryKey" value="HKEY_LOCAL_MACHINE\SOFTWARE\Classes\deadline"/>
+                    </actionList>
+                    <elseActionList>
+                        <setInstallerVariable name="deadlineBaseRegistryKey" value="HKEY_CURRENT_USER\SOFTWARE\Classes\deadline"/>
+                    </elseActionList>
+                </if>
+                <registryDelete>
+                    <key>${deadlineBaseRegistryKey}</key>
+                    <name>URL Protocol</name>
+                </registryDelete>
+                <registryDelete>
+                    <key>${deadlineBaseRegistryKey}\shell\open\command</key>
+                </registryDelete>
+            </actionList>
+            <ruleList>
+                <platformTest type="windows"/>
+            </ruleList>
+        </actionGroup>
+
+        <!-- =====================================
+        Uninstalling Linux Protocol Handler
+        ====================================== -->
+        <actionGroup>
+            <actionList>
+                <if>
+                    <conditionRuleList>
+                        <compareText logic="equals" text="${installscope}" value="system"/>
+                    </conditionRuleList>
+                    <actionList>
+                        <setInstallerVariable name="deadlineProtocolEntryDir" value="/usr/share/applications"/>
+                        <setInstallerVariable name="mimeappsListFile" value="/usr/share/applications/mimeapps.list"/>
+                    </actionList>
+                    <elseActionList>
+                        <setInstallerVariable name="deadlineProtocolEntryDir" value="~/.local/share/applications"/>
+                        <setInstallerVariable name="mimeappsListFile" value="~/.config/mimeapps.list"/>
+                    </elseActionList>
+                </if>
+                <setInstallerVariable name="deadlineProtocolEntryPath" value="${deadlineProtocolEntryDir}/deadline.desktop"/>
+                <deleteFile>
+                    <path>${deadlineProtocolEntryPath}</path>
+                    <ruleList>
+                        <fileExists>
+                            <path>${deadlineProtocolEntryPath}</path>
+                        </fileExists>
+                    </ruleList>
+                </deleteFile>
+                <runProgram>
+                    <program>sed</program>
+                    <programArguments>-i '/\[Default Applications\]/,/\[/{/x-scheme-handler\/deadline/d;}' ${mimeappsListFile}</programArguments>
+                    <ruleList>
+                        <fileExists>
+                            <path>${mimeappsListFile}</path>
+                        </fileExists>
+                    </ruleList>
+                    <abortOnError>0</abortOnError>
+                </runProgram>
+                <runProgram>
+                    <program>update-desktop-database</program>
+                    <programArguments>${deadlineProtocolEntryDir}</programArguments>
+                    <abortOnError>0</abortOnError>
+                </runProgram>
+            </actionList>
+            <ruleList>
+                <platformTest type="linux"/>
+                <programTest>
+                    <condition>is_in_path</condition>
+                    <name>update-desktop-database</name>
+                </programTest>
+            </ruleList>
+        </actionGroup>
+    </postUninstallationActionList>
+    <width>550</width>
+</project>
