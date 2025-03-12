@@ -6,6 +6,7 @@ Integ tests for the CLI attachment commands.
 
 import os
 import json
+from typing import Tuple
 from click.testing import CliRunner
 from dataclasses import asdict
 
@@ -148,7 +149,9 @@ class TestAttachment:
 
     @pytest.mark.integ
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
-    def test_attachment_basic_flow(self, temp_dir, job_attachment_resources, manifest_case_key):
+    def test_attachment_basic_flow(
+        self, temp_dir, job_attachment_resources, manifest_case_key
+    ) -> Tuple[str, str, str]:
         # Given
         file_name: str = f"{hash_data(temp_dir.encode('utf-8'), HashAlgorithm.XXH128)}_output"
         manifest_path: str = os.path.join(temp_dir, file_name)
@@ -208,6 +211,8 @@ class TestAttachment:
         )
         asset_files = os.listdir(os.path.join(os.getcwd(), file_name, "files"))
         assert len(asset_files) == 1
+
+        return file_name, manifest_path, s3_root_uri
 
     @pytest.mark.integ
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -294,3 +299,58 @@ class TestAttachment:
         assert len(asset_files) == 3, (
             f"Expecting 3 asset files, 2 from upload and 1 from download, but got {len(asset_files)}."
         )
+
+    @pytest.mark.integ
+    @pytest.mark.parametrize(
+        "override_mode,expected_num_files, expected_files",
+        [
+            pytest.param("CREATE_COPY", 2, ["file1.txt", "file1 (1).txt"]),
+            pytest.param("SKIP", 1, ["file1.txt"]),
+            pytest.param("OVERWRITE", 1, ["file1.txt"]),
+        ],
+    )
+    def test_attachment_file_override(
+        self, temp_dir, job_attachment_resources, override_mode, expected_num_files, expected_files
+    ):
+        test_case_key = "TEST_CASE_1"
+        file_name, manifest_path, s3_root_uri = self.test_attachment_basic_flow(
+            temp_dir=temp_dir,
+            job_attachment_resources=job_attachment_resources,
+            manifest_case_key=test_case_key,
+        )
+
+        # When 2 - test download again with file override mode.
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "download",
+                "--manifests",
+                manifest_path,
+                "--profile",
+                "default",
+                "--s3-root-uri",
+                s3_root_uri,
+                "--conflict-resolution",
+                override_mode,
+                "--json",
+            ],
+        )
+        # Then
+        assert result.exit_code == 0, f"Non-Zeo exit code, CLI output {result.output}"
+
+        # How many bytes downloaded.
+        expected_processed_bytes = (
+            0 if override_mode == "SKIP" else len(MOCK_FILE_CASE[test_case_key])
+        )
+        assert json.loads(result.output)["processed_bytes"] == expected_processed_bytes
+        assert file_name in os.listdir(os.getcwd()), (
+            "Expecting downloaded folder named with data hash created in the working directory with downloaded files but not."
+        )
+        asset_files = os.listdir(os.path.join(os.getcwd(), file_name, "files"))
+        assert len(asset_files) == expected_num_files
+
+        # Make sure the files are named correctly and what we expected to download.
+        for file in expected_files:
+            assert file in asset_files
