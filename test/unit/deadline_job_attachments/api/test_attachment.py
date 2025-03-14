@@ -25,7 +25,11 @@ from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.api.attachment import _process_path_mapping
 from deadline.job_attachments.upload import S3AssetUploader
-from deadline.job_attachments.models import JobAttachmentS3Settings, PathMappingRule
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    PathMappingRule,
+)
 
 PATH_MAPPING = {
     "source_path_format": "posix",
@@ -137,8 +141,17 @@ class TestAttachmentDownload:
                 path_mapping_rules=mapping_file_path,
             )
 
-    def test_download_single_to_mapped(
-        self, temp_assets_dir, session_mock, mock_download_files_from_manifests
+    @pytest.mark.parametrize(
+        "conflict_resolution",
+        [
+            FileConflictResolution.CREATE_COPY,
+            FileConflictResolution.OVERWRITE,
+            FileConflictResolution.SKIP,
+            None,
+        ],
+    )
+    def test_download_conflict_resolution(
+        self, temp_assets_dir, session_mock, mock_download_files_from_manifests, conflict_resolution
     ):
         with open(
             os.path.join(temp_assets_dir, PATH_MAPPING_HASH),
@@ -151,12 +164,21 @@ class TestAttachmentDownload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_download(
-            manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
-            s3_root_uri="s3://bucket/assetRoot",
-            boto3_session=session_mock,
-            path_mapping_rules=mapping_file_path,
-        )
+        if conflict_resolution:
+            attachment_api.attachment_download(
+                manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
+                s3_root_uri="s3://bucket/assetRoot",
+                boto3_session=session_mock,
+                path_mapping_rules=mapping_file_path,
+                conflict_resolution=conflict_resolution,
+            )
+        else:
+            attachment_api.attachment_download(
+                manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
+                s3_root_uri="s3://bucket/assetRoot",
+                boto3_session=session_mock,
+                path_mapping_rules=mapping_file_path,
+            )
 
         mock_download_files_from_manifests.assert_called_once_with(
             s3_bucket="bucket",
@@ -167,6 +189,9 @@ class TestAttachmentDownload:
             },
             cas_prefix="assetRoot/Data",
             session=session_mock,
+            conflict_resolution=conflict_resolution
+            if conflict_resolution
+            else FileConflictResolution.CREATE_COPY,
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -195,6 +220,7 @@ class TestAttachmentDownload:
             },
             cas_prefix="assetRoot/Data",
             session=session_mock,
+            conflict_resolution=FileConflictResolution.CREATE_COPY,
         )
 
     def test_download_multiple_to_current(
@@ -224,6 +250,7 @@ class TestAttachmentDownload:
             manifests_by_root=expected_merged,
             cas_prefix="assetRoot/Data",
             session=session_mock,
+            conflict_resolution=FileConflictResolution.CREATE_COPY,
         )
 
     def test_download_invalid_input_manifests(self, session_mock):

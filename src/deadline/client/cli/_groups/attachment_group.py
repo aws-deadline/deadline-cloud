@@ -21,7 +21,7 @@ from deadline.client import api
 from deadline.job_attachments import api as attachment_api
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import MissingJobAttachmentSettingsError
-from deadline.job_attachments.models import JobAttachmentS3Settings
+from deadline.job_attachments.models import FileConflictResolution, JobAttachmentS3Settings
 
 
 @click.group(name="attachment")
@@ -51,6 +51,21 @@ def cli_attachment():
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
     "--profile", help="The AWS profile to use for interacting with Job Attachments S3 bucket."
+)
+@click.option(
+    "--conflict-resolution",
+    type=click.Choice(
+        [
+            FileConflictResolution.SKIP.name,
+            FileConflictResolution.OVERWRITE.name,
+            FileConflictResolution.CREATE_COPY.name,
+        ],
+        case_sensitive=False,
+    ),
+    help="How to handle downloads if a file already exists:\n"
+    "CREATE_COPY (default): Download the file with a new name, appending '(X)' to the end. X is incremented for each duplicate\n"
+    "SKIP: Do not download the file\n"
+    "OVERWRITE: Download and replace the existing file",
 )
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
 @_handle_error
@@ -94,12 +109,24 @@ def attachment_download(
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
 
+    # Apply conflict resolution setting from Config.
+    conflict_resolution = FileConflictResolution.CREATE_COPY
+    conflict_resolution_setting = config_file.get_setting(
+        "settings.conflict_resolution", config=config
+    )
+    if (
+        conflict_resolution_setting
+        and conflict_resolution_setting != FileConflictResolution.NOT_SELECTED.name
+    ):
+        conflict_resolution = FileConflictResolution[conflict_resolution_setting]
+
     attachment_api.attachment_download(
         manifests=manifests,
         s3_root_uri=s3_root_uri,
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
         logger=logger,
+        conflict_resolution=conflict_resolution,
     )
 
 

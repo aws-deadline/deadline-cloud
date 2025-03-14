@@ -11,7 +11,11 @@ from dataclasses import asdict
 from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.download import download_files_from_manifests
-from deadline.job_attachments.models import JobAttachmentS3Settings, PathMappingRule
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    PathMappingRule,
+)
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
 from deadline.job_attachments.upload import S3AssetUploader
 from deadline.client.cli._groups.click_logger import ClickLogger
@@ -25,6 +29,7 @@ def attachment_download(
     boto3_session: boto3.Session,
     path_mapping_rules: Optional[str] = None,
     logger: ClickLogger = ClickLogger(False),
+    conflict_resolution: FileConflictResolution = FileConflictResolution.CREATE_COPY,
 ):
     """
     BETA API - This API is still evolving.
@@ -79,6 +84,7 @@ def attachment_download(
         manifests_by_root=merged_manifests_by_root,
         cas_prefix=s3_settings.full_cas_prefix(),
         session=boto3_session,
+        conflict_resolution=conflict_resolution,
     )
     logger.echo(download_summary)
     logger.json(asdict(download_summary.convert_to_summary_statistics()))
