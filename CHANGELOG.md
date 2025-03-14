@@ -1,3 +1,19 @@
+## 0.49.7 (2025-03-12)
+
+
+### Features
+* Add configurable job timeouts widget. (#611) ([`978c631`](https://github.com/aws-deadline/deadline-cloud/commit/978c631bffa4fa7717d99f1e000f38d051de25a7))
+* Allow windows long paths during manifest snapshot, manifest upload, and download. (#547) ([`b54e362`](https://github.com/aws-deadline/deadline-cloud/commit/b54e362afbc37968557977c76820b073b753cf22))
+* Add helper function to add default timeouts in job templates. (#600) ([`8ee8bd1`](https://github.com/aws-deadline/deadline-cloud/commit/8ee8bd1c23b464395441a955ad6db664f6b32cba))
+* **cli**: Add --output option to `config show` to support json (#586) ([`7c63ca1`](https://github.com/aws-deadline/deadline-cloud/commit/7c63ca1953b4b2acc2d42973d562697613ab7a17))
+
+### Bug Fixes
+* Assets deleted in s3 don't get reuploaded causing missing asset failures. (#371) ([`69d6c04`](https://github.com/aws-deadline/deadline-cloud/commit/69d6c04adced90a1fd892ccbdbc0ac3948511621))
+* Inconsistent file path hashes on different operating systems. (#618) ([`a096ff9`](https://github.com/aws-deadline/deadline-cloud/commit/a096ff966bbe1be322795442932d2090132a22e5))
+* Copy number not incremented when multiple files of the same name are downloaded. (#615) ([`ba2f2fe`](https://github.com/aws-deadline/deadline-cloud/commit/ba2f2fe116f9a0e789ef0e25fce629b1a020d5d9))
+* Manifest download cli does not download output manifests for selected job or step. (#603) ([`b2285fb`](https://github.com/aws-deadline/deadline-cloud/commit/b2285fb2c77445096c898ec827d45f341a1474a6))
+* ~ symbol does not expand to users home directory when downloading output. (#557) ([`d5e50ad`](https://github.com/aws-deadline/deadline-cloud/commit/d5e50ad7bca0e58f4af3a75acac49c2d2302ec41))
+
 ## 0.49.6 (2025-02-06)
 
 
