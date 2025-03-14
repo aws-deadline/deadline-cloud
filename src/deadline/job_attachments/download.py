@@ -774,6 +774,7 @@ def download_files_from_manifests(
     session: Optional[boto3.Session] = None,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     logger: Optional[Union[Logger, LoggerAdapter]] = None,
+    conflict_resolution: FileConflictResolution = FileConflictResolution.CREATE_COPY,
 ) -> DownloadSummaryStatistics:
     """
     Given manifests, downloads all files from a CAS in each manifest.
@@ -822,6 +823,7 @@ def download_files_from_manifests(
             session,
             file_mod_time,
             progress_tracker=progress_tracker,
+            file_conflict_resolution=conflict_resolution,
         )
 
         if fs_permission_settings is not None:
