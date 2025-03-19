@@ -10,7 +10,6 @@ from deadline.job_attachments.models import ManifestDownloadResponse
 
 
 class TestManifestDownload:
-
     @pytest.fixture
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:
@@ -40,7 +39,6 @@ class TestManifestDownload:
         step_manifests: List,
         temp_dir: str,
     ) -> None:
-
         # This is heavily mocked, so return nothing. Integration tests tests full manifest merging.
         mock_get_manifest_from_s3.return_value = None
         mock_get_output_manifest.return_value = {}

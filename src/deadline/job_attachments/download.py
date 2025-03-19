@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Functions for downloading output from the Job Attachment CAS."""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -8,7 +9,6 @@ import io
 import json
 import os
 import re
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -69,7 +69,12 @@ from .os_file_permission import (
     _set_fs_group_for_posix,
     _set_fs_permission_for_windows,
 )
-from ._utils import _is_relative_to, _join_s3_paths, _is_windows_long_path_registry_enabled
+from ._utils import (
+    _get_long_path_compatible_path,
+    _is_relative_to,
+    _join_s3_paths,
+)
+from threading import Lock
 
 download_logger = getLogger("deadline.job_attachments.download")
 
@@ -308,6 +313,34 @@ def get_job_input_output_paths_by_asset_root(
     return combined_path_groups
 
 
+def _get_new_copy_file_path(
+    local_file_name: Path,
+    collision_lock: Lock,
+    collision_file_dict: DefaultDict[str, int],
+) -> Path:
+    with collision_lock:
+        file_str: str = str(local_file_name)
+        num: int = collision_file_dict[file_str]
+        new_file_name = local_file_name
+
+        # Iterate until we find a number we don't conflict with
+        while True:
+            try:
+                # Handle multi-process locks with creating and/or opening file to verify if it exists
+                with open(new_file_name, "x"):
+                    break
+            # If file exists we go here and increment num to find a unique path
+            except FileExistsError:
+                num += 1
+                new_file_name = local_file_name.parent.joinpath(
+                    f"{local_file_name.stem} ({num}){local_file_name.suffix}"
+                )
+
+        collision_file_dict[file_str] = num
+        local_file_name = new_file_name
+    return local_file_name
+
+
 def download_files_in_directory(
     s3_settings: JobAttachmentS3Settings,
     attachments: Attachments,
@@ -380,6 +413,8 @@ def download_file(
     file: RelativeFilePath,
     hash_algorithm: HashAlgorithm,
     local_download_dir: str,
+    collision_lock: Lock,
+    collision_file_dict: DefaultDict[str, int],
     s3_bucket: str,
     cas_prefix: Optional[str],
     s3_client: Optional[BaseClient] = None,
@@ -406,7 +441,9 @@ def download_file(
     file_bytes = file.size
 
     # Python will handle the path separator '/' correctly on every platform.
-    local_file_name = Path(local_download_dir).joinpath(file.path)
+    local_file_path: Path = _get_long_path_compatible_path(
+        Path(local_download_dir).joinpath(file.path)
+    )
 
     s3_key = (
         f"{cas_prefix}/{file.hash}.{hash_algorithm.value}"
@@ -415,24 +452,21 @@ def download_file(
     )
 
     # If the file name already exists, resolve the conflict based on the file_conflict_resolution
-    if local_file_name.is_file():
+    if local_file_path.is_file():
         if file_conflict_resolution == FileConflictResolution.SKIP:
             return (file_bytes, None)
         elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
             pass
         elif file_conflict_resolution == FileConflictResolution.CREATE_COPY:
-            # This loop resolves filename conflicts by appending " (1)"
-            # to the stem of the filename until a unique name is found.
-            while local_file_name.is_file():
-                local_file_name = local_file_name.parent.joinpath(
-                    local_file_name.stem + " (1)" + local_file_name.suffix
-                )
+            local_file_path = _get_new_copy_file_path(
+                local_file_path, collision_lock, collision_file_dict
+            )
         else:
             raise ValueError(
                 f"Unknown choice for file conflict resolution: {file_conflict_resolution}"
             )
 
-    local_file_name.parent.mkdir(parents=True, exist_ok=True)
+    local_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     future: concurrent.futures.Future
 
@@ -450,7 +484,7 @@ def download_file(
     future = transfer_manager.download(
         bucket=s3_bucket,
         key=s3_key,
-        fileobj=str(local_file_name),
+        fileobj=str(local_file_path),
         extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
         subscribers=subscribers,
     )
@@ -488,7 +522,7 @@ def download_file(
                 status_code=status_code,
                 bucket_name=s3_bucket,
                 key_or_prefix=s3_key,
-                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_name)})",
+                message=f"{status_code_guidance.get(status_code, '')} {str(exc)} (Failed to download the file to {str(local_file_path)})",
             ) from exc
 
         # TODO: Temporary to prevent breaking backwards-compatibility; if file not found, try again without hash alg postfix
@@ -498,7 +532,7 @@ def download_file(
             future = transfer_manager.download(
                 bucket=s3_bucket,
                 key=s3_key,
-                fileobj=str(local_file_name),
+                fileobj=str(local_file_path),
                 extra_args={"ExpectedBucketOwner": get_account_id(session=session)},
                 subscribers=subscribers,
             )
@@ -520,31 +554,12 @@ def download_file(
             error_details=str(bce),
         ) from bce
     except Exception as e:
-        # Add 9 to account for .Hex value when file in the middle of downloading in windows paths
-        # For example: file test.txt when download will be test.txt.H4SD9Ddj
-        if (
-            len(str(local_file_name)) + TEMP_DOWNLOAD_ADDED_CHARS_LENGTH >= WINDOWS_MAX_PATH_LENGTH
-        ) and sys.platform == "win32":
-            uncPath = str(local_file_name).startswith("\\\\?\\")
-            if not uncPath:
-                # Path don't start with \\?\ -> Long path error
-                raise AssetSyncError(
-                    "Your file path is longer than what Windows allow.\n"
-                    + "This could be the error if you do not enable longer file path in Windows"
-                )
-            elif not _is_windows_long_path_registry_enabled():
-                # Path start with \\?\ but do not enable registry -> Undefined error
-                raise AssetSyncError(
-                    f"{e}\nUNC notation exist, but long path registry not enabled. Undefined error"
-                ) from e
-
-        # Path start with \\?\ and registry is enable, something else cause this error
         raise AssetSyncError(e) from e
 
-    download_logger.debug(f"Downloaded {file.path} to {str(local_file_name)}")
-    os.utime(local_file_name, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
+    download_logger.debug(f"Downloaded {file.path} to {str(local_file_path)}")
+    os.utime(local_file_path, (modified_time_override, modified_time_override))  # type: ignore[arg-type]
 
-    return (file_bytes, local_file_name)
+    return (file_bytes, local_file_path)
 
 
 def _download_files_parallel(
@@ -565,6 +580,8 @@ def _download_files_parallel(
     Returns a list of local paths of downloaded files.
     """
     downloaded_file_names: list[str] = []
+    collision_lock: Lock = Lock()
+    collision_file_dict: DefaultDict[str, int] = DefaultDict(int)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_download_workers) as executor:
         futures = {
@@ -573,6 +590,8 @@ def _download_files_parallel(
                 file,
                 hash_algorithm,
                 local_download_dir,
+                collision_lock,
+                collision_file_dict,
                 s3_bucket,
                 cas_prefix,
                 s3_client,
@@ -755,6 +774,7 @@ def download_files_from_manifests(
     session: Optional[boto3.Session] = None,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     logger: Optional[Union[Logger, LoggerAdapter]] = None,
+    conflict_resolution: FileConflictResolution = FileConflictResolution.CREATE_COPY,
 ) -> DownloadSummaryStatistics:
     """
     Given manifests, downloads all files from a CAS in each manifest.
@@ -803,6 +823,7 @@ def download_files_from_manifests(
             session,
             file_mod_time,
             progress_tracker=progress_tracker,
+            file_conflict_resolution=conflict_resolution,
         )
 
         if fs_permission_settings is not None:
@@ -1024,7 +1045,8 @@ def mount_vfs_from_manifests(
     for mount_point, manifest in manifests_by_root.items():
         # Validate the file paths to see if they are under the given download directory.
         _ensure_paths_within_directory(
-            mount_point, [path.path for path in manifest.paths]  # type: ignore
+            mount_point,
+            [path.path for path in manifest.paths],  # type: ignore
         )
         final_manifest: BaseAssetManifest = handle_existing_vfs(
             manifest=manifest,
@@ -1109,6 +1131,7 @@ class OutputDownloader:
         Returns a dict of asset root paths to lists of output paths.
         """
         output_paths_by_root: dict[str, list[str]] = {}
+
         for root, path_group in self.outputs_by_root.items():
             output_paths_by_root[root] = path_group.get_all_paths()
         return output_paths_by_root

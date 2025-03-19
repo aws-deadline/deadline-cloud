@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Tests for the asset manifest model """
+"""Tests for the asset manifest model"""
 
 import pytest
 

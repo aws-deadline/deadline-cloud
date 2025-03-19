@@ -29,6 +29,7 @@ Running this script on the above CHANGELOG.md should return the following conten
 
 ```
 """
+
 import re
 
 h2 = r"^##\s.*$"

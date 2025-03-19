@@ -3,6 +3,7 @@
 """
 Functionality common to all the CLI groups.
 """
+
 __all__ = [
     "_PROMPT_WHEN_COMPLETE",
     "_prompt_at_completion",

@@ -51,9 +51,9 @@ class TestCacheDB:
             cdb = CacheDB("name", "table", "query", tmpdir)
             cdb.cache_dir = "/some/bad/path"
             with cdb:
-                assert (
-                    False
-                ), "Context manager should throw a JobAttachmentsError, this assert should not be reached"
+                assert False, (
+                    "Context manager should throw a JobAttachmentsError, this assert should not be reached"
+                )
         assert isinstance(err.value.__cause__, OperationalError)
 
     @pytest.mark.parametrize(
@@ -210,3 +210,16 @@ class TestS3CheckCache:
                     )
                 )
                 assert s3c.get_entry("bucket/Data/somehash") is None
+
+    def test_delete_cache(self, tmpdir):
+        """
+        Tests if the cache file can be deleted when calling remove_cache
+        """
+        cache_dir = tmpdir.mkdir("cache")
+        with S3CheckCache(cache_dir) as s3c:
+            file_name: str = os.path.join(cache_dir, "s3_check_cache.db")
+            assert os.path.exists(file_name)
+            s3c.remove_cache()
+
+            # Test if the cache file was deleted
+            assert not os.path.exists(file_name)

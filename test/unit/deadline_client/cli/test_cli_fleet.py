@@ -3,6 +3,7 @@
 """
 Tests for the CLI fleet commands.
 """
+
 from unittest.mock import patch
 from copy import deepcopy
 import os

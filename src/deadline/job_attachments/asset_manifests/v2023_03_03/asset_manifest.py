@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Module that defines the v2023-03-03 version of the asset manifest """
+"""Module that defines the v2023-03-03 version of the asset manifest"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

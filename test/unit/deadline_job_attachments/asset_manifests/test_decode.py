@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-""" Tests for the asset_manifests.decode module """
+"""Tests for the asset_manifests.decode module"""
+
 from __future__ import annotations
 from enum import Enum
 

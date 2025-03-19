@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """Functions for handling and retrieving AWS clients."""
+
 from __future__ import annotations
 
 from functools import lru_cache

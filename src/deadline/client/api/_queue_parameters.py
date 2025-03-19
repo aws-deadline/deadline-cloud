@@ -59,9 +59,9 @@ def get_queue_parameter_definitions(
                     parameter["userInterface"] = {
                         "control": get_ui_control_for_parameter_definition(parameter)
                     }
-                parameter["userInterface"][
-                    "groupLabel"
-                ] = f"Queue Environment: {template['environment']['name']}"
+                parameter["userInterface"]["groupLabel"] = (
+                    f"Queue Environment: {template['environment']['name']}"
+                )
             existing_parameter = queue_parameters_definitions.get(parameter["name"])
             if existing_parameter:
                 differences = parameter_definition_difference(existing_parameter, parameter)

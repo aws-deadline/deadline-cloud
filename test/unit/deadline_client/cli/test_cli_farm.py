@@ -3,6 +3,7 @@
 """
 Tests for the CLI farm commands.
 """
+
 from unittest.mock import patch
 import os
 

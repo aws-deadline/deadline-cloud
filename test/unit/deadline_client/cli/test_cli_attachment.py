@@ -3,6 +3,7 @@
 """
 Tests for the CLI attachment commands.
 """
+
 import os
 
 from click.testing import CliRunner

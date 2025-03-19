@@ -7,11 +7,13 @@ All the `deadline manifest` commands:
     * diff
     * download
 """
+
 from __future__ import annotations
 
 from configparser import ConfigParser
 import dataclasses
 import os
+import sys
 from typing import List, Optional
 import boto3
 import click
@@ -19,6 +21,10 @@ import click
 from deadline.client import api
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
+from deadline.job_attachments._utils import (
+    WINDOWS_MAX_PATH_LENGTH,
+    _is_windows_long_path_registry_enabled,
+)
 from deadline.job_attachments.api.manifest import (
     _glob_files,
     _manifest_diff,
@@ -30,6 +36,7 @@ from deadline.job_attachments.models import (
     S3_MANIFEST_FOLDER_NAME,
     JobAttachmentS3Settings,
     ManifestDiff,
+    AssetType,
 )
 
 from ...exceptions import NonValidInputError
@@ -128,7 +135,24 @@ def manifest_snapshot(
         logger=logger,
     )
     if manifest_out:
-        logger.json(dataclasses.asdict(manifest_out))
+        if (
+            sys.platform == "win32"
+            and len(manifest_out.manifest) >= WINDOWS_MAX_PATH_LENGTH
+            and not _is_windows_long_path_registry_enabled()
+        ):
+            long_manifest_path_warning = f"""WARNING: Manifest file path {manifest_out.manifest} exceeds Windows path length limit. This may cause unexpected issues.
+For details and a fix using the registry, see: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation"""
+            logger.echo(
+                click.style(
+                    long_manifest_path_warning,
+                    fg="yellow",
+                )
+            )
+            logger.json(
+                dict(dataclasses.asdict(manifest_out), **{"warning": long_manifest_path_warning})
+            )
+        else:
+            logger.json(dataclasses.asdict(manifest_out))
 
 
 @cli_manifest.command(
@@ -225,6 +249,18 @@ def manifest_diff(
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
+    "--asset-type",
+    default=AssetType.ALL.value,
+    help="Which asset type to download:\n"
+    "INPUT means download only input asset files for given job/step.\n"
+    "OUTPUT means download only output asset files for given job/step.\n"
+    "ALL (default) means download all input & output asset files for given job/step.\n",
+    type=click.Choice(
+        [e.value for e in AssetType],
+        case_sensitive=False,
+    ),
+)
+@click.option(
     "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting. "
 )
 @_handle_error
@@ -232,11 +268,12 @@ def manifest_download(
     download_dir: str,
     job_id: str,
     step_id: str,
+    asset_type: str,
     json: bool,
     **args,
 ):
     """
-    Downloads input manifest of previously submitted job.
+    Downloads input/output manifests of a submitted job as per provided asset_type
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -257,6 +294,7 @@ def manifest_download(
         queue_id=queue_id,
         job_id=job_id,
         step_id=step_id,
+        asset_type=AssetType(asset_type),
         boto3_session=boto3_session,
         logger=logger,
     )

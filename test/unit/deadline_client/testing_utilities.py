@@ -41,7 +41,7 @@ if os.name == "nt":
         result = ["set MATCHED=YES\n"]
         for i, arg in enumerate(args, start=1):
             result.append(f'if not "%{i}" == "{_batfile_quote(arg)}" set MATCHED=NO\n')
-        result.append(f'if not "%{len(args)+1}" == "" set MATCHED=NO\n')
+        result.append(f'if not "%{len(args) + 1}" == "" set MATCHED=NO\n')
         result.append(f"if %MATCHED% == NO goto no_match_{args_index}\n")
         return "".join(result)
 

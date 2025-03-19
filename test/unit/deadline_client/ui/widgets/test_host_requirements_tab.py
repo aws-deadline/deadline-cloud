@@ -114,10 +114,10 @@ def test_name_in_custom_amount_widget_should_not_allow_reserved_first_identifier
         with pytest.raises(NonValidInputError) as e:
             widget.get_requirement()
 
-        assert str(
-            e.value
-        ) == "Please make sure that the first identifier in your name is not a reserved identifier. " + str(
-            RESERVED_FIRST_IDENTIFIERS
+        assert (
+            str(e.value)
+            == "Please make sure that the first identifier in your name is not a reserved identifier. "
+            + str(RESERVED_FIRST_IDENTIFIERS)
         )
 
 
@@ -227,8 +227,8 @@ def test_name_in_custom_attribute_widget_should_not_allow_reserved_first_identif
         with pytest.raises(NonValidInputError) as e:
             widget.get_requirement()
 
-        assert str(
-            e.value
-        ) == "Please make sure that the first identifier in your name is not a reserved identifier. " + str(
-            RESERVED_FIRST_IDENTIFIERS
+        assert (
+            str(e.value)
+            == "Please make sure that the first identifier in your name is not a reserved identifier. "
+            + str(RESERVED_FIRST_IDENTIFIERS)
         )

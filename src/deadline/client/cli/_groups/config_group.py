@@ -5,6 +5,7 @@ All the `deadline config` commands.
 """
 
 import click
+import json
 import textwrap
 
 from ...config import config_file
@@ -20,29 +21,44 @@ def cli_config():
 
 
 @cli_config.command(name="show")
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default="verbose",
+    help="Output format of the command",
+)
 @_handle_error
-def config_show():
+def config_show(output):
     """
     Show all workstation configuration settings and current values.
     """
-    click.echo(f"AWS Deadline Cloud configuration file:\n   {config_file.get_config_file_path()}")
-    click.echo()
-
-    for setting_name in config_file.SETTINGS.keys():
-        setting_value = config_file.get_setting(setting_name)
-        setting_default = config_file.get_setting_default(setting_name)
-
-        # Wrap and indent the descriptions to 80 characters because they may be multiline.
-        setting_description: str = config_file.SETTINGS[setting_name].get("description", "")
-        setting_description = "\n".join(
-            f"   {line}" for line in textwrap.wrap(setting_description, width=77)
-        )
-
+    settings_json = {}
+    if output == "verbose":
         click.echo(
-            f"{setting_name}: {setting_value} {'(default)' if setting_value == setting_default else ''}"
+            f"AWS Deadline Cloud configuration file:\n   {config_file.get_config_file_path()}"
         )
-        click.echo(setting_description)
         click.echo()
+        for setting_name in config_file.SETTINGS.keys():
+            setting_value = config_file.get_setting(setting_name)
+            setting_default = config_file.get_setting_default(setting_name)
+
+            # Wrap and indent the descriptions to 80 characters because they may be multiline.
+            setting_description: str = config_file.SETTINGS[setting_name].get("description", "")
+            setting_description = "\n".join(
+                f"   {line}" for line in textwrap.wrap(setting_description, width=77)
+            )
+            click.echo(
+                f"{setting_name}: {setting_value} {'(default)' if setting_value == setting_default else ''}"
+            )
+            click.echo(setting_description)
+            click.echo()
+    else:
+        settings_json["settings.config_file_path"] = str(config_file.get_config_file_path())
+        for setting_name in config_file.SETTINGS.keys():
+            setting_value = config_file.get_setting(setting_name)
+            settings_json[setting_name] = setting_value
+
+        click.echo(json.dumps(settings_json))
 
 
 @cli_config.command(name="gui")

@@ -279,9 +279,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -450,9 +448,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -613,9 +609,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             expected_files = set(
@@ -792,9 +786,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -931,9 +923,7 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
         ):
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             caplog.set_level(DEBUG)
@@ -1669,9 +1659,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1707,9 +1695,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             caplog.set_level(INFO)
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1790,9 +1776,7 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
-        ):
+        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1947,9 +1931,7 @@ class TestUpload:
                 skipped_bytes=0,
             )
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -2496,6 +2478,131 @@ class TestUpload:
         )
         assert actual_queues == expected_queues
 
+    @pytest.mark.parametrize(
+        "cache_entry",
+        [
+            S3CheckCacheEntry(
+                s3_key="bucket/Data/test-hash",
+                last_seen_time=str(datetime.now().timestamp()),
+            ),
+            None,
+        ],
+    )
+    def test_verify_hash_cache_integrity_returns_true_when_cache_and_s3_match(self, cache_entry):
+        # Given
+        mock_s3_check_cache_impl = MagicMock()
+        mock_s3_check_cache_impl.get_entry.return_value = cache_entry
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.return_value = {}
+
+        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader._s3 = mock_s3_client
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            with patch.object(
+                s3_asset_uploader,
+                "file_already_uploaded",
+                wraps=s3_asset_uploader.file_already_uploaded,
+            ) as file_already_uploaded_spy:
+                # Then
+                # Execute verify_hash_cache_integrity where hash exists in S3
+                assert s3_asset_uploader.verify_hash_cache_integrity(
+                    s3_check_cache_dir="cache-dir",
+                    manifest=AssetManifest(
+                        hash_alg=HashAlgorithm.XXH128,
+                        paths=[
+                            BaseManifestPath(
+                                path="test-file.txt", hash="test-hash", size=5, mtime=1
+                            )
+                        ],
+                        total_size=1,
+                    ),
+                    s3_cas_prefix="Data",
+                    s3_bucket="bucket",
+                )
+                if cache_entry:
+                    file_already_uploaded_spy.assert_called_once_with(
+                        bucket="bucket", key="Data/test-hash"
+                    )
+                else:
+                    file_already_uploaded_spy.assert_not_called()
+
+    def test_verify_hash_cache_integrity_returns_false_when_cache_and_s3_mismatch(self):
+        # Given
+        mock_s3_check_cache_impl = MagicMock()
+        mock_s3_check_cache_impl.get_entry.return_value = S3CheckCacheEntry(
+            s3_key="bucket/Data/test-hash",
+            last_seen_time=str(datetime.now().timestamp()),
+        )
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        mock_s3_client = MagicMock()
+        mock_s3_client.head_object.side_effect = ClientError(
+            {"ResponseMetadata": {"HTTPStatusCode": 404}}, "HeadObject"
+        )
+
+        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader._s3 = mock_s3_client
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            with patch.object(
+                s3_asset_uploader,
+                "file_already_uploaded",
+                wraps=s3_asset_uploader.file_already_uploaded,
+            ) as file_already_uploaded_spy:
+                # Execute verify_hash_cache_integrity where hash does not exist in S3
+                # Then
+                assert not s3_asset_uploader.verify_hash_cache_integrity(
+                    s3_check_cache_dir="cache-dir",
+                    manifest=AssetManifest(
+                        hash_alg=HashAlgorithm.XXH128,
+                        paths=[
+                            BaseManifestPath(
+                                path="test-file.txt", hash="test-hash", size=5, mtime=1
+                            )
+                        ],
+                        total_size=1,
+                    ),
+                    s3_cas_prefix="Data",
+                    s3_bucket="bucket",
+                )
+
+                file_already_uploaded_spy.assert_called_once_with(
+                    bucket="bucket", key="Data/test-hash"
+                )
+
+    def test_reset_s3_check_cache_removes_cache(self, tmpdir):
+        # Given
+        cache_dir: str = "mock_dir"
+        mock_s3_check_cache_impl = MagicMock()
+
+        mock_s3_check_cache = MagicMock()
+        mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
+
+        # When
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.S3CheckCache",
+            return_value=mock_s3_check_cache,
+        ):
+            # Execute reset_s3_check_cache where the cached hash does not exist in S3
+            s3_asset_uploader = S3AssetUploader()
+            s3_asset_uploader.reset_s3_check_cache(cache_dir)
+
+            # Then
+            mock_s3_check_cache_impl.remove_cache.assert_called_once()
+
     @mock_aws
     @pytest.mark.parametrize(
         "manifest_version",
@@ -2632,9 +2739,7 @@ class TestUpload:
             assert file_size == 5
             s3_cache.put_entry.assert_called_once_with(expected_new_entry)
 
-            s3 = boto3.Session(region_name="us-west-2").resource(
-                "s3"
-            )  # pylint: disable=invalid-name
+            s3 = boto3.Session(region_name="us-west-2").resource("s3")  # pylint: disable=invalid-name
             bucket = s3.Bucket(self.job_attachment_s3_settings.s3BucketName)
 
             assert_expected_files_on_s3(
@@ -2661,6 +2766,26 @@ class TestUpload:
         # Then
         assert hash_alg == HashAlgorithm.XXH128
         assert manifest_name == "73addc7c69ddec53bd8d9df653add3c4_suffix"
+
+    def test_get_hashed_file_name_from_root_str(self):
+        # Given
+        manifest = AssetManifest(
+            hash_alg=HashAlgorithm("xxh128"),
+            total_size=10,
+            paths=[
+                BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
+                BaseManifestPath(
+                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                ),
+            ],
+        )
+        # When
+        (hash_alg, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
+            manifest, "C:\\Program Files\\My App\\data.txt", "suffix"
+        )
+        # Then
+        assert hash_alg == HashAlgorithm.XXH128
+        assert manifest_name == "da20652d1ff9f1dc55050b28b3ab6d36_suffix"
 
 
 def assert_progress_report_last_callback(

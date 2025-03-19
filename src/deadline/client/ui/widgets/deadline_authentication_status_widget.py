@@ -5,6 +5,7 @@ Provides a widget to place in AWS Deadline Cloud submitter dialogs, that shows
 the current status of AWS Deadline Cloud authentication and API.
 The current status is handled by DeadlineAuthenticationStatus.
 """
+
 from logging import getLogger
 from typing import Optional
 

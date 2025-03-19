@@ -4,6 +4,7 @@
 Tests the deadline.client.job_bundle.parameters functions for working with
 job bundle parameters
 """
+
 from __future__ import annotations
 
 import pytest

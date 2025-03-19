@@ -3,6 +3,7 @@
 """
 Data classes for AWS objects.
 """
+
 from __future__ import annotations
 
 import sys
@@ -131,6 +132,12 @@ class StorageProfileOperatingSystemFamily(str, Enum):
             if member == value:
                 return member
         return None
+
+
+class AssetType(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+    ALL = "all"
 
 
 class PathFormat(str, Enum):
