@@ -40,3 +40,4 @@ jobs:
       ref_type: ${{inputs.ref_type}}
       ref: ${{inputs.ref}}
       oses: "['${{inputs.os}}']"
+      project_name: "deadline-cloud"
