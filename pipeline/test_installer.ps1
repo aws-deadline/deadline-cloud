@@ -1,0 +1,4 @@
+$ErrorActionPreference = "Stop"
+
+hatch run test_installer
+if ($LASTEXITCODE -ne 0) { throw "Failed to test installer" }
