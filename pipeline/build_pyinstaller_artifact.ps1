@@ -4,5 +4,8 @@ pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Failed to update pip" }
 pip install --upgrade hatch
 if ($LASTEXITCODE -ne 0) { throw "Failed to update hatch" }
-hatch run integ:test
-if ($LASTEXITCODE -ne 0) { throw "Failed to run integration tests" }
+
+hatch run installer:build
+if ($LASTEXITCODE -ne 0) { throw "Failed to build project" }
+hatch run installer:make_exe
+if ($LASTEXITCODE -ne 0) { throw "Failed to build pyinstaller artifact" }
