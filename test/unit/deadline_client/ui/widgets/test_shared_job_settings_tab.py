@@ -49,8 +49,8 @@ def test_priority_should_be_integer_within_range(shared_job_settings_tab: Shared
     shared_job_settings_tab.shared_job_properties_box.priority_box.setValue(-1)
     assert shared_job_settings_tab.shared_job_properties_box.priority_box.value() == 0
 
-    shared_job_settings_tab.shared_job_properties_box.priority_box.setValue(100)
-    assert shared_job_settings_tab.shared_job_properties_box.priority_box.value() == 99
+    shared_job_settings_tab.shared_job_properties_box.priority_box.setValue(101)
+    assert shared_job_settings_tab.shared_job_properties_box.priority_box.value() == 100
 
 
 def test_initial_state_should_be_allowed_enums(shared_job_settings_tab: SharedJobSettingsWidget):

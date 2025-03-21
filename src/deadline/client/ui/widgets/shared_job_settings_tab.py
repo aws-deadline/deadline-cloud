@@ -270,6 +270,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
         self.priority_box_label = QLabel("Priority")
         self.priority_box = QSpinBox(parent=self)
+        self.priority_box.setRange(0, 100)
         self.layout.addRow(self.priority_box_label, self.priority_box)
 
         self.initial_status_box_label = QLabel("Initial state")
