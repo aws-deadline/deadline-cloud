@@ -5,7 +5,7 @@ pre-install-commands = ["pip install -r requirements-testing.txt"]
 sync = "pip install -r requirements-testing.txt"
 test = "pytest --cov-config pyproject.toml {args:test/unit}"
 test_docker = "./scripts/run_sudo_tests.sh --build"
-test_installer = "pytest --no-cov {args:test/installer} -vvv --numprocesses=1"
+test_installer = "pytest --no-cov {args:test/installer} -vvv"
 test_build_installer = "pytest --no-cov {args:test/build_installer}"
 typing = "mypy {args:src test} --always-false=PYQT5 --always-false=PYSIDE2 --always-false=PYQT6 --always-true=PYSIDE6"
 style = ["ruff check {args:.}", "ruff format --check --diff {args:.}"]
@@ -14,7 +14,7 @@ lint = ["style", "typing"]
 quality = ["ruff format {args:.}", "typing", "style"]
 
 [[envs.all.matrix]]
-python = ["3.8", "3.9", "3.10", "3.11"]
+python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
 
 [envs.default.env-vars]
 SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
