@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 #!/usr/bin/env python
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 import os
