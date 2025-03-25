@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 # Stop on first error
 $ErrorActionPreference = "Stop"
 
