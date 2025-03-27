@@ -410,10 +410,10 @@ def _manifest_download(
         logger.echo(f"Downloading input manifests for job: {job_id}")
 
         # Get input_manifest_paths from Deadline GetJob API
-        attachments: dict = job["attachments"] if "attachments" in job else {}
+        attachments: dict = job.get("attachments", {})
         input_manifest_paths: List[Tuple[str, str]] = [
             (manifest.get("inputManifestPath", ""), manifest["rootPath"])
-            for manifest in attachments["manifests"]
+            for manifest in attachments.get("manifests", [])
         ]
 
         # Download each input_manifest_path
@@ -433,36 +433,40 @@ def _manifest_download(
         if step_id is not None:
             logger.echo(f"Finding step-step dependency manifests for step: {step_id}")
 
-            # Get Step-Step dependencies.
-            nextToken = ""
-            step_dep_response = deadline.list_step_dependencies(
-                farmId=farm_id,
-                queueId=queue_id,
-                jobId=job_id,
-                stepId=step_id,
-                nextToken=nextToken,
-            )
-            for dependent_step in step_dep_response["dependencies"]:
-                logger.echo(f"Found Step-Step dependency. {dependent_step['stepId']}")
-
-                # Get manifests for the step-step dependency
-                step_manifests_by_root: Dict[str, List[BaseAssetManifest]] = (
-                    get_output_manifests_by_asset_root(
-                        s3_settings=queue_s3_settings,
-                        farm_id=farm_id,
-                        queue_id=queue_id,
-                        job_id=job_id,
-                        step_id=dependent_step["stepId"],
-                        session=queue_role_session,
-                    )
+            # Get Step-Step dependencies with pagination
+            next_token = ""
+            while next_token is not None:
+                step_dep_response = deadline.list_step_dependencies(
+                    farmId=farm_id,
+                    queueId=queue_id,
+                    jobId=job_id,
+                    stepId=step_id,
+                    nextToken=next_token,
                 )
-                # Merge all manifests by root.
-                for root in step_manifests_by_root.keys():
-                    for manifest in step_manifests_by_root[root]:
-                        logger.echo(f"Found step-step output manifest for root: {root}")
-                        add_manifest_by_root(
-                            manifests_by_root=manifests_by_root, root=root, manifest=manifest
+
+                for dependent_step in step_dep_response["dependencies"]:
+                    logger.echo(f"Found Step-Step dependency. {dependent_step['stepId']}")
+
+                    # Get manifests for the step-step dependency
+                    step_manifests_by_root: Dict[str, List[BaseAssetManifest]] = (
+                        get_output_manifests_by_asset_root(
+                            s3_settings=queue_s3_settings,
+                            farm_id=farm_id,
+                            queue_id=queue_id,
+                            job_id=job_id,
+                            step_id=dependent_step["stepId"],
+                            session=queue_role_session,
                         )
+                    )
+                    # Merge all manifests by root.
+                    for root in step_manifests_by_root.keys():
+                        for manifest in step_manifests_by_root[root]:
+                            logger.echo(f"Found step-step output manifest for root: {root}")
+                            add_manifest_by_root(
+                                manifests_by_root=manifests_by_root, root=root, manifest=manifest
+                            )
+
+                next_token = step_dep_response.get("nextToken")
 
     # If output manifests need to be downloaded
     if download_output:
