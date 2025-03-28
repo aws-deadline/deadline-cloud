@@ -3,7 +3,6 @@ import getpass
 import glob
 import os
 import platform
-import pwd
 import re
 import shutil
 import stat
@@ -271,6 +270,9 @@ class TestLinuxAndMacOS:
     def _validate_posix_permissions(self, installation_path: Path):
         # assists mypy type checking to ignore this on Windows
         assert sys.platform != "win32"
+        # pwd is not available on Windows
+        import pwd
+
         # GIVEN
         current_user = pwd.getpwuid(os.getuid())[0]  # type: ignore
 
@@ -310,6 +312,23 @@ class TestWindows:
         # GIVEN / WHEN / THEN
         self._verify_windows_least_privilege(system_installation)
 
+    def _running_in_container(self) -> bool:
+        """
+        Check to see if the cexecsvc service exists and is running
+        to determine if we're running on a container.
+        """
+        # assists mypy type checking to ignore this on non-Windows
+        assert sys.platform == "win32"
+        import win32service
+        import win32serviceutil
+
+        try:
+            service_status = win32serviceutil.QueryServiceStatus("cexecsvc")
+            return service_status[1] == win32service.SERVICE_RUNNING
+        except win32service.error:
+            # Service doesn't exist, not on a container
+            return False
+
     def _verify_windows_least_privilege(self, installation_path: Path):
         # assists mypy type checking to ignore this on non-Windows
         assert sys.platform == "win32"
@@ -320,7 +339,15 @@ class TestWindows:
 
         # GIVEN
         windows_user = getpass.getuser()
-        builtin_admin_group_sid, _, _ = win32security.LookupAccountName(None, "Administrators")
+
+        if self._running_in_container():
+            # The admin group is different when running
+            # in a container.
+            admin_group = "ContainerAdministrator"
+        else:
+            admin_group = "Administrators"
+
+        builtin_admin_group_sid, _, _ = win32security.LookupAccountName(None, admin_group)
         user_sid, _, _ = win32security.LookupAccountName(None, windows_user)
 
         # WHEN
@@ -336,7 +363,7 @@ class TestWindows:
             if _is_admin():
                 if builtin_admin_group_sid != owner_sid:
                     bad_perms[path].append(
-                        f"Expected to be owned by 'Administrators' but got '{win32security.LookupAccountSid(None, owner_sid)}'"
+                        f"Expected to be owned by '{admin_group}' but got '{win32security.LookupAccountSid(None, owner_sid)}'"
                     )
             elif user_sid != owner_sid:
                 bad_perms[path].append(
