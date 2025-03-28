@@ -3,6 +3,7 @@ import getpass
 import glob
 import os
 import platform
+import pwd
 import re
 import shutil
 import stat
@@ -271,7 +272,7 @@ class TestLinuxAndMacOS:
         # assists mypy type checking to ignore this on Windows
         assert sys.platform != "win32"
         # GIVEN
-        current_user = getpass.getuser()
+        current_user = pwd.getpwuid(os.getuid())[0]  # type: ignore
 
         # WHEN
         bad_perms: DefaultDict[Path, List[str]] = defaultdict(list)
