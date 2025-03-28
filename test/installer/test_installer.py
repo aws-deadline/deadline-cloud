@@ -491,7 +491,12 @@ class TestVerifySigning:
             Number of errors: 1
         """
         # GIVEN
-        signtool = next(glob.iglob("C:/Program Files*/Windows Kits/*/bin/*/x64/signtool.exe"), None)
+        # Check PATH, then SDK installation location
+        signtool = shutil.which("signtool")
+        if not signtool:
+            signtool = next(
+                glob.iglob("C:/Program Files*/Windows Kits/*/bin/*/x64/signtool.exe"), None
+            )
         assert signtool, "signtool not found in expected location"
 
         # WHEN
