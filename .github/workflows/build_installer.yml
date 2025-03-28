@@ -10,6 +10,7 @@ on:
         options:
         - Linux
         - Windows
+        - MacOS
       ref_type:
         required: true
         type: choice
