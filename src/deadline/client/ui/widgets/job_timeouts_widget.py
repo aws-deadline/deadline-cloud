@@ -291,8 +291,7 @@ class TimeoutTableWidget(QGroupBox):
         """
         any_deactivated = any(not row.checkbox.isChecked() for row in self.timeout_rows.values())
         warning_text = (
-            "Warning: Without a specified timeout, tasks may run indefinitely if issues occur, "
-            "or they will use OpenJD's default timeouts if they exist."
+            "Warning: Without a specified timeout, tasks may run indefinitely if issues occur."
             if any_deactivated
             else ""
         )
