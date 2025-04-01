@@ -86,20 +86,45 @@ TEMP_DOWNLOAD_ADDED_CHARS_LENGTH = 9
 def get_manifest_from_s3(
     manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
 ) -> BaseAssetManifest:
+    _, manifest = get_asset_root_and_manifest_from_s3(manifest_key, s3_bucket, session)
+    return manifest
+
+
+def get_asset_root_and_manifest_from_s3(
+    manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
+) -> Tuple[Optional[str], BaseAssetManifest]:
     s3_client = get_s3_client(session=session)
     try:
-        file_buffer = io.BytesIO()
-        s3_client.download_fileobj(
-            s3_bucket,
-            manifest_key,
-            file_buffer,
-            ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
+        # Attempt to get the manifest and metadata in a single request. If it's larger than a single 8MB
+        # chunk, fetch it in chunks using the S3 transfer manager.
+        max_chunk_length = 8 * 1024 * 1024  # 8MB
+        res = s3_client.get_object(
+            Bucket=s3_bucket,
+            Key=manifest_key,
+            Range=f"bytes=0-{max_chunk_length}",
+            ExpectedBucketOwner=get_account_id(session=session),
         )
-        byte_value = file_buffer.getvalue()
-        string_value = byte_value.decode("utf-8")
-        asset_manifest = decode_manifest(string_value)
-        file_buffer.close()
-        return asset_manifest
+        metadata = res["Metadata"]
+        content_length = res["ContentLength"]
+        body = res["Body"]
+        asset_root = _get_asset_root_from_metadata(metadata=metadata)
+
+        if content_length < max_chunk_length:
+            contents = body.read().decode("utf-8")
+        else:
+            file_buffer = io.BytesIO()
+            s3_client.download_fileobj(
+                s3_bucket,
+                manifest_key,
+                file_buffer,
+                ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
+            )
+            byte_value = file_buffer.getvalue()
+            contents = byte_value.decode("utf-8")
+
+        asset_manifest = decode_manifest(contents)
+
+        return (asset_root, asset_manifest)
     except ClientError as exc:
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
         status_code_guidance = {
@@ -132,6 +157,13 @@ def get_manifest_from_s3(
         ) from bce
     except Exception as e:
         raise AssetSyncError(e) from e
+
+
+def _get_asset_root_from_metadata(metadata: dict[str, str]) -> Optional[str]:
+    if "asset-root-json" in metadata:
+        return json.loads(metadata["asset-root-json"])
+    else:
+        return metadata.get("asset-root", None)
 
 
 def _get_output_manifest_prefix(
@@ -257,7 +289,7 @@ def get_job_input_paths_by_asset_root(
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
             key = _join_s3_paths(manifest_properties.inputManifestPath)
-            asset_manifest = get_manifest_from_s3(
+            _, asset_manifest = get_asset_root_and_manifest_from_s3(
                 manifest_key=key,
                 s3_bucket=s3_settings.s3BucketName,
                 session=session,
@@ -655,47 +687,6 @@ def download_files(
     )
 
 
-def _get_asset_root_from_s3(
-    manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
-) -> Optional[str]:
-    """
-    Gets asset root from metadata (of output manifest) stored in S3.
-    If neither of the keys "asset-root-json" or "asset-root" exist in the metadata, returns None.
-    """
-    s3_client = get_s3_client(session=session)
-    try:
-        head = s3_client.head_object(Bucket=s3_bucket, Key=manifest_key)
-    except ClientError as exc:
-        status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
-        status_code_guidance = {
-            **COMMON_ERROR_GUIDANCE_FOR_S3,
-            403: (
-                "Access denied. Ensure that the bucket is in the AWS account, "
-                "and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket."
-            ),
-            404: "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account.",
-        }
-        raise JobAttachmentsS3ClientError(
-            action="checking if object exists",
-            status_code=status_code,
-            bucket_name=s3_bucket,
-            key_or_prefix=manifest_key,
-            message=f"{status_code_guidance.get(status_code, '')} {str(exc)}",
-        ) from exc
-    except BotoCoreError as bce:
-        raise JobAttachmentS3BotoCoreError(
-            action="checking for the existence of an object in the S3 bucket",
-            error_details=str(bce),
-        ) from bce
-    except Exception as e:
-        raise AssetSyncError(e) from e
-
-    if "asset-root-json" in head["Metadata"]:
-        return json.loads(head["Metadata"]["asset-root-json"])
-    else:
-        return head["Metadata"].get("asset-root", None)
-
-
 def get_job_output_paths_by_asset_root(
     s3_settings: JobAttachmentS3Settings,
     farm_id: str,
@@ -751,12 +742,11 @@ def get_output_manifests_by_asset_root(
         return outputs
 
     for key in manifests_keys:
-        asset_manifest = get_manifest_from_s3(
+        asset_root, asset_manifest = get_asset_root_and_manifest_from_s3(
             manifest_key=key,
             s3_bucket=s3_settings.s3BucketName,
             session=session,
         )
-        asset_root = _get_asset_root_from_s3(key, s3_settings.s3BucketName, session)
         if not asset_root:
             raise MissingAssetRootError(
                 f"Failed to get asset root from metadata of output manifest: {key}"

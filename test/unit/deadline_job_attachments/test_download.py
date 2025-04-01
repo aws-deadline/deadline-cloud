@@ -39,6 +39,7 @@ from deadline.job_attachments.download import (
     download_file,
     download_files_from_manifests,
     download_files_in_directory,
+    get_asset_root_and_manifest_from_s3,
     get_job_input_output_paths_by_asset_root,
     get_job_input_paths_by_asset_root,
     get_job_output_paths_by_asset_root,
@@ -47,7 +48,7 @@ from deadline.job_attachments.download import (
     mount_vfs_from_manifests,
     merge_asset_manifests,
     _ensure_paths_within_directory,
-    _get_asset_root_from_s3,
+    _get_asset_root_from_metadata,
     _get_new_copy_file_path,
     _get_tasks_manifests_keys_from_s3,
     VFS_CACHE_REL_PATH_IN_SESSION,
@@ -196,7 +197,7 @@ def assert_download_task_output(
     Assert that the expected files are downloaded when download_job_output is called with a task id.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value=str(tmp_path.resolve()),
     ):
         mock_on_downloading_files = MagicMock(return_value=True)
@@ -246,7 +247,7 @@ def assert_download_step_output(
     Assert that the expected files are downloaded when download_job_output is called with a step id.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value=str(tmp_path.resolve()),
     ):
         mock_on_downloading_files = MagicMock(return_value=True)
@@ -290,7 +291,7 @@ def assert_download_job_output(
     Assert that the expected files are downloaded when download_job_output is called.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value=str(tmp_path.resolve()),
     ):
         mock_on_downloading_files = MagicMock(return_value=True)
@@ -336,7 +337,7 @@ def assert_download_files_in_directory(
     Assert that the expected files are downloaded when download_files_in_directory is called.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value=str(tmp_path.resolve()),
     ):
         mock_on_downloading_files = MagicMock(return_value=True)
@@ -499,7 +500,7 @@ def assert_get_job_output_paths_by_asset_root(
     Assert that get_job_output_paths_by_asset_root returns a list of (hash, path) pairs of all output files.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value="/test",
     ):
         paths_by_root = get_job_output_paths_by_asset_root(
@@ -525,7 +526,7 @@ def assert_get_job_output_paths_by_asset_root_when_no_asset_root_throws_error(
     Assert that get_job_output_paths_by_asset_root raises MissingAssetRootError when fail to get manifest.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value=None,
     ), pytest.raises(MissingAssetRootError) as raised_err:
         get_job_output_paths_by_asset_root(s3_settings, farm_id, queue_id, "job-1")
@@ -546,7 +547,7 @@ def assert_get_job_input_output_paths_by_asset_root(
     asset files and output files.
     """
     with patch(
-        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+        f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
         return_value="/tmp",
     ):
         paths_by_root = get_job_input_output_paths_by_asset_root(
@@ -1157,7 +1158,7 @@ class TestFullDownload:
         tmp_path: Path,
     ):
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1190,7 +1191,7 @@ class TestFullDownload:
 
     def test_OutputDownloader_set_root_path(self, farm_id, queue_id, tmp_path: Path):
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1237,7 +1238,7 @@ class TestFullDownload:
         resolving the symlink target, the absolute path with ".." removed is stored.
         """
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1274,7 +1275,7 @@ class TestFullDownload:
         Assert a ValueError is thrown when given a non-existent root path.
         """
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1336,7 +1337,7 @@ class TestFullDownload:
             tmp_path / "test" / "test12.txt",
         ]
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1428,7 +1429,7 @@ class TestFullDownload:
         expected_files_after_create_copy.extend(expected_files)
 
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1457,7 +1458,7 @@ class TestFullDownload:
         self, farm_id, queue_id, tmp_path: Path
     ):
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value=str(tmp_path.resolve()),
         ):
             output_downloader = OutputDownloader(
@@ -1496,7 +1497,7 @@ class TestFullDownload:
         ]
 
         with patch(
-            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_s3",
+            f"{deadline.__package__}.job_attachments.download._get_asset_root_from_metadata",
             return_value="/test_root",
         ):
             output_downloader = OutputDownloader(
@@ -1652,57 +1653,56 @@ class TestFullDownload:
     ):
         self.create_output_downloaded_and_validate_path(farm_id, outputs_by_root, queue_id)
 
-    def test_get_asset_root_from_s3_error_message_on_not_found(self):
+    def test_get_asset_root_from_metadata_returns_none_if_not_found(self):
+        assert _get_asset_root_from_metadata(metadata={}) is None
+
+    def test_get_asset_root_and_manifest_from_s3_gets_large_manifests_in_multiple_chunks(self):
         """
         Test if the function raises the expected exception with a proper error message
-        when S3 client's head_object returns a Not Found (404) error.
+        when S3 client's download_fileobj returns an Access Denied (403) error.
         """
-        s3_client = boto3.client("s3")
-        stubber = Stubber(s3_client)
-        stubber.add_client_error(
-            "head_object",
-            service_error_code="NotFound",
-            service_message="Not Found",
-            http_status_code=404,
-        )
+        test_manifest = {
+            "manifestVersion": "2023-03-03",
+            "hashAlg": "xxh128",
+            "totalSize": 12345,
+            "paths": [
+                {
+                    "path": "relative/path/to/file1.txt",
+                    "hash": "abcdef1234567890",
+                    "size": 1024,
+                    "mtime": 1678012345000000,
+                },
+                {
+                    "path": "relative/path/to/file2.png",
+                    "hash": "0987654321fedcba",
+                    "size": 11321,
+                    "mtime": 1678012346000000,
+                },
+            ],
+        }
+        test_root = "/tmp"
 
-        with stubber, patch(
-            f"{deadline.__package__}.job_attachments.download.get_s3_client", return_value=s3_client
-        ):
-            with pytest.raises(JobAttachmentsS3ClientError) as err:
-                _get_asset_root_from_s3("not/existed/test.txt", "test-bucket")
-            assert isinstance(err.value.__cause__, ClientError)
-            assert (
-                err.value.__cause__.response["ResponseMetadata"]["HTTPStatusCode"] == 404
-                # type: ignore[attr-defined]
-            )
-            assert (
-                "Error checking if object exists in bucket 'test-bucket', Target key or prefix: 'not/existed/test.txt', "
-                "HTTP Status Code: 404, Not found. "
-            ) in str(err.value)
-
-    def test_get_asset_root_from_s3_error_message_on_timeout(self):
-        """
-        Test that the appropriate error is raised when a ReadTimeoutError occurs
-        during an S3 client's head_object call.
-        """
         mock_s3_client = MagicMock()
-        mock_s3_client.head_object.side_effect = ReadTimeoutError(endpoint_url="test_url")
+        mock_s3_client.get_object.return_value = {
+            "Metadata": {"asset-root": test_root},
+            "ContentLength": 9999999999,
+            "Body": MagicMock(),
+        }
+
+        def mock_download_fileobj(_1, _2, buffer, **kwargs):
+            buffer.write(json.dumps(test_manifest).encode("utf-8"))
+
+        mock_s3_client.download_fileobj = mock_download_fileobj
 
         with patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_client",
             return_value=mock_s3_client,
         ):
-            with pytest.raises(AssetSyncError) as exc:
-                _get_asset_root_from_s3("test-key", "test-bucket")
-            assert isinstance(exc.value.__cause__, BotoCoreError)
-            assert (
-                "An issue occurred with AWS service request while checking for the existence of an object in the S3 bucket: "
-                'Read timeout on endpoint URL: "test_url"\n'
-                "This could be due to temporary issues with AWS, internet connection, or your AWS credentials. "
-                "Please verify your credentials and network connection. If the problem persists, try again later"
-                " or contact support for further assistance."
-            ) in str(exc.value)
+            asset_root, asset_manifest = get_asset_root_and_manifest_from_s3(
+                "test-key", "test-bucket"
+            )
+            assert asset_root == test_root
+            assert asset_manifest.hashAlg == test_manifest["hashAlg"]
 
     def test_get_manifest_from_s3_error_message_on_access_denied(self):
         """
@@ -1712,7 +1712,7 @@ class TestFullDownload:
         s3_client = boto3.client("s3")
         stubber = Stubber(s3_client)
         stubber.add_client_error(
-            "head_object",
+            "get_object",
             service_error_code="AccessDenied",
             service_message="Access Denied",
             http_status_code=403,
@@ -1739,7 +1739,7 @@ class TestFullDownload:
         during an S3 client's download_fileobj call.
         """
         mock_s3_client = MagicMock()
-        mock_s3_client.download_fileobj.side_effect = ReadTimeoutError(endpoint_url="test_url")
+        mock_s3_client.get_object.side_effect = ReadTimeoutError(endpoint_url="test_url")
 
         with patch(
             f"{deadline.__package__}.job_attachments.download.get_s3_client",
