@@ -741,17 +741,15 @@ def get_output_manifests_by_asset_root(
     except JobAttachmentsError:
         return outputs
 
-    for key in manifests_keys:
-        asset_root, asset_manifest = get_asset_root_and_manifest_from_s3(
-            manifest_key=key,
-            s3_bucket=s3_settings.s3BucketName,
-            session=session,
-        )
-        if not asset_root:
-            raise MissingAssetRootError(
-                f"Failed to get asset root from metadata of output manifest: {key}"
-            )
-        outputs[asset_root].append(asset_manifest)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
+        futures = [executor.submit(get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session) for key in manifests_keys]
+        for key, future in zip(manifests_keys, futures):
+            asset_root, asset_manifest = future.result()
+            if not asset_root:
+                raise MissingAssetRootError(
+                    f"Failed to get asset root from metadata of output manifest: {key}"
+                )
+            outputs[asset_root].append(asset_manifest)
 
     return outputs
 
