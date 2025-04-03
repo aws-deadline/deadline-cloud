@@ -39,7 +39,6 @@ from deadline.job_attachments.download import (
     download_file,
     download_files_from_manifests,
     download_files_in_directory,
-    get_asset_root_and_manifest_from_s3,
     get_job_input_output_paths_by_asset_root,
     get_job_input_paths_by_asset_root,
     get_job_output_paths_by_asset_root,
@@ -1655,54 +1654,6 @@ class TestFullDownload:
 
     def test_get_asset_root_from_metadata_returns_none_if_not_found(self):
         assert _get_asset_root_from_metadata(metadata={}) is None
-
-    def test_get_asset_root_and_manifest_from_s3_gets_large_manifests_in_multiple_chunks(self):
-        """
-        Test if the function raises the expected exception with a proper error message
-        when S3 client's download_fileobj returns an Access Denied (403) error.
-        """
-        test_manifest = {
-            "manifestVersion": "2023-03-03",
-            "hashAlg": "xxh128",
-            "totalSize": 12345,
-            "paths": [
-                {
-                    "path": "relative/path/to/file1.txt",
-                    "hash": "abcdef1234567890",
-                    "size": 1024,
-                    "mtime": 1678012345000000,
-                },
-                {
-                    "path": "relative/path/to/file2.png",
-                    "hash": "0987654321fedcba",
-                    "size": 11321,
-                    "mtime": 1678012346000000,
-                },
-            ],
-        }
-        test_root = "/tmp"
-
-        mock_s3_client = MagicMock()
-        mock_s3_client.get_object.return_value = {
-            "Metadata": {"asset-root": test_root},
-            "ContentLength": 9999999999,
-            "Body": MagicMock(),
-        }
-
-        def mock_download_fileobj(_1, _2, buffer, **kwargs):
-            buffer.write(json.dumps(test_manifest).encode("utf-8"))
-
-        mock_s3_client.download_fileobj = mock_download_fileobj
-
-        with patch(
-            f"{deadline.__package__}.job_attachments.download.get_s3_client",
-            return_value=mock_s3_client,
-        ):
-            asset_root, asset_manifest = get_asset_root_and_manifest_from_s3(
-                "test-key", "test-bucket"
-            )
-            assert asset_root == test_root
-            assert asset_manifest.hashAlg == test_manifest["hashAlg"]
 
     def test_get_manifest_from_s3_error_message_on_access_denied(self):
         """

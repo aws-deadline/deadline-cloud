@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import io
 import json
 import os
 import re
@@ -95,33 +94,16 @@ def get_asset_root_and_manifest_from_s3(
 ) -> Tuple[Optional[str], BaseAssetManifest]:
     s3_client = get_s3_client(session=session)
     try:
-        # Attempt to get the manifest and metadata in a single request. If it's larger than a single 8MB
-        # chunk, fetch it in chunks using the S3 transfer manager.
-        max_chunk_length = 8 * 1024 * 1024  # 8MB
+        # Assumption: the manifest is less than 5GB. S3 objects larger than 5GB will be truncated.
+        # Using the assumption because it simplifies the code. A large manifest might be:
+        # 1 million files * 256 bytes per file path = 256MB so this assumption is safe.
         res = s3_client.get_object(
             Bucket=s3_bucket,
             Key=manifest_key,
-            Range=f"bytes=0-{max_chunk_length}",
             ExpectedBucketOwner=get_account_id(session=session),
         )
-        metadata = res["Metadata"]
-        content_length = res["ContentLength"]
-        body = res["Body"]
-        asset_root = _get_asset_root_from_metadata(metadata=metadata)
-
-        if content_length < max_chunk_length:
-            contents = body.read().decode("utf-8")
-        else:
-            file_buffer = io.BytesIO()
-            s3_client.download_fileobj(
-                s3_bucket,
-                manifest_key,
-                file_buffer,
-                ExtraArgs={"ExpectedBucketOwner": get_account_id(session=session)},
-            )
-            byte_value = file_buffer.getvalue()
-            contents = byte_value.decode("utf-8")
-
+        asset_root = _get_asset_root_from_metadata(metadata=res["Metadata"])
+        contents = res["Body"].read().decode("utf-8")
         asset_manifest = decode_manifest(contents)
 
         return (asset_root, asset_manifest)
@@ -742,7 +724,12 @@ def get_output_manifests_by_asset_root(
         return outputs
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
-        futures = [executor.submit(get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session) for key in manifests_keys]
+        futures = [
+            executor.submit(
+                get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session
+            )
+            for key in manifests_keys
+        ]
         for key, future in zip(manifests_keys, futures):
             asset_root, asset_manifest = future.result()
             if not asset_root:
