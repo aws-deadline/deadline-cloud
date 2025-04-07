@@ -15,6 +15,7 @@ from common import UnsupportedOSError
 _INSTALL_BUILDER_ARCHIVE_FILENAME = {
     "Windows": "VMware-InstallBuilder-Professional-windows.tar.gz",
     "Linux": "VMware-InstallBuilder-Professional-linux.tar.gz",
+    "Darwin": "VMware-InstallBuilder-Professional-macos.tar.gz",
 }
 
 
