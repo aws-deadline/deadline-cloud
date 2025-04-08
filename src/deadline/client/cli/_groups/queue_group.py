@@ -5,6 +5,8 @@ All the `deadline queue` commands.
 """
 
 import click
+import json
+import time
 from botocore.exceptions import ClientError  # type: ignore[import]
 
 from ... import api
@@ -55,6 +57,99 @@ def queue_list(**args):
     ]
 
     click.echo(_cli_object_repr(structured_queue_list))
+
+
+@cli_queue.command(name="export-credentials")
+@click.option("--queue-id", help="The queue ID to use.")
+@click.option("--farm-id", help="The farm ID to use.")
+@click.option(
+    "--mode",
+    type=click.Choice(["USER", "READ"], case_sensitive=False),
+    default="USER",
+    help="The type of queue role to assume (default: USER)",
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["credentials_process"], case_sensitive=False),
+    default="credentials_process",
+    help="Format of the output (default: credentials_process)",
+)
+@click.option("--profile", help="The AWS profile to use.")
+@_handle_error
+def queue_export_credentials(mode, output_format, **args):
+    """
+    Export queue credentials in a format compatible with AWS SDK credentials_process.
+    """
+    start_time = time.time()
+    is_success = True
+    error_type = None
+
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+
+    queue_id: str = config_file.get_setting("defaults.queue_id", config=config)
+    farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
+
+    try:
+        # Call the appropriate API based on mode
+        if mode.upper() == "USER":
+            response = api.assume_queue_role_for_user(
+                farmId=farm_id, queueId=queue_id, config=config
+            )
+        elif mode.upper() == "READ":
+            response = api.assume_queue_role_for_read(
+                farmId=farm_id, queueId=queue_id, config=config
+            )
+        else:
+            is_success = False
+            error_type = "InvalidMode"
+            raise DeadlineOperationError(f"Invalid mode: {mode}")
+
+        # Format the response according to the AWS SDK credentials_process format
+        if output_format.lower() == "credentials_process":
+            credentials = response["credentials"]
+            formatted_credentials = {
+                "Version": 1,
+                "AccessKeyId": credentials["accessKeyId"],
+                "SecretAccessKey": credentials["secretAccessKey"],
+                "SessionToken": credentials["sessionToken"],
+                "Expiration": credentials["expiration"].isoformat(),
+            }
+            click.echo(json.dumps(formatted_credentials, indent=2))
+        else:
+            is_success = False
+            error_type = "InvalidOutputFormat"
+            raise DeadlineOperationError(f"Invalid output format: {output_format}")
+
+    except ClientError as exc:
+        is_success = False
+        error_type = "ClientError"
+        if "AccessDenied" in str(exc):
+            raise DeadlineOperationError(
+                f"Insufficient permissions to assume the requested queue role: {exc}"
+            ) from exc
+        elif "UnrecognizedClientException" in str(exc):
+            raise DeadlineOperationError(
+                f"Authentication failed. Please run 'deadline auth login' or check your AWS credentials: {exc}"
+            ) from exc
+        else:
+            raise DeadlineOperationError(
+                f"Failed to get credentials from AWS Deadline Cloud:\n{exc}"
+            ) from exc
+    finally:
+        # Record telemetry
+        duration_ms = int((time.time() - start_time) * 1000)
+        api._telemetry.get_deadline_cloud_library_telemetry_client().record_event(
+            "com.amazon.rum.deadline.queue_export_credentials",
+            {
+                "mode": mode,
+                "queue_id": queue_id,
+                "output_format": output_format,
+                "is_success": is_success,
+                "error_type": error_type if not is_success else None,
+                "duration_ms": duration_ms,
+            },
+        )
 
 
 @cli_queue.command(name="paramdefs")

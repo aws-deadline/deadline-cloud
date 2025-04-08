@@ -186,6 +186,42 @@ and removing them by logging out:
 $ deadline auth logout
 ```
 
+## AWS Credentials Integration
+
+You can use the Deadline Cloud client to obtain temporary AWS credentials for a queue and use them with the AWS CLI or SDK. This enables you to create AWS profiles that have queue-specific permissions for use in programmatic workflows.
+
+To export credentials for a queue in a format compatible with the AWS SDK credentials_process interface:
+
+```sh
+$ deadline queue export-credentials --farm-id farm-1234567890abcdefg --queue-id q-12345abcdef --mode USER
+{
+  "Version": 1,
+  "AccessKeyId": "ASIA...",
+  "SecretAccessKey": "wJalr...",
+  "SessionToken": "AQoD...",
+  "Expiration": "2025-04-08T20:00:46Z"
+}
+```
+
+You can then reference this command in your AWS config file to create a profile that uses these credentials. Often this will be a profile from a Deadline Cloud monitor session:
+
+```
+[profile deadline-queue]
+credential_process = deadline queue export-credentials --farm-id farm-1234567890abcdefg --queue-id q-12345abcdef --mode USER --profile myfarm-us-west-2
+region = us-west-2
+```
+
+Then use this profile with AWS CLI commands:
+
+```sh
+$ aws s3 ls --profile deadline-queue
+```
+
+Available modes:
+- `USER`: Credentials with full queue-role permissions.
+- `READ`: Credentials with read-only permissions for queue logs
+
+
 ## Code of Conduct
 
 This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
