@@ -5,9 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "deadline"
 description = "Multi-purpose library and command line tool that implements functionality to support applications using AWS Deadline Cloud."
-authors = [
-  {name = "Amazon Web Services"},
-]
+authors = [{ name = "Amazon Web Services" }]
 dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,25 +27,25 @@ classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Intended Audience :: Developers",
   "Intended Audience :: End Users/Desktop",
-  "Topic :: Software Development :: Libraries"
+  "Topic :: Software Development :: Libraries",
 ]
 
 # Note: All deps should be using >= since this is a *library* as well as an application.
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-    "boto3 >= 1.36.8",
-    "click >= 8.1.7",
-    "pyyaml >= 6.0",
-    # Job Attachments
-    "typing_extensions >= 4.7,< 4.12; python_version == '3.7'",
-    "typing_extensions >= 4.8; python_version > '3.7'",
-    # Pinning due to 3.4 not being available upstream
-    "xxhash >= 3.4,< 3.6",
-    # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
-    "jsonschema == 4.17.*",
-    "pywin32 >= 307,< 309; sys_platform == 'win32'",
-    "QtPy == 2.4.*",
+  "boto3 >= 1.36.8",
+  "click >= 8.1.7",
+  "pyyaml >= 6.0",
+  # Job Attachments
+  "typing_extensions >= 4.7,< 4.14; python_version == '3.7'",
+  "typing_extensions >= 4.8; python_version > '3.7'",
+  # Pinning due to 3.4 not being available upstream
+  "xxhash >= 3.4,< 3.6",
+  # Pinning due to new 4.18 dependencies breaking pyinstaller implementation
+  "jsonschema == 4.17.*",
+  "pywin32 >= 307,< 311; sys_platform == 'win32'",
+  "QtPy == 2.4.*",
 ]
 
 [project.urls]
@@ -56,8 +54,8 @@ Source = "https://github.com/aws-deadline/deadline-cloud"
 
 [project.optional-dependencies]
 gui = [
-    # If the version changes, update the version in deadline/client/ui/__init__.py
-    "PySide6-essentials >= 6.6,< 6.9",
+  # If the version changes, update the version in deadline/client/ui/__init__.py
+  "PySide6-essentials >= 6.6,< 6.10",
 ]
 
 [project.scripts]
@@ -65,9 +63,7 @@ deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
 deadline = "deadline.client.cli:main"
 
 [tool.hatch.build]
-artifacts = [
-  "*_version.py",
-]
+artifacts = ["*_version.py"]
 
 [tool.hatch.version]
 source = "vcs"
@@ -82,22 +78,13 @@ version-file = "_version.py"
 path = "hatch_custom_hook.py"
 
 [tool.hatch.build.hooks.custom.copy_version_py]
-destinations = [
-  "src/deadline/client",
-  "src/deadline/job_attachments",
-]
+destinations = ["src/deadline/client", "src/deadline/job_attachments"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-  "src/*",
-  "hatch_version_hook.py",
-  "THIRD_PARTY_LICENSES",
-]
+include = ["src/*", "hatch_version_hook.py", "THIRD_PARTY_LICENSES"]
 
 [tool.hatch.build.targets.wheel]
-packages = [
-  "src/deadline",
-]
+packages = ["src/deadline"]
 
 [tool.mypy]
 # Enables the type-checker on the interior of functions without type annotations.
@@ -115,14 +102,7 @@ explicit_package_bases = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = [
-  "qtpy.*",
-  "boto3.*",
-  "botocore.*",
-  "moto.*",
-  "xxhash",
-  "jsonschema",
-]
+module = ["qtpy.*", "boto3.*", "botocore.*", "moto.*", "xxhash", "jsonschema"]
 
 [[tool.mypy.overrides]]
 module = "deadline.client.ui.*"
@@ -134,14 +114,10 @@ disable_error_code = ["attr-defined", "assignment"]
 line-length = 100
 
 [tool.ruff.lint]
-ignore = [
-  "E501",
-]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = [
-  "deadline"
-]
+known-first-party = ["deadline"]
 
 [tool.ruff.lint.per-file-ignores]
 # We need to use a platform assertion to short-circuit mypy type checking on non-Windows platforms
@@ -155,44 +131,35 @@ known-first-party = [
 [tool.pytest.ini_options]
 xfail_strict = true
 addopts = [
-    "--durations=5",
-    "--color=yes",
-    "--cov=src/deadline",
-    "--cov-report=html:build/coverage",
-    "--cov-report=xml:build/coverage/coverage.xml",
-    "--cov-report=term-missing",
-    "--numprocesses=auto"
+  "--durations=5",
+  "--color=yes",
+  "--cov=src/deadline",
+  "--cov-report=html:build/coverage",
+  "--cov-report=xml:build/coverage/coverage.xml",
+  "--cov-report=term-missing",
+  "--numprocesses=auto",
 ]
-testpaths = [ "test/unit" ]
-looponfailroots = [
-    "src",
-    "test/unit",
-]
+testpaths = ["test/unit"]
+looponfailroots = ["src", "test/unit"]
 markers = [
-    "no_setup: mark that test shouldn't use default setups",
-    "integ: tests that run against AWS resources",
-    "docker: marks tests to be run only in a Docker environment",
+  "no_setup: mark that test shouldn't use default setups",
+  "integ: tests that run against AWS resources",
+  "docker: marks tests to be run only in a Docker environment",
 ]
 # looponfailroots is deprecated, this removes the deprecation from the test output
-filterwarnings = [
-    "ignore::DeprecationWarning"
-]
+filterwarnings = ["ignore::DeprecationWarning"]
 
 
 [tool.coverage.run]
 disable_warnings = ["module-not-measured"]
 branch = true
 parallel = false
-source_pkgs = [ "deadline" ]
-omit = [
-    "*/deadline/client/ui/*",
-]
-plugins = [
-  "coverage_conditional_plugin"
-]
+source_pkgs = ["deadline"]
+omit = ["*/deadline/client/ui/*"]
+plugins = ["coverage_conditional_plugin"]
 
 [tool.coverage.paths]
-source = [ "src/" ]
+source = ["src/"]
 
 [tool.coverage.report]
 show_missing = true
@@ -200,9 +167,7 @@ fail_under = 80
 
 # https://github.com/wemake-services/coverage-conditional-plugin
 [tool.coverage.coverage_conditional_plugin.omit]
-"sys_platform != 'win32'" = [
-  "src/deadline/job_attachments/_windows/*.py",
-]
+"sys_platform != 'win32'" = ["src/deadline/job_attachments/_windows/*.py"]
 
 [tool.coverage.coverage_conditional_plugin.rules]
 # This cannot be empty otherwise coverage-conditional-plugin crashes with:
@@ -223,25 +188,20 @@ tag_format = "{version}"
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = [
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "feat",
-    "fix",
-    "perf",
-    "style",
-    "refactor",
-    "test",
-    "revert",
-]
-minor_tags = []
-patch_tags = [
+  "build",
   "chore",
+  "ci",
+  "docs",
   "feat",
   "fix",
+  "perf",
+  "style",
   "refactor",
+  "test",
+  "revert",
 ]
+minor_tags = []
+patch_tags = ["chore", "feat", "fix", "refactor"]
 
 [tool.semantic_release.publish]
 upload_to_vcs_release = false

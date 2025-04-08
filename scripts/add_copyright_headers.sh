@@ -1,5 +1,6 @@
 #!/bin/bash
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+set -euxo pipefail
 
 if [ $# -eq 0 ]; then
     echo "Usage: add-copyright-headers <file.java> ..." >&2
@@ -7,7 +8,7 @@ if [ $# -eq 0 ]; then
 fi
 
 for file in "$@"; do
-    if ! head -1 | grep 'Copyright ' "$file" >/dev/null; then
+    if ! head -1 "$file" | grep 'Copyright ' >/dev/null; then
         case $file in
             *.java)
                 CONTENT=$(cat "$file")
@@ -66,9 +67,16 @@ EOF
 $CONTENT
 EOF
             ;;
+            *.ps1)
+                CONTENT=$(cat "$file")
+                cat > "$file" <<EOF
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+$CONTENT
+EOF
+            ;;
             *)
                 echo "Skipping file in unrecognized format: $file" >&2
-                exit 1
             ;;
         esac
     fi

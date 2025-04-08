@@ -5,4 +5,6 @@ set -e
 
 pip install --upgrade pip
 pip install --upgrade hatch
-hatch run integ:test
+
+hatch run installer:build
+hatch run installer:make_exe

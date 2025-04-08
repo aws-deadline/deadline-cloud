@@ -1,72 +1,51 @@
 [envs.default]
-pre-install-commands = [
-  "pip install -r requirements-testing.txt"
-]
+pre-install-commands = ["pip install -r requirements-testing.txt"]
 
 [envs.default.scripts]
 sync = "pip install -r requirements-testing.txt"
 test = "pytest --cov-config pyproject.toml {args:test/unit}"
 test_docker = "./scripts/run_sudo_tests.sh --build"
+test_installer = "pytest --no-cov {args:test/installer} -vvv"
+test_build_installer = "pytest --no-cov {args:test/build_installer}"
 typing = "mypy {args:src test} --always-false=PYQT5 --always-false=PYSIDE2 --always-false=PYQT6 --always-true=PYSIDE6"
-style = [
-  "ruff check {args:.}",
-  "ruff format --check --diff {args:.}",
-]
-fmt = [
-  "ruff format {args:.}",
-  "style",
-]
-lint = [
-  "style",
-  "typing",
-]
-quality = [
-  "ruff format {args:.}",
-  "typing",
-  "style",
-]
+style = ["ruff check {args:.}", "ruff format --check --diff {args:.}"]
+fmt = ["ruff format {args:.}", "style"]
+lint = ["style", "typing"]
+quality = ["ruff format {args:.}", "typing", "style"]
 
 [[envs.all.matrix]]
-python = ["3.8", "3.9", "3.10", "3.11"]
+python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
 
 [envs.default.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES="True"
+SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
 
 [envs.codebuild.scripts]
 build = "hatch build"
 
 [envs.codebuild.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES="True"
-
-[envs.codebuild-installer]
-pre-install-commands = [
-  "pip install -r requirements-installer.txt"
-]
-
-[envs.codebuild-installer.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES="True"
-
-[envs.codebuild-installer.scripts]
-build = "hatch build"
-make_exe = "python scripts/pyinstaller/make_exe.py --output {env:OUT_FILE}"
+SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
 
 [envs.integ]
 pre-install-commands = [
   "pip install -r requirements-integ-testing.txt",
-  "pip install -r requirements-testing.txt"
+  "pip install -r requirements-testing.txt",
 ]
 
 [envs.integ.scripts]
 test = "pytest --no-cov {args:test/integ} -vvv --numprocesses=1"
 
+[envs.installer.env-vars]
+SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
+
 [envs.installer]
-pre-install-commands = [
-  "pip install -r requirements-installer.txt"
-]
+pre-install-commands = ["pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
 build = "hatch build"
-make_exe = "python scripts/pyinstaller/make_exe.py --output {env:OUT_FILE}"
+make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip"
+prepare_artifacts = "python scripts/prepare_artifacts.py --archive-path {root}/installer/components/DeadlineClient.zip --output-path {root}/installer/components/DeadlineClient"
+build_installer = "python {root}/scripts/build_installer_cli.py --installer-source-path {root}/installer/DeadlineCloudClient.xml {args:}"
+build_installer_local = "hatch build && hatch run make_exe && hatch run prepare_artifacts && hatch run build_installer --local-dev"
 
 [envs.release]
 detached = true
