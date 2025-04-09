@@ -84,8 +84,9 @@ def _validate_files(installation_path: Path) -> None:
     # THEN
     top_level_dir = [f.name for f in installation_path.iterdir()]
     assert "DeadlineClient" in top_level_dir
-    assert "installer_version.txt" in top_level_dir
-    assert uninstaller in top_level_dir
+    deadline_client_dir = [f.name for f in (Path(installation_path, "DeadlineClient")).iterdir()]
+    assert "installer_version.txt" in deadline_client_dir
+    assert uninstaller in deadline_client_dir
 
     # Check main CLI runs
     cli_path = installation_path / "DeadlineClient" / "deadline"
@@ -134,9 +135,11 @@ def per_test_system_installation(installer_path, tmp_path):
 
 @pytest.fixture(scope="function")
 def uninstaller_path():
-    uninstaller_path = Path("uninstall")
+    uninstaller_path = Path("DeadlineClient", "uninstall")
     if platform.system() == "Darwin":
-        uninstaller_path = Path("uninstall.app", "Contents", "MacOS", "installbuilder.sh")
+        uninstaller_path = Path(
+            "DeadlineClient", "uninstall.app", "Contents", "MacOS", "installbuilder.sh"
+        )
     elif platform.system() == "Windows":
         uninstaller_path = uninstaller_path.with_suffix(".exe")
 
