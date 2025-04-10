@@ -28,9 +28,9 @@ on:
         - mainline
 
 jobs:
-  BuildDeadlineCloudClientInstaller:
+  BuildInstaller:
     if: (github.repository == 'aws-deadline/deadline-cloud')
-    name: Build Deadline Cloud Client Installer
+    name: Build Installer
     uses: aws-deadline/.github/.github/workflows/reusable_build_installers.yml@mainline
     secrets: inherit
     permissions:
