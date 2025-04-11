@@ -18,14 +18,14 @@ Install the latest version of Squish for Qt on Linux, Windows, or macOS. (As of 
 
 To get started with writing tests, register the Deadline Client executable in AUT Settings in the Squish IDE. This is typically done by going to 'Edit' -> 'Server Settings' and registering under 'Mapped AUTs' (in Squish IDE). 
 
-Specific steps for setting up on Linux, Windows, and macOS are below. The steps also include OS-specific environment variables which should point to where the PySide6 Qt libraries live on your system. The environment variables can be added in the AUT Environment table in the Test Suite Settings page 
+Specific steps for setting up on Linux, Windows, and macOS are below. The steps also include Squish OS-specific environment variables which should point to where the PySide6 Qt libraries live on your system. The environment variables can be added in the AUT Environment table in the Test Suite Settings page 
 (in Squish IDE) or in the `suite_deadline_gui/envvars` file. 
 
 ### For Linux: 
 
 On Linux, the Deadline Client executable (`deadline`) needs to be set as the main AUT. It may live in this file path: `~/.local/bin/deadline`
 
-#### Environment Variables: 
+#### Squish Environment Variables: 
 
 ```sh
 LD_LIBRARY_PATH=/home/<user>/.local/lib/python3.9/site-packages/PySide6/Qt/lib
@@ -36,19 +36,29 @@ LD_LIBRARY_PATH=/home/<user>/.local/lib/python3.9/site-packages/PySide6/Qt/lib
 
 On Windows, `python.exe` needs to be set as the main AUT. It may live in this file path: `C:/Users/<user>/AppData/Local/Programs/Python/Python310`
 
-#### Environment Variables: 
+#### Squish Environment Variables: 
 
 ```sh
 PATH=C:\Users\<user>\AppData\Local\Programs\Python\Python310\Lib\site-packages\PySide6\
 
 SQUISH_NO_CAPTURE_OUTPUT=1
 ```
+
 - To test that Deadline Client is registered and environment variables are configured successfully, navigate to the Test Suite Settings page (in Squish IDE) and add `C:\Users\<user>\AppData\Local\Programs\Python\Python310\Scripts\deadline.exe config gui` to `Arguments`. Then, launch Deadline AUT by going to 'Run' -> 'Launch AUT' in the Squish IDE. If Deadline AUT launches successfully with no issues, you may begin writing tests using Squish IDE.
+
+#### Additional Windows Environment Variable: 
+
+The following environment variable needs to be set in the environment where Squish tests are invoked from. It is used in launching the AUT on Windows during the automated tests, and needs to point to where `deadline.exe` lives on your system. If not set, it will use a default. The default can be found on lines 11 and 13 in the `/shared/config.py` file.
+
+```sh
+WINDOWS_DEADLINE_PATH=C:\Users\<user>\AppData\Local\Programs\Python\Python310\Scripts\deadline.exe
+```
 
 ### For macOS:
 
 On macOS, the Deadline Client executable (`deadline`) needs to be set as the main AUT. It may live in this file path: `/Users/<user>/Library/Python/3.9/bin/deadline.exe`
 
+#### Squish Environment Variables: 
 ```sh
 DYLD_LIBRARY_PATH=/Users/<user>/Library/Python/3.9/lib/python/site-packages/PySide6/Qt/lib
 ```
@@ -66,7 +76,7 @@ The following Deadline Cloud resources are needed in order to run `tst_verify_se
 
 ## Running Squish Tests Locally
 
-Squish tests can be run from the IDE or the command line. Prior to running tests, you will want to authenticate using the AWS default profile so the Deadline Cloud resources can be accessed.
+Squish tests can be run from the IDE or the command line. Prior to running tests, you will want to authenticate using the AWS default profile so the Deadline Cloud resources can be accessed. Additionally, remember that on Windows, the `WINDOWS_DEADLINE_PATH` environment variable should be set to where `deadline.exe` lives on your system; otherwise, it will use a default.
 - In the IDE, hit the green 'Play' button located in the Test Suites left-hand column. 
 - To run tests using the command line:
     - First, `cd ~/<squish_install_folder>/bin`
