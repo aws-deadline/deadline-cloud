@@ -12,7 +12,9 @@ python_version = f"Python{sys.version_info.major}{sys.version_info.minor}"
 # Deadline executable file path on Windows
 windows_deadline = f"{home_dir}/AppData/Local/Programs/Python/{python_version}/Scripts/deadline.exe"
 # WINDOWS_DEADLINE_PATH environment variable
-windows_deadline_path_envvar = str(Path(os.environ.get('WINDOWS_DEADLINE_PATH', f'{windows_deadline}')))
+windows_deadline_path_envvar = str(
+    Path(os.environ.get("WINDOWS_DEADLINE_PATH", f"{windows_deadline}"))
+)
 
 
 # tst_verify_settings_dialogue test suite:

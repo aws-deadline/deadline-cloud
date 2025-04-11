@@ -19,7 +19,9 @@ def launch_jobbundle_dir():
 
 # launch Choose Job Bundle GUI Submitter on windows
 def launch_jobbundle_dir_windows_only():
-    squish.startApplication(f"python {config.windows_deadline_path_envvar} bundle gui-submit --browse")
+    squish.startApplication(
+        f"python {config.windows_deadline_path_envvar} bundle gui-submit --browse"
+    )
     test.log("Launched Choose Job Bundle Directory on Windows.")
 
 
