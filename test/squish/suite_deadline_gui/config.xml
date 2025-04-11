@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!-- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. -->
 <testconfig version="1.0">
     <information>
@@ -7,3 +8,14 @@
     <testsettings/>
     <passwords/>
 </testconfig>
+=======
+<!-- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. -->
+<testconfig version="1.0">
+    <information>
+        <summary/>
+        <description/>
+    </information>
+    <testsettings/>
+    <passwords/>
+</testconfig>
+>>>>>>> 3d15597 (chore: Update copyright headers)
