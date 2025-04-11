@@ -11,6 +11,7 @@
         Reference: https://clients.bitrock.com/installbuilder/docs/installbuilder-userguide.html#built_in_variables
     -->
     <installerFilename>${product_shortname}-${platform_name}-installer.${platform_exec_suffix}</installerFilename>
+    <uninstallerDirectory>${installdir}/DeadlineClient</uninstallerDirectory>
     <enableRollback>1</enableRollback>
     <enableTimestamp>1</enableTimestamp>
 
@@ -437,10 +438,10 @@ ${_fnAddEnvironmentVariable_list}
         </writeFile>
         <writeFile>
             <progressText>Writing version file</progressText>
-            <path>${installdir}/installer_version.txt</path>
+            <path>${installdir}/DeadlineClient/installer_version.txt</path>
             <text>${project.version}</text>
         </writeFile>
-        <changePermissions permissions="0644" files="${installdir}/installer_version.txt"/>
+        <changePermissions permissions="0644" files="${installdir}/DeadlineClient/installer_version.txt"/>
         <addFilesToUninstaller>
           <files>${installdir}/DeadlineClient/</files>
         </addFilesToUninstaller>
@@ -458,7 +459,6 @@ ${_fnAddEnvironmentVariable_list}
                 <isFalse value="${installer_is_root_install}"/>
             </ruleList>
         </actionGroup>
-        <deleteFile path="${installdir}/installer_version.txt"/>
     </preUninstallationActionList>
 
     <postUninstallationActionList>
