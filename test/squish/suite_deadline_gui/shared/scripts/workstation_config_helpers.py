@@ -28,7 +28,7 @@ def launch_deadline_config_gui():
 
 # launch Deadline Workstation Config on windows
 def launch_deadline_config_gui_windows_only():
-    squish.startApplication(f"python {config.windows_deadline} config gui")
+    squish.startApplication(f"python {config.windows_deadline_path_envvar} config gui")
     test.log("Launched Deadline Workstation Config GUI on Windows.")
     test.log(
         "Sleep for " + str(snooze_timeout) + " second(s) to allow authentication to fully load."
