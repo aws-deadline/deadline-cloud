@@ -17,7 +17,9 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    uses: aws-deadline/.github/.github/workflows/reusable_publish.yml@mainline
+    uses: aws-deadline/.github/.github/workflows/reusable_publish_v2.yml@mainline
+    with:
+      installer_oses: "['Linux', 'Windows', 'MacOS']"
     secrets: inherit
   # PyPI does not support reusable workflows yet
   # # See https://github.com/pypi/warehouse/issues/11096
@@ -31,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: release
+          ref: ${{ needs.Publish.outputs.tag }}
           fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
