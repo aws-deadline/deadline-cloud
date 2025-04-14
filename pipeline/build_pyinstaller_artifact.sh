@@ -3,8 +3,8 @@
 # Set the -e option
 set -e
 
-pip install --upgrade pip
-pip install --upgrade hatch
+pip3 install --upgrade pip
+pip3 install --upgrade hatch
 
 hatch run installer:build
 hatch run installer:make_exe
