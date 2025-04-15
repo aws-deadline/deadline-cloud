@@ -1,7 +1,6 @@
 ## 0.49.8 (2025-04-14)
 
 
-
 ### Features
 * Reduce and parallelize calls to S3 when fetching output asset manifests (#647) ([`bfa9475`](https://github.com/aws-deadline/deadline-cloud/commit/bfa947590c251afc25d18b0b0076504da0b9bf6a))
 
