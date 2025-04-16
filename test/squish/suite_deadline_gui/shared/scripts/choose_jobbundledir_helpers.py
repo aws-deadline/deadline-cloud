@@ -5,13 +5,42 @@
 import choose_jobbundledir_locators
 import gui_submitter_helpers
 import gui_submitter_locators
+import config
 import squish
 import test
+import platform
 
 
+# launch Choose Job Bundle GUI Submitter on linux and macOS
 def launch_jobbundle_dir():
     squish.startApplication("deadline bundle gui-submit --browse")
     test.log("Launched Choose Job Bundle Directory.")
+
+
+# launch Choose Job Bundle GUI Submitter on windows
+def launch_jobbundle_dir_windows_only():
+    squish.startApplication(
+        f"python {config.windows_deadline_path_envvar} bundle gui-submit --browse"
+    )
+    test.log("Launched Choose Job Bundle Directory on Windows.")
+
+
+# launch Choose Job Bundle GUI Submitter based on OS platform being tested
+def detect_platform_and_launch_jobbundle_guisubmitter():
+    if platform.system() == "Linux":
+        test.log("Detected test running on Linux OS")
+        test.log("Launching Choose Job Bundle GUI Submitter on Linux")
+        launch_jobbundle_dir()
+    elif platform.system() == "Windows":
+        test.log("Detected test running on Windows OS")
+        test.log("Launching Choose Job Bundle GUI Submitter on Windows")
+        launch_jobbundle_dir_windows_only()
+    elif platform.system() == "Darwin":
+        test.log("Detected test running on macOS")
+        test.log("Launching Choose Job Bundle GUI Submitter on macOS")
+        launch_jobbundle_dir()
+    else:
+        test.log("Unknown operating system")
 
 
 def select_jobbundle(filepath: str):

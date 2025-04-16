@@ -1,1 +1,4 @@
-LD_LIBRARY_PATH=./.local/lib/python3.9/site-packages/PySide6/Qt/lib
+LD_LIBRARY_PATH=/home/user/.local/lib/python3.9/site-packages/PySide6/Qt/lib/
+PATH=C:\Users\user\AppData\Local\Programs\Python\Python310\Lib\site-packages\PySide6\
+SQUISH_NO_CAPTURE_OUTPUT=1
+DYLD_LIBRARY_PATH=/Users/user/Library/Python/3.9/lib/python/site-packages/PySide6/Qt/lib/

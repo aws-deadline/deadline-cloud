@@ -8,13 +8,12 @@ import choose_jobbundledir_locators
 import gui_submitter_helpers
 import gui_submitter_locators
 import squish
-
 import test
 
 
 def init():
-    # launch Choose job bundle directory using deadline bundle gui-submit --browse command
-    choose_jobbundledir_helpers.launch_jobbundle_dir()
+    # launch Choose Job Bundle GUI Submitter based on OS platform being tested
+    choose_jobbundledir_helpers.detect_platform_and_launch_jobbundle_guisubmitter()
     # verify Choose job bundle directory is open
     test.compare(
         str(

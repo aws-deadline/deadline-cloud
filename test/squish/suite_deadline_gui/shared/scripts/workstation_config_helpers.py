@@ -3,13 +3,15 @@
 
 import workstation_config_locators
 import gui_submitter_locators
+import config
 import squish
-
 import test
+import platform
 
 snooze_timeout = 1  # seconds
 
 
+# launch Deadline Workstation Config on linux and macOS
 def launch_deadline_config_gui():
     squish.startApplication("deadline config gui")
     test.log("Launched Deadline Workstation Config GUI.")
@@ -22,6 +24,39 @@ def launch_deadline_config_gui():
         True,
         "Expect the Deadline Workstation Config GUI to be open.",
     )
+
+
+# launch Deadline Workstation Config on windows
+def launch_deadline_config_gui_windows_only():
+    squish.startApplication(f"python {config.windows_deadline_path_envvar} config gui")
+    test.log("Launched Deadline Workstation Config GUI on Windows.")
+    test.log(
+        "Sleep for " + str(snooze_timeout) + " second(s) to allow authentication to fully load."
+    )
+    squish.snooze(snooze_timeout)
+    test.compare(
+        squish.waitForObjectExists(workstation_config_locators.deadline_config_dialog).visible,
+        True,
+        "Expect the Deadline Workstation Config GUI to be open.",
+    )
+
+
+# launch Deadline Workstation Config based on OS platform being tested
+def detect_platform_and_launch_deadline_config():
+    if platform.system() == "Linux":
+        test.log("Detected test running on Linux OS")
+        test.log("Launching Deadline Workstation Config on Linux")
+        launch_deadline_config_gui()
+    elif platform.system() == "Windows":
+        test.log("Detected test running on Windows OS")
+        test.log("Launching Deadline Workstation Config on Windows")
+        launch_deadline_config_gui_windows_only()
+    elif platform.system() == "Darwin":
+        test.log("Detected test running on macOS")
+        test.log("Launching Deadline Workstation Config on macOS")
+        launch_deadline_config_gui()
+    else:
+        test.log("Unknown operating system")
 
 
 def close_deadline_config_gui():
@@ -72,34 +107,6 @@ def set_farm_name(farm_name: str):
     test.log("Selected farm name.")
 
 
-def open_close_job_hist_directory():
-    # hit '...' button to open Choose Job history directory file browser
-    squish.clickButton(squish.waitForObject(workstation_config_locators.open_job_hist_dir_button))
-    test.log("Opened job history directory dialogue.")
-    # verify job history directory dialogue is open
-    test.compare(
-        str(
-            squish.waitForObjectExists(
-                workstation_config_locators.choosejobhistdir_filebrowser
-            ).windowTitle
-        ),
-        "Choose Job history directory",
-        "Expect Choose Job history directory dialogue window title to be present.",
-    )
-    test.compare(
-        squish.waitForObjectExists(
-            workstation_config_locators.choosejobhistdir_filebrowser
-        ).visible,
-        True,
-        "Expect Choose Job history directory dialogue to be open.",
-    )
-    # hit 'choose' button to set default and close file browser
-    squish.clickButton(
-        squish.waitForObject(workstation_config_locators.choosejobhistdir_choose_button)
-    )
-    test.log("Closed job history directory dialogue.")
-
-
 def set_queue_name(queue_name: str):
     # open Default queue drop down menu
     squish.mouseClick(
@@ -120,7 +127,9 @@ def set_queue_name(queue_name: str):
     test.log("Selected queue name.")
 
 
-def set_storage_profile(storage_profile: str):
+def set_and_verify_os_storage_profile(
+    linux_storage_profile: str, windows_storage_profile: str, macos_storage_profile: str
+):
     # open Default storage profile drop down menu
     squish.mouseClick(
         squish.waitForObject(
@@ -128,20 +137,86 @@ def set_storage_profile(storage_profile: str):
         )
     )
     test.log("Opened storage profile drop down menu.")
-    test.compare(
-        squish.waitForObjectExists(
-            workstation_config_locators.storage_profile_locator(storage_profile)
-        ).text,
-        storage_profile,
-        "Expect storage profile to be present in drop down.",
-    )
-    # select Default storage profile
-    squish.mouseClick(
-        squish.waitForObjectItem(
-            workstation_config_locators.farmsettings_defaultstorageprofile_dropdown, storage_profile
+    # select storage profile based on OS platform being tested
+    if platform.system() == "Linux":
+        test.log("Detected test running on Linux OS")
+        test.compare(
+            squish.waitForObjectExists(
+                workstation_config_locators.storage_profile_locator(linux_storage_profile)
+            ).text,
+            linux_storage_profile,
+            "Expect Linux Storage Profile to be present in drop down.",
         )
-    )
-    test.log("Selected storage profile.")
+        # select Linux Storage Profile
+        squish.mouseClick(
+            squish.waitForObjectItem(
+                workstation_config_locators.farmsettings_defaultstorageprofile_dropdown,
+                linux_storage_profile,
+            )
+        )
+        # verify correct storage profile name is set
+        test.compare(
+            str(
+                squish.waitForObjectExists(
+                    workstation_config_locators.farmsettings_defaultstorageprofile_dropdown
+                ).currentText
+            ),
+            linux_storage_profile,
+            "Expect selected storage profile to be set.",
+        )
+    elif platform.system() == "Windows":
+        test.log("Detected test running on Windows OS")
+        test.compare(
+            squish.waitForObjectExists(
+                workstation_config_locators.storage_profile_locator(windows_storage_profile)
+            ).text,
+            windows_storage_profile,
+            "Expect Windows Storage Profile to be present in drop down.",
+        )
+        # select Windows Storage Profile
+        squish.mouseClick(
+            squish.waitForObjectItem(
+                workstation_config_locators.farmsettings_defaultstorageprofile_dropdown,
+                windows_storage_profile,
+            )
+        )
+        # verify correct storage profile name is set
+        test.compare(
+            str(
+                squish.waitForObjectExists(
+                    workstation_config_locators.farmsettings_defaultstorageprofile_dropdown
+                ).currentText
+            ),
+            windows_storage_profile,
+            "Expect selected storage profile to be set.",
+        )
+    elif platform.system() == "Darwin":
+        test.log("Detected test running on macOS")
+        test.compare(
+            squish.waitForObjectExists(
+                workstation_config_locators.storage_profile_locator(macos_storage_profile)
+            ).text,
+            macos_storage_profile,
+            "Expect macOS Storage Profile to be present in drop down.",
+        )
+        # select macOS Storage Profile
+        squish.mouseClick(
+            squish.waitForObjectItem(
+                workstation_config_locators.farmsettings_defaultstorageprofile_dropdown,
+                macos_storage_profile,
+            )
+        )
+        # verify correct storage profile name is set
+        test.compare(
+            str(
+                squish.waitForObjectExists(
+                    workstation_config_locators.farmsettings_defaultstorageprofile_dropdown
+                ).currentText
+            ),
+            macos_storage_profile,
+            "Expect selected storage profile to be set.",
+        )
+    test.log("Selected storage profile based on OS platform being tested.")
 
 
 def set_job_attachments_filesystem_options(job_attachments: str):
