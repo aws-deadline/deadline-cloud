@@ -3,10 +3,7 @@
 
 import loginout_locators
 import workstation_config_locators
-import workstation_config_helpers
-import config
 import squish
-
 import test
 
 
@@ -102,12 +99,3 @@ def set_aws_profile_name_and_verify_auth(profile_name: str):
         "<b style='color:green;'>AUTHORIZED</b>",
         "Expect `AWS Deadline Cloud API: AUTHORIZED` text to be correct.",
     )
-
-
-def authenticate_submitter_settings_dialogue():
-    # hit Settings button to open Deadline Settings dialogue
-    workstation_config_helpers.open_settings_dialogue()
-    # authenticate in settings dialogue (using default aws profile) if not authenticated before running tests
-    set_aws_profile_name_and_verify_auth(config.profile_name)
-    # close Settings dialogue
-    workstation_config_helpers.close_deadline_config_gui()
