@@ -1,3 +1,15 @@
+## 0.49.8 (2025-04-14)
+
+
+### Features
+* Reduce and parallelize calls to S3 when fetching output asset manifests (#647) ([`bfa9475`](https://github.com/aws-deadline/deadline-cloud/commit/bfa947590c251afc25d18b0b0076504da0b9bf6a))
+
+### Bug Fixes
+* Remove OpenJD reference from timeout warning message. (#637) ([`448feaa`](https://github.com/aws-deadline/deadline-cloud/commit/448feaa1a00c6ffc139dbe35acb1555ef71fd407))
+* Allow pagination over step dependencies in manifest download cli (#638) ([`afcec1b`](https://github.com/aws-deadline/deadline-cloud/commit/afcec1bb18ae262449015e7ab8e05273b1df9517))
+* Priority box now has correct range. (#589) ([`c21fd6e`](https://github.com/aws-deadline/deadline-cloud/commit/c21fd6ee93d2ef9ebda192a0e33c6fb8b06d70fa))
+* Support file conflict resolution in Attachment download CLIs (#622) ([`d4eafa7`](https://github.com/aws-deadline/deadline-cloud/commit/d4eafa716f76f69faf6ba303db2e82fc187b8207))
+
 ## 0.49.7 (2025-03-12)
 
 
