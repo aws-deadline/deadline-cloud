@@ -444,15 +444,21 @@
 ${_fnAddEnvironmentVariable_list}
             </text>
         </writeFile>
+        <addFilesToUninstaller>
+            <ruleList>
+                <compareTextLength text="${_fnAddEnvironmentVariable_list}" logic="greater" length="0"/>
+            </ruleList>
+            <files>/etc/profile.d/deadline.sh</files>
+        </addFilesToUninstaller>
         <writeFile>
             <progressText>Writing version file</progressText>
             <path>${installdir}/DeadlineClient/installer_version.txt</path>
             <text>${project.version}</text>
         </writeFile>
         <changePermissions permissions="0644" files="${installdir}/DeadlineClient/installer_version.txt"/>
-        <addFilesToUninstaller>
-          <files>${installdir}/DeadlineClient/</files>
-        </addFilesToUninstaller>
+        <addDirectoriesToUninstaller>
+          <files>${installdir}/DeadlineClient</files>
+        </addDirectoriesToUninstaller>
     </postInstallationActionList>
 
     <preUninstallationActionList>
@@ -552,6 +558,10 @@ ${_fnAddEnvironmentVariable_list}
                 </programTest>
             </ruleList>
         </actionGroup>
+        <!-- =======================================
+        Removing deadline from path
+        =========================================-->
+        <removeDirectoryFromPath path="${installdir}/DeadlineClient" scope="${installscope}"/>
     </postUninstallationActionList>
     <width>550</width>
 </project>
