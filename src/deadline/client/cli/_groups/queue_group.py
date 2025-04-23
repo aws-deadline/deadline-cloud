@@ -131,7 +131,7 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
         "--saved-progress-checkpoint-location",
         help="Proceed downloading from previous progress file at this location, if it exists.\n"
         "If parameter not provided or file does not exist,\n"
-        "the download will start from the provided bootstrap lookback in minutes or it's default value. \n",
+        "the download will start from the provided bootstrap lookback in minutes or its default value. \n",
         required=True,
     )
     @click.option(
