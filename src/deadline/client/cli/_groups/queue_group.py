@@ -11,6 +11,15 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+)
+from .click_logger import ClickLogger
+from deadline.client.api import _queue_apis
+from configparser import ConfigParser
+from typing import Optional
+import boto3
+import os
 
 
 @click.group(name="queue")
@@ -95,3 +104,117 @@ def queue_get(**args):
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))
+
+
+if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
+
+    @cli_queue.command(
+        name="incremental-output-download",
+        help="BETA - Download Job Output data incrementally for all jobs running on a queue as session actions finish.\n"
+        "The command bootstraps once using a bootstrap lookback specified in minutes and\n"
+        "continues downloading from the last saved progress thereafter until bootstrap is forced.\n"
+        "[NOTE] This command is still WIP and partially implemented right now",
+    )
+    @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
+    @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
+    @click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
+    @click.option(
+        "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting."
+    )
+    @click.option(
+        "--bootstrap-lookback-in-minutes",
+        default=0,
+        help="Downloads outputs for job-session-actions that have been completed since these many\n"
+        "minutes at bootstrap. Default value is 0 minutes.",
+    )
+    @click.option(
+        "--saved-progress-checkpoint-location",
+        help="Proceed downloading from previous progress file at this location, if it exists.\n"
+        "If parameter not provided or file does not exist,\n"
+        "the download will start from the provided bootstrap lookback in minutes or its default value. \n",
+        required=True,
+    )
+    @click.option(
+        "--force-bootstrap",
+        is_flag=True,
+        help="Ignores the previous download progress and forces command to start from the bootstrap \n"
+        "lookback period specified in minutes.\n"
+        "Default value is False.",
+        default=False,
+    )
+    @click.option(
+        "--conflict-resolution",
+        type=click.Choice(
+            [
+                FileConflictResolution.SKIP.name,
+                FileConflictResolution.OVERWRITE.name,
+                FileConflictResolution.CREATE_COPY.name,
+            ],
+            case_sensitive=False,
+        ),
+        default=FileConflictResolution.OVERWRITE.name,
+        help="How to handle downloads if an output file already exists:\n"
+        "CREATE_COPY (default): Download the file with a new name, appending '(1)' to the end\n"
+        "SKIP: Do not download the file\n"
+        "OVERWRITE: Download and replace the existing file.\n"
+        "Default behaviour is to OVERWRITE.",
+    )
+    @_handle_error
+    def incremental_output_download(
+        path_mapping_rules: str,
+        json: bool,
+        bootstrap_lookback_in_minutes: Optional[int],
+        saved_progress_checkpoint_location: str,
+        force_bootstrap: bool,
+        **args,
+    ):
+        """
+        Download Job Output data incrementally for all jobs running on a queue as session actions finish.
+        The command bootstraps once using a bootstrap lookback specified in minutes and
+        continues downloading from the last saved progress thereafter until bootstrap is forced
+
+        :param path_mapping_rules: path mapping rules for cross OS path mapping
+        :param json: whether output is printed as JSON for scripting
+        :param bootstrap_lookback_in_minutes: Downloads outputs for job-session-actions that have been completed
+        since these many minutes at bootstrap. Default value is 0 minutes.
+        :param saved_progress_checkpoint_location: location of the download progress file
+        :param force_bootstrap: force bootstrap and ignore current download progress. Default value is False.
+        :param args:
+        :return:
+        """
+        logger: ClickLogger = ClickLogger(is_json=json)
+        logger.echo("processing " + args.__str__())
+
+        logger.echo("Started incremental download....")
+
+        try:
+            # Validate file path inputs for downloading outputs incrementally.
+            _queue_apis._validate_file_inputs_for_incremental_output_download(
+                saved_progress_checkpoint_location=saved_progress_checkpoint_location,
+                path_mapping_rules=path_mapping_rules,
+            )
+        except RuntimeError as e:
+            logger.echo(f"Download failed due to error: {e}")
+            return
+
+        # Get a temporary config object with the standard options handled
+        config: Optional[ConfigParser] = _apply_cli_options_to_config(
+            required_options={"farm_id", "queue_id"}, **args
+        )
+
+        farm_id = config_file.get_setting("defaults.farm_id", config=config)
+        queue_id = config_file.get_setting("defaults.queue_id", config=config)
+
+        boto3_session: boto3.Session = api.get_boto3_session(config=config)
+
+        # Call the incremental output download api
+        _queue_apis._incremental_output_download(
+            boto3_session=boto3_session,
+            farm_id=farm_id,
+            queue_id=queue_id,
+            saved_progress_checkpoint_location=saved_progress_checkpoint_location,
+            bootstrap_lookback_in_minutes=bootstrap_lookback_in_minutes,
+            force_bootstrap=force_bootstrap,
+            path_mapping_rules=path_mapping_rules,
+            logger=logger,
+        )

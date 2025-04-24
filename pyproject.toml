@@ -46,6 +46,7 @@ dependencies = [
   "jsonschema == 4.17.*",
   "pywin32 >= 307,< 311; sys_platform == 'win32'",
   "QtPy == 2.4.*",
+  "psutil >= 7.0.0"
 ]
 
 [project.urls]
