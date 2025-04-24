@@ -14,6 +14,7 @@ from deadline.client import api, config
 from deadline.client.cli import main
 
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUES_LIST
+import os
 
 
 def test_cli_queue_list(fresh_deadline_config):
@@ -145,3 +146,16 @@ description: ''
             farmId=MOCK_FARM_ID, queueId=MOCK_QUEUES_LIST[0]["queueId"]
         )
         assert result.exit_code == 0
+
+
+def test_incremental_download_existence(fresh_deadline_config):
+    """
+    Confirm that the CLI is not available for environment with no ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD variable
+    """
+
+    assert not os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD")
+
+    runner = CliRunner()
+    response = runner.invoke(main, ["queue", "incremental-output-download"])
+
+    assert "Error: No such command 'incremental-output-download'." in response.output
