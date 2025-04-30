@@ -74,6 +74,7 @@ def cli_manifest():
     "--include",
     default=None,
     help="Glob syntax of files and directories to include in the manifest. Can be provided multiple times.",
+    multiple=True,
 )
 @click.option(
     "-e",

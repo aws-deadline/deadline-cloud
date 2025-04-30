@@ -583,6 +583,25 @@ class AssetSync:
 
         return self.manifest_model.AssetManifest(**asset_manifest_args)  # type: ignore[call-arg]
 
+    @staticmethod
+    def _get_output_dirs(
+        manifest_properties: ManifestProperties,
+    ) -> List[str]:
+        output_dirs: List[str] = []
+        source_path_format = manifest_properties.rootPathFormat
+        current_path_format = PathFormat.get_host_path_format()
+
+        for output_dir in manifest_properties.outputRelativeDirectories or []:
+            if source_path_format != current_path_format:
+                if source_path_format == PathFormat.WINDOWS:
+                    output_dir = output_dir.replace("\\", "/")
+                elif source_path_format == PathFormat.POSIX:
+                    output_dir = output_dir.replace("/", "\\")
+
+            output_dirs.append(output_dir)
+
+        return output_dirs
+
     def _get_output_files(
         self,
         manifest_properties: ManifestProperties,
