@@ -14,6 +14,7 @@ from deadline.job_attachments.download import download_files_from_manifests
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
+    UploadManifestInfo,
     PathMappingRule,
 )
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
@@ -98,7 +99,7 @@ def attachment_upload(
     path_mapping_rules: Optional[str] = None,
     upload_manifest_path: Optional[str] = None,
     logger: ClickLogger = ClickLogger(False),
-):
+) -> List[UploadManifestInfo]:
     """
     BETA API - This API is still evolving.
 
@@ -113,6 +114,10 @@ def attachment_upload(
         path_mapping_rules (Optional[str], optional): Optional file path to a JSON file contains list of path mapping. Defaults to None.
         upload_manifest_path (Optional[str], optional): Optional path prefix for uploading given manifests. Defaults to None.
         logger (ClickLogger, optional): Logger to provide visibility. Defaults to ClickLogger(False).
+
+    Returns:
+        List[UploadManifestInfo]: A list of UploadManifestInfo objects corresponding to the input manifests
+        containing manifest path, hash information, and source path
 
     Raises:
         NonValidInputError: raise when any of the input is not valid.
@@ -129,9 +134,15 @@ def attachment_upload(
         path_mapping_rules=path_mapping_rules, root_dirs=root_dirs
     )
 
+    # Initialize an empty list to store manifest information
+    manifest_info_list = []
+
     s3_settings: JobAttachmentS3Settings = JobAttachmentS3Settings.from_s3_root_uri(s3_root_uri)
     asset_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
-    for file_name in file_name_manifest_dict:
+
+    # Iterate over original manifests in the order they were provided
+    for manifest_path in manifests:
+        file_name = os.path.basename(manifest_path)
         manifest: BaseAssetManifest = file_name_manifest_dict[file_name]
 
         # File name is supposed to be prefixed by a hash of source path in path mapping or provided root dirs
@@ -178,6 +189,16 @@ def attachment_upload(
         logger.echo(
             f"Uploaded assets from {rule.destination_path}, to {s3_settings.to_s3_root_uri()}/Manifests/{key}, hashed data {data}"
         )
+
+        manifest_info_list.append(
+            UploadManifestInfo(
+                output_manifest_path=key,
+                output_manifest_hash=data,
+                source_path=rule.source_path,
+            )
+        )
+
+    return manifest_info_list
 
 
 def _process_path_mapping(
