@@ -43,6 +43,33 @@ def _process_glob_inputs(glob_arg_input: str) -> GlobConfig:
     return glob_config
 
 
+def _match_files_with_pattern(base_path: str, patterns: List[str]) -> set:
+    """
+    Helper function to match files based on glob patterns.
+
+    Args:
+        base_path: Root path to glob from
+        patterns: List of glob patterns to match
+
+    Returns:
+        Set of normalized file paths that match the patterns
+    """
+    matched_files = set()
+    for pattern in patterns:
+        # Make pattern relative to base path
+        full_pattern = os.path.join(base_path, pattern)
+
+        # Use recursive glob for directory matching
+        for matched_path in glob.glob(full_pattern, recursive=True):
+            # Only add files, not directories
+            if os.path.isfile(matched_path):
+                # Convert to proper path format
+                normalized_path = os.path.normpath(matched_path)
+                matched_files.add(normalized_path)
+
+    return matched_files
+
+
 def _glob_paths(
     path: str, include: List[str] = ["**/*"], exclude: Optional[List[str]] = None
 ) -> List[str]:
@@ -57,35 +84,12 @@ def _glob_paths(
     # Convert path to absolute path
     base_path = os.path.abspath(path)
 
-    # Initialize result set
-    matched_files = set()
-
     # Process include patterns
-    for pattern in include:
-        # Make pattern relative to base path
-        full_pattern = os.path.join(base_path, pattern)
-
-        # Use recursive glob for directory matching
-        for matched_path in glob.glob(full_pattern, recursive=True):
-            # Only add files, not directories
-            if os.path.isfile(matched_path):
-                # Convert to proper path format
-                normalized_path = os.path.normpath(matched_path)
-                matched_files.add(normalized_path)
+    matched_files = _match_files_with_pattern(base_path, include)
 
     # Process exclude patterns
     if exclude:
-        files_to_exclude = set()
-        for pattern in exclude:
-            # Make pattern relative to base path
-            full_pattern = os.path.join(base_path, pattern)
-
-            # Find files to exclude
-            for matched_path in glob.glob(full_pattern, recursive=True):
-                if os.path.isfile(matched_path):
-                    normalized_path = os.path.normpath(matched_path)
-                    files_to_exclude.add(normalized_path)
-
+        files_to_exclude = _match_files_with_pattern(base_path, exclude)
         # Remove excluded files from result
         matched_files -= files_to_exclude
 

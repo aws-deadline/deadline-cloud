@@ -129,6 +129,8 @@ class TestManifestSnapshot:
         # Lets add another file.
         new_file = "subdir1/file3.txt"
         Path(os.path.join(root_dir, new_file)).touch()
+        new_nested_file = "subdir1/nested/file4.txt"
+        Path(os.path.join(root_dir, new_nested_file)).touch()
 
         # When
         runner = CliRunner()
@@ -163,8 +165,8 @@ class TestManifestSnapshot:
         for file_entry in manifest_data.get("paths", []):
             actual_files.add(file_entry.get("path"))
 
-        assert actual_files == {"subdir1/file3.txt"}, (
-            f"Expected manifest to contain only 'subdir1/file1.txt' and 'subdir1/file3.txt', "
+        assert actual_files == {new_file, new_nested_file}, (
+            f"Expected manifest to contain only 'subdir1/file3.txt' and 'subdir1/nested/file4.txt', "
             f"but got {actual_files}"
         )
 
