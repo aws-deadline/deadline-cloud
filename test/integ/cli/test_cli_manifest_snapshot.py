@@ -130,7 +130,11 @@ class TestManifestSnapshot:
         new_file = "subdir1/file3.txt"
         Path(os.path.join(root_dir, new_file)).touch()
         new_nested_file = "subdir1/nested/file4.txt"
-        Path(os.path.join(root_dir, new_nested_file)).touch()
+        nested_file_path = Path(os.path.join(root_dir, new_nested_file))
+        nested_file_path.parent.mkdir(
+            parents=True, exist_ok=True
+        )  # Create parent directories if they don't exist
+        nested_file_path.touch()
 
         # When
         runner = CliRunner()
