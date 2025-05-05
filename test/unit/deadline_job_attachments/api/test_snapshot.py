@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Set
 from deadline.job_attachments.api.manifest import _manifest_snapshot
 from deadline.job_attachments.exceptions import ManifestCreationException
 from deadline.job_attachments.models import ManifestSnapshot
@@ -17,6 +17,12 @@ class TestSnapshotAPI:
     def temp_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir_path:
             yield tmpdir_path
+
+    def get_manifest_files(self, manifest_path) -> Set[str]:
+        """Helper method to extract file paths from a manifest"""
+        with open(manifest_path, "r") as manifest_file:
+            manifest_payload = json.load(manifest_file)
+            return {item["path"] for item in manifest_payload["paths"]}
 
     def test_snapshot_empty_folder(self, temp_dir):
         """
@@ -102,6 +108,9 @@ class TestSnapshotAPI:
         [
             pytest.param(
                 ["test_file", "**/nested_file"], None, ["test_file", "nested/nested_file"]
+            ),
+            pytest.param(
+                ["nested/**"], None, ["nested/excluded_nested_file", "nested/nested_file"]
             ),
             pytest.param(
                 None,
@@ -384,3 +393,103 @@ class TestSnapshotAPI:
         )
         # Then. We should find no new manifest, there were no files to snapshot
         assert diffed_manifest is None
+
+    @pytest.mark.parametrize(
+        "test_case,initial_include,initial_exclude,diff_include,diff_exclude,modified_files,new_files,expected_diff_files",
+        [
+            # Test case 1: Include filter with same filter in diff
+            (
+                "include_filter",
+                None,  # initial include
+                None,  # initial exclude
+                ["subdir1/**"],  # diff include
+                None,  # diff exclude
+                ["subdir1/file1.txt"],  # files to modify
+                [
+                    ("subdir1/file2.txt", "new txt"),
+                    ("subdir1/file1.txt", "new dat"),
+                ],  # new files to add
+                {"subdir1/file1.txt", "subdir1/file2.txt"},  # expected files in diff
+            ),
+            # Test case 2: Exclude filter with same filter in diff
+            (
+                "exclude_filter",
+                None,  # initial include
+                ["*.dat"],  # initial exclude
+                None,  # diff include
+                ["*.dat"],  # diff exclude
+                ["file1.txt", "file1.dat"],  # files to modify
+                [],  # no new files
+                {"file1.txt"},  # expected files in diff (dat file excluded)
+            ),
+        ],
+    )
+    def test_diff_with_includes_excludes(
+        self,
+        temp_dir,
+        test_case,
+        initial_include,
+        initial_exclude,
+        diff_include,
+        diff_exclude,
+        modified_files,
+        new_files,
+        expected_diff_files,
+    ):
+        """
+        Parametrized test for different filter scenarios with diff:
+        1. Create initial snapshot with specified include/exclude filters
+        2. Modify specified files and add new files
+        3. Create diff snapshot with specified include/exclude filters
+        4. Verify the diff contains the expected files
+        """
+        # Setup test directory
+        root_dir = os.path.join(temp_dir, "snapshot")
+        os.makedirs(root_dir, exist_ok=True)
+
+        # Create initial files
+        subdir1 = os.path.join(root_dir, "subdir1")
+        subdir2 = os.path.join(root_dir, "subdir2")
+        os.makedirs(subdir1)
+        os.makedirs(subdir2)
+        Path(os.path.join(subdir1, "file1.txt")).touch()
+        Path(os.path.join(subdir2, "file2.txt")).touch()
+
+        # Create initial snapshot with specified filters
+        initial_manifest = _manifest_snapshot(
+            root=root_dir,
+            destination=temp_dir,
+            name=f"initial_{test_case}",
+            include=initial_include,
+            exclude=initial_exclude,
+        )
+
+        assert initial_manifest is not None
+        initial_paths = self.get_manifest_files(initial_manifest.manifest)
+        assert len(initial_paths) == 2
+
+        # Modify specified files
+        for filename in modified_files:
+            with open(os.path.join(root_dir, filename), "w") as f:
+                f.write(f"modified {filename}")
+
+        # Add new files
+        for filename, content in new_files:
+            with open(os.path.join(root_dir, filename), "w") as f:
+                f.write(content)
+
+        # Create diff snapshot with specified filters
+        diff_manifest = _manifest_snapshot(
+            root=root_dir,
+            destination=temp_dir,
+            name=f"diff_{test_case}",
+            include=diff_include,
+            exclude=diff_exclude,
+            diff=initial_manifest.manifest,
+        )
+
+        assert diff_manifest is not None
+        diff_files = self.get_manifest_files(diff_manifest.manifest)
+
+        # Verify diff manifest contains expected files
+        assert diff_files == expected_diff_files
