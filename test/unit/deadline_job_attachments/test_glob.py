@@ -77,3 +77,47 @@ def test_glob_path_exclude(test_glob_folder: str):
     assert len(globbed_files) == 2
     assert os.path.join(os.sep, test_glob_folder, "include.txt") in globbed_files
     assert os.path.join(os.sep, test_glob_folder, "nested", "nested_include.txt") in globbed_files
+
+
+def test_glob_path_include_subdir(test_glob_folder: str):
+    """
+    Test case to glob files only from the include sub directory.
+    """
+    globbed_files: List[str] = _glob_paths(path=test_glob_folder, include=["nested/**"])
+
+    # There are 2 files
+    assert len(globbed_files) == 2
+    assert os.path.join(os.sep, test_glob_folder, "nested", "nested_include.txt") in globbed_files
+    assert os.path.join(os.sep, test_glob_folder, "nested", "nested_exclude.txt") in globbed_files
+
+
+def test_glob_path_include_nonexistent(test_glob_folder: str):
+    """
+    Test case to glob files only from the include sub directory which does not exist.
+    """
+    globbed_files: List[str] = _glob_paths(path=test_glob_folder, include=["nonexistent/**"])
+
+    # There are 0 files
+    assert len(globbed_files) == 0
+
+
+def test_glob_path_exclude_subdir(test_glob_folder: str):
+    """
+    Test case to glob files and exclude sub directory.
+    """
+    globbed_files: List[str] = _glob_paths(path=test_glob_folder, exclude=["nested/**"])
+
+    # There are 2 files
+    assert len(globbed_files) == 2
+    assert os.path.join(os.sep, test_glob_folder, "include.txt") in globbed_files
+    assert os.path.join(os.sep, test_glob_folder, "exclude.txt") in globbed_files
+
+
+def test_glob_path_exclude_nonexistent(test_glob_folder: str):
+    """
+    Test case to glob files only exclude sub directory which does not exist.
+    """
+    globbed_files: List[str] = _glob_paths(path=test_glob_folder, exclude=["nonexistent/**"])
+
+    # There are 2 files
+    assert len(globbed_files) == 4

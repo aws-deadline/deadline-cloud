@@ -1,5 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import os
+import glob
 import json
 from pathlib import Path
 from typing import List, Optional
@@ -41,6 +43,33 @@ def _process_glob_inputs(glob_arg_input: str) -> GlobConfig:
     return glob_config
 
 
+def _match_files_with_pattern(base_path: str, patterns: List[str]) -> set:
+    """
+    Helper function to match files based on glob patterns.
+
+    Args:
+        base_path: Root path to glob from
+        patterns: List of glob patterns to match
+
+    Returns:
+        Set of normalized file paths that match the patterns
+    """
+    matched_files = set()
+    for pattern in patterns:
+        # Make pattern relative to base path
+        full_pattern = os.path.join(base_path, pattern)
+
+        # Use recursive glob for directory matching
+        for matched_path in glob.glob(full_pattern, recursive=True):
+            # Only add files, not directories
+            if os.path.isfile(matched_path):
+                # Convert to proper path format
+                normalized_path = os.path.normpath(matched_path)
+                matched_files.add(normalized_path)
+
+    return matched_files
+
+
 def _glob_paths(
     path: str, include: List[str] = ["**/*"], exclude: Optional[List[str]] = None
 ) -> List[str]:
@@ -52,21 +81,16 @@ def _glob_paths(
     exclude: Optional, pattern syntax for files to exclude.
     return: List of files found based on supplied glob patterns.
     """
-    include_files: List[Optional[str]] = []
-    for input_glob in include:
-        include_files.extend(
-            [str(path) if path.is_file() else None for path in Path(path).glob(input_glob)]
-        )
-    include_files = list(filter(None, include_files))
+    # Convert path to absolute path
+    base_path = os.path.abspath(path)
 
+    # Process include patterns
+    matched_files = _match_files_with_pattern(base_path, include)
+
+    # Process exclude patterns
     if exclude:
-        exclude_files = []
-        for exclude_glob in exclude:
-            exclude_files.extend(
-                [str(path) if path.is_file() else None for path in Path(path).glob(exclude_glob)]
-            )
+        files_to_exclude = _match_files_with_pattern(base_path, exclude)
+        # Remove excluded files from result
+        matched_files -= files_to_exclude
 
-        # use sets to remove duplicates and remove all excluded file.
-        exclude_files = list(filter(None, exclude_files))
-        include_files = list(set(include_files) - set(exclude_files))
-    return include_files  # type: ignore[return-value]
+    return list(matched_files)

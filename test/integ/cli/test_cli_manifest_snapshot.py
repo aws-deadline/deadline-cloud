@@ -25,6 +25,13 @@ class TestManifestSnapshot:
         with tempfile.TemporaryDirectory() as tmpdir_path:
             yield tmpdir_path
 
+    @pytest.fixture
+    def manifest_dir(self, temp_dir):
+        manifest_dir = os.path.join(temp_dir, "manifest_dir")
+        os.makedirs(manifest_dir)
+
+        yield manifest_dir
+
     def _create_test_manifest(self, tmp_path: str, root_dir: str) -> str:
         """
         Create some test files in the temp dir, snapshot it and return the manifest file.
@@ -105,6 +112,63 @@ class TestManifestSnapshot:
             diff = json.loads(result.output)
             assert len(diff["new"]) == 1
             assert new_file in diff["new"]
+
+    def test_manifest_snapshot_and_diff_with_include(self, tmp_path: str, manifest_dir: str):
+        """
+        Tests creating a snapshot of the whole root directory and then running a diff with an include filter.
+        This verifies that:
+        1. The initial snapshot contains all files
+        2. The diff correctly identifies changes only in the included subdirectory
+        """
+        TEST_ROOT_DIR = "root_dir"
+
+        # Given a created manifest file...
+        root_dir = os.path.join(tmp_path, TEST_ROOT_DIR)
+        manifest = self._create_test_manifest(tmp_path, root_dir)
+
+        # Lets add another file.
+        new_file = "subdir1/file3.txt"
+        Path(os.path.join(root_dir, new_file)).touch()
+        new_nested_file = "subdir1/nested/file4.txt"
+        Path(os.path.join(root_dir, new_nested_file)).touch()
+
+        # When
+        runner = CliRunner()
+        args = [
+            "manifest",
+            "snapshot",
+            "--root",
+            root_dir,
+            "--diff",
+            manifest,
+            "--include",
+            "subdir1/**",
+            "--destination",
+            manifest_dir,
+        ]
+
+        result = runner.invoke(main, args)
+        assert result.exit_code == 0, result.output
+
+        # Find the manifest file
+        manifest_files = os.listdir(manifest_dir)
+        assert len(manifest_files) == 1, (
+            f"Expected exactly one manifest file, but got {len(manifest_files)}"
+        )
+        manifest_path = os.path.join(manifest_dir, manifest_files[0])
+
+        # Read the manifest file and verify its contents
+        with open(manifest_path, "r") as f:
+            manifest_data = json.load(f)
+
+        actual_files = set()
+        for file_entry in manifest_data.get("paths", []):
+            actual_files.add(file_entry.get("path"))
+
+        assert actual_files == {new_file, new_nested_file}, (
+            f"Expected manifest to contain only 'subdir1/file3.txt' and 'subdir1/nested/file4.txt', "
+            f"but got {actual_files}"
+        )
 
     @pytest.mark.integ
     @pytest.mark.skipif(
