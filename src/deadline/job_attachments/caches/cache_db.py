@@ -41,7 +41,7 @@ class CacheDB(ABC):
 
             self.enabled = True
         except ImportError:
-            logger.warn(f"SQLite was not found, {cache_name} will not be used.")
+            logger.warning(f"SQLite was not found, {cache_name} will not be used.")
             self.enabled = False
             return
 

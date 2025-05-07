@@ -7,7 +7,9 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional
+import json
+from typing import Any, Dict, Optional, Protocol
+import yaml
 
 from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
@@ -24,18 +26,16 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from deadline.client.ui.dialogs.submit_job_progress_dialog import SubmitJobProgressDialog
-from deadline.job_attachments.models import JobAttachmentS3Settings
-from deadline.job_attachments.upload import S3AssetManager
+from .submit_job_progress_dialog import SubmitJobProgressDialog
 
 from ..dataclasses import HostRequirements
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .. import block_signals
-from ...config import get_setting
-from ...config.config_file import str2bool
+from ...config import get_setting, set_setting, config_file
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
+from ...job_bundle.parameters import JobParameter
 from ...job_bundle.submission import AssetReferences
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
@@ -48,6 +48,22 @@ logger = logging.getLogger(__name__)
 
 # initialize early so once the UI opens, things are already initialized
 DeadlineAuthenticationStatus.getInstance()
+
+
+class OnCreateJobBundleCallback(Protocol):
+    """This protocol defines the callback for creating a job bundle in the SubmitJobToDeadlineDialog."""
+
+    def __call__(
+        self,
+        widget: SubmitJobToDeadlineDialog,
+        job_bundle_dir: str,
+        settings: Any,
+        queue_parameters: list[JobParameter],
+        asset_references: AssetReferences,
+        host_requirements: Optional[Dict[str, Any]] = None,
+        *,
+        purpose: JobBundlePurpose,
+    ) -> dict[str, Any]: ...
 
 
 class SubmitJobToDeadlineDialog(QDialog):
@@ -64,11 +80,19 @@ class SubmitJobToDeadlineDialog(QDialog):
             to override default queue parameter values from the queue. For example,
             a Rez queue environment may have a default "" for the RezPackages parameter, but a Maya
             submitter would override that default with "maya-2023" or similar.
-        auto_detected_attachments (FlatAssetReferences): The job attachments that were automatically detected
+        auto_detected_attachments (AssetReferences): The job attachments that were automatically detected
             from the input document/scene file or starting job bundle.
-        attachments: (FlatAssetReferences): The job attachments that have been added to the job by the user.
-        on_create_job_bundle_callback: A function to call when the dialog needs to create a Job Bundle. It
-            is called with arguments (widget, job_bundle_dir, settings, queue_parameters, asset_references)
+        attachments (AssetReferences): The job attachments that have been added to the job by the user.
+        on_create_job_bundle_callback (OnCreateJobBundleCallback): A function to call when the dialog
+            needs to create a Job Bundle. It is called with arguments:
+            (widget, job_bundle_dir, settings, queue_parameters, asset_references, host_requirements, purpose).
+            It can return either None or a dict with parameters about the submission. Currently,
+            the additional parameters supported are:
+            {
+                # See documentation for deadline.client.api.create_job_from_job_bundle about these parameters
+                "job_parameters": [{"name": "ParameterName", "value": "Parameter Value", ...}],
+                "known_asset_paths": ["/path/1", ...],
+            }
         parent: parent of the widget
         f: Qt Window Flags
         show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
@@ -84,12 +108,13 @@ class SubmitJobToDeadlineDialog(QDialog):
         initial_shared_parameter_values: dict[str, Any],
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
-        on_create_job_bundle_callback,
+        on_create_job_bundle_callback: OnCreateJobBundleCallback,
         parent=None,
         f=Qt.WindowFlags(),
         show_host_requirements_tab=False,
         host_requirements: Optional[HostRequirements] = None,
         submitter_name: Optional[str] = None,
+        known_asset_paths: Optional[list[str]] = None,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
@@ -103,6 +128,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
+        self.known_asset_paths = known_asset_paths or []
 
         self._build_ui(
             job_setup_widget_type,
@@ -356,19 +382,19 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
 
             if self.show_host_requirements_tab:
-                requirements = self.host_requirements.get_requirements()
-                self.on_create_job_bundle_callback(
+                host_requirements = self.host_requirements.get_requirements()
+                parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
                     self.job_history_bundle_dir,
                     settings,
                     queue_parameters,
                     asset_references,
-                    requirements,
+                    host_requirements,
                     purpose=JobBundlePurpose.EXPORT,
                 )
             else:
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
-                self.on_create_job_bundle_callback(
+                parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
                     self.job_history_bundle_dir,
                     settings,
@@ -376,6 +402,14 @@ class SubmitJobToDeadlineDialog(QDialog):
                     asset_references,
                     purpose=JobBundlePurpose.EXPORT,
                 )
+            if parameters_from_callback is None:
+                parameters_from_callback = {}
+
+            # If the callback returned job parameters, update them in the job bundle as well so that
+            # submission from the job history dir is equivalent.
+            job_parameters = parameters_from_callback.get("job_parameters", [])
+            if job_parameters:
+                self.save_job_parameters_to_job_bundle(self.job_history_bundle_dir, job_parameters)
 
             logger.info(f"Saved the submission as a job bundle: {self.job_history_bundle_dir}")
             if sys.platform == "win32":
@@ -396,6 +430,36 @@ class SubmitJobToDeadlineDialog(QDialog):
             logger.exception("Error saving bundle")
             message = str(exc)
             QMessageBox.critical(self, f"{self.submitter_name} job submission", message)  # type: ignore[call-arg]
+
+    def save_job_parameters_to_job_bundle(
+        self, job_bundle_dir: str, job_parameters: list[JobParameter]
+    ):
+        """
+        Saves the job parameters to the job bundle. If the job bundle already has a parameter_values file,
+        it updates it. Otherwise it creates it.
+        """
+        job_parameters_dict = {param["name"]: param for param in job_parameters}
+
+        job_parameters_file = os.path.join(job_bundle_dir, "parameter_values.yaml")
+        if os.path.exists(job_parameters_file):
+            with open(job_parameters_file, "r", encoding="utf8") as f:
+                existing_job_parameters = yaml.safe_load(f).get("parameterValues", [])
+        else:
+            job_parameters_file = os.path.join(job_bundle_dir, "parameter_values.json")
+            if os.path.exists(job_parameters_file):
+                with open(job_parameters_file, "r", encoding="utf8") as f:
+                    existing_job_parameters = json.load(f).get("parameterValues", [])
+            else:
+                existing_job_parameters = []
+
+        # Overwrite any existing values, and add new values at the end
+        combined_job_parameters = []
+        for param in existing_job_parameters:
+            combined_job_parameters.append(job_parameters_dict.pop(param["name"], param))
+        combined_job_parameters.extend(job_parameters_dict.values())
+
+        with open(job_parameters_file, "w", encoding="utf8") as f:
+            json.dump({"parameterValues": combined_job_parameters}, f, indent=1)
 
     def on_submit(self):
         """
@@ -419,15 +483,13 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         # Submit the job
         try:
-            deadline = api.get_boto3_client("deadline")
-
             self.job_history_bundle_dir = create_job_history_bundle_dir(
                 self.submitter_name, settings.name
             )
 
             if self.show_host_requirements_tab:
                 requirements = self.host_requirements.get_requirements()
-                self.on_create_job_bundle_callback(
+                parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
                     self.job_history_bundle_dir,
                     settings,
@@ -438,7 +500,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 )
             else:
                 # Maintaining backward compatibility for submitters that do not support host_requirements yet
-                self.on_create_job_bundle_callback(
+                parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
                     self.job_history_bundle_dir,
                     settings,
@@ -446,56 +508,27 @@ class SubmitJobToDeadlineDialog(QDialog):
                     asset_references,
                     purpose=JobBundlePurpose.SUBMISSION,
                 )
+            if parameters_from_callback is None:
+                parameters_from_callback = {}
 
-            farm_id = get_setting("defaults.farm_id")
-            queue_id = get_setting("defaults.queue_id")
-            storage_profile_id = get_setting("settings.storage_profile_id")
+            # If the callback returned job parameters, update them in the job bundle as well so that
+            # submission from the job history dir is equivalent.
+            job_parameters = parameters_from_callback.get("job_parameters", [])
+            if job_parameters:
+                self.save_job_parameters_to_job_bundle(self.job_history_bundle_dir, job_parameters)
 
-            storage_profile = None
-            if storage_profile_id:
-                storage_profile = api.get_storage_profile_for_queue(
-                    farm_id, queue_id, storage_profile_id, deadline
-                )
-
-            queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
-
-            queue_role_session = api.get_queue_user_boto3_session(
-                deadline=deadline,
-                farm_id=farm_id,
-                queue_id=queue_id,
-                queue_display_name=queue["displayName"],
-            )
-
-            asset_manager: Optional[S3AssetManager] = None
-            if "jobAttachmentSettings" in queue:
-                asset_manager = S3AssetManager(
-                    farm_id=farm_id,
-                    queue_id=queue_id,
-                    job_attachment_settings=JobAttachmentS3Settings(
-                        **queue["jobAttachmentSettings"]
-                    ),
-                    session=queue_role_session,
-                )
-
-            api.get_deadline_cloud_library_telemetry_client().record_event(
-                event_type="com.amazon.rum.deadline.submission",
-                event_details={
-                    "submitter_name": self.submitter_name,
-                },
-                from_gui=True,
-            )
-
-            self.create_job_response = job_progress_dialog.start_submission(
-                farm_id,
-                queue_id,
-                storage_profile,
-                self.job_history_bundle_dir,
-                queue_parameters,
-                asset_manager,
-                deadline,
-                auto_accept=str2bool(get_setting("settings.auto_accept")),
+            job_id = job_progress_dialog.start_job_submission(
+                job_bundle_dir=self.job_history_bundle_dir,
+                submitter_name=self.submitter_name,
+                config=config_file.read_config(),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
+                job_parameters=job_parameters,
+                known_asset_paths=self.known_asset_paths
+                + parameters_from_callback.get("known_asset_paths", []),
             )
+            if job_id:
+                set_setting("defaults.job_id", job_id)
+
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
             QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))

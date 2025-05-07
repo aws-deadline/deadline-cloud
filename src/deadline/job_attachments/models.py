@@ -61,6 +61,8 @@ class AssetUploadGroup:
     """Represents all of the information needed to prepare to upload assets"""
 
     asset_groups: List[AssetRootGroup] = field(default_factory=list)
+    known_asset_paths: List[Path] = field(default_factory=list)
+    """List of paths that should not generate warnings"""
     total_input_files: int = 0
     total_input_bytes: int = 0
 

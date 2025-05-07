@@ -1,14 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from deadline.client import api
-from deadline.client.config import config_file
-from deadline.job_attachments.models import AssetRootGroup, AssetRootManifest
-from deadline.job_attachments.upload import S3AssetManager, SummaryStatistics
+from .. import api
+from ..config import config_file
+from ...job_attachments.models import AssetRootGroup, AssetRootManifest
+from ...job_attachments.upload import S3AssetManager, SummaryStatistics
+from ...job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
 
 
 import textwrap
 from configparser import ConfigParser
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 
 def _hash_attachments(
@@ -25,7 +26,7 @@ def _hash_attachments(
     callback. Returns a list of the asset manifests of the hashed files.
     """
 
-    def _default_update_hash_progress(hashing_metadata: Dict[str, str]) -> bool:
+    def _default_update_hash_progress(hashing_metadata: ProgressReportMetadata) -> bool:
         return True
 
     if not hashing_progress_callback:
@@ -41,7 +42,18 @@ def _hash_attachments(
     api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
         hashing_summary
     )
-    print_function_callback("Hashing Summary:")
-    print_function_callback(textwrap.indent(str(hashing_summary), "    "))
+    if hashing_summary.total_files > 0:
+        print_function_callback("Hashing Summary:")
+        print_function_callback(textwrap.indent(str(hashing_summary), "    "))
+    else:
+        # Ensure to call the callback once if no files were processed
+        hashing_progress_callback(
+            ProgressReportMetadata(
+                status=ProgressStatus.PREPARING_IN_PROGRESS,
+                progress=100,
+                transferRate=0,
+                progressMessage="No files to hash",
+            )
+        )
 
     return hashing_summary, manifests

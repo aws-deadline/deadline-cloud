@@ -9,35 +9,35 @@ import os
 from logging import INFO
 from pathlib import Path
 from typing import Any, Dict, Tuple
-from unittest.mock import ANY, patch, Mock
+from unittest.mock import ANY, patch, Mock, call
 from deadline.client import exceptions
 
 import pytest
 import time
 
 from deadline.client import api, config
-from deadline.client.api import _submit_job_bundle
 from deadline.job_attachments.exceptions import MisconfiguredInputsError
 from deadline.job_attachments.models import (
     AssetRootGroup,
     AssetUploadGroup,
-    Attachments,
     FileSystemLocation,
     FileSystemLocationType,
     JobAttachmentsFileSystem,
-    ManifestProperties,
     PathFormat,
     StorageProfile,
     StorageProfileOperatingSystemFamily,
 )
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments.progress_tracker import SummaryStatistics, ProgressReportMetadata
+from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
+from ..testing_utilities import patch_calls_for_create_job_from_job_bundle, write_test_asset_files
 from ..shared_constants import (
     MOCK_BUCKET_NAME,
     MOCK_FARM_ID,
     MOCK_STORAGE_PROFILE_ID,
     MOCK_QUEUE_ID,
+    MOCK_JOB_ID,
+    MOCK_STATUS_MESSAGE,
 )
 
 MOCK_GET_QUEUE_RESPONSE = {
@@ -57,14 +57,6 @@ MOCK_GET_QUEUE_RESPONSE = {
     "updatedAt": "2022-11-22T22:26:57+00:00",
     "updatedBy": "0123abcdf-abcd-0123-fa82-0123456abcd1",
 }
-
-MOCK_JOB_ID = "job-0123456789abcdefghijklmnopqrstuv"
-
-MOCK_CREATE_JOB_RESPONSE = {"jobId": MOCK_JOB_ID}
-
-MOCK_STATUS_MESSAGE = "Testing123"
-
-MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
 
 MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE = {
     "storageProfileId": MOCK_STORAGE_PROFILE_ID,
@@ -305,20 +297,18 @@ def test_create_job_from_job_bundle(
     """
     Test a matrix of different job template and parameters file cases.
     """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES[job_template_case]
     parameters_type, parameters, expected_create_job_parameters = MOCK_PARAMETERS_CASES[
         parameters_case
     ]
-    with patch.object(api._session, "get_boto3_session") as session_mock:
-        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        session_mock().client("deadline").get_job.return_value = MOCK_GET_JOB_RESPONSE
-        session_mock().client(
-            "deadline"
-        ).get_storage_profile_for_queue.return_value = MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
-
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        )
 
         # Write the template to the job bundle
         with open(
@@ -349,7 +339,7 @@ def test_create_job_from_job_bundle(
     expected_create_job_parameters_dict["priority"] = expected_create_job_parameters_dict.get(
         "priority", 50
     )
-    session_mock().client("deadline").create_job.assert_called_once_with(
+    mock.get_boto3_client().create_job.assert_called_once_with(
         farmId=MOCK_FARM_ID,
         queueId=MOCK_QUEUE_ID,
         template=job_template,
@@ -365,14 +355,10 @@ def test_create_job_from_job_bundle_error_missing_template(
     """
     Test a job bundle with missing template.
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-
+    with patch_calls_for_create_job_from_job_bundle():
         # Don't write a template file
 
         # Write the parameters to the job bundle, if the test case parameter includes them
@@ -395,14 +381,10 @@ def test_create_job_from_job_bundle_error_duplicate_template(
     """
     Test a job bundle with both a JSON and YAML template.
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-
+    with patch_calls_for_create_job_from_job_bundle():
         # Write both a JSON and YAML template file
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
             f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
@@ -429,14 +411,10 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
     """
     Test a job bundle with an incorrect AWS Deadline Cloud parameter
     """
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ):
-        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-
+    with patch_calls_for_create_job_from_job_bundle():
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
             f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
@@ -455,63 +433,16 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
             )
 
 
-def _write_asset_files(assets_dir: str, asset_contents: Dict[str, str]):
-    """
-    Write a set of asset contents files to the provided assets directory.
-    Each key of asset_contents is a relative path from assets_dir, and
-    each value is what to write to the file.
-    """
-    for rel_path, contents in asset_contents.items():
-        path = os.path.join(assets_dir, rel_path)
-        if not os.path.isdir(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
-        if isinstance(contents, str):
-            with open(path, "w", encoding="utf8") as f:
-                f.write(contents)
-        elif isinstance(contents, bytes):
-            with open(path, "wb") as f:
-                f.write(contents)
-        else:
-            raise ValueError("The contents provided in asset_contents must be either str or bytes.")
-
-
 def test_create_job_from_job_bundle_job_attachments(
     fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
 ):
     """
     Test a job bundle with asset references.
     """
-    # Use a temporary directory for the job bundle
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
-        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
-    ) as mock_hash_attachments, patch.object(
-        S3AssetManager,
-        "prepare_paths_for_upload",
-    ) as mock_prepare_paths, patch.object(
-        S3AssetManager, "upload_assets"
-    ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ) as mock_telemetry, patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-    ):
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        client_mock().get_storage_profile_for_queue.side_effect = [
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
             MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
-        ]
-        expected_upload_group = AssetUploadGroup(
-            total_input_files=3, total_input_bytes=256, asset_groups=[AssetRootGroup()]
         )
-        mock_prepare_paths.return_value = expected_upload_group
-        mock_upload_assets.return_value = [
-            SummaryStatistics(),
-            Attachments([]),
-        ]
 
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
@@ -527,7 +458,7 @@ def test_create_job_from_job_bundle_job_attachments(
             "somedir/asset-2.txt": "Asset 2",
             "somedir/asset-3.bat": "@echo asset 3",
         }
-        _write_asset_files(temp_assets_dir, asset_contents)
+        write_test_asset_files(temp_assets_dir, asset_contents)
 
         # Write the asset_references file
         asset_references = {
@@ -548,52 +479,54 @@ def test_create_job_from_job_bundle_job_attachments(
         def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_print_callback(msg: str) -> None:
-            pass
-
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
-            print_function_callback=fake_print_callback,
+            print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
             queue_parameter_definitions=[],
+            known_asset_paths=[temp_assets_dir],
         )
 
-        mock_prepare_paths.assert_called_once_with(
-            input_paths=sorted(
-                [
-                    os.path.join(temp_assets_dir, "asset-1.txt"),
-                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-2.txt")),
-                    os.path.join(temp_assets_dir, os.path.normpath("somedir/asset-3.bat")),
-                ]
-            ),
-            output_paths=[os.path.join(temp_assets_dir, "somedir")],
-            referenced_paths=[],
-            storage_profile=MOCK_STORAGE_PROFILE,
-            require_paths_exist=False,
-        )
-        mock_hash_attachments.assert_called_once_with(
+        mock.hash_attachments.assert_called_once_with(
             asset_manager=ANY,
-            asset_groups=[AssetRootGroup()],
+            asset_groups=[
+                AssetRootGroup(
+                    root_path=temp_assets_dir,
+                    inputs={Path(temp_assets_dir) / p for p in asset_contents.keys()},
+                    outputs={Path(temp_assets_dir) / "somedir"},
+                )
+            ],
             total_input_files=3,
-            total_input_bytes=256,
-            print_function_callback=fake_print_callback,
+            total_input_bytes=35,
+            print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
         )
-        client_mock().create_job.assert_called_once_with(
+        mock.get_boto3_client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
             template=ANY,
-            templateType=ANY,
+            templateType="JSON",
             priority=50,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
-            attachments={
-                "manifests": [],
-                "fileSystem": JobAttachmentsFileSystem.COPIED,
-            },
+            attachments=ANY,
         )
-        assert mock_telemetry.call_count == 3
+        mock_telemetry_client = mock.get_deadline_cloud_library_telemetry_client()
+        assert mock_telemetry_client.record_hashing_summary.call_count == 1
+        assert mock_telemetry_client.record_upload_summary.call_count == 1
+        assert mock_telemetry_client.record_event.mock_calls == [
+            call(
+                event_type="com.amazon.rum.deadline.submission",
+                event_details={"submitter_name": "Custom"},
+                from_gui=False,
+            ),
+            call(
+                event_type="com.amazon.rum.deadline.create_job",
+                event_details={"is_success": True},
+                from_gui=False,
+            ),
+        ]
 
 
 def test_create_job_from_job_bundle_empty_job_attachments(
@@ -604,37 +537,20 @@ def test_create_job_from_job_bundle_empty_job_attachments(
     (for example, if under a SHARED Storage Profile Filesystem Location), no Job
     Attachments calls are made.
     """
-    # Use a temporary directory for the job bundle
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
-        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
-    ) as mock_hash_attachments, patch.object(
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock, patch.object(
         S3AssetManager,
         "prepare_paths_for_upload",
-    ) as mock_prepare_paths, patch.object(
-        S3AssetManager, "upload_assets"
-    ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ), patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-    ):
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        client_mock().get_storage_profile_for_queue.side_effect = [
+    ) as mock_prepare_paths:
+        mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
             MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
-        ]
-
+        )
         # When this function returns an empty object, we skip Job Attachments calls
         expected_upload_group = AssetUploadGroup()
         mock_prepare_paths.return_value = expected_upload_group
-
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -646,7 +562,7 @@ def test_create_job_from_job_bundle_empty_job_attachments(
             "somedir/asset-2.txt": "Asset 2",
             "somedir/asset-3.bat": "@echo asset 3",
         }
-        _write_asset_files(temp_assets_dir, asset_contents)
+        write_test_asset_files(temp_assets_dir, asset_contents)
 
         # Write the asset_references file
         asset_references = {
@@ -667,13 +583,10 @@ def test_create_job_from_job_bundle_empty_job_attachments(
         def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_print_callback(msg: str) -> None:
-            pass
-
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
-            print_function_callback=fake_print_callback,
+            print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
             queue_parameter_definitions=[],
@@ -692,10 +605,10 @@ def test_create_job_from_job_bundle_empty_job_attachments(
             storage_profile=MOCK_STORAGE_PROFILE,
             require_paths_exist=False,
         )
-        mock_hash_attachments.assert_not_called()
-        mock_upload_assets.assert_not_called()
+        mock.hash_attachments.assert_not_called()
+        mock.upload_assets.assert_not_called()
         # Should not be called with Job Attachments
-        client_mock().create_job.assert_called_once_with(
+        mock.get_boto3_client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
             template=ANY,
@@ -711,17 +624,15 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
     """
     Test a job bundle with an asset_references file but no referenced files.
     """
-    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
-    with patch.object(api._session, "get_boto3_session") as session_mock:
-        session_mock().client("deadline").create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        session_mock().client("deadline").get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        session_mock().client("deadline").get_storage_profile_for_queue.side_effect = [
-            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
-        ]
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
+            MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
+        )
 
         # Write the template to the job bundle
         with open(
@@ -749,7 +660,7 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
 
         assert response == MOCK_JOB_ID
         # There should be no job attachments section in the result
-        session_mock().client("deadline").create_job.assert_called_once_with(
+        mock.get_boto3_client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
             template=job_template,
@@ -766,6 +677,9 @@ def test_create_job_from_job_bundle_partially_empty_directories(
     Test a job bundle with an input directory that contains both empty directories and input files
     does not throw a MisconfiguredInputsError and successfully submits
     """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
     temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
     assets_directory: str = str(temp_bundle_dir_as_path / "assets")
@@ -773,14 +687,7 @@ def test_create_job_from_job_bundle_partially_empty_directories(
     Path(empty_directory).mkdir(parents=True)
     (temp_bundle_dir_as_path / "assets" / "input_file").touch()
 
-    with patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ):
-        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-
+    with patch_calls_for_create_job_from_job_bundle():
         # Write the template to the job bundle
         with open(
             os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
@@ -818,19 +725,17 @@ def test_create_job_from_job_bundle_misconfigured_directories(
     with a job bundle with input directories that do not exist throws an error.
     Also confirms that empty directories as logged and added to referenced paths.
     """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
     temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
     missing_directory = str(temp_bundle_dir_as_path / "does" / "not" / "exist" / "bad_path")
     empty_directory = str(temp_bundle_dir_as_path / "empty_dir")
     Path(empty_directory).mkdir()
 
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+    with patch_calls_for_create_job_from_job_bundle():
         caplog.set_level(INFO)
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
         # Write the template to the job bundle
         with open(
@@ -872,19 +777,17 @@ def test_create_job_from_job_bundle_misconfigured_input_files(
     directories in the warning message, but DOES incldue misconfigured directories that
     were specified as files, which should result in an error.
     """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
     job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
     temp_bundle_dir_as_path = Path(temp_job_bundle_dir)
     missing_file = str(temp_bundle_dir_as_path / "does" / "not" / "exist.png")
     directory_pretending_to_be_file = str(temp_bundle_dir_as_path / "sneaky_bad_not_file")
     Path(directory_pretending_to_be_file).mkdir()
 
-    with patch.object(api._session, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+    with patch_calls_for_create_job_from_job_bundle():
         caplog.set_level(INFO)
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
         # Write the template to the job bundle
         with open(
@@ -925,52 +828,15 @@ def test_create_job_from_job_bundle_with_single_asset_file(
     """
     Test a job bundle with a single input file reference and no output directories.
     """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
     # Use a temporary directory for the job bundle
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
-        _submit_job_bundle, "_hash_attachments", return_value=(None, None)
-    ) as mock_hash_attachments, patch.object(
-        S3AssetManager,
-        "prepare_paths_for_upload",
-    ) as mock_prepare_paths, patch.object(
-        S3AssetManager, "upload_assets"
-    ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ), patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-    ):
-        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
-        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
-        client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        client_mock().get_storage_profile_for_queue.side_effect = [
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        mock.get_boto3_client().get_storage_profile_for_queue.side_effect = [
             MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
         ]
-        expected_upload_group = AssetUploadGroup(
-            total_input_files=1, total_input_bytes=1, asset_groups=[AssetRootGroup()]
-        )
-        mock_prepare_paths.return_value = expected_upload_group
-        mock_upload_assets.return_value = [
-            SummaryStatistics(),
-            Attachments(
-                [
-                    ManifestProperties(
-                        rootPath="/mnt/root/path1",
-                        rootPathFormat=PathFormat.POSIX,
-                        inputManifestPath="mock-manifest",
-                        inputManifestHash="mock-manifest-hash",
-                        outputRelativeDirectories=["."],
-                    ),
-                ],
-            ),
-        ]
-
-        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-        config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
         # Write a JSON template
         with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -980,7 +846,7 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         asset_contents = {
             "asset-1.txt": "This is asset 1",
         }
-        _write_asset_files(temp_assets_dir, asset_contents)
+        write_test_asset_files(temp_assets_dir, asset_contents)
 
         # Write the asset_references file
         asset_references = {
@@ -999,54 +865,51 @@ def test_create_job_from_job_bundle_with_single_asset_file(
         def fake_upload_callback(metadata: ProgressReportMetadata) -> bool:
             return True
 
-        def fake_print_callback(msg: str) -> None:
-            pass
-
         # This is the function we're testing
         api.create_job_from_job_bundle(
             temp_job_bundle_dir,
-            print_function_callback=fake_print_callback,
+            print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
             upload_progress_callback=fake_upload_callback,
             queue_parameter_definitions=[],
+            known_asset_paths=[temp_assets_dir],
         )
 
-        mock_prepare_paths.assert_called_once_with(
-            input_paths=[os.path.join(temp_assets_dir, "asset-1.txt")],
-            output_paths=[],
-            referenced_paths=[],
-            storage_profile=MOCK_STORAGE_PROFILE,
-            require_paths_exist=False,
-        )
-        mock_hash_attachments.assert_called_once_with(
+        mock.hash_attachments.assert_called_once_with(
             asset_manager=ANY,
-            asset_groups=[AssetRootGroup()],
+            asset_groups=[
+                AssetRootGroup(
+                    root_path=temp_assets_dir, inputs={Path(temp_assets_dir) / "asset-1.txt"}
+                )
+            ],
             total_input_files=1,
-            total_input_bytes=1,
-            print_function_callback=fake_print_callback,
+            total_input_bytes=15,
+            print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
         )
 
-        client_mock().create_job.assert_called_once_with(
-            farmId=MOCK_FARM_ID,
-            queueId=MOCK_QUEUE_ID,
-            template=ANY,
-            templateType=ANY,
-            priority=50,
-            storageProfileId=MOCK_STORAGE_PROFILE_ID,
-            attachments={
-                "manifests": [
-                    {
-                        "rootPath": "/mnt/root/path1",
-                        "rootPathFormat": PathFormat.POSIX,
-                        "inputManifestPath": "mock-manifest",
-                        "inputManifestHash": "mock-manifest-hash",
-                        "outputRelativeDirectories": ["."],
-                    },
-                ],
-                "fileSystem": JobAttachmentsFileSystem.COPIED,
-            },
-        )
+        assert mock.get_boto3_client().create_job.mock_calls == [
+            call(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                template=ANY,
+                templateType=ANY,
+                priority=50,
+                storageProfileId=MOCK_STORAGE_PROFILE_ID,
+                attachments={
+                    "manifests": [
+                        {
+                            "rootPath": "/mnt/root/path1",
+                            "rootPathFormat": PathFormat.POSIX,
+                            "inputManifestPath": "mock-manifest",
+                            "inputManifestHash": "mock-manifest-hash",
+                            "outputRelativeDirectories": ["."],
+                        },
+                    ],
+                    "fileSystem": JobAttachmentsFileSystem.COPIED,
+                },
+            )
+        ]
 
 
 get_job_responses = [

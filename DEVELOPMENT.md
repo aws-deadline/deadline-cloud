@@ -22,9 +22,9 @@ To develop the Python code in this repository you will need:
 
 1. Python 3.8 or higher. We recommend [mise](https://github.com/jdx/mise) if you would like to run more than one version
    of Python on the same system. When running unit tests against all supported Python versions, for instance.
-2. The [hatch](https://github.com/pypa/hatch) package installed (`pip install --upgrade hatch`) into your Python environment. 
+2. The [hatch](https://github.com/pypa/hatch) package installed (`pip install --upgrade hatch`) into your Python environment.
 
-You can develop on a Linux, MacOs, or Windows workstation, but you may find that some of the support scripting is specific to
+You can develop on a Linux, MacOS, or Windows workstation, but you may find that some of the support scripting is specific to
 Linux/MacOS workstations.
 
 If you are making changes to the Job Attachments files, then you will also need the following to be able to run the integration
@@ -50,14 +50,14 @@ from any directory of this repository:
 * `hatch run fmt` - To automatically reformat all code to adhere to our formatting standards.
 * `hatch shell` - Enter a shell environment where you can run the `deadline` command-line directly as it is implemented in your
   checked-out local git repository.
-* `hatch env prune` - Delete all of your isolated workspace [environments](https://hatch.pypa.io/1.12/environment/) 
+* `hatch env prune` - Delete all of your isolated workspace [environments](https://hatch.pypa.io/1.12/environment/)
    for this package.
 
 If you are not sure about how to approach development for this package, then we suggest a development
 process along the lines of the following as a starting point:
 
 1. Make your functional changes and make sure that they work.
-2. Add unit tests for your changes and ensure that all unit tests pass. 
+2. Add unit tests for your changes and ensure that all unit tests pass.
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
@@ -88,7 +88,7 @@ The tests for this package have three forms:
    without requiring an AWS account.
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
-3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license. 
+3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license.
 
 ### Writing Tests
 
@@ -117,7 +117,7 @@ You can run unit tests by running:
 * `hatch run test` - To run the unit tests with your default Python runtime.
 * `hatch run all:test` - To run the unit tests with all of the supported Python runtime versions that you have installed.
 
-Notes: 
+Notes:
 * If you are running unit tests on Linux, you may encounter errors such as `INTERNALERROR> ImportError: libEGL.so.1: cannot open shared object file: No such file or directory`. This is because some Qt dependencies are missed on Linux. Please install these [Qt dependencies](https://github.com/aws-deadline/.github/blob/mainline/.github/workflows/reusable_python_build.yml#L46-L49) to resolve this issue.
 
 #### Running Docker-based Unit Tests
@@ -157,7 +157,7 @@ export JOB_ATTACHMENTS_BUCKET=$(
 )
 export JA_TEST_ROOT_PREFIX=$(
    aws deadline get-queue --farm-id $FARM_ID --queue-id $QUEUE_ID \
-    --query 'jobAttachmentSettings.rootPrefix' | tr -d '"' 
+    --query 'jobAttachmentSettings.rootPrefix' | tr -d '"'
 )
 ```
 
@@ -167,7 +167,7 @@ Then you can run the integration tests with:
 hatch run integ:test
 ```
 
-Notes: 
+Notes:
 * If you are not one of the AWS Deadline Cloud developers then you may see test failures in tests marked with
   `pytest.mark.cross_account`. That's okay, just ignore them; they'll be tested with the required setup in our CI.
 * If you are adding/changing code related to the Job Attachments' file-upload interactions with S3, then if you have a second
@@ -184,11 +184,11 @@ production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadl
 
 ### Squish GUI Submitter Tests
 
-Squish GUI tests are located under the `test/squish` directory of this repository. New tests can be added for the Deadline GUI when necessary (ie: new functionality is introduced and a test can be added for coverage, or existing functionality is modified). When changes are made, Squish automated tests should be run to ensure changes are not breaking Deadline CLI and GUI functionality. 
+Squish GUI tests are located under the `test/squish` directory of this repository. New tests can be added for the Deadline GUI when necessary (ie: new functionality is introduced and a test can be added for coverage, or existing functionality is modified). When changes are made, Squish automated tests should be run to ensure changes are not breaking Deadline CLI and GUI functionality.
 
 #### Running Squish GUI Submitter Tests
 
-A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes. 
+A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes.
 
 ## Things to Know
 
@@ -208,7 +208,7 @@ For the command-line interface:
 
 For the Python library interface:
 * We follow the [PEP 8](https://peps.python.org/pep-0008/#descriptive-naming-styles) weak internal use indicator convention
-  and name all functions and modules that are internal/private with a leading underscore character. 
+  and name all functions and modules that are internal/private with a leading underscore character.
 * All functions and modules whose name does not begin with an underscore are part of the public contract for this package.
 * Things like adding a non-required keyword argument to a function, or adding a new public function are not breaking changes.
 * Things like renaming a keyword argument, or adding/removing a positional argument in a public function is a breaking change.
@@ -222,9 +222,9 @@ Library dependencies are Python packages required to build and run the Deadline 
 
 The Deadline Cloud library is designed to be integrated into third-party applications that have bespoke and customized deployment environments. Adding dependencies will increase the chance of library version conflicts and incompatabilities. Please evaluate the addition of each new dependency.
 
-We try to minimize the number of dependencies required to build and run Deadline Cloud. When contributing changes, please consider the following. 
+We try to minimize the number of dependencies required to build and run Deadline Cloud. When contributing changes, please consider the following.
 
-#### Why is a new dependency needed? 
+#### Why is a new dependency needed?
 
 * Is the dependency library functionality required small enough to have a minimal version added to the Deadline Cloud code base?
 
@@ -234,12 +234,12 @@ We try to minimize the number of dependencies required to build and run Deadline
     - PyPI download stats
     - GitHub stars
     - GitHub dependency graph showing downstream consumers
-* Is it well-maintained? 
+* Is it well-maintained?
 * Is the library released regularly or recently?
 
 #### Version Pinning
 
-* How should we pin the version of this new dependency? 
+* How should we pin the version of this new dependency?
     - Please consider changes over time such as API or CLI command evolution and breakage.
 * Does the library follow a versioning scheme such as semver?
 
@@ -287,17 +287,14 @@ class MyCustomWidget(QWidget):
       self.__refresh_thread = None
       self.__refresh_id = 0
 
-      # Set this to True when exiting
-      self.canceled = False
+      # Use the CancelationFlag object to decouple the cancelation value
+      # from the window lifetime.
+      self.canceled = CancelationFlag()
+      self.destroyed.connect(self.canceled.set_canceled)
 
       # Connect the Signals to handler functions that run on the main thread
       self.update.connect(self.handle_update)
       self.background_exception.connect(self.handle_background_exception)
-
-    def closeEvent(self, event):
-      # Tell background threads when the widget closes
-      self.canceled = True
-      event.accept()
 
    def handle_background_exception(self, e: BaseException):
       # Handle the error

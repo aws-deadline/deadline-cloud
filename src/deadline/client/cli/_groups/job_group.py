@@ -701,7 +701,6 @@ def job_download_output(step_id, task_id, output, **args):
             click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
             sys.exit(1)
         else:
-            logger.exception("Exception details:")
             if logging.DEBUG >= logger.getEffectiveLevel():
                 logger.exception("Exception details:")
             raise DeadlineOperationError(f"Failed to download output:\n{e}") from e

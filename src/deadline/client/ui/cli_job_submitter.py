@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ..job_bundle import deadline_yaml_dump
+from ..job_bundle.parameters import JobParameter
 from .dataclasses import CliJobSettings
 from .dialogs.submit_job_to_deadline_dialog import (
     SubmitJobToDeadlineDialog,
@@ -49,11 +50,11 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         widget: SubmitJobToDeadlineDialog,
         job_bundle_dir: str,
         settings: CliJobSettings,
-        queue_parameters: list[dict[str, Any]],
+        queue_parameters: list[JobParameter],
         asset_references: AssetReferences,
         host_requirements: Optional[Dict[str, Any]] = None,
         purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
-    ) -> None:
+    ) -> dict[str, Any]:
         """
         Perform a submission when the submit button is pressed
 
@@ -72,19 +73,17 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
         job_template: Dict[str, Any] = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": settings.name,
-            "description": settings.description,
-            "parameterDefinitions": [
-                {
-                    "name": "DataDir",
-                    "type": "PATH",
-                    "objectType": "DIRECTORY",
-                    "dataFlow": "INOUT",
-                    "default": settings.data_dir,
-                }
-            ],
         }
-        if not settings.description:
-            del job_template["description"]
+        if settings.description:
+            job_template["description"] = settings.description
+        job_template["parameterDefinitions"] = [
+            {
+                "name": "DataDir",
+                "type": "PATH",
+                "objectType": "DIRECTORY",
+                "dataFlow": "INOUT",
+            }
+        ]
         step = {
             "name": "CliScript",
             "script": {
@@ -164,6 +163,11 @@ def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
                     deadline_yaml_dump(asset_references.to_dict(), f)
                 elif settings.file_format == "JSON":
                     json.dump(asset_references.to_dict(), f, indent=1)
+
+        return {
+            "known_asset_paths": [settings.data_dir],
+            "job_parameters": [{"name": "DataDir", "value": settings.data_dir}],
+        }
 
     __submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=CliJobSettingsWidget,

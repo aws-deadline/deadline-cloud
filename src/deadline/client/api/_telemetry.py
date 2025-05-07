@@ -374,12 +374,11 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> C
             :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
             :param ** Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
             """
-            success: bool = True
+            success: bool = False
             try:
-                return function(*args, **kwargs)
-            except Exception as e:
-                success = False
-                raise e
+                result = function(*args, **kwargs)
+                success = True
+                return result
             finally:
                 event_name = decorator_kwargs.get("metric_name", function.__name__)
                 get_deadline_cloud_library_telemetry_client().record_event(

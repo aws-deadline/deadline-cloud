@@ -8,6 +8,24 @@ import contextlib
 import os
 import tempfile
 from typing import Dict, Optional, Tuple
+from unittest.mock import patch, Mock
+import boto3
+
+from deadline.client.api import _submit_job_bundle
+from deadline.job_attachments.models import (
+    Attachments,
+    ManifestProperties,
+    PathFormat,
+)
+from deadline.job_attachments.upload import S3AssetManager
+from deadline.job_attachments.progress_tracker import SummaryStatistics
+
+from .shared_constants import (
+    MOCK_CREATE_JOB_RESPONSE,
+    MOCK_GET_JOB_RESPONSE,
+    MOCK_GET_QUEUE_ENVIRONMENT_RESPONSES,
+    MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE,
+)
 
 if os.name == "nt":
 
@@ -126,3 +144,100 @@ def program_that_prints_output(
         yield temp.name
     finally:
         os.remove(temp.name)
+
+
+def write_test_asset_files(assets_dir: str, asset_contents: Dict[str, str]):
+    """
+    Write a set of asset contents files to the provided assets directory.
+    Each key of asset_contents is a relative path from assets_dir, and
+    each value is what to write to the file.
+    """
+    for rel_path, contents in asset_contents.items():
+        path = os.path.join(assets_dir, rel_path)
+        if not os.path.isdir(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        if isinstance(contents, str):
+            with open(path, "w", encoding="utf8") as f:
+                f.write(contents)
+        elif isinstance(contents, bytes):
+            with open(path, "wb") as f:
+                f.write(contents)
+        else:
+            raise ValueError("The contents provided in asset_contents must be either str or bytes.")
+
+
+@contextlib.contextmanager
+def patch_calls_for_create_job_from_job_bundle(
+    *,
+    create_job_return=MOCK_CREATE_JOB_RESPONSE,
+    get_job_return=MOCK_GET_JOB_RESPONSE,
+    get_queue_return={
+        "displayName": "Test Queue",
+        "jobAttachmentSettings": {"s3BucketName": "mock", "rootPrefix": "root"},
+    },
+    queue_paramdefs=[],
+    upload_assets_return=[
+        SummaryStatistics(),
+        Attachments(
+            [
+                ManifestProperties(
+                    rootPath="/mnt/root/path1",
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="mock-manifest",
+                    inputManifestHash="mock-manifest-hash",
+                    outputRelativeDirectories=["."],
+                ),
+            ],
+        ),
+    ],
+):
+    """This is a context manager to help test deadline.client.api.create_job_from_job_bundle.
+
+    It patches a bunch of functions that might call to the internet, or need to be wrapped to test JA effectively.
+    See the assignments in this function implementation to access the mocked values."""
+    with patch.object(
+        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    ) as mock_get_deadline_cloud_library_telemetry_client, patch.object(
+        _submit_job_bundle.api, "get_queue_parameter_definitions", return_value=queue_paramdefs
+    ) as mock_get_queue_parameter_definitions, patch.object(
+        _submit_job_bundle.api,
+        "create_job_from_job_bundle",
+        wraps=_submit_job_bundle.create_job_from_job_bundle,
+    ) as mock_create_job_from_job_bundle, patch.object(
+        _submit_job_bundle,
+        "_generate_message_for_asset_paths",
+        wraps=_submit_job_bundle._generate_message_for_asset_paths,
+    ) as mock_generate_message_for_asset_paths, patch.object(
+        _submit_job_bundle, "_hash_attachments", wraps=_submit_job_bundle._hash_attachments
+    ) as mock_hash_attachments, patch(
+        "deadline.job_attachments.upload.S3AssetUploader"
+    ), patch.object(
+        S3AssetManager, "upload_assets", return_value=upload_assets_return
+    ) as mock_upload_assets, patch.object(
+        _submit_job_bundle.api, "get_queue_user_boto3_session"
+    ) as mock_get_queue_user_boto3_session, patch.object(boto3, "Session") as boto3_session_mock:
+        mock = Mock()
+        # Read these assignments to see what to access
+        mock.get_boto3_client = boto3_session_mock().client
+        mock.get_deadline_cloud_library_telemetry_client = (
+            mock_get_deadline_cloud_library_telemetry_client
+        )
+        mock.create_job_from_job_bundle = mock_create_job_from_job_bundle
+        mock.get_queue_parameter_definitions = mock_get_queue_parameter_definitions
+        mock.generate_message_for_asset_paths = mock_generate_message_for_asset_paths
+        mock.hash_attachments = mock_hash_attachments
+        mock.upload_assets = mock_upload_assets
+        mock.get_queue_user_boto3_session = mock_get_queue_user_boto3_session
+        mock.Session = boto3_session_mock
+
+        mock.get_boto3_client().create_job.return_value = create_job_return
+        mock.get_boto3_client().get_job.return_value = get_job_return
+        mock.get_boto3_client().get_queue.return_value = get_queue_return
+        mock.get_boto3_client().list_queue_environments.return_value = (
+            MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE
+        )
+        mock.get_boto3_client().get_queue_environment.side_effect = (
+            MOCK_GET_QUEUE_ENVIRONMENT_RESPONSES
+        )
+
+        yield mock

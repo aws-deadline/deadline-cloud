@@ -303,7 +303,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.limited_max_worker_count.toggled.connect(
             self.limited_max_worker_count_radio_button_toggled
         )
-        self.max_worker_count_layout = QVBoxLayout(self)
+        self.max_worker_count_layout = QVBoxLayout()
         self.max_worker_count_layout.addWidget(self.unlimited_max_worker_count)
         self.max_worker_count_layout.addWidget(self.limited_max_worker_count)
         self.max_worker_count_layout.addWidget(self.max_worker_count_box)

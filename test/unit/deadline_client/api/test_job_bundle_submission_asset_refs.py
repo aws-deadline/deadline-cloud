@@ -8,6 +8,7 @@ where there are PATH parameters that carry assetReference IN/OUT metadata.
 import os
 import pytest
 from unittest.mock import ANY, patch
+from pathlib import Path
 
 from deadline.client import api, config
 from deadline.client.api import _submit_job_bundle
@@ -15,7 +16,6 @@ from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import (
     Attachments,
     AssetRootGroup,
-    AssetUploadGroup,
     JobAttachmentsFileSystem,
     AssetRootManifest,
     ManifestProperties,
@@ -24,13 +24,14 @@ from deadline.job_attachments.models import (
 from deadline.job_attachments.upload import S3AssetManager
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
-from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID
-from .test_job_bundle_submission import (
-    MOCK_CREATE_JOB_RESPONSE,
+from ..shared_constants import (
+    MOCK_FARM_ID,
+    MOCK_QUEUE_ID,
     MOCK_GET_JOB_RESPONSE,
+    MOCK_CREATE_JOB_RESPONSE,
     MOCK_GET_QUEUE_RESPONSE,
-    _write_asset_files,
 )
+from ..testing_utilities import write_test_asset_files
 
 # A YAML job template that contains every type of (file, directory) * (none, in, out, inout) asset references
 JOB_BUNDLE_RELATIVE_FILE_PATH = "./file/inside/job_bundle.txt"
@@ -241,7 +242,7 @@ def test_create_job_from_job_bundle_with_not_valid_directory_path(
 
 
 def test_create_job_from_job_bundle_with_all_asset_ref_variants(
-    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir, temp_cwd
 ):
     """
     Test a job bundle with template from JOB_TEMPLATE_ALL_ASSET_REF_VARIANTS.
@@ -251,7 +252,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         _submit_job_bundle.api, "get_boto3_client"
     ) as client_mock, patch.object(
         _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(S3AssetManager, "prepare_paths_for_upload") as mock_prepare_paths, patch.object(
+    ), patch.object(
         S3AssetManager, "hash_assets_and_create_manifest"
     ) as mock_hash_assets, patch.object(
         S3AssetManager, "upload_assets"
@@ -261,7 +262,6 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
-        mock_prepare_paths.return_value = AssetUploadGroup(asset_groups=[AssetRootGroup()])
         mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
         mock_upload_assets.return_value = [
             SummaryStatistics(),
@@ -317,7 +317,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
         ]
 
         # Write file contents to the job bundle dir
-        _write_asset_files(
+        write_test_asset_files(
             temp_job_bundle_dir,
             {
                 JOB_BUNDLE_RELATIVE_FILE_PATH: "file in",
@@ -326,7 +326,7 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             },
         )
         # Write file contents to the temporary assets dir
-        _write_asset_files(
+        write_test_asset_files(
             temp_assets_dir,
             {
                 "file/inside/asset-dir-fileinout.txt": "file inout",
@@ -337,53 +337,64 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
 
         # This is the function we're testing
         api.create_job_from_job_bundle(
-            temp_job_bundle_dir, job_parameters=job_parameters, queue_parameter_definitions=[]
+            temp_job_bundle_dir,
+            job_parameters=job_parameters,
+            queue_parameter_definitions=[],
+            known_asset_paths=[
+                temp_assets_dir,
+                os.path.join(os.getcwd(), "dir", "inside"),
+                os.path.join(os.getcwd(), "file", "inside"),
+            ],
         )
 
         # The values of input_paths and output_paths are the first
         # thing this test needs to verify, confirming that the
         # bundle dir is used for default parameter values, and the
         # current working directory is used for job parameters.
-        input_paths = sorted(
-            os.path.normpath(p)
-            for p in [
-                temp_assets_dir + "/./dir/inside/asset-dir-dirinout/file_x.txt",
-                temp_assets_dir + "/./dir/inside/asset-dir-dirinout/subdir/file_y.txt",
-                temp_assets_dir + "/file/inside/asset-dir-fileinout.txt",
-                temp_job_bundle_dir + "/dir/inside/job_bundle/file1.txt",
-                temp_job_bundle_dir + "/dir/inside/job_bundle/subdir/file1.txt",
-                temp_job_bundle_dir + "/file/inside/job_bundle.txt",
-            ]
-        )
-        output_paths = sorted(
-            os.path.normpath(os.path.abspath(p))
-            for p in [
-                temp_assets_dir + "/./dir/inside/asset-dir-dirinout",
-                temp_assets_dir + "/file/inside",
-                "./dir/inside/cwd-dirout",
-                "./file/inside",
-            ]
-        )
-        referenced_paths = sorted(
-            os.path.normpath(os.path.abspath(p))
-            for p in [
-                os.path.join(temp_assets_dir, "./dir/inside/asset-dir-dirnone"),
-                os.path.join(temp_assets_dir, "./dir/inside/asset-dir-dirnonedefault"),
-                os.path.join(temp_assets_dir, "file/inside/asset-dir-filenonedefault.txt"),
-                os.path.join(temp_assets_dir, "file/inside/asset-dir-filenone.txt"),
-            ]
-        )
-        mock_prepare_paths.assert_called_once_with(
-            input_paths=input_paths,
-            output_paths=output_paths,
-            referenced_paths=referenced_paths,
-            storage_profile=None,
-            require_paths_exist=False,
-        )
         mock_hash_assets.assert_called_once_with(
-            asset_groups=[AssetRootGroup()],
-            total_input_files=0,
-            total_input_bytes=0,
+            asset_groups=[
+                AssetRootGroup(
+                    root_path=os.path.commonpath(
+                        [os.getcwd(), temp_job_bundle_dir, temp_assets_dir]
+                    ),
+                    inputs={
+                        Path(temp_job_bundle_dir) / "dir" / "inside" / "job_bundle" / "file1.txt",
+                        Path(temp_job_bundle_dir)
+                        / "dir"
+                        / "inside"
+                        / "job_bundle"
+                        / "subdir"
+                        / "file1.txt",
+                        Path(temp_job_bundle_dir) / "file" / "inside" / "job_bundle.txt",
+                        Path(temp_assets_dir)
+                        / "dir"
+                        / "inside"
+                        / "asset-dir-dirinout"
+                        / "subdir"
+                        / "file_y.txt",
+                        Path(temp_assets_dir)
+                        / "dir"
+                        / "inside"
+                        / "asset-dir-dirinout"
+                        / "file_x.txt",
+                        Path(temp_assets_dir) / "file" / "inside" / "asset-dir-fileinout.txt",
+                    },
+                    outputs={
+                        Path(os.path.join(os.getcwd(), "dir", "inside", "cwd-dirout")),
+                        Path(os.path.join(os.getcwd(), "file", "inside")),
+                        Path(temp_assets_dir) / "file" / "inside",
+                        Path(temp_assets_dir) / "dir" / "inside" / "asset-dir-dirinout",
+                    },
+                    references={
+                        Path(temp_assets_dir) / "file" / "inside" / "asset-dir-filenone.txt",
+                        Path(temp_assets_dir) / "file" / "inside" / "asset-dir-filenonedefault.txt",
+                        Path(temp_assets_dir) / "dir" / "inside" / "asset-dir-dirnone",
+                        Path(temp_assets_dir) / "dir" / "inside" / "asset-dir-dirnonedefault",
+                    },
+                ),
+            ],
+            total_input_files=6,
+            total_input_bytes=59,
             hash_cache_dir=os.path.expanduser(os.path.join("~", ".deadline", "cache")),
             on_preparing_to_submit=ANY,
         )

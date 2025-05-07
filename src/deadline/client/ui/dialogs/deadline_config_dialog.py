@@ -26,10 +26,12 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -38,6 +40,8 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QVBoxLayout,
     QWidget,
 )
+
+import os
 
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
@@ -307,6 +311,60 @@ class DeadlineWorkstationConfigWidget(QWidget):
             "Current logging level",
             self._log_levels,
         )
+
+        # Known asset paths section
+        known_paths_label = QLabel("Known asset paths")
+        known_paths_label.setToolTip(
+            "Paths that should not generate warnings when outside storage profile locations"
+        )
+        self.labels["settings.known_asset_paths"] = known_paths_label
+
+        known_paths_widget = QWidget(parent=group)
+        known_paths_layout = QVBoxLayout(known_paths_widget)
+        known_paths_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Add buttons and status label
+        button_layout = QHBoxLayout()
+        self.add_known_path_button = QPushButton("Add...")
+        self.add_known_path_button.clicked.connect(self._on_add_known_path)
+        self.edit_known_path_button = QPushButton("Edit...")
+        self.edit_known_path_button.clicked.connect(self._on_edit_known_path)
+        self.remove_known_path_button = QPushButton("Remove Selected")
+        self.remove_known_path_button.clicked.connect(self._on_remove_known_path)
+        self.known_paths_status = QLabel()
+        button_layout.addWidget(self.add_known_path_button)
+        button_layout.addWidget(self.edit_known_path_button)
+        button_layout.addWidget(self.remove_known_path_button)
+        button_layout.addStretch()
+        button_layout.addWidget(self.known_paths_status)
+        known_paths_layout.addLayout(button_layout)
+
+        # Add path list
+        self.known_paths_list = QListWidget(parent=known_paths_widget)
+        self.known_paths_list.setAlternatingRowColors(True)
+        known_paths_layout.addWidget(self.known_paths_list)
+
+        layout.addRow(known_paths_label, known_paths_widget)
+
+        # Add refresh callback for known paths
+        def refresh_known_paths():
+            with block_signals(self.known_paths_list):
+                self.known_paths_list.clear()
+                paths_str = config_file.get_setting(
+                    "settings.known_asset_paths", config=self.config
+                )
+                if paths_str:
+                    paths = paths_str.split(os.pathsep)
+                    self.known_paths_list.addItems(paths)
+
+            # Update status label
+            count = self.known_paths_list.count()
+            self.known_paths_status.setText(f"{count} paths")
+
+            self._update_known_paths_buttons()
+
+        self._refresh_callbacks.append(refresh_known_paths)
+        self.known_paths_list.itemSelectionChanged.connect(self._update_known_paths_buttons)
 
     def _init_checkbox_setting(
         self, group: QWidget, layout: QFormLayout, setting_name: str, label_text: str
@@ -578,8 +636,10 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         self.changes.clear()
 
-        # The file watcher will see the file modification and call refresh() for us
         config_file.write_config(self.config)
+
+        # Refresh the GUI (writing the config file should cause this, but do this redundantly to make sure)
+        self.refresh()
 
         return True
 
@@ -615,6 +675,78 @@ class DeadlineWorkstationConfigWidget(QWidget):
             index
         )
         self.refresh()
+
+    def _on_add_known_path(self):
+        """Handle adding a new known path"""
+        path = QFileDialog.getExistingDirectory(
+            self, "Select a directory to add to known asset paths", os.path.expanduser("~")
+        )
+        if path:
+            # Normalize path
+            path = os.path.normpath(path)
+
+            # Get current paths
+            current_paths = []
+            for i in range(self.known_paths_list.count()):
+                current_paths.append(self.known_paths_list.item(i).text())
+
+            # Only add if not already in list
+            if path not in current_paths:
+                self.known_paths_list.addItem(path)
+
+                # Update config
+                current_paths.append(path)
+                self.changes["settings.known_asset_paths"] = os.pathsep.join(current_paths)
+                self.refresh()
+
+    def _on_remove_known_path(self):
+        """Handle removing the selected known path"""
+        current_row = self.known_paths_list.currentRow()
+        if current_row >= 0:
+            self.known_paths_list.takeItem(current_row)
+
+            # Update config
+            current_paths = []
+            for i in range(self.known_paths_list.count()):
+                current_paths.append(self.known_paths_list.item(i).text())
+            self.changes["settings.known_asset_paths"] = os.pathsep.join(current_paths)
+            self.refresh()
+
+    def _update_known_paths_buttons(self):
+        """Enable/disable edit and remove buttons based on selection"""
+        has_selection = self.known_paths_list.currentRow() >= 0
+        self.edit_known_path_button.setEnabled(has_selection)
+        self.remove_known_path_button.setEnabled(has_selection)
+
+    def _on_edit_known_path(self):
+        """Handle editing the selected known path"""
+        current_row = self.known_paths_list.currentRow()
+        if current_row >= 0:
+            current_path = self.known_paths_list.item(current_row).text()
+            path = QFileDialog.getExistingDirectory(
+                self,
+                "Select a directory to replace the selected path",
+                current_path if os.path.exists(current_path) else os.path.expanduser("~"),
+            )
+            if path:
+                # Normalize path
+                path = os.path.normpath(path)
+
+                # Only update if path changed
+                if path != current_path:
+                    # Get current paths
+                    current_paths = []
+                    for i in range(self.known_paths_list.count()):
+                        if i != current_row:  # Skip the path being edited
+                            current_paths.append(self.known_paths_list.item(i).text())
+
+                    # Only add if not already in list
+                    if path not in current_paths:
+                        self.known_paths_list.item(current_row).setText(path)
+                        current_paths.insert(current_row, path)
+
+                    self.changes["settings.known_asset_paths"] = os.pathsep.join(current_paths)
+                    self.refresh()
 
 
 class _DeadlineResourceListComboBox(QWidget):
