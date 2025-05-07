@@ -17,6 +17,7 @@ import sys
 from configparser import ConfigParser
 from typing import Any, Callable, Optional, Set
 import logging
+import traceback
 
 import click
 from contextlib import ExitStack
@@ -65,13 +66,11 @@ def _handle_error(func: Callable) -> Callable:
         except click.ClickException:
             # Let click exceptions fall through
             raise
-        except Exception as e:
+        except Exception:
             # Log and print out unfamiliar exceptions with additional
             # messaging.
-            click.echo(f"The AWS Deadline Cloud CLI encountered the following exception:\n{e}")
-
-            if logging.DEBUG >= logger.getEffectiveLevel():
-                logger.exception("Exception details:")
+            click.echo("The AWS Deadline Cloud CLI encountered the following exception:")
+            click.echo(traceback.format_exc())
             _prompt_at_completion(ctx)
             sys.exit(1)
 

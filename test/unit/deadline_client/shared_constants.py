@@ -39,3 +39,68 @@ MOCK_GET_QUEUE_RESPONSE = {
     "updatedAt": "2022-11-22T22:26:57+00:00",
     "updatedBy": "0123abcdf-abcd-0123-fa82-0123456abcd1",
 }
+
+MOCK_LIST_QUEUE_ENVIRONMENTS_RESPONSE = {
+    "environments": [
+        {"queueEnvironmentId": "queueenv-123", "name": "First Env", "priority": 2},
+        {"queueEnvironmentId": "queueenv-234", "name": "Second Env", "priority": 1},
+    ]
+}
+
+MOCK_QUEUE_ENV_TEMPLATE_1 = """
+specificationVersion: 'jobtemplate-2023-09'
+parameterDefinitions:
+- name: RezPackages
+  type: STRING
+  description: Choose which rez packages to install for the render.
+  default: ""
+  userInterface:
+    control: LINE_EDIT
+    label: Rez Packages
+environment:
+  name: Rez Non-Final
+  script:
+    actions:
+      onEnter:
+        command: "say-hello"
+"""
+
+MOCK_QUEUE_ENV_TEMPLATE_2 = """
+specificationVersion: 'jobtemplate-2023-09'
+parameterDefinitions:
+- name: IntParam
+  type: INT
+  default: ""
+  userInterface:
+    control: SPIN_BOX
+    label: Int Param
+environment:
+  name: Int Param Env
+  script:
+    actions:
+      onEnter:
+        command: "say-hello"
+"""
+
+MOCK_GET_QUEUE_ENVIRONMENT_RESPONSES = [
+    {
+        "queueEnvironmentId": "queueenv-123",
+        "name": "Rez Non-Final",
+        "priority": 1,
+        "templateType": "YAML",
+        "template": MOCK_QUEUE_ENV_TEMPLATE_1,
+    },
+    {
+        "queueEnvironmentId": "queueenv-234",
+        "name": "Int Param Env",
+        "priority": 1,
+        "templateType": "YAML",
+        "template": MOCK_QUEUE_ENV_TEMPLATE_1,
+    },
+]
+
+MOCK_CREATE_JOB_RESPONSE = {"jobId": MOCK_JOB_ID}
+
+MOCK_STATUS_MESSAGE = "Testing123"
+
+MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
