@@ -35,7 +35,7 @@ classifiers = [
 # limiting dependencies if they want/need to.
 dependencies = [
   "boto3 >= 1.36.8",
-  "click >= 8.1.7",
+  "click >= 8.1.7,<8.2.0",
   "pyyaml >= 6.0",
   # Job Attachments
   "typing_extensions >= 4.7,< 4.14; python_version == '3.7'",

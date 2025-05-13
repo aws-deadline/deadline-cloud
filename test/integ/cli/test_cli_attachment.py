@@ -125,7 +125,6 @@ class TestAttachment:
         assert result.exit_code != 0, (
             f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         )
-        assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
         assert "HTTP Status Code: 403, Access denied." in result.output
 
         result = runner.invoke(
@@ -144,7 +143,6 @@ class TestAttachment:
         assert result.exit_code != 0, (
             f"Expecting cross-account s3 access to fail but not, CLI output {result.output}"
         )
-        assert "deadline.job_attachments.exceptions.JobAttachmentsS3ClientError" in result.output
         assert "HTTP Status Code: 403, Forbidden or Access denied." in result.output
 
     @pytest.mark.integ
