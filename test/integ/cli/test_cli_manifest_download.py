@@ -55,9 +55,9 @@ class TestManifestDownload:
 
     def validate_result_exit_code_0(self, job_attachment_test, result):
         # Then
-        assert (
-            result.exit_code == 0
-        ), f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        assert result.exit_code == 0, (
+            f"{result.output}, {job_attachment_test.farm_id}, {job_attachment_test.queue_id}"
+        )
 
     def run_cli_with_params(
         self, asset_type, job_attachment_test, job_id, json_output, step_id, temp_dir
