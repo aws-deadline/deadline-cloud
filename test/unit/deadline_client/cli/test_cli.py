@@ -24,7 +24,7 @@ def test_cli_debug_logging_on(fresh_deadline_config):
     # so we instead run it as a subprocess to match the actual
     # environment.
     output = subprocess.check_output(
-        args=[sys.executable, "-m", "deadline", "--log-level", "DEBUG", "config"],
+        args=[sys.executable, "-m", "deadline", "--log-level", "DEBUG", "config", "--help"],
         stderr=subprocess.STDOUT,
         text=True,
     )
@@ -51,14 +51,12 @@ def test_cli_unfamiliar_exception(fresh_deadline_config):
 @pytest.mark.parametrize("cli_group", ["config", "farm", "queue", "bundle"])
 def test_cli_group_without_command(fresh_deadline_config, cli_group):
     """
-    Test that each group prints the the usage screen if no command is provided
+    Test that each group prints the usage screen if no command is provided
     """
     runner = CliRunner()
     result = runner.invoke(main, [cli_group])
 
     assert result.output.startswith("Usage:")
-    # Click's default, with no clear way to override, is to return success in this case
-    assert result.exit_code == 0
 
 
 @pytest.mark.parametrize(

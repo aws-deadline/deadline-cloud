@@ -249,20 +249,25 @@ class TelemetryClient:
                 return
 
             headers = {"Accept": "application-json", "Content-Type": "application-json"}
-            request_body = {
-                "BatchId": str(uuid.uuid4()),
-                "RumEvents": [
-                    {
-                        "details": str(json.dumps(event_data.event_details)),
-                        "id": str(uuid.uuid4()),
-                        "metadata": str(json.dumps(self._system_metadata)),
-                        "timestamp": int(datetime.now().timestamp()),
-                        "type": event_data.event_type,
-                    },
-                ],
-                "UserDetails": {"sessionId": self.session_id, "userId": self.telemetry_id},
-            }
-            request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
+            try:
+                request_body = {
+                    "BatchId": str(uuid.uuid4()),
+                    "RumEvents": [
+                        {
+                            "details": str(json.dumps(event_data.event_details)),
+                            "id": str(uuid.uuid4()),
+                            "metadata": str(json.dumps(self._system_metadata)),
+                            "timestamp": int(datetime.now().timestamp()),
+                            "type": event_data.event_type,
+                        },
+                    ],
+                    "UserDetails": {"sessionId": self.session_id, "userId": self.telemetry_id},
+                }
+                request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
+            except Exception as exc:
+                logger.debug(f"Failed to serialize telemetry data. {str(exc)}")
+                continue
+
             req = request.Request(url=self.endpoint, data=request_body_encoded, headers=headers)
             try:
                 logger.debug("Sending telemetry data: %s", request_body)
