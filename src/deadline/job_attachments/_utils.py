@@ -14,7 +14,6 @@ __all__ = [
     "_join_s3_paths",
     "_generate_random_guid",
     "_float_to_iso_datetime_string",
-    "_human_readable_file_size",
     "_get_unique_dest_dir_name",
     "_get_bucket_and_object_key",
     "_is_relative_to",
@@ -35,7 +34,7 @@ https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitat
 
 WINDOWS_UNC_PATH_STRING_PREFIX = "\\\\?\\"
 """
-When this is prepended to any path on Windows, 
+When this is prepended to any path on Windows,
 it becomes a UNC path and is allowed to go over the 260 max path length limit.
 """
 
@@ -56,32 +55,6 @@ def _float_to_iso_datetime_string(time: float):
     iso_string = dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     return iso_string
-
-
-def _human_readable_file_size(size_in_bytes: int) -> str:
-    """
-    Convert a size in bytes to something human readable. For example 1000 bytes will be converted
-    to 1 KB. Sizes close enough to a postfix threshold will be rounded up to the next threshold.
-    For example 999999 bytes would be output as 1.0 MB and NOT 999.99 MB (or as a consequence of
-    Python's round function 1000.0 KB).
-
-    This function is inherently lossy, so it should be used for display purposes only.
-    """
-    converted_size = float(size_in_bytes)
-    rounded: float
-    postfixes = ["B", "KB", "MB", "GB", "TB", "PB"]
-
-    for postfix in postfixes:
-        rounded = round(converted_size, ndigits=2)
-
-        if rounded < 1000:
-            return f"{rounded} {postfix}"
-
-        converted_size /= 1000
-
-    # If we go higher than the provided postfix,
-    # then return as a large amount of the highest postfix we've specified.
-    return f"{rounded} {postfixes[-1]}"
 
 
 def _get_unique_dest_dir_name(source_root: str) -> str:

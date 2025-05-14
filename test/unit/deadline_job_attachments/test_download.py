@@ -82,7 +82,7 @@ from deadline.job_attachments.os_file_permission import (
     WindowsFileSystemPermissionSettings,
     WindowsPermissionEnum,
 )
-from deadline.job_attachments._utils import _human_readable_file_size
+from deadline.job_attachments.api import human_readable_file_size
 
 from .conftest import has_posix_target_user, has_posix_disjoint_user
 from ..conftest import is_windows_non_admin
@@ -376,7 +376,7 @@ def assert_progress_tracker_values(
     expected_total_bytes: int,
     mock_on_downloading_files: MagicMock,
 ):
-    readable_total_input_bytes = _human_readable_file_size(expected_total_bytes)
+    readable_total_input_bytes = human_readable_file_size(expected_total_bytes)
     expected_files_set = set().union(*expected_files.values())
     file_counts_by_root_directory = {root: len(paths) for root, paths in expected_files.items()}
 

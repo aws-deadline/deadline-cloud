@@ -62,7 +62,10 @@ from deadline.job_attachments.models import (
 )
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata, SummaryStatistics
 from deadline.job_attachments.upload import S3AssetManager
-from deadline.job_attachments._utils import _human_readable_file_size
+from deadline.job_attachments._path_summarization import (
+    human_readable_file_size,
+    summarize_path_list,
+)
 
 __all__ = ["SubmitJobProgressDialog"]
 
@@ -600,27 +603,31 @@ class SubmitJobProgressDialog(QDialog):
         with uploading when files were found outside of the configured storage profile locations.
         """
         message_text = (
-            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}. "
+            f"Job submission contains {upload_group.total_input_files} input files totaling {human_readable_file_size(upload_group.total_input_bytes)}. "
             " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
         warning_message = ""
+        warning_input_paths = set()
+        warning_output_paths = set()
         for group in upload_group.asset_groups:
             if not group.file_system_location_name:
-                warning_message += f"\n\nUnder the directory '{group.root_path}':"
+                warning_input_paths.update(group.inputs)
+                warning_output_paths.update(group.outputs)
+
+        if len(warning_input_paths) > 0:
+            warning_message += "Locations for upload:\n"
+            warning_message += textwrap.indent(summarize_path_list(warning_input_paths), "  ")
+        if len(warning_output_paths) > 0:
+            warning_message += "Locations to collect job outputs for download:\n"
+            # We expect the list of output paths to be small, but truncate it to an arbitrary limit just in case for the summary
+            warning_entry_count = 4
+            if len(warning_output_paths) == warning_entry_count + 1:
+                warning_entry_count += 1
+            for path in sorted(warning_output_paths)[:warning_entry_count]:
+                warning_message += f"  {path}\n"
+            if len(warning_output_paths) > warning_entry_count:
                 warning_message += (
-                    f"\n\t{len(group.inputs)} input file{'' if len(group.inputs) == 1 else 's'}"
-                    if len(group.inputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.outputs)} output director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.outputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.references)} referenced file{'' if len(group.references) == 1 else 's'} and/or director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.references) > 0
-                    else ""
+                    f"\n  ... and {len(warning_output_paths) - warning_entry_count} more\n"
                 )
 
         # Exit early if we've set auto accept and there are no warnings
@@ -638,8 +645,8 @@ class SubmitJobProgressDialog(QDialog):
             else:
                 message_text += "\n\nNo storage profile locations are configured for this queue."
             message_text += (
-                "\nPlease confirm that you intend to submit a job that uses files from the following directories:"
-                f"{warning_message}\n\n"
+                "\nPlease confirm that you intend to submit a job that uses files from the following directories:\n"
+                f"{warning_message}\n"
                 "To permanently remove this warning you must only use files located within a storage profile location."
             )
             message_box.setIcon(QMessageBox.Warning)
