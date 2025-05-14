@@ -10,7 +10,7 @@ from enum import Enum
 from threading import Lock
 from typing import Callable, Dict, Optional, Union
 
-from deadline.job_attachments._utils import _human_readable_file_size
+from ._path_summarization import human_readable_file_size
 
 CALLBACK_INTERVAL = 1  # in seconds
 MAX_FILES_IN_CHUNK = 50
@@ -59,11 +59,11 @@ class SummaryStatistics:
     def __str__(self):
         return (
             f"Processed {self.processed_files} file{'' if self.processed_files == 1 else 's'}"
-            + f" totaling {_human_readable_file_size(self.processed_bytes)}.\n"
+            + f" totaling {human_readable_file_size(self.processed_bytes)}.\n"
             + f"Skipped re-processing {self.skipped_files} files totaling"
-            + f" {_human_readable_file_size(self.skipped_bytes)}.\n"
+            + f" {human_readable_file_size(self.skipped_bytes)}.\n"
             + f"Total processing time of {round(self.total_time, ndigits=5)} seconds"
-            + f" at {_human_readable_file_size(int(self.transfer_rate))}/s.\n"
+            + f" at {human_readable_file_size(int(self.transfer_rate))}/s.\n"
         )
 
 
@@ -306,9 +306,9 @@ class ProgressTracker:
 
         progress_message = (
             f"{self.status.verb_in_message}"
-            f" {_human_readable_file_size(completed_bytes)} / {_human_readable_file_size(self.total_bytes)}"
+            f" {human_readable_file_size(completed_bytes)} / {human_readable_file_size(self.total_bytes)}"
             f" of {self.total_files} file{'' if self.total_files == 1 else 's'}"
-            f" ({transfer_rate_name}: {_human_readable_file_size(int(transfer_rate))}/s)"
+            f" ({transfer_rate_name}: {human_readable_file_size(int(transfer_rate))}/s)"
         )
 
         return ProgressReportMetadata(

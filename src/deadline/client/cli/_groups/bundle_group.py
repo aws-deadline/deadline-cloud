@@ -6,6 +6,7 @@ All the `deadline bundle` commands.
 
 from __future__ import annotations
 
+import textwrap
 import json
 import logging
 import re
@@ -14,15 +15,15 @@ from typing import Any, Optional
 import click
 from botocore.exceptions import ClientError
 
-from deadline.client import api
-from deadline.client.config import config_file, get_setting, set_setting
-from deadline.job_attachments.exceptions import (
+from ... import api
+from ...config import config_file, get_setting, set_setting
+from ....job_attachments.exceptions import (
     AssetSyncError,
     AssetSyncCancelledError,
     MisconfiguredInputsError,
 )
-from deadline.job_attachments.models import AssetUploadGroup, JobAttachmentsFileSystem
-from deadline.job_attachments._utils import _human_readable_file_size
+from ....job_attachments.models import AssetUploadGroup, JobAttachmentsFileSystem
+from ....job_attachments._path_summarization import human_readable_file_size, summarize_path_list
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
@@ -161,23 +162,27 @@ def bundle_submit(
         Prints a warning that requires confirmation if paths are found outside of configured storage profile locations.
         """
         warning_message = ""
+        warning_input_paths = set()
+        warning_output_paths = set()
         for group in upload_group.asset_groups:
             if not group.file_system_location_name:
-                warning_message += f"\n\nUnder the directory '{group.root_path}':"
+                warning_input_paths.update(group.inputs)
+                warning_output_paths.update(group.outputs)
+
+        if len(warning_input_paths) > 0:
+            warning_message += "Locations for upload:\n"
+            warning_message += textwrap.indent(summarize_path_list(warning_input_paths), "  ")
+        if len(warning_output_paths) > 0:
+            warning_message += "Locations to collect job outputs for download:\n"
+            # We expect the list of output paths to be small, but truncate it to an arbitrary limit just in case for the summary
+            warning_entry_count = 4
+            if len(warning_output_paths) == warning_entry_count + 1:
+                warning_entry_count += 1
+            for path in sorted(warning_output_paths)[:warning_entry_count]:
+                warning_message += f"  {path}\n"
+            if len(warning_output_paths) > warning_entry_count:
                 warning_message += (
-                    f"\n\t{len(group.inputs)} input file{'' if len(group.inputs) == 1 else 's'}"
-                    if len(group.inputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.outputs)} output director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.outputs) > 0
-                    else ""
-                )
-                warning_message += (
-                    f"\n\t{len(group.references)} referenced file{'' if len(group.references) == 1 else 's'} and/or director{'y' if len(group.outputs) == 1 else 'ies'}"
-                    if len(group.references) > 0
-                    else ""
+                    f"\n  ... and {len(warning_output_paths) - warning_entry_count} more\n"
                 )
 
         # Exit early if there are no warnings and we've either set auto accept or there's no files to confirm
@@ -189,14 +194,14 @@ def bundle_submit(
             return False
 
         message_text = (
-            f"Job submission contains {upload_group.total_input_files} input files totaling {_human_readable_file_size(upload_group.total_input_bytes)}. "
+            f"Job submission contains {upload_group.total_input_files} input files totaling {human_readable_file_size(upload_group.total_input_bytes)}. "
             " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
         )
         if warning_message:
             message_text += (
                 f"\n\nFiles were specified outside of the configured storage profile location(s). "
-                " Please confirm that you intend to submit a job that uses files from the following directories:"
-                f"{warning_message}\n\n"
+                " Please confirm that you intend to submit a job that uses files from the following directories:\n"
+                f"{warning_message}\n"
                 "To permanently remove this warning you must only use files located within a storage profile location."
             )
         message_text += "\n\nDo you wish to proceed?"

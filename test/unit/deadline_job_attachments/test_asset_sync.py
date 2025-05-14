@@ -40,7 +40,7 @@ from deadline.job_attachments.progress_tracker import (
     ProgressStatus,
     SummaryStatistics,
 )
-from deadline.job_attachments._utils import _human_readable_file_size
+from deadline.job_attachments.api import human_readable_file_size
 from ..conftest import is_windows_non_admin
 
 
@@ -72,47 +72,6 @@ class TestAssetSync:
         asset_sync = AssetSync(farm_id)
         asset_sync.s3_uploader._s3 = client
         return asset_sync
-
-    @pytest.mark.parametrize(
-        ("file_size", "expected_output"),
-        [
-            (1000000000000000000, "1000.0 PB"),
-            (89234597823492938, "89.23 PB"),
-            (1000000000000001, "1.0 PB"),
-            (1000000000000000, "1.0 PB"),
-            (999999999999999, "1.0 PB"),
-            (999995000000000, "1.0 PB"),
-            (999994000000000, "999.99 TB"),
-            (8934587945678, "8.93 TB"),
-            (1000000000001, "1.0 TB"),
-            (1000000000000, "1.0 TB"),
-            (999999999999, "1.0 TB"),
-            (999995000000, "1.0 TB"),
-            (999994000000, "999.99 GB"),
-            (83748237582, "83.75 GB"),
-            (1000000001, "1.0 GB"),
-            (1000000000, "1.0 GB"),
-            (999999999, "1.0 GB"),
-            (999995000, "1.0 GB"),
-            (999994000, "999.99 MB"),
-            (500229150, "500.23 MB"),
-            (1000001, "1.0 MB"),
-            (1000000, "1.0 MB"),
-            (999999, "1.0 MB"),
-            (999995, "1.0 MB"),
-            (999994, "999.99 KB"),
-            (96771, "96.77 KB"),
-            (1001, "1.0 KB"),
-            (1000, "1.0 KB"),
-            (999, "999.0 B"),
-            (934, "934.0 B"),
-        ],
-    )
-    def test_human_readable_file_size(self, file_size: int, expected_output: str) -> None:
-        """
-        Test that given a file size in bytes, the expected human readable file size is output.
-        """
-        assert _human_readable_file_size(file_size) == expected_output
 
     def test_sync_inputs_no_inputs_successful(
         self,
@@ -690,7 +649,7 @@ class TestAssetSync:
                 f'"totalSize":{expected_total_bytes}}}',
             )
 
-            readable_total_input_bytes = _human_readable_file_size(expected_total_bytes)
+            readable_total_input_bytes = human_readable_file_size(expected_total_bytes)
 
             expected_summary_statistics = SummaryStatistics(
                 total_time=summary_statistics.total_time,

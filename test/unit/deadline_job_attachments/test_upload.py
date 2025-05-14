@@ -55,7 +55,7 @@ from deadline.job_attachments.progress_tracker import (
     SummaryStatistics,
 )
 from deadline.job_attachments.upload import FileStatus, S3AssetManager, S3AssetUploader
-from deadline.job_attachments._utils import _human_readable_file_size
+from deadline.job_attachments.api import human_readable_file_size
 from ..conftest import is_windows_non_admin
 
 
@@ -2797,7 +2797,7 @@ def assert_progress_report_last_callback(
     """
     Assert that the argument of the last callback (when the progress is 100%) is as expected.
     """
-    readable_total_input_bytes = _human_readable_file_size(expected_total_input_bytes)
+    readable_total_input_bytes = human_readable_file_size(expected_total_input_bytes)
     actual_args, _ = on_preparing_to_submit.call_args
     actual_last_hashing_progress_report = actual_args[0]
     assert actual_last_hashing_progress_report.status == ProgressStatus.PREPARING_IN_PROGRESS

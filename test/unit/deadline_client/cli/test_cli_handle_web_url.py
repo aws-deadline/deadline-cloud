@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from deadline.client import api
+from deadline.client.config import set_setting
 from deadline.client.cli import main
 from deadline.client.cli._deadline_web_url import (
     parse_query_string,
@@ -25,6 +26,9 @@ from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
     PathFormat,
+)
+from deadline.job_attachments.progress_tracker import (
+    DownloadSummaryStatistics,
 )
 
 from ..api.test_job_bundle_submission import (
@@ -256,12 +260,17 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
     """
+    set_setting("settings.auto_accept", "true")
+
     with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
         job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ):
+    ) as MockOutputDownloader, patch.object(api, "get_queue_user_boto3_session"):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
@@ -297,7 +306,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
             on_downloading_files=ANY,
         )
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
 
 
 def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_config):
@@ -305,12 +314,19 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
     """
+    set_setting("settings.auto_accept", "true")
+
     with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 

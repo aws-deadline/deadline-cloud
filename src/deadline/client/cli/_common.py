@@ -16,6 +16,7 @@ __all__ = [
 import sys
 from configparser import ConfigParser
 from typing import Any, Callable, Optional, Set
+import logging
 
 import click
 from contextlib import ExitStack
@@ -25,6 +26,8 @@ from ..config import config_file
 from ..exceptions import DeadlineOperationError
 from ..job_bundle import deadline_yaml_dump
 from ._groups._sigint_handler import SigIntHandler
+
+logger = logging.getLogger("deadline.client.cli")
 
 _PROMPT_WHEN_COMPLETE = "PROMPT_WHEN_COMPLETE"
 
@@ -66,9 +69,9 @@ def _handle_error(func: Callable) -> Callable:
             # Log and print out unfamiliar exceptions with additional
             # messaging.
             click.echo(f"The AWS Deadline Cloud CLI encountered the following exception:\n{e}")
-            import traceback
 
-            traceback.print_exc()
+            if logging.DEBUG >= logger.getEffectiveLevel():
+                logger.exception("Exception details:")
             _prompt_at_completion(ctx)
             sys.exit(1)
 
