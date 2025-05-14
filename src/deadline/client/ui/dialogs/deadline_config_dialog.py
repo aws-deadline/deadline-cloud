@@ -242,6 +242,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.addRow(default_farm_box_label, self.default_farm_box)
 
     def _build_farm_settings_ui(self, group, layout):
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+
         self.default_queue_box = DeadlineQueueListComboBox(parent=group)
         default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default queue")
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
@@ -653,7 +655,8 @@ class _DeadlineResourceListComboBox(QWidget):
         self.box = QComboBox(parent=self)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.box)
+        layout.addWidget(self.box, stretch=1)
+
         self.refresh_button = QPushButton("")
         layout.addWidget(self.refresh_button)
         self.refresh_button.setIcon(QApplication.style().standardIcon(QStyle.SP_BrowserReload))
