@@ -165,9 +165,9 @@ def test_default_location(installer_path: Path):
         help_result = subprocess.run(
             [installer_path, *text_mode, "--help"], capture_output=True, text=True, timeout=5
         )
-        assert help_result.returncode == 0, (
-            f"Installer exited with non-zero code: {help_result.returncode}"
-        )
+        assert (
+            help_result.returncode == 0
+        ), f"Installer exited with non-zero code: {help_result.returncode}"
         assert help_result.stdout is not None, "No stdout from --help"
         help_output = iter(help_result.stdout.splitlines())
     except subprocess.TimeoutExpired as e:
@@ -182,9 +182,9 @@ def test_default_location(installer_path: Path):
             location = re.match(default_pattern, next(help_output, "").strip(), flags=re.IGNORECASE)
             break
 
-    assert location is not None, (
-        f"Could not find default install location in help output:\n{help_result.stdout}"
-    )
+    assert (
+        location is not None
+    ), f"Could not find default install location in help output:\n{help_result.stdout}"
     if platform.system() != "Windows":
         assert location.group(1) == default_install_location.as_posix()
     else:
@@ -245,9 +245,9 @@ def test_did_not_build_with_evaluation_mode(installer_path: Path, tmp_path: Path
     assert output
 
     for line in output:
-        assert eval_text not in line, (
-            "Installer was detected to have been built with Evaluation mode"
-        )
+        assert (
+            eval_text not in line
+        ), "Installer was detected to have been built with Evaluation mode"
 
 
 @pytest.mark.skipif(platform.system() == "Windows", reason="Only run on Linux and MacOS")
@@ -527,9 +527,9 @@ class TestVerifySigning:
         )
 
         # THEN
-        assert "Can't check signature: No public key" not in result.stderr, (
-            "Missing Public Key in keyring"
-        )
+        assert (
+            "Can't check signature: No public key" not in result.stderr
+        ), "Missing Public Key in keyring"
         assert result.returncode == 0, "Code signing validation failed"
         # gpg shoves the success message into stderr for some reason
         # This matches what customers are told to do via the public docs:
@@ -556,9 +556,9 @@ class TestVerifySigning:
             capture_output=True,
             text=True,
         )
-        assert "code object is not signed at all" not in codesign_result.stdout, (
-            "The file is not signed"
-        )
+        assert (
+            "code object is not signed at all" not in codesign_result.stdout
+        ), "The file is not signed"
         assert codesign_result.returncode == 0
 
         # WHEN / THEN
@@ -567,9 +567,9 @@ class TestVerifySigning:
             capture_output=True,
             text=True,
         )
-        assert "rejected" not in spctl_result.stderr, (
-            "MacOS will not allow this file to be executed"
-        )
+        assert (
+            "rejected" not in spctl_result.stderr
+        ), "MacOS will not allow this file to be executed"
         assert spctl_result.returncode == 0
         # success message is sent to stderr
         assert "accepted" in spctl_result.stderr, "File was not accepted by MacOS"

@@ -323,7 +323,7 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
         return self.edit_control.text()
 
     def set_value(self, value):
-        self.edit_control.setText(value)
+        self.edit_control.setText(str(value))
 
     def _handle_text_changed(self, text, callback):
         message = deepcopy(self.job_template_parameter)
@@ -377,7 +377,7 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
         return self.edit_control.toPlainText()
 
     def set_value(self, value):
-        self.edit_control.setPlainText(value)
+        self.edit_control.setPlainText(str(value))
 
     def _handle_text_changed(self, text, callback):
         message = deepcopy(self.job_template_parameter)

@@ -1601,8 +1601,8 @@ def test_download_outputs_windows_long_file_path(
             WINDOWS_UNC_PATH_STRING_PREFIX + long_root_path, sync_outputs.step0_task0_output_file
         )
         assert output_file_path.exists()
-        assert len(str(output_file_path)) > 260, (
-            f"Expected full output file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(str(output_file_path))}"
-        )
+        assert (
+            len(str(output_file_path)) > 260
+        ), f"Expected full output file path to be over the windows path length limit of {WINDOWS_MAX_PATH_LENGTH}, got {len(str(output_file_path))}"
     finally:
         shutil.rmtree(WINDOWS_UNC_PATH_STRING_PREFIX + long_root_path)
