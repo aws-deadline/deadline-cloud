@@ -58,6 +58,8 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
+        assert manifest.root == root_dir
         assert manifest.manifest is not None
         with open(manifest.manifest, "r") as manifest_file:
             manifest_payload = json.load(manifest_file)
@@ -92,6 +94,8 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
+        assert manifest.root == root_dir
         assert manifest.manifest is not None
         with open(manifest.manifest, "r") as manifest_file:
             manifest_payload = json.load(manifest_file)
@@ -175,6 +179,8 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
+        assert manifest.root == root_dir
         assert manifest.manifest is not None
         with open(manifest.manifest, "r") as manifest_file:
             manifest_payload = json.load(manifest_file)
@@ -207,6 +213,7 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
         assert manifest.manifest is not None
 
         # Given a second new file.
@@ -255,6 +262,7 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
         assert manifest.manifest is not None
 
         # Given the file's timestamp is updated.
@@ -299,6 +307,7 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
         assert manifest.manifest is not None
 
         # Given the file's contents is updated.
@@ -342,6 +351,7 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
         assert manifest.manifest is not None
 
         # When snapshot again.
@@ -376,6 +386,7 @@ class TestSnapshotAPI:
 
         # Then
         assert manifest is not None
+        assert manifest.root is not None
         assert manifest.manifest is not None
 
         with open(manifest.manifest, "r") as manifest_file:
