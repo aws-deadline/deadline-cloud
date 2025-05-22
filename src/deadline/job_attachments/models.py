@@ -27,6 +27,7 @@ from deadline.job_attachments.exceptions import (
 from ._utils import (
     _generate_random_guid,
     _join_s3_paths,
+    _float_to_iso_datetime_string,
 )
 
 S3_DATA_FOLDER_NAME = "Data"
@@ -288,6 +289,32 @@ class JobAttachmentS3Settings:
             step_id,
             task_id,
             session_action_id,
+        )
+
+    @staticmethod
+    def partial_session_action_manifest_prefix(
+        farm_id: str,
+        queue_id: str,
+        job_id: str,
+        step_id: str,
+        task_id: str,
+        session_action_id: str,
+        time: float,
+    ) -> str:
+        """
+        Constructs the partial S3 prefix for storing session action output manifests.
+
+        This method creates a hierarchical path structure for organizing output manifests in S3,
+        following the pattern: farm_id/queue_id/job_id/step_id/task_id/timestamp_session_action_id.
+        The timestamp is converted from a float to an ISO datetime string format.
+        """
+        return _join_s3_paths(
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            task_id,
+            f"{_float_to_iso_datetime_string(time)}_{session_action_id}",
         )
 
     def partial_manifest_prefix(self, farm_id, queue_id) -> str:
