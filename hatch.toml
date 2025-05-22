@@ -11,7 +11,6 @@ typing = "mypy {args:src test} --always-false=PYQT5 --always-false=PYSIDE2 --alw
 style = ["ruff check {args:.}", "ruff format --check --diff {args:.}"]
 fmt = ["ruff format {args:.}", "style"]
 lint = ["style", "typing"]
-quality = ["ruff format {args:.}", "typing", "style"]
 
 [[envs.all.matrix]]
 python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]

@@ -5,9 +5,9 @@ import os
 from contextlib import ExitStack
 from typing import List, Dict
 
-from deadline.client.exceptions import NonValidInputError
-from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
-from deadline.job_attachments.asset_manifests.decode import decode_manifest
+from ...client.exceptions import NonValidInputError
+from ..asset_manifests.base_manifest import BaseAssetManifest
+from ..asset_manifests.decode import decode_manifest
 
 
 def _read_manifests(manifest_paths: List[str]) -> Dict[str, BaseAssetManifest]:

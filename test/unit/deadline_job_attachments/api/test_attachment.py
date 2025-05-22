@@ -28,6 +28,7 @@ from deadline.job_attachments.upload import S3AssetUploader
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
+    UploadManifestInfo,
     PathMappingRule,
 )
 
@@ -286,6 +287,55 @@ class TestAttachmentUpload:
             S3AssetUploader, "upload_assets", return_value=("key", "data")
         ) as mock_upload_assets:
             yield mock_upload_assets
+
+    def test_upload_returns_manifest_info_list(self, temp_assets_dir, session_mock):
+        """Test that attachment_upload returns a list of UploadManifestInfo objects corresponding to the input manifests."""
+        # Create a path mapping file with two rules
+        path_mapping = [
+            {
+                "source_path_format": "posix",
+                "source_path": "/local/home/test",
+                "destination_path": "/local/home/test1/output",
+            },
+            {
+                "source_path_format": "posix",
+                "source_path": "/local/home/test2",
+                "destination_path": "/local/home/test2/output",
+            },
+        ]
+        path_mapping_file = os.path.join(temp_assets_dir, "path_mapping.json")
+        with open(path_mapping_file, "w") as f:
+            json.dump(path_mapping, f)
+
+        # Create a manifest file that only has changes for the first asset root
+        manifest_case_key = PATH_MAPPING_HASH
+        file_name = f"{PATH_MAPPING_HASH}.manifest"
+        with open(os.path.join(temp_assets_dir, file_name), "w") as f:
+            json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
+
+        # Mock asset_uploader.upload_assets to return known values
+        with patch(
+            "deadline.job_attachments.upload.S3AssetUploader.upload_assets"
+        ) as mock_upload_assets:
+            mock_upload_assets.return_value = ("key1", "hash1")
+
+            # Call attachment_upload
+            result = attachment_api.attachment_upload(
+                manifests=[os.path.join(temp_assets_dir, file_name)],
+                s3_root_uri=TEST_S3_URI,
+                boto3_session=session_mock,
+                path_mapping_rules=path_mapping_file,
+            )
+
+            # Verify the result structure
+            assert isinstance(result, list)
+            assert len(result) == 1  # We only passed one manifest
+
+            # Verify the UploadManifestInfo object has the correct values
+            assert isinstance(result[0], UploadManifestInfo)
+            assert result[0].output_manifest_path == "key1"
+            assert result[0].output_manifest_hash == "hash1"
+            assert result[0].source_path == "/local/home/test"
 
     def test_upload_invalid_input_manifests(self, session_mock):
         with pytest.raises(NonValidInputError):

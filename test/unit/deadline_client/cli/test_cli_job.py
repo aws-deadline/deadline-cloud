@@ -27,7 +27,9 @@ from deadline.job_attachments.models import (
     JobAttachmentS3Settings,
     PathFormat,
 )
-
+from deadline.job_attachments.progress_tracker import (
+    DownloadSummaryStatistics,
+)
 from ..api.test_job_bundle_submission import (
     MOCK_GET_QUEUE_RESPONSE,
 )
@@ -356,6 +358,11 @@ def test_cli_job_download_output_stdout_with_only_required_input(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
@@ -462,6 +469,11 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
 
         mock_root_path = "C:\\Users\\username" if sys.platform != "win32" else "/root/path"
@@ -557,6 +569,11 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
 
         # UNC format (which refers to the same location as 'C:\Users\username')
@@ -628,7 +645,7 @@ You are about to download files which may come from multiple root directories. H
             in result.output
         )
         assert "Download Summary:" in result.output
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
 
 
 def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path):
@@ -647,6 +664,11 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {}
 
@@ -710,6 +732,11 @@ def test_cli_job_download_output_stdout_with_json_format(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
@@ -884,12 +911,19 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
     """
+    config.set_setting("settings.auto_accept", "true")
+
     with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
         job_group, "OutputDownloader"
     ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
     ):
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
@@ -1026,6 +1060,11 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
         return_value=tmp_path,
     ) as mock_expanduser:
         mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
         MockOutputDownloader.return_value.download_job_output = mock_download
         windows_root_path = "C:\\Users\\username"
         not_windows_root_path = "/root/path"

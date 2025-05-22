@@ -11,7 +11,7 @@ __all__ = [
 
 import os
 from collections import namedtuple
-from typing import Any, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING, cast, Union
 
 # typing_extensions is only needed for type-checking. It fails to import at run-time in Python 3.7
 # so provide stubs at run-time.
@@ -70,8 +70,8 @@ class JobParameter(TypedDict):
     objectType: NotRequired[str]
     maxLength: NotRequired[int]
     minLength: NotRequired[int]
-    maxValue: NotRequired[int | float | str]
-    minValue: NotRequired[int | float | str]
+    maxValue: NotRequired[Union[int, float, str]]
+    minValue: NotRequired[Union[int, float, str]]
     userInterface: NotRequired[UserInterfaceSpec]
 
 

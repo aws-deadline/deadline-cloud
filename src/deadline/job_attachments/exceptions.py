@@ -6,8 +6,6 @@ Exceptions that the Deadline Job Attachments library can raise.
 
 from typing import Optional
 
-from deadline.job_attachments.progress_tracker import SummaryStatistics
-
 
 COMMON_ERROR_GUIDANCE_FOR_S3 = {
     408: "Request timeout. Please consider retrying later, or ensure your network connection is stable.",
@@ -139,12 +137,9 @@ class AssetSyncCancelledError(JobAttachmentsError):
     Exception thrown when an operation (synching files to/from S3) has been cancelled.
     """
 
-    summary_statistics: Optional[SummaryStatistics] = None
-
-    def __init__(self, message, summary_statistics: Optional[SummaryStatistics] = None):
+    def __init__(self, message, summary_statistics=None):
         super().__init__(message)
-        if summary_statistics:
-            self.summary_statistics = summary_statistics
+        self.summary_statistics = summary_statistics
 
 
 class PathOutsideDirectoryError(JobAttachmentsError):

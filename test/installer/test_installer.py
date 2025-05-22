@@ -483,7 +483,7 @@ class TestVerifySigning:
             ========================================
             0      sha256     Authenticode
 
-            Successfully verified: C:\*.exe
+            Successfully verified: C:\\*.exe
 
         Example failure:
 

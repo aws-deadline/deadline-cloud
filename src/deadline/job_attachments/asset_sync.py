@@ -62,10 +62,10 @@ from .models import (
 )
 from .upload import S3AssetUploader
 from .os_file_permission import FileSystemPermissionSettings, PosixFileSystemPermissionSettings
+from ._path_summarization import human_readable_file_size
 from ._utils import (
     _float_to_iso_datetime_string,
     _get_unique_dest_dir_name,
-    _human_readable_file_size,
     _join_s3_paths,
 )
 
@@ -675,7 +675,7 @@ class AssetSync:
 
             self.logger.info(
                 f"Found {total_file_count} file{'' if total_file_count == 1 else 's'}"
-                f" totaling {_human_readable_file_size(total_file_size)}"
+                f" totaling {human_readable_file_size(total_file_size)}"
                 f" in output directory: {str(output_root)}"
             )
 
@@ -732,8 +732,8 @@ class AssetSync:
         """
         disk_free: int = shutil.disk_usage(session_dir).free
         if total_input_bytes > disk_free:
-            input_size_readable = _human_readable_file_size(total_input_bytes)
-            disk_free_readable = _human_readable_file_size(disk_free)
+            input_size_readable = human_readable_file_size(total_input_bytes)
+            disk_free_readable = human_readable_file_size(disk_free)
             raise AssetSyncError(
                 "Error occurred while attempting to sync input files: "
                 f"Total file size required for download ({input_size_readable}) is larger than available disk space ({disk_free_readable})"

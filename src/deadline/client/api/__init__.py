@@ -25,6 +25,8 @@ __all__ = [
     "get_storage_profile_for_queue",
     "record_success_fail_telemetry_event",
     "record_function_latency_telemetry_event",
+    "assume_queue_role_for_user",
+    "assume_queue_role_for_read",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -63,6 +65,10 @@ from ._list_apis import (
     list_storage_profiles_for_queue,
 )
 from ._queue_parameters import get_queue_parameter_definitions
+from ._queue_credentials import (
+    assume_queue_role_for_user,
+    assume_queue_role_for_read,
+)
 from ._submit_job_bundle import (
     create_job_from_job_bundle,
     wait_for_create_job_to_complete,
