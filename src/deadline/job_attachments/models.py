@@ -449,3 +449,19 @@ class FileStatus(Enum):
     NEW = 1
     MODIFIED = 2
     DELETED = 3
+
+
+@dataclass
+class UploadManifestInfo:
+    """
+    Structured class for output manifest information.
+
+    Attributes:
+        output_manifest_path: The relative path to the uploaded output manifest without root prefix
+        output_manifest_hash: The hash of the output manifest content
+        source_path: Optional source path from the mapping rule
+    """
+
+    output_manifest_path: str
+    output_manifest_hash: str
+    source_path: Optional[str] = None
