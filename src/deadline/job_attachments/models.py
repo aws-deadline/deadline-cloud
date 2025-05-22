@@ -390,7 +390,8 @@ class GlobConfig:
 class ManifestSnapshot:
     """Data structure to store the results of a manifest snapshot"""
 
-    manifest: str = field(default_factory=str)
+    root: str
+    manifest: str
 
 
 @dataclass

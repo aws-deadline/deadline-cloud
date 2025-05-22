@@ -178,7 +178,7 @@ def _manifest_snapshot(
         )
         # Output results.
         logger.echo(f"Manifest generated at {local_manifest_file}")
-        return ManifestSnapshot(manifest=local_manifest_file)
+        return ManifestSnapshot(root=root, manifest=local_manifest_file)
     else:
         # No manifest generated.
         logger.echo("No manifest generated")
