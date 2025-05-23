@@ -72,6 +72,8 @@ class TestModels:
             HashAlgorithm.XXH128
         )
 
+
+class TestJobAttachmentS3SettingsModel:
     @pytest.mark.parametrize(
         ("input", "output"),
         [
@@ -114,8 +116,32 @@ class TestModels:
         with pytest.raises(MalformedAttachmentSettingError):
             JobAttachmentS3Settings.from_s3_root_uri("s3://s3BucketOnly")
 
+    def test_job_attachment_s3_settings_partial_session_action_manifest_prefix(self):
+        """
+        Test JobAttachmentS3Settings partial_session_action_manifest_prefix method
+        """
+        # Mock the _float_to_iso_datetime_string function to return a predictable value
+        with patch(
+            "deadline.job_attachments.models._float_to_iso_datetime_string",
+            return_value="2025-05-22T22:17:03.409012Z",
+        ):
+            # Call the partial_session_action_manifest_prefix method
+            result = JobAttachmentS3Settings.partial_session_action_manifest_prefix(
+                farm_id="farm1",
+                queue_id="queue1",
+                job_id="job1",
+                step_id="step1",
+                task_id="task1",
+                session_action_id="session1",
+                time=1747952223.4090126,  # This is 2025-05-22T22:17:03.409012Z in timestamp
+            )
 
-class TestManifestSnapshotClass:
+            # Verify the result
+            expected = "farm1/queue1/job1/step1/task1/2025-05-22T22:17:03.409012Z_session1"
+            assert result == expected
+
+
+class TestManifestSnapshotModel:
     """Tests for the ManifestSnapshot class"""
 
     def test_manifest_snapshot_creation(self):
