@@ -725,7 +725,7 @@ def job_download_output(step_id, task_id, output, **args):
 @_handle_error
 def job_trace_schedule(verbose, trace_format, trace_file, **args):
     """
-    EXPERIMENTAL - Generate statistics from a completed job.
+    EXPERIMENTAL - Generate statistics from a job.
 
     To visualize the trace output file when providing the options
     "--trace-format chrome --trace-file <output>.json", use
@@ -744,10 +744,15 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
         raise DeadlineOperationError("Error: Must provide --trace-format with --trace-file.")
 
     deadline = api.get_boto3_client("deadline", config=config)
+    trace_end_utc = datetime.datetime.now(datetime.timezone.utc)
 
     click.echo("Getting the job...")
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
     job.pop("ResponseMetadata", None)
+
+    if "startedAt" not in job:
+        raise DeadlineOperationError("No trace available - Job hasn't started yet, exiting")
+    started_at = job["startedAt"]
 
     click.echo("Getting all the sessions for the job...")
     response = deadline.list_sessions(farmId=farm_id, queueId=queue_id, jobId=job_id)
@@ -833,14 +838,14 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     click.echo("Processing the trace data...")
     trace_events = []
 
-    started_at = job["startedAt"]
-
     def time_int(timestamp: datetime.datetime):
         return int((timestamp - started_at) / datetime.timedelta(microseconds=1))
 
     def duration_of(resource):
         try:
-            return time_int(resource["endedAt"]) - time_int(resource["startedAt"])
+            return time_int(resource.get("endedAt", trace_end_utc)) - time_int(
+                resource["startedAt"]
+            )
         except KeyError:
             return 0
 
@@ -863,6 +868,8 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
 
         pid = workers[session["workerId"]]
         session_event_name = f"{session['step']['name']} - {session['index']}"
+        if "endedAt" not in session:
+            session_event_name = f"{session_event_name} - In Progress"
         trace_events.append(
             {
                 "name": session_event_name,
@@ -910,6 +917,8 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                     name = "Sync Job Attchmnt (Dependencies)"
                 else:
                     name = "Sync Job Attchmnt (Submitted)"
+            if "endedAt" not in action:
+                name = f"{name} - In Progress"
             if "startedAt" in action:
                 trace_events.append(
                     {
@@ -927,12 +936,13 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                         },
                     }
                 )
+
         trace_events.append(
             {
                 "name": session_event_name,
                 "cat": "SESSION",
                 "ph": "E",  # End Event
-                "ts": time_int(session["endedAt"]),
+                "ts": time_int(session.get("endedAt", trace_end_utc)),
                 "pid": pid,
                 "tid": 0,
             }
