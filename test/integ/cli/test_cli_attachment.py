@@ -145,11 +145,13 @@ class TestAttachment:
         )
         assert "HTTP Status Code: 403, Forbidden or Access denied." in result.output
 
-    @pytest.mark.integ
-    @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
-    def test_attachment_basic_flow(
+    def _run_attachment_basic_flow(
         self, temp_dir, job_attachment_resources, manifest_case_key
     ) -> Tuple[str, str, str]:
+        """
+        Helper function that runs the basic attachment flow and returns file info.
+        This is used by both the basic flow test and the file override test.
+        """
         # Given
         file_name: str = f"{hash_data(temp_dir.encode('utf-8'), HashAlgorithm.XXH128)}_output"
         manifest_path: str = os.path.join(temp_dir, file_name)
@@ -211,6 +213,14 @@ class TestAttachment:
         assert len(asset_files) == 1
 
         return file_name, manifest_path, s3_root_uri
+
+    @pytest.mark.integ
+    @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
+    def test_attachment_basic_flow(self, temp_dir, job_attachment_resources, manifest_case_key):
+        """Test the basic attachment upload and download flow."""
+        # Run the basic attachment flow and verify the results through assertions
+        # (all assertions are done within _run_attachment_basic_flow)
+        self._run_attachment_basic_flow(temp_dir, job_attachment_resources, manifest_case_key)
 
     @pytest.mark.integ
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -311,7 +321,7 @@ class TestAttachment:
         self, temp_dir, job_attachment_resources, override_mode, expected_num_files, expected_files
     ):
         test_case_key = "TEST_CASE_1"
-        file_name, manifest_path, s3_root_uri = self.test_attachment_basic_flow(
+        file_name, manifest_path, s3_root_uri = self._run_attachment_basic_flow(
             temp_dir=temp_dir,
             job_attachment_resources=job_attachment_resources,
             manifest_case_key=test_case_key,
