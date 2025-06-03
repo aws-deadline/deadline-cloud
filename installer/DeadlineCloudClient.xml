@@ -348,6 +348,14 @@
                         </programTest>
                     </ruleList>
                 </actionGroup>
+
+                <!-- On macOS, run the executable once since first launch can be slow. -->
+
+                <runProgram program="${installdir}/DeadlineClient/deadline" programArguments="--version">
+                    <ruleList>
+                        <platformTest type="osx"/>
+                    </ruleList>
+                </runProgram>
             </postInstallationActionList>
         </component>
     </componentList>
