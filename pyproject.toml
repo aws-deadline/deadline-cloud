@@ -80,7 +80,7 @@ path = "hatch_custom_hook.py"
 destinations = ["src/deadline/client", "src/deadline/job_attachments"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/*", "hatch_version_hook.py", "THIRD_PARTY_LICENSES"]
+include = ["src/*", "hatch_custom_hook.py", "THIRD_PARTY_LICENSES"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deadline"]
