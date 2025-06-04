@@ -28,6 +28,12 @@ __all__ = [
     "record_function_latency_telemetry_event",
     "assume_queue_role_for_user",
     "assume_queue_role_for_read",
+    "wait_for_job_completion",
+    "JobCompletionResult",
+    "FailedTask",
+    "get_session_logs",
+    "SessionLogResult",
+    "LogEvent",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -76,6 +82,14 @@ from ._submit_job_bundle import (
     wait_for_create_job_to_complete,
 )
 from ._get_storage_profile_for_queue import get_storage_profile_for_queue
+from ._job_monitoring import (
+    wait_for_job_completion,
+    JobCompletionResult,
+    FailedTask,
+    get_session_logs,
+    SessionLogResult,
+    LogEvent,
+)
 
 logger = getLogger(__name__)
 

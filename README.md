@@ -186,6 +186,64 @@ and removing them by logging out:
 $ deadline auth logout
 ```
 
+## Job Monitoring and Logs
+
+### Waiting for Job Completion
+
+After submitting a job, you can wait for it to complete using the `wait` command:
+
+```sh
+# Wait for a job to complete with default settings
+$ deadline job wait --job-id job-12345
+
+# Customize the maximum polling interval (default is 120 seconds)
+# The polling interval starts at 0.5 seconds and doubles until reaching this maximum
+$ deadline job wait --job-id job-12345 --max-poll-interval 30
+
+# Set a timeout (default is 0, meaning no timeout)
+$ deadline job wait --job-id job-12345 --timeout 3600
+
+# Get the result in JSON format
+$ deadline job wait --job-id job-12345 --output json
+```
+
+The command blocks until the job reaches a terminal state (SUCCEEDED, FAILED, CANCELED, SUSPENDED, NOT_COMPATIBLE), then returns information about the job's status and any failed tasks. It uses exponential backoff for polling, starting at 0.5 seconds and doubling the interval after each check until it reaches the maximum polling interval.
+
+**Exit Codes:**
+- `0` - Job succeeded
+- `1` - Timeout waiting for job completion
+- `2` - Job failed or has failed tasks
+- `3` - Job was canceled
+- `4` - Job was archived
+- `5` - Job is not compatible 
+
+### Retrieving Job Logs
+
+You can monitor job status and retrieve logs using the CLI. The logs lines are returned starting from the most recent log event.:
+
+```sh
+# Get logs for a specific session
+$ deadline job logs --session-id session-12345
+
+# Get logs for a job (automatically selects session: ongoing sessions preferred, then most recently started/ended)
+$ deadline job logs --job-id job-12345
+
+# Limit the number of log lines returned to the 50 most recent.
+$ deadline job logs --session-id session-12345 --limit 50
+
+# Filter logs by time range
+$ deadline job logs --session-id session-12345 --start-time 2023-01-01T12:00:00Z --end-time 2023-01-01T13:00:00Z
+
+# Get logs in JSON format
+$ deadline job logs --session-id session-12345 --output json
+
+# Paginate through logs
+$ deadline job logs --session-id session-12345 --next-token next-token-value
+```
+
+When using a Deadline Cloud monitor profile, the `job logs` command will use the Queue role credentials to read logs. Otherwise, the chosen profile credentials are used for all API invocations. This allows you to access logs with the appropriate permissions based on your authentication method.
+
+
 ## AWS Credentials Integration
 
 You can use the Deadline Cloud client to obtain temporary AWS credentials for a queue and use them with the AWS CLI or SDK. This enables you to create AWS profiles that have queue-specific permissions for use in programmatic workflows.
