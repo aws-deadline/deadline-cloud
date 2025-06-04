@@ -1,3 +1,29 @@
+## 0.50.0 (2025-06-04)
+
+### BREAKING CHANGES
+
+* Add root information to manifest snapshot response (#685) ([`cc1ef80`](https://github.com/aws-deadline/deadline-cloud/commit/cc1ef809613ecd6091f7b27b8e14d81c33b7d25e))
+  * The ManifestSnapshot class now **requires** both a root and manifest to be provided instead of only an optional manifest
+
+### Features
+* Add function to construct s3 paths for job attachments output manifests (#687) ([`6cc672d`](https://github.com/aws-deadline/deadline-cloud/commit/6cc672d1990376bcbd2c73d72d717546ee58a9e1))
+* return output manifest paths and hashes (#671) ([`ba10d51`](https://github.com/aws-deadline/deadline-cloud/commit/ba10d5116637b18e35786085ebc778e59af77781))
+* **cli**: Add queue role credential export functionality (#654) ([`a41aeda`](https://github.com/aws-deadline/deadline-cloud/commit/a41aeda374534e5d0cdcaf88e5c1f35833d0c500))
+* Add functionality to summarize lists of paths ([`0ddf2bc`](https://github.com/aws-deadline/deadline-cloud/commit/0ddf2bc03e06a06e288a7d6a7b8ee88df07c8083))
+
+
+### Bug Fixes
+* trace-schedule fails on in-progress jobs (#690) ([`b2add3d`](https://github.com/aws-deadline/deadline-cloud/commit/b2add3d2c82e82aeb790500b90ec9ec200debd62))
+* Guarantee string input to line edit GUI fields (#678) ([`88e8b9c`](https://github.com/aws-deadline/deadline-cloud/commit/88e8b9c0fb2d4e0e93b8ea1578119eddeafddd51))
+* exit with zero exit code when missing a required sub-command or --help (#679) ([`f24f22d`](https://github.com/aws-deadline/deadline-cloud/commit/f24f22df9f8546e858f8a58cfa3b3356782213ff))
+* Queue drop down widget does not expand to full width of the row layout (#675) ([`40d5c68`](https://github.com/aws-deadline/deadline-cloud/commit/40d5c687200711fe4cf90e6d7971b5dec8da18c7))
+* manifest snapshot test failed to create files in nested directory (#672) ([`466bed7`](https://github.com/aws-deadline/deadline-cloud/commit/466bed78cafac59ced57fb775b787b95a6410bd4))
+* manifest snapshot include and exclude paths handled incorrectly in glob (#670) ([`f87d0a2`](https://github.com/aws-deadline/deadline-cloud/commit/f87d0a26d592e10510c0cf850d99bf700113d9f1))
+
+### Experimental
+* Job output download
+  * skeleton and locking for incremental output downloads for all jobs running on a queue (#665) ([`2d8a3b0`](https://github.com/aws-deadline/deadline-cloud/commit/2d8a3b01fd53d9996914cfa5f0a37b5a2c05abf6))
+
 ## 0.49.8 (2025-04-14)
 
 
