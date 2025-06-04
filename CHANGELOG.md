@@ -1,3 +1,10 @@
+## 0.50.1 (2025-06-04)
+
+
+
+### Bug Fixes
+* sdist failed to install (#695) ([`39d5a02`](https://github.com/aws-deadline/deadline-cloud/commit/39d5a025a49ba1869772d1e469c4c7e1f1c229c7))
+
 ## 0.50.0 (2025-06-04)
 
 ### BREAKING CHANGES
