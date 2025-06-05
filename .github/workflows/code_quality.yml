@@ -8,6 +8,9 @@ on:
       branch:
         required: false
         type: string
+      tag:
+        required: false
+        type: string
 
 jobs:
   Test:
@@ -20,3 +23,4 @@ jobs:
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
+      ref: ${{inputs.tag}}
