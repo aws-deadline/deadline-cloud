@@ -84,17 +84,8 @@ jobs:
       tag: ${{ needs.TagRelease.outputs.tag }}
       oses: "['Linux', 'Windows', 'MacOS']"
 
-  IsCondaReady:
-    needs: BuildAndStageInstallers
-    runs-on: ubuntu-latest
-    environment: release
-    name: “Is the Conda Package available in all ProdWaves and have you ran any required manual tests?”
-    steps:
-      - run: |
-         :
-
   Release:
-    needs: [TagRelease, IsCondaReady]
+    needs: [TagRelease, BuildAndStageInstallers]
     uses: aws-deadline/.github/.github/workflows/reusable_release.yml@mainline
     secrets: inherit
     permissions:
