@@ -368,11 +368,12 @@ class S3AssetUploader:
         s3_cache: Optional[S3CheckCache] = None,
     ) -> None:
         """
-        Uploads all of the files listed in the given manifest to S3 if they don't exist in the
+        Uploads all the provided files to S3 if they don't exist in the
         given S3 prefix already.
 
-        The local 'S3 check cache' is used to note if we've seen an object in S3 before so we
-        can save the S3 API calls.
+        The optional local 'S3 check cache' is used to note if we've seen an object in S3 before so we
+        can save the S3 API calls. This is used when submitting jobs, but not when uploading output on
+        the worker.
         """
 
         # Split into a separate 'large file' and 'small file' queues.
@@ -567,7 +568,7 @@ class S3AssetUploader:
         progress_tracker: Optional[ProgressTracker] = None,
     ) -> Tuple[bool, int]:
         """
-        Uploads an object to the S3 content-addressable storage (CAS) prefix. Optionally,
+        Uploads a local file to the S3 content-addressable storage (CAS) prefix. Optionally,
         does a head-object check and only uploads the file if it doesn't exist in S3 already.
         Returns a tuple (whether it has been uploaded, the file size).
         """
