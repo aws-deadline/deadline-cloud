@@ -6,12 +6,33 @@ import sys
 import pytest
 
 from deadline.job_attachments._utils import (
+    _normalize_windows_path,
     _is_relative_to,
     _retry,
 )
 
 
 class TestUtils:
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="This test is for paths in Windows format and will be skipped on non-Windows systems.",
+    )
+    @pytest.mark.parametrize(
+        ("input_path", "expected"),
+        [
+            (r"\\?\C:\path\to\file.txt", Path(r"C:\path\to\file.txt")),
+            (r"\\?\D:\another\long\path", Path(r"D:\another\long\path")),
+            (r"C:\normal\path.txt", Path(r"C:\normal\path.txt")),
+            (r"Z:\already\normal\path", Path(r"Z:\already\normal\path")),
+        ],
+    )
+    def test_normalize_windows_path(self, input_path, expected):
+        """
+        Tests if _normalize_windows_path correctly strips the \\?\\ prefix
+        from Windows extended-length paths.
+        """
+        assert _normalize_windows_path(Path(input_path)) == expected
+
     @pytest.mark.skipif(
         sys.platform == "win32",
         reason="This test is for paths in POSIX path format and will be skipped on Windows.",
@@ -54,6 +75,16 @@ class TestUtils:
             ("C:/a/b/c", "C:/d", False),
             ("a/b/c", "b", False),
             ("a/b/c", "d", False),
+            (
+                "\\\\?\\C:\\path\\to\\a\\very\\long\\file\\path\\that\\exceeds\\the\\windows\\max\\path\\length\\for\\testing\\max\\file\\path\\error\\handling\\when\\comparing\\path\\relativity\\using\\job\\attachments",
+                "C:\\path\\to\\",
+                True,
+            ),
+            (
+                "\\\\?\\C:\\path\\to\\a\\very\\long\\file\\path\\that\\exceeds\\the\\windows\\max\\path\\length\\for\\testing\\max\\file\\path\\error\\handling\\when\\comparing\\path\\relativity\\using\\job\\attachments",
+                "C:\\path\\doesnt\\exist\\",
+                False,
+            ),
         ],
     )
     def test_is_relative_to_on_windows(self, path1, path2, expected):
