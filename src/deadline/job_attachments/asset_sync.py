@@ -56,7 +56,7 @@ from .models import (
     JobAttachmentsFileSystem,
     JobAttachmentS3Settings,
     ManifestProperties,
-    OutputFile,
+    FileUploadInfo,
     PathFormat,
     PathMappingRule,
 )
@@ -487,7 +487,7 @@ class AssetSync:
     def _upload_output_files_to_s3(
         self,
         s3_settings: JobAttachmentS3Settings,
-        output_files: List[OutputFile],
+        files: List[FileUploadInfo],
         on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]],
     ) -> SummaryStatistics:
         """
@@ -495,10 +495,10 @@ class AssetSync:
         Sets up `progress_tracker` to report upload progress back to the caller (i.e. worker.)
         """
         # Sets up progress tracker to report upload progress back to the caller.
-        total_file_size = sum([file.file_size for file in output_files])
+        total_file_size = sum([file.size for file in files])
         progress_tracker = ProgressTracker(
             status=ProgressStatus.UPLOAD_IN_PROGRESS,
-            total_files=len(output_files),
+            total_files=len(files),
             total_bytes=total_file_size,
             on_progress_callback=on_uploading_files,
             logger=self.logger,
@@ -506,18 +506,12 @@ class AssetSync:
 
         start_time = time.perf_counter()
 
-        for file in output_files:
-            if file.in_s3:
-                progress_tracker.increase_skipped(1, file.file_size)
-                continue
-
-            self.s3_uploader.upload_file_to_s3(
-                local_path=Path(file.full_path),
-                s3_bucket=s3_settings.s3BucketName,
-                s3_upload_key=file.s3_key,
-                progress_tracker=progress_tracker,
-                base_dir_path=Path(file.base_dir) if file.base_dir else None,
-            )
+        self.s3_uploader.upload_files(
+            files=files,
+            s3_bucket=s3_settings.s3BucketName,
+            s3_cas_prefix=s3_settings.full_cas_prefix(),
+            progress_tracker=progress_tracker,
+        )
 
         progress_tracker.total_time = time.perf_counter() - start_time
         return progress_tracker.get_summary_statistics()
@@ -562,24 +556,22 @@ class AssetSync:
             extra_args=metadata,
         )
 
-    def _generate_output_manifest(self, outputs: List[OutputFile]) -> BaseAssetManifest:
+    def _generate_output_manifest(self, outputs: List[FileUploadInfo]) -> BaseAssetManifest:
         paths: list[RelativeFilePath] = []
         for output in outputs:
             path_args: dict[str, Any] = {
-                "hash": output.file_hash,
+                "hash": output.hash,
                 "path": output.rel_path,
             }
-            path_args["size"] = output.file_size
-            # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
-            # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
-            path_args["mtime"] = trunc(Path(output.full_path).stat().st_mtime_ns // 1000)
+            path_args["size"] = output.size
+            path_args["mtime"] = output.mtime
             paths.append(self.manifest_model.Path(**path_args))
 
         asset_manifest_args: dict[str, Any] = {
             "paths": paths,
             "hash_alg": self.hash_alg,
         }
-        asset_manifest_args["total_size"] = sum([output.file_size for output in outputs])
+        asset_manifest_args["total_size"] = sum([output.size for output in outputs])
 
         return self.manifest_model.AssetManifest(**asset_manifest_args)  # type: ignore[call-arg]
 
@@ -589,12 +581,12 @@ class AssetSync:
         s3_settings: JobAttachmentS3Settings,
         local_root: Path,
         session_dir: Path,
-    ) -> List[OutputFile]:
+    ) -> List[FileUploadInfo]:
         """
         Walks the output directories for this asset root for any output files that have been created or modified
         since the start time provided. Hashes and checks if the output files already exist in the CAS.
         """
-        output_files: List[OutputFile] = []
+        output_files: List[FileUploadInfo] = []
 
         source_path_format = manifest_properties.rootPathFormat
         current_path_format = PathFormat.get_host_path_format()
@@ -652,24 +644,20 @@ class AssetSync:
                 ):
                     file_size = file_real_path.resolve().lstat().st_size
                     file_hash = hash_file(str(file_real_path), self.hash_alg)
-                    s3_key = f"{file_hash}.{self.hash_alg.value}"
-
-                    if s3_settings.full_cas_prefix():
-                        s3_key = _join_s3_paths(s3_settings.full_cas_prefix(), s3_key)
-                    in_s3 = self.s3_uploader.file_already_uploaded(s3_settings.s3BucketName, s3_key)
 
                     total_file_count += 1
                     total_file_size += file_size
 
                     output_files.append(
-                        OutputFile(
-                            file_size=file_size,
-                            file_hash=file_hash,
+                        FileUploadInfo(
+                            size=file_size,
+                            hash=file_hash,
+                            hash_alg=self.hash_alg,
+                            # stat().st_mtime_ns returns an int that represents the time in nanoseconds since the epoch.
+                            # The asset manifest spec requires the mtime to be represented as an integer in microseconds.
+                            mtime=trunc(file_mtime // 1000),
                             rel_path=str(PurePosixPath(*file_path.relative_to(local_root).parts)),
-                            full_path=str(file_real_path),
-                            s3_key=s3_key,
-                            in_s3=in_s3,
-                            base_dir=str(session_dir),
+                            full_path=file_real_path,
                         )
                     )
 
@@ -946,7 +934,7 @@ class AssetSync:
             self.logger.info(f"No attachments configured for Job {job_id}, no outputs to sync.")
             return SummaryStatistics()
 
-        all_output_files: List[OutputFile] = []
+        all_output_files: List[FileUploadInfo] = []
 
         storage_profiles_source_paths = list(storage_profiles_path_mapping_rules.keys())
 
@@ -974,7 +962,7 @@ class AssetSync:
                 dir_name: str = _get_unique_dest_dir_name(manifest_properties.rootPath)
                 local_root = session_dir.joinpath(dir_name)
 
-            output_files: List[OutputFile] = self._get_output_files(
+            output_files: List[FileUploadInfo] = self._get_output_files(
                 manifest_properties,
                 s3_settings,
                 local_root,
@@ -1009,7 +997,9 @@ class AssetSync:
                 f" to S3: {s3_settings.s3BucketName}/{s3_settings.full_cas_prefix()}"
             )
             summary_stats: SummaryStatistics = self._upload_output_files_to_s3(
-                s3_settings, all_output_files, on_uploading_files
+                s3_settings,
+                all_output_files,
+                on_uploading_files,
             )
         else:
             summary_stats = SummaryStatistics()

@@ -42,6 +42,7 @@ from deadline.job_attachments.models import (
     Attachments,
     FileSystemLocation,
     FileSystemLocationType,
+    FileUploadInfo,
     ManifestProperties,
     JobAttachmentS3Settings,
     StorageProfileOperatingSystemFamily,
@@ -2431,31 +2432,101 @@ class TestUpload:
             ),
             (
                 [
-                    BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
-                    BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
-                    BaseManifestPath(path="", hash="", size=1000 * (1024**2), mtime=1),
+                    FileUploadInfo(
+                        rel_path="",
+                        full_path="",
+                        hash="",
+                        hash_alg=HashAlgorithm.XXH128,
+                        size=10 * (1024**2),
+                        mtime=1,
+                    ),
+                    FileUploadInfo(
+                        rel_path="",
+                        full_path="",
+                        hash="",
+                        hash_alg=HashAlgorithm.XXH128,
+                        size=100 * (1024**2),
+                        mtime=1,
+                    ),
+                    FileUploadInfo(
+                        rel_path="",
+                        full_path="",
+                        hash="",
+                        hash_alg=HashAlgorithm.XXH128,
+                        size=1000 * (1024**2),
+                        mtime=1,
+                    ),
                 ],
                 100 * (1024**2),  # 100 MB
                 (
                     [
-                        BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
-                        BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                        FileUploadInfo(
+                            rel_path="",
+                            full_path="",
+                            hash="",
+                            hash_alg=HashAlgorithm.XXH128,
+                            size=10 * (1024**2),
+                            mtime=1,
+                        ),
+                        FileUploadInfo(
+                            rel_path="",
+                            full_path="",
+                            hash="",
+                            hash_alg=HashAlgorithm.XXH128,
+                            size=100 * (1024**2),
+                            mtime=1,
+                        ),
                     ],
                     [
-                        BaseManifestPath(path="", hash="", size=1000 * (1024**2), mtime=1),
+                        FileUploadInfo(
+                            rel_path="",
+                            full_path="",
+                            hash="",
+                            hash_alg=HashAlgorithm.XXH128,
+                            size=1000 * (1024**2),
+                            mtime=1,
+                        ),
                     ],
                 ),
             ),
             (
                 [
-                    BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
-                    BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                    FileUploadInfo(
+                        rel_path="",
+                        full_path="",
+                        hash="",
+                        hash_alg=HashAlgorithm.XXH128,
+                        size=10 * (1024**2),
+                        mtime=1,
+                    ),
+                    FileUploadInfo(
+                        rel_path="",
+                        full_path="",
+                        hash="",
+                        hash_alg=HashAlgorithm.XXH128,
+                        size=100 * (1024**2),
+                        mtime=1,
+                    ),
                 ],
                 800 * (1024**2),  # 800 MB
                 (
                     [
-                        BaseManifestPath(path="", hash="", size=10 * (1024**2), mtime=1),
-                        BaseManifestPath(path="", hash="", size=100 * (1024**2), mtime=1),
+                        FileUploadInfo(
+                            rel_path="",
+                            full_path="",
+                            hash="",
+                            hash_alg=HashAlgorithm.XXH128,
+                            size=10 * (1024**2),
+                            mtime=1,
+                        ),
+                        FileUploadInfo(
+                            rel_path="",
+                            full_path="",
+                            hash="",
+                            hash_alg=HashAlgorithm.XXH128,
+                            size=100 * (1024**2),
+                            mtime=1,
+                        ),
                     ],
                     [],
                 ),
@@ -2464,9 +2535,9 @@ class TestUpload:
     )
     def test_separate_files_by_size(
         self,
-        input_files: List[BaseManifestPath],
+        input_files: List[FileUploadInfo],
         size_threshold: int,
-        expected_queues: Tuple[List[BaseManifestPath], List[BaseManifestPath]],
+        expected_queues: Tuple[List[FileUploadInfo], List[FileUploadInfo]],
     ):
         """
         Tests that a helper method `_separate_files_by_size` is working as expected.

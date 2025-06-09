@@ -27,7 +27,7 @@ from deadline.job_attachments.asset_manifests import (
     hash_file,
 )
 from deadline.job_attachments._aws.deadline import get_queue
-from deadline.job_attachments.exceptions import AssetSyncError, JobAttachmentsS3ClientError
+from deadline.job_attachments.exceptions import JobAttachmentsS3ClientError
 from deadline.job_attachments.models import (
     Attachments,
     ManifestProperties,
@@ -1453,7 +1453,11 @@ def test_sync_outputs_bucket_wrong_account(
 
     # WHEN
     with pytest.raises(
-        AssetSyncError, match=f"Error checking if object exists in bucket '{external_bucket}'"
+        # Note: This error is raised in this case when the s3:PutObject operation is denied
+        # due to the ExpectedBucketOwner check on our s3 operation. If the bucket is in the expected
+        # account, then the error is a different access denied error.
+        JobAttachmentsS3ClientError,
+        match=".*when calling the PutObject operation: Access Denied",
     ):
         sync_inputs.asset_syncer.sync_outputs(
             s3_settings=job_attachment_settings,

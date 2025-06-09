@@ -104,19 +104,16 @@ class ManifestPathGroup:
 
 
 @dataclass
-class OutputFile:
-    """Files for output"""
+class FileUploadInfo:
+    """Information for uploading a file to content-addressable storage"""
 
     # File size in Bytes
-    file_size: int
-    file_hash: str
+    size: int
+    hash: str
+    hash_alg: HashAlgorithm
+    mtime: int
     rel_path: str
-    full_path: str
-    s3_key: str
-    # If the file already exists in the CAS
-    in_s3: bool
-    # The base directory path against which file paths are containment-checked
-    base_dir: Optional[str]
+    full_path: Path
 
 
 class StorageProfileOperatingSystemFamily(str, Enum):

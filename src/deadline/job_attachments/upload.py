@@ -59,6 +59,7 @@ from .models import (
     AssetRootManifest,
     AssetUploadGroup,
     Attachments,
+    FileUploadInfo,
     FileStatus,
     FileSystemLocationType,
     JobAttachmentS3Settings,
@@ -337,51 +338,81 @@ class S3AssetUploader:
         can save the S3 API calls.
         """
 
+        files: List[FileUploadInfo] = [
+            FileUploadInfo(
+                size=path.size,
+                hash=path.hash,
+                hash_alg=manifest.hashAlg,
+                mtime=path.mtime,
+                rel_path=path.path,
+                full_path=source_root.joinpath(path.path),
+            )
+            for path in manifest.paths
+        ]
+
+        with S3CheckCache(s3_check_cache_dir) as s3_cache:
+            self.upload_files(
+                files,
+                s3_bucket=s3_bucket,
+                s3_cas_prefix=s3_cas_prefix,
+                progress_tracker=progress_tracker,
+                s3_cache=s3_cache,
+            )
+
+    def upload_files(
+        self,
+        files: List[FileUploadInfo],
+        s3_bucket: str,
+        s3_cas_prefix: str,
+        progress_tracker: Optional[ProgressTracker] = None,
+        s3_cache: Optional[S3CheckCache] = None,
+    ) -> None:
+        """
+        Uploads all of the files listed in the given manifest to S3 if they don't exist in the
+        given S3 prefix already.
+
+        The local 'S3 check cache' is used to note if we've seen an object in S3 before so we
+        can save the S3 API calls.
+        """
+
         # Split into a separate 'large file' and 'small file' queues.
         # Separate 'large' files from 'small' files so that we can process 'large' files serially.
         # This wastes less bandwidth if uploads are cancelled, as it's better to use the multi-threaded
         # multi-part upload for a single large file than multiple large files at the same time.
         (small_file_queue, large_file_queue) = self._separate_files_by_size(
-            manifest.paths, self.small_file_threshold
+            files, self.small_file_threshold
         )
 
-        with S3CheckCache(s3_check_cache_dir) as s3_cache:
-            # First, process the whole 'small file' queue with parallel object uploads.
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.num_upload_workers
-            ) as executor:
-                futures = {
-                    executor.submit(
-                        self.upload_object_to_cas,
-                        file,
-                        manifest.hashAlg,
-                        s3_bucket,
-                        source_root,
-                        s3_cas_prefix,
-                        s3_cache,
-                        progress_tracker,
-                    ): file
-                    for file in small_file_queue
-                }
-                # surfaces any exceptions in the thread
-                for future in concurrent.futures.as_completed(futures):
-                    (is_uploaded, file_size) = future.result()
-                    if progress_tracker and not is_uploaded:
-                        progress_tracker.increase_skipped(1, file_size)
-
-            # Now process the whole 'large file' queue with serial object uploads (but still parallel multi-part upload.)
-            for file in large_file_queue:
-                (is_uploaded, file_size) = self.upload_object_to_cas(
+        # First, process the whole 'small file' queue with parallel object uploads.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_upload_workers) as executor:
+            futures = {
+                executor.submit(
+                    self.upload_file_to_cas,
                     file,
-                    manifest.hashAlg,
                     s3_bucket,
-                    source_root,
                     s3_cas_prefix,
                     s3_cache,
                     progress_tracker,
-                )
+                ): file
+                for file in small_file_queue
+            }
+            # surfaces any exceptions in the thread
+            for future in concurrent.futures.as_completed(futures):
+                (is_uploaded, file_size) = future.result()
                 if progress_tracker and not is_uploaded:
                     progress_tracker.increase_skipped(1, file_size)
+
+        # Now process the whole 'large file' queue with serial object uploads (but still parallel multi-part upload.)
+        for file in large_file_queue:
+            (is_uploaded, file_size) = self.upload_file_to_cas(
+                file,
+                s3_bucket,
+                s3_cas_prefix,
+                s3_cache,
+                progress_tracker,
+            )
+            if progress_tracker and not is_uploaded:
+                progress_tracker.increase_skipped(1, file_size)
 
         # to report progress 100% at the end, and
         # to check if the job submission was canceled in the middle of processing the last batch of files.
@@ -450,7 +481,7 @@ class S3AssetUploader:
 
         # Find the list of s3 upload keys that have been cached
         s3_upload_keys: List[str] = [
-            self._generate_s3_upload_key(file, manifest.hashAlg, s3_cas_prefix)
+            self._generate_s3_upload_key(file.hash, manifest.hashAlg, s3_cas_prefix)
             for file in manifest.paths
         ]
         with S3CheckCache(s3_check_cache_dir) as s3_cache:
@@ -466,14 +497,14 @@ class S3AssetUploader:
 
     def _separate_files_by_size(
         self,
-        files_to_upload: list[base_manifest.BaseManifestPath],
+        files_to_upload: list[FileUploadInfo],
         size_threshold: int,
-    ) -> Tuple[list[base_manifest.BaseManifestPath], list[base_manifest.BaseManifestPath]]:
+    ) -> Tuple[list[FileUploadInfo], list[FileUploadInfo]]:
         """
         Splits the given list of files into two queues: one for small files and one for large files.
         """
-        small_file_queue: list[base_manifest.BaseManifestPath] = []
-        large_file_queue: list[base_manifest.BaseManifestPath] = []
+        small_file_queue: list[FileUploadInfo] = []
+        large_file_queue: list[FileUploadInfo] = []
         for file in files_to_upload:
             if file.size <= size_threshold:
                 small_file_queue.append(file)
@@ -486,11 +517,11 @@ class S3AssetUploader:
 
     def _generate_s3_upload_key(
         self,
-        file: base_manifest.BaseManifestPath,
-        hash_algorithm: HashAlgorithm,
+        file_hash: str,
+        hash_alg: HashAlgorithm,
         s3_cas_prefix: str,
     ) -> str:
-        s3_upload_key = f"{file.hash}.{hash_algorithm.value}"
+        s3_upload_key = f"{file_hash}.{hash_alg.value}"
         if s3_cas_prefix:
             s3_upload_key = _join_s3_paths(s3_cas_prefix, s3_upload_key)
         return s3_upload_key
@@ -510,38 +541,69 @@ class S3AssetUploader:
         does a head-object check and only uploads the file if it doesn't exist in S3 already.
         Returns a tuple (whether it has been uploaded, the file size).
         """
-        local_path = source_root.joinpath(file.path)
-        s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, s3_cas_prefix)
-        is_uploaded = False
-        file_size = local_path.resolve().stat().st_size
+        file_upload_info = FileUploadInfo(
+            size=file.size,
+            hash=file.hash,
+            hash_alg=hash_algorithm,
+            mtime=file.mtime,
+            rel_path=file.path,
+            full_path=source_root.joinpath(file.path),
+        )
 
-        if s3_check_cache.get_entry(s3_key=f"{s3_bucket}/{s3_upload_key}"):
+        return self.upload_file_to_cas(
+            file=file_upload_info,
+            s3_bucket=s3_bucket,
+            s3_cas_prefix=s3_cas_prefix,
+            s3_check_cache=s3_check_cache,
+            progress_tracker=progress_tracker,
+        )
+
+    def upload_file_to_cas(
+        self,
+        file: FileUploadInfo,
+        s3_bucket: str,
+        s3_cas_prefix: str,
+        s3_check_cache: Optional[S3CheckCache] = None,
+        progress_tracker: Optional[ProgressTracker] = None,
+    ) -> Tuple[bool, int]:
+        """
+        Uploads an object to the S3 content-addressable storage (CAS) prefix. Optionally,
+        does a head-object check and only uploads the file if it doesn't exist in S3 already.
+        Returns a tuple (whether it has been uploaded, the file size).
+        """
+        s3_upload_key = self._generate_s3_upload_key(file.hash, file.hash_alg, s3_cas_prefix)
+        is_uploaded = False
+
+        if s3_check_cache is not None and s3_check_cache.get_entry(
+            s3_key=f"{s3_bucket}/{s3_upload_key}"
+        ):
             logger.debug(
-                f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
+                f"skipping {file.full_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
             )
-            return (is_uploaded, file_size)
+            return (is_uploaded, file.size)
 
         if self.file_already_uploaded(s3_bucket, s3_upload_key):
             logger.debug(
-                f"skipping {local_path} because it has already been uploaded to s3://{s3_bucket}/{s3_upload_key}"
+                f"skipping {file.full_path} because it has already been uploaded to s3://{s3_bucket}/{s3_upload_key}"
             )
         else:
             self.upload_file_to_s3(
-                local_path=local_path,
+                local_path=Path(file.full_path),
                 s3_bucket=s3_bucket,
                 s3_upload_key=s3_upload_key,
                 progress_tracker=progress_tracker,
             )
             is_uploaded = True
 
-        s3_check_cache.put_entry(
-            S3CheckCacheEntry(
-                s3_key=f"{s3_bucket}/{s3_upload_key}",
-                last_seen_time=self._get_current_timestamp(),
+        if s3_check_cache is not None:
+            s3_check_cache.put_entry(
+                S3CheckCacheEntry(
+                    s3_key=f"{s3_bucket}/{s3_upload_key}",
+                    last_seen_time=self._get_current_timestamp(),
+                )
             )
-        )
 
-        return (is_uploaded, file_size)
+        return (is_uploaded, file.size)
 
     def upload_file_to_s3(
         self,
