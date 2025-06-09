@@ -71,13 +71,25 @@ def _get_bucket_and_object_key(s3_path: str) -> Tuple[str, str]:
     return bucket, key
 
 
+def _normalize_windows_path(path: Path) -> Path:
+    """
+    Strips \\\\?\\ prefix from Windows paths.
+    """
+    p_str = str(path)
+    if p_str.startswith("\\\\?\\"):
+        return Path(p_str[4:])
+    return path
+
+
 def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
     """
     Determines if path1 is relative to path2. This function is to support
     Python versions (3.7 and 3.8) that do not have the built-in `Path.is_relative_to()` method.
     """
     try:
-        Path(path1).relative_to(Path(path2))
+        p1 = _normalize_windows_path(Path(path1).resolve())
+        p2 = _normalize_windows_path(Path(path2).resolve())
+        p1.relative_to(p2)
         return True
     except ValueError:
         return False
