@@ -11,9 +11,10 @@ from deadline.client.api._queue_apis import (
     _validate_file_inputs_for_incremental_output_download,
 )
 from deadline.client.cli._groups.click_logger import ClickLogger
+from deadline.job_attachments.incremental_downloads.exceptions import PidLockAlreadyHeld
 
 
-@patch("deadline.client.api._queue_apis._pid_utils.check_and_obtain_pid_lock_if_available")
+@patch("deadline.client.api._queue_apis._pid_utils.try_acquire_pid_lock")
 def test_incremental_output_download_success(mock_pid_lock, tmp_path):
     """Test successful execution of _incremental_output_download"""
     # Arrange
@@ -21,7 +22,13 @@ def test_incremental_output_download_success(mock_pid_lock, tmp_path):
     queue_id = "queue-0123456789abcdef"
     boto3_session = MagicMock(spec=boto3.Session)
     saved_progress_checkpoint_location = str(tmp_path / "checkpoint")
-    logger = MagicMock(spec=ClickLogger)
+    pid_file_full_path = os.path.join(
+        saved_progress_checkpoint_location, "queue-0123456789abcdef_incremental_output_download.pid"
+    )
+    logger: ClickLogger = ClickLogger(is_json=False)
+
+    # make directory
+    os.mkdir(saved_progress_checkpoint_location)
 
     # Act
     _incremental_output_download(
@@ -29,24 +36,27 @@ def test_incremental_output_download_success(mock_pid_lock, tmp_path):
         queue_id=queue_id,
         boto3_session=boto3_session,
         saved_progress_checkpoint_location=saved_progress_checkpoint_location,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
 
     # Assert
-    mock_pid_lock.assert_called_once_with(saved_progress_checkpoint_location, logger)
+    mock_pid_lock.assert_called_once_with(pid_file_full_path, logger.echo)
 
 
-@patch("deadline.client.api._queue_apis._pid_utils.check_and_obtain_pid_lock_if_available")
-def test_incremental_output_download_runtime_error(mock_pid_lock, tmp_path):
-    """Test _incremental_output_download when RuntimeError is raised"""
+@patch("deadline.client.api._queue_apis._pid_utils.try_acquire_pid_lock")
+def test_incremental_output_download_pid_lock_already_held_error(mock_pid_lock, tmp_path):
+    """Test _incremental_output_download when PidLockAlreadyHeld is raised"""
     # Arrange
     farm_id = "farm-0123456789abcdef"
     queue_id = "queue-0123456789abcdef"
     boto3_session = MagicMock(spec=boto3.Session)
     saved_progress_checkpoint_location = str(tmp_path / "checkpoint")
+    pid_file_full_path = os.path.join(
+        saved_progress_checkpoint_location, "queue-0123456789abcdef_incremental_output_download.pid"
+    )
     logger = MagicMock(spec=ClickLogger)
 
-    mock_pid_lock.side_effect = RuntimeError("Download already in progress")
+    mock_pid_lock.side_effect = PidLockAlreadyHeld("Download already in progress")
 
     # Act
     _incremental_output_download(
@@ -54,17 +64,17 @@ def test_incremental_output_download_runtime_error(mock_pid_lock, tmp_path):
         queue_id=queue_id,
         boto3_session=boto3_session,
         saved_progress_checkpoint_location=saved_progress_checkpoint_location,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
 
     # Assert
-    mock_pid_lock.assert_called_once_with(saved_progress_checkpoint_location, logger)
+    mock_pid_lock.assert_called_once_with(pid_file_full_path, logger.echo)
     logger.echo.assert_called_once_with(
-        "Download failed because of error : Download already in progress"
+        f"Another download is in progress at {saved_progress_checkpoint_location}, wait for previous download to finish"
     )
 
 
-@patch("deadline.client.api._queue_apis._pid_utils.check_and_obtain_pid_lock_if_available")
+@patch("deadline.client.api._queue_apis._pid_utils.try_acquire_pid_lock")
 def test_incremental_output_download_generic_exception(mock_pid_lock, tmp_path):
     """Test _incremental_output_download when a generic Exception is raised"""
     # Arrange
@@ -72,6 +82,9 @@ def test_incremental_output_download_generic_exception(mock_pid_lock, tmp_path):
     queue_id = "queue-0123456789abcdef"
     boto3_session = MagicMock(spec=boto3.Session)
     saved_progress_checkpoint_location = str(tmp_path / "checkpoint")
+    pid_file_full_path = os.path.join(
+        saved_progress_checkpoint_location, "queue-0123456789abcdef_incremental_output_download.pid"
+    )
     logger = MagicMock(spec=ClickLogger)
 
     mock_pid_lock.side_effect = Exception("Unexpected error")
@@ -82,11 +95,11 @@ def test_incremental_output_download_generic_exception(mock_pid_lock, tmp_path):
         queue_id=queue_id,
         boto3_session=boto3_session,
         saved_progress_checkpoint_location=saved_progress_checkpoint_location,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
 
     # Assert
-    mock_pid_lock.assert_called_once_with(saved_progress_checkpoint_location, logger)
+    mock_pid_lock.assert_called_once_with(pid_file_full_path, logger.echo)
     logger.echo.assert_called_once()
     assert "Failed to obtain lock for download progress" in logger.echo.call_args[0][0]
 
