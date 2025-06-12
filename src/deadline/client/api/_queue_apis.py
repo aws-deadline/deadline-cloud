@@ -4,12 +4,14 @@ from __future__ import annotations
 __all__ = ["_incremental_output_download"]
 
 from .. import api
-from typing import Optional
+from typing import Optional, Callable
 import boto3
-from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.client import _pid_utils
 
 import os
+from deadline.job_attachments.incremental_downloads.exceptions import PidLockAlreadyHeld
+
+PID_FILE_NAME = "incremental_output_download.pid"
 
 
 @api.record_function_latency_telemetry_event()
@@ -21,7 +23,7 @@ def _incremental_output_download(
     bootstrap_lookback_in_minutes: Optional[int] = 0,
     force_bootstrap: bool = False,
     path_mapping_rules: Optional[str] = None,
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[str], None] = lambda msg: None,
 ) -> None:
     """
     Download Job Output data incrementally for all jobs running on a queue as session actions finish.
@@ -36,20 +38,26 @@ def _incremental_output_download(
     :param force_bootstrap: force bootstrap and ignore current download progress. Default value is False.
     :param path_mapping_rules: path mapping rules for cross OS path mapping
     :param boto3_session: boto3 session
-    :param logger: Click logger component
+    :param print_function_callback: Callback to print messages produced in this function.
+                Used in the CLI to print to stdout using click.echo. By default, ignores messages.
     :return: None
     """
 
     try:
-        # Check if a download is already ongoing with pid lock checking mechanism
-        _pid_utils.check_and_obtain_pid_lock_if_available(
-            saved_progress_checkpoint_location, logger
+        # 1. Construct pid file full path
+        pid_file_full_path = os.path.join(
+            saved_progress_checkpoint_location, f"{queue_id}_{PID_FILE_NAME}"
         )
-    except RuntimeError as e:
-        logger.echo(f"Download failed because of error : {e}")
+
+        # 2. Check if a download is already ongoing with pid lock checking mechanism
+        _pid_utils.try_acquire_pid_lock(pid_file_full_path, print_function_callback)
+    except PidLockAlreadyHeld:
+        print_function_callback(
+            f"Another download is in progress at {saved_progress_checkpoint_location}, wait for previous download to finish"
+        )
         return
     except Exception as e:
-        logger.echo(
+        print_function_callback(
             f"Failed to obtain lock for download progress at {saved_progress_checkpoint_location} due to unexpected exception : {e}"
         )
         return
