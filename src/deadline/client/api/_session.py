@@ -12,7 +12,7 @@ from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Tuple
 
 import boto3  # type: ignore[import]
 import botocore
@@ -27,6 +27,7 @@ from botocore.session import get_session as get_botocore_session
 from .. import version
 from ..config import get_setting
 from ..exceptions import DeadlineOperationError
+from ...job_attachments._aws.aws_clients import get_s3_client
 
 
 class AwsCredentialsSource(Enum):
@@ -117,6 +118,25 @@ def get_default_client_config() -> botocore.config.Config:
     return session_config
 
 
+@lru_cache
+def get_session_client(session: boto3.Session, service_name: str):
+    """
+    Create and cache a boto3 client for the given session and service name.
+
+    This function is decorated with @lru_cache to ensure that repeated calls
+    with the same session and service name return the cached client to avoid
+    repeating initialization where possible.
+
+    Args:
+        session: The boto3 Session to use for creating the client
+        service_name: The name of the AWS service (e.g., 's3', 'sts', 'ec2')
+
+    Returns:
+        A boto3 client for the specified service
+    """
+    return session.client(service_name, config=get_default_client_config())
+
+
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
     """
     Gets a client from the boto3 session returned by `get_boto3_session`.
@@ -129,7 +149,7 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
     """
 
     session = get_boto3_session(config=config)
-    return session.client(service_name, config=get_default_client_config())
+    return get_session_client(session=session, service_name=service_name)
 
 
 def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
@@ -278,6 +298,66 @@ def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAut
             if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
                 return AwsAuthenticationStatus.NEEDS_LOGIN
             return AwsAuthenticationStatus.CONFIGURATION_ERROR
+
+
+def precache_clients(
+    deadline: BaseClient = None,
+    config: Optional[ConfigParser] = None,
+    farm_id: Optional[str] = None,
+    queue_id: Optional[str] = None,
+    queue_display_name: Optional[str] = None,
+) -> Tuple[BaseClient, BaseClient]:
+    """
+    Initialize an S3 client (and optionally a Deadline client) with queue user credentials
+    to pre-warm the client cache.
+
+    This function creates an S3 client using queue user credentials, which triggers
+    the expensive service discovery process once. Subsequent client creations using
+    the same session object should then use the cached client, improving performance.
+    This function is designed to be called in a background thread at application startup.
+
+    Args:
+        deadline: An existing deadline client. If None, one will be created.
+        config: Optional configuration parser. If None, the default configuration will be used.
+        farm_id: The farm ID. If None, it will be retrieved from settings.
+        queue_id: The queue ID. If None, it will be retrieved from settings.
+        queue_display_name: The queue display name. If None, it will be retrieved from the queue.
+
+    Returns:
+        Created (or current) s3 client for the given queue_role_session
+
+    Example:
+        # Fire and forget initialization in a background thread
+        import threading
+        threading.Thread(
+            target=initialize_queue_user_s3_client,
+            daemon=True,
+            name="S3ClientInit"
+        ).start()
+    """
+    if not deadline:
+        deadline = get_boto3_client("deadline", config=config)
+    if not queue_id:
+        queue_id = get_setting("defaults.queue_id", config=config)
+    if not farm_id:
+        farm_id = get_setting("defaults.farm_id", config=config)
+
+    if not queue_display_name:
+        queue = deadline.get_queue(
+            farmId=farm_id,
+            queueId=queue_id,
+        )
+        queue_display_name = queue["displayName"]
+
+    queue_role_session = get_queue_user_boto3_session(
+        deadline=deadline,
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue_display_name,
+    )
+    # Initialize the S3 client to populate the cache
+    return deadline, get_s3_client(queue_role_session)
 
 
 class QueueUserCredentialProvider(CredentialProvider):
