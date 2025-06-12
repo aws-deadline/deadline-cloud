@@ -1,5 +1,5 @@
 name: "Release: Publish"
-run-name: "Release: ${{ github.event.head_commit.message }}"
+run-name: "Release: ${{ github.event.head_commit.message || inputs.tag }}"
 
 on:
   push:
@@ -7,20 +7,103 @@ on:
       - mainline
     paths:
       - CHANGELOG.md
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: Specify a tag to re-run a release.
 
 concurrency:
   group: release
 
+permissions:
+  contents: read
+
 jobs:
-  Publish:
-    name: Publish Release
+  TagRelease:
+    uses: aws-deadline/.github/.github/workflows/reusable_tag_release.yml@mainline
+    secrets: inherit
+    with:
+      tag: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
+
+  UnitTests:
+    name: Unit Tests
+    needs: TagRelease
+    uses: ./.github/workflows/code_quality.yml
+    with:
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
+  LinuxIntegrationTests:
+    name: Linux Integration Tests
+    needs: [TagRelease, UnitTests]
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      environment: release
+      os: linux
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
+  WindowsIntegrationTests:
+    name: Windows Integration Tests
+    needs: [TagRelease, UnitTests]
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      environment: release
+      os: windows
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
+  PreRelease:
+    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests]
+    uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
     permissions:
       id-token: write
       contents: write
-    uses: aws-deadline/.github/.github/workflows/reusable_publish_v2.yml@mainline
-    with:
-      installer_oses: "['Linux', 'Windows', 'MacOS']"
     secrets: inherit
+    with:
+        tag: ${{ needs.TagRelease.outputs.tag }}
+
+  BuildAndStageInstallers:
+    needs: [TagRelease, PreRelease]
+    uses: aws-deadline/.github/.github/workflows/reusable_build_and_stage_installers.yml@mainline
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      project_name: ${{ github.event.repository.name }}
+      tag: ${{ needs.TagRelease.outputs.tag }}
+      oses: "['Linux', 'Windows', 'MacOS']"
+
+  Release:
+    needs: [TagRelease, BuildAndStageInstallers]
+    uses: aws-deadline/.github/.github/workflows/reusable_release.yml@mainline
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: write
+    with:
+        tag: ${{ needs.TagRelease.outputs.tag }}
+  
+  Publish:
+    needs: [TagRelease, Release]
+    uses: aws-deadline/.github/.github/workflows/reusable_publish_python.yml@mainline
+    permissions:
+      id-token: write
+    secrets: inherit
+    with:
+        tag: ${{ needs.TagRelease.outputs.tag }}
+  
+
   # PyPI does not support reusable workflows yet
   # # See https://github.com/pypi/warehouse/issues/11096
   PublishToPyPI:
