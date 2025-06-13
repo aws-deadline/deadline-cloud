@@ -9,6 +9,7 @@ from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
 from deadline.client import api, config
+from deadline.client.api._session import get_session_client, precache_clients
 
 
 def test_get_boto3_session(fresh_deadline_config):
@@ -139,3 +140,127 @@ def test_check_deadline_api_available_fails(fresh_deadline_config):
         assert result is False
         # It should have called list_farms with to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(maxResults=1)
+
+
+def test_get_session_client_caching():
+    """Test that get_session_client properly caches clients."""
+    # Create a real boto3 session for testing the cache
+    session = boto3.Session()
+
+    # First call should create a new client
+    client1 = get_session_client(session, "s3")
+
+    # Second call with same session should return the same client
+    client2 = get_session_client(session, "s3")
+
+    # Verify they're the same object
+    assert client1 is client2
+
+    # Different service should create a new client
+    client3 = get_session_client(session, "sts")
+    assert client1 is not client3
+
+    # Create a new session with the same parameters
+    # This should create a new client since it's a different object
+    new_session = boto3.Session()
+    client4 = get_session_client(new_session, "s3")
+    assert client1 is not client4
+
+
+@patch("deadline.client.api._session.get_s3_client")
+@patch("deadline.client.api._session.get_queue_user_boto3_session")
+@patch("deadline.client.api._session.get_boto3_client")
+def test_precache_clients(mock_get_boto3_client, mock_get_queue_user_session, mock_get_s3_client):
+    """Test that precache_clients calls the right functions."""
+    # Setup mocks
+    mock_deadline_client = MagicMock()
+    mock_deadline_client.get_queue.return_value = {"displayName": "test-queue"}
+    mock_get_boto3_client.return_value = mock_deadline_client
+
+    mock_session = MagicMock()
+    mock_get_queue_user_session.return_value = mock_session
+
+    # Call the function
+    precache_clients()
+
+    # Verify the right calls were made
+    mock_get_boto3_client.assert_called_once_with("deadline", config=None)
+    mock_deadline_client.get_queue.assert_called_once()
+    mock_get_queue_user_session.assert_called_once()
+    mock_get_s3_client.assert_called_once_with(mock_session)
+
+
+@patch("deadline.client.api._session.get_s3_client")
+@patch("deadline.client.api._session.get_queue_user_boto3_session")
+@patch("deadline.client.api._session.get_boto3_client")
+def test_precache_clients_with_params(
+    mock_get_boto3_client, mock_get_queue_user_session, mock_get_s3_client
+):
+    """Test that precache_clients uses provided parameters correctly."""
+    # Setup mocks
+    mock_deadline_client = MagicMock()
+    mock_session = MagicMock()
+    mock_config = MagicMock()
+    mock_get_queue_user_session.return_value = mock_session
+
+    # Call the function with all parameters specified
+    precache_clients(
+        deadline=mock_deadline_client,
+        config=mock_config,
+        farm_id="test-farm",
+        queue_id="test-queue",
+        queue_display_name="Test Queue",
+    )
+
+    # Verify the right calls were made
+    mock_get_boto3_client.assert_not_called()  # Should not be called since we provided a client
+    mock_deadline_client.get_queue.assert_not_called()  # Should not be called since we provided queue_display_name
+
+    # Verify queue user session was created with correct parameters
+    mock_get_queue_user_session.assert_called_once_with(
+        deadline=mock_deadline_client,
+        config=mock_config,
+        farm_id="test-farm",
+        queue_id="test-queue",
+        queue_display_name="Test Queue",
+    )
+
+    # Verify S3 client was initialized with the session
+    mock_get_s3_client.assert_called_once_with(mock_session)
+
+
+def test_precache_clients_warms_asset_uploader_client(fresh_deadline_config):
+    """
+    Test that initializing the deadline and S3 client with precache_clients
+    properly pre-warms the cache for subsequent job submissions.
+    """
+    # Setup mocks
+    mock_deadline_client = MagicMock()
+    mock_deadline_client.get_queue.return_value = {
+        "displayName": "test-queue",
+        "jobAttachmentSettings": {"s3BucketName": "test-bucket", "rootPrefix": "test-prefix"},
+    }
+
+    # Use a real boto3 session for proper hashability
+    real_session = boto3.Session()
+
+    # First, initialize the S3 client
+    with patch(
+        "deadline.client.api._session.get_boto3_client", return_value=mock_deadline_client
+    ), patch(
+        "deadline.client.api._session.get_queue_user_boto3_session", return_value=real_session
+    ):
+        # Get the client from initialization
+        _, s3_client1 = precache_clients(farm_id="test-farm", queue_id="test-queue")
+
+    # Now create an S3AssetUploader with the same session
+    from deadline.job_attachments.upload import S3AssetUploader
+
+    # Create the uploader with the same session
+    uploader = S3AssetUploader(session=real_session)
+
+    # Get the client from the uploader
+    s3_client2 = uploader._s3
+
+    # Verify that both clients are the same object (cached)
+    assert s3_client1 is s3_client2
