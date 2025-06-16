@@ -316,12 +316,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_worker_count_box.setHidden(not state)
 
     def refresh_ui(self, settings: Any):
-        self.sub_name_edit.setText(settings.name)
-        self.desc_edit.setText(settings.description)
-        self.initial_status_box.setCurrentText("READY")
-        self.max_failed_tasks_count_box.setValue(20)
-        self.max_retries_per_task_box.setValue(5)
-        self.priority_box.setValue(50)
+        self.sub_name_edit.setText(getattr(settings, "name", ""))
+        self.desc_edit.setText(getattr(settings, "description", ""))
+        self.initial_status_box.setCurrentText(getattr(settings, "initial_state", "READY"))
+        self.max_failed_tasks_count_box.setValue(getattr(settings, "max_failed_tasks_count", 20))
+        self.max_retries_per_task_box.setValue(getattr(settings, "max_retries_per_task", 5))
+        self.priority_box.setValue(getattr(settings, "priority", 50))
         self.unlimited_max_worker_count.setChecked(True)
         self.limited_max_worker_count.setChecked(False)
         self.max_worker_count_box.setHidden(True)
@@ -411,6 +411,10 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         """
         settings.name = self.sub_name_edit.text()
         settings.description = self.desc_edit.text()
+        settings.initial_state = self.initial_status_box.currentText()
+        settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
+        settings.max_retries_per_task = self.max_retries_per_task_box.value()
+        settings.priority = self.priority_box.value()
 
 
 class DeadlineCloudSettingsWidget(QGroupBox):
