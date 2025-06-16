@@ -311,5 +311,5 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
             bootstrap_lookback_in_minutes=bootstrap_lookback_in_minutes,
             force_bootstrap=force_bootstrap,
             path_mapping_rules=path_mapping_rules,
-            logger=logger,
+            print_function_callback=logger.echo,
         )

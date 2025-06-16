@@ -13,6 +13,7 @@ __all__ = [
     "check_authentication_status",
     "check_deadline_api_available",
     "get_credentials_source",
+    "precache_clients",
     "list_farms",
     "list_queues",
     "list_jobs",
@@ -50,6 +51,7 @@ from ._loginout import login, logout
 from ._session import (
     AwsAuthenticationStatus,
     AwsCredentialsSource,
+    precache_clients,
     get_queue_user_boto3_session,
     check_authentication_status,
     get_boto3_client,
