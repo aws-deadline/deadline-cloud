@@ -76,8 +76,9 @@ def _normalize_windows_path(path: Path) -> Path:
     Strips \\\\?\\ prefix from Windows paths.
     """
     p_str = str(path)
-
-    return Path(p_str.removeprefix("\\\\?\\"))
+    if p_str.startswith("\\\\?\\"):
+        return Path(p_str[4:])
+    return path
 
 
 def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
