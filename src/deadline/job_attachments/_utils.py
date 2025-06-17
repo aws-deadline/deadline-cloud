@@ -75,11 +75,36 @@ def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
     """
     Determines if path1 is relative to path2. This function is to support
     Python versions (3.7 and 3.8) that do not have the built-in `Path.is_relative_to()` method.
+
+    On Windows, it handles UNC paths by normalizing both paths before comparison.
     """
+    # First try the direct comparison without any string manipulation
     try:
         Path(path1).relative_to(Path(path2))
         return True
     except ValueError:
+        # If we're on Windows and the direct comparison failed, try with UNC path handling
+        if sys.platform == "win32":
+            path1_str = str(path1)
+            path2_str = str(path2)
+
+            # Only proceed if at least one path has the UNC prefix
+            if path1_str.startswith(WINDOWS_UNC_PATH_STRING_PREFIX) or path2_str.startswith(
+                WINDOWS_UNC_PATH_STRING_PREFIX
+            ):
+                # Strip the prefix if it exists
+                if path1_str.startswith(WINDOWS_UNC_PATH_STRING_PREFIX):
+                    path1_str = path1_str[len(WINDOWS_UNC_PATH_STRING_PREFIX) :]
+                if path2_str.startswith(WINDOWS_UNC_PATH_STRING_PREFIX):
+                    path2_str = path2_str[len(WINDOWS_UNC_PATH_STRING_PREFIX) :]
+
+                # Try again with the modified paths
+                try:
+                    Path(path1_str).relative_to(Path(path2_str))
+                    return True
+                except ValueError:
+                    pass
+
         return False
 
 

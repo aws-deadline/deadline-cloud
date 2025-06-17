@@ -330,7 +330,7 @@ def precache_clients(
         # Fire and forget initialization in a background thread
         import threading
         threading.Thread(
-            target=initialize_queue_user_s3_client,
+            target=precache_clients,
             daemon=True,
             name="S3ClientInit"
         ).start()
