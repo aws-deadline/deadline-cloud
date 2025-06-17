@@ -6,12 +6,12 @@ __all__ = ["_incremental_output_download"]
 from .. import api
 from typing import Optional, Callable
 import boto3
-from deadline.client import _pid_utils
+from ...job_attachments.incremental_downloads.incremental_download_state import (
+    IncrementalDownloadState,
+)
+import datetime
 
 import os
-from deadline.job_attachments.incremental_downloads.exceptions import PidLockAlreadyHeld
-
-PID_FILE_NAME = "incremental_output_download.pid"
 
 
 @api.record_function_latency_telemetry_event()
@@ -19,12 +19,10 @@ def _incremental_output_download(
     farm_id: str,
     queue_id: str,
     boto3_session: boto3.Session,
-    saved_progress_checkpoint_location: str,
-    bootstrap_lookback_in_minutes: Optional[int] = 0,
-    force_bootstrap: bool = False,
+    download_state: IncrementalDownloadState,
     path_mapping_rules: Optional[str] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
-) -> None:
+) -> IncrementalDownloadState:
     """
     Download Job Output data incrementally for all jobs running on a queue as session actions finish.
     The command bootstraps once using a bootstrap lookback specified in minutes and
@@ -32,35 +30,20 @@ def _incremental_output_download(
 
     :param farm_id: farm id for the output download
     :param queue_id: queue for scoping output download
-    :param bootstrap_lookback_in_minutes: Downloads outputs for job-session-actions that have been completed
     since these many minutes at bootstrap. Default value is 0 minutes.
-    :param saved_progress_checkpoint_location: location of the download progress file
-    :param force_bootstrap: force bootstrap and ignore current download progress. Default value is False.
+    :param download_state: Download state for starting the incremental download
     :param path_mapping_rules: path mapping rules for cross OS path mapping
     :param boto3_session: boto3 session
     :param print_function_callback: Callback to print messages produced in this function.
                 Used in the CLI to print to stdout using click.echo. By default, ignores messages.
-    :return: None
+    :return: updated downloaded state
     """
+    # Download outputs for ongoing jobs using current download progress
+    # Right now it is set to no change in progress except setting the last lookback time to now
+    updated_downloaded_state: IncrementalDownloadState = download_state
+    updated_downloaded_state.last_lookback_time = datetime.datetime.now(datetime.timezone.utc)
 
-    try:
-        # 1. Construct pid file full path
-        pid_file_full_path = os.path.join(
-            saved_progress_checkpoint_location, f"{queue_id}_{PID_FILE_NAME}"
-        )
-
-        # 2. Check if a download is already ongoing with pid lock checking mechanism
-        _pid_utils.try_acquire_pid_lock(pid_file_full_path, print_function_callback)
-    except PidLockAlreadyHeld:
-        print_function_callback(
-            f"Another download is in progress at {saved_progress_checkpoint_location}, wait for previous download to finish"
-        )
-        return
-    except Exception as e:
-        print_function_callback(
-            f"Failed to obtain lock for download progress at {saved_progress_checkpoint_location} due to unexpected exception : {e}"
-        )
-        return
+    return updated_downloaded_state
 
 
 def _validate_file_inputs_for_incremental_output_download(
