@@ -316,8 +316,8 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_worker_count_box.setHidden(not state)
 
     def refresh_ui(self, settings: Any):
-        self.sub_name_edit.setText(getattr(settings, "name", ""))
-        self.desc_edit.setText(getattr(settings, "description", ""))
+        self.sub_name_edit.setText(settings.name)
+        self.desc_edit.setText(settings.description)
         self.initial_status_box.setCurrentText(getattr(settings, "initial_state", "READY"))
         self.max_failed_tasks_count_box.setValue(getattr(settings, "max_failed_tasks_count", 20))
         self.max_retries_per_task_box.setValue(getattr(settings, "max_retries_per_task", 5))
