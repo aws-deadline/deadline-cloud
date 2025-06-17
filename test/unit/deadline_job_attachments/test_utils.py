@@ -85,6 +85,13 @@ class TestUtils:
                 "C:\\path\\doesnt\\exist\\",
                 False,
             ),
+            (
+                "\\\\?\\C:\\ProgramData\\Amazon\\OpenJD\\session-612345a668724122b6949a232cb4583e1234567d\\assetroot-777691d8674399c12345\\Desktop\\resources\\isolated-black-tree-silhouettes-white-background-shade-trees-used-product-design-isolated-black-tree-silhouettes-1270.jpg",
+                Path(
+                    "C:\\ProgramData\\Amazon\\OpenJD\\session-612345a668724122b6949a232cb4583e1234567d\\assetroot-777691d8674399c12345"
+                ),
+                True,
+            ),
         ],
     )
     def test_is_relative_to_on_windows(self, path1, path2, expected):
