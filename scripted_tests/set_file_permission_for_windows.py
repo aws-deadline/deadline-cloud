@@ -31,7 +31,8 @@ python ./scripted_tests/set_file_permission_for_windows.py \
     -f <file_permission> \
     -d <directory_permission> \
     -u <target_user_name> \
-    -du <disjoint_user_name>
+    -du <disjoint_user_name> \
+    -ex <use_extended_paths> 
 
 Note: The `-f` and `-d` flags are optional.
 
@@ -64,6 +65,12 @@ def run_test():
     parser.add_argument("-d", "--dir_permission", required=False, type=str, default="FULL_CONTROL")
     parser.add_argument("-u", "--target_user", required=True, type=str)
     parser.add_argument("-du", "--disjoint_user", required=True, type=str)
+    parser.add_argument(
+        "-ex",
+        "--use_extended_paths",
+        action="store_true",
+        help="Use extended-length file paths (\\\\?\\)",
+    )
 
     args = parser.parse_args()
 
@@ -86,7 +93,11 @@ def run_test():
             if not os.path.exists(file_path):
                 with file_path.open("w", encoding="utf-8") as f:
                     f.write(f"test: {i}")
-            files.append(str(file_path))
+
+            file_path_str = (
+                _to_extended_path(file_path) if args.use_extended_paths else str(file_path)
+            )
+            files.append(str(file_path_str))
 
         print("Temporary files created.")
         print("Running test: Setting file permissions...")
@@ -136,6 +147,11 @@ def check_file_permission(file_path, username) -> Tuple[bool, bool]:
 
     # Return a tuple of (has read access, has write access)
     return (bool(result & con.FILE_GENERIC_READ), bool(result & con.FILE_GENERIC_WRITE))
+
+
+def _to_extended_path(path: Path) -> str:
+    # Convert to absolute and apply extended-length prefix
+    return f"\\\\?\\{path.resolve()}"
 
 
 if __name__ == "__main__":
