@@ -107,5 +107,6 @@ class CliJobSettingsWidget(QWidget):
         settings.file_format = self.file_format_box.currentText()
 
     def use_array_parameter_changed(self, state: int):
-        self.array_parameter_name.setEnabled(state == Qt.Checked)
-        self._set_enabled_with_label("array_parameter_values", state == Qt.Checked)
+        enabled = Qt.CheckState(state) == Qt.Checked
+        self.array_parameter_name.setEnabled(enabled)
+        self._set_enabled_with_label("array_parameter_values", enabled)

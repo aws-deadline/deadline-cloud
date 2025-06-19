@@ -5,6 +5,8 @@ Common fixtures for Deadline Client Library tests.
 """
 
 import tempfile
+import os
+
 import pytest
 
 
@@ -26,3 +28,20 @@ def temp_assets_dir():
 
     with tempfile.TemporaryDirectory() as assets_dir:
         yield assets_dir
+
+
+@pytest.fixture(scope="function")
+def temp_cwd():
+    """
+    Fixture to provide a temporary current working directory.
+    """
+
+    with tempfile.TemporaryDirectory() as cwd:
+        # Change the current working directory to the temporary directory
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(cwd)
+            yield cwd
+        finally:
+            # Restore the original current working directory
+            os.chdir(original_cwd)

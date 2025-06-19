@@ -128,7 +128,7 @@ def test_initialize_failure_then_success(fresh_deadline_config):
         assert client._system_metadata["monitor_id"] == "monitor-id"
 
 
-def test_get_telemetry_identifier(mock_telemetry_client):
+def test_get_telemetry_identifier(fresh_deadline_config, mock_telemetry_client):
     """Ensures that getting the local-user-id handles empty/malformed strings"""
     # Confirm that we generate a new UUID if the setting doesn't exist, and write to config
     uuid.UUID(mock_telemetry_client.telemetry_id, version=4)  # Should not raise ValueError
@@ -146,7 +146,7 @@ def test_get_telemetry_identifier(mock_telemetry_client):
 
 
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread(mock_telemetry_client):
+def test_process_event_queue_thread(fresh_deadline_config, mock_telemetry_client):
     """Test that the queue processing thread function exits cleanly after getting None"""
     # GIVEN
     queue_mock = MagicMock()
@@ -170,7 +170,7 @@ def test_process_event_queue_thread(mock_telemetry_client):
 )
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
 def test_process_event_queue_thread_retries_and_exits(
-    mock_telemetry_client, http_code, attempt_count
+    fresh_deadline_config, mock_telemetry_client, http_code, attempt_count
 ):
     """Test that the thread exits cleanly after getting an unexpected exception"""
     # GIVEN
@@ -190,7 +190,9 @@ def test_process_event_queue_thread_retries_and_exits(
 
 
 @pytest.mark.timeout(5)  # Timeout in case we don't exit the while loop
-def test_process_event_queue_thread_handles_unexpected_error(mock_telemetry_client):
+def test_process_event_queue_thread_handles_unexpected_error(
+    fresh_deadline_config, mock_telemetry_client
+):
     """Test that the thread exits cleanly after getting an unexpected exception"""
     # GIVEN
     queue_mock = MagicMock()
@@ -204,7 +206,7 @@ def test_process_event_queue_thread_handles_unexpected_error(mock_telemetry_clie
     assert queue_mock.get.call_count == 1
 
 
-def test_record_hashing_summary(mock_telemetry_client):
+def test_record_hashing_summary(fresh_deadline_config, mock_telemetry_client):
     """Tests that recording a hashing summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -224,7 +226,7 @@ def test_record_hashing_summary(mock_telemetry_client):
     queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_record_upload_summary(mock_telemetry_client):
+def test_record_upload_summary(fresh_deadline_config, mock_telemetry_client):
     """Tests that recording an upload summary sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -244,7 +246,7 @@ def test_record_upload_summary(mock_telemetry_client):
     queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_record_error(mock_telemetry_client):
+def test_record_error(fresh_deadline_config, mock_telemetry_client):
     """Test that recording an error sends the expected TelemetryEvent to the thread queue"""
     # GIVEN
     queue_mock = MagicMock()
@@ -291,13 +293,17 @@ def test_record_error(mock_telemetry_client):
     ],
 )
 def test_get_prefixed_endpoint(
-    mock_telemetry_client: TelemetryClient, endpoint: str, prefix: str, expected_result: str
+    fresh_deadline_config,
+    mock_telemetry_client: TelemetryClient,
+    endpoint: str,
+    prefix: str,
+    expected_result: str,
 ):
     """Test that the _get_prefixed_endpoint function returns the expected prefixed endpoint"""
     assert mock_telemetry_client._get_prefixed_endpoint(endpoint, prefix) == expected_result
 
 
-def test_record_decorator_success():
+def test_record_decorator_success(fresh_deadline_config):
     """Tests that recording a decorator successful metric"""
     with patch.object(
         api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
@@ -325,7 +331,7 @@ def test_record_decorator_success():
         queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_record_decorator_fails():
+def test_record_decorator_fails(fresh_deadline_config):
     """Tests that recording a decorator failed metric"""
     with patch.object(
         api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
@@ -354,7 +360,7 @@ def test_record_decorator_fails():
         queue_mock.put_nowait.assert_called_once_with(expected_event)
 
 
-def test_latency_decorator():
+def test_latency_decorator(fresh_deadline_config):
     """Tests that the latency recording decorator works"""
     with patch.object(
         api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]

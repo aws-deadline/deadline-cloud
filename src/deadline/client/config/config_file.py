@@ -33,7 +33,8 @@ CONFIG_FILE_PATH_ENV_VAR = "DEADLINE_CONFIG_FILE_PATH"
 # The default AWS Deadline Cloud endpoint URL
 # Environment variable that, if set, overrides the value of DEFAULT_DEADLINE_ENDPOINT_URL
 DEFAULT_DEADLINE_ENDPOINT_URL = os.getenv(
-    "AWS_ENDPOINT_URL_DEADLINE", f"https://deadline.{boto3.Session().region_name}.amazonaws.com"
+    "AWS_ENDPOINT_URL_DEADLINE",
+    f"https://deadline.{boto3.Session().region_name}.amazonaws.com",
 )
 
 # The default directory within which to save the history of created jobs.
@@ -96,6 +97,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "settings.auto_accept": {
         "default": "false",
+        "description": "Automatically accept the default choice for any interactive prompts.",
     },
     "settings.conflict_resolution": {
         "default": FileConflictResolution.NOT_SELECTED.name,
@@ -105,9 +107,19 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": "WARNING",
         "description": "The logging level to use in the CLI and GUIs.",
     },
-    "telemetry.opt_out": {"default": "false"},
-    "telemetry.identifier": {"default": ""},
-    "defaults.job_attachments_file_system": {"default": "COPIED", "depend": "defaults.farm_id"},
+    "telemetry.opt_out": {
+        "default": "false",
+        "description": "If set to 'true', don't record any telemetry events.",
+    },
+    "telemetry.identifier": {
+        "default": "",
+        "description": "A randomly generated identifier used to record telemetry events for this configuration.",
+    },
+    "defaults.job_attachments_file_system": {
+        "default": "COPIED",
+        "depend": "defaults.farm_id",
+        "description": "The file system mode to use for job attachments when running jobs. COPIED means to download a copy of the attachment data, VIRTUAL means to use a virtual file system for lazy loading.",
+    },
     "settings.s3_max_pool_connections": {
         "default": "50",
         "description": (
@@ -122,6 +134,10 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "When uploading job attachments, the file size threshold is set to separate 'large' files from 'small' files so that 'large' files can be processed serially. "
             "This multiplier is used to calculate the size threshold. (Small files are defined as those smaller than or equal to the chunk size multiplied by this factor.)"
         ),
+    },
+    "settings.known_asset_paths": {
+        "default": "",  # OS-specific path separator delimited list
+        "description": "A list of paths that should not generate warnings when outside storage profile locations, separated by the OS path list separator (semicolon on Windows, colon on Linux/macOS).",
     },
 }
 

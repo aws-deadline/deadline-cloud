@@ -1117,7 +1117,7 @@ class S3AssetManager:
                 common_path = common_path.parent
             asset_group.root_path = str(common_path)
 
-        return list(groupings.values())
+        return sorted(groupings.values(), key=lambda v: (v.root_path, v.file_system_location_name))
 
     def _get_matched_group(
         self, root_path: str, groupings: dict[str, AssetRootGroup]
@@ -1230,8 +1230,8 @@ class S3AssetManager:
         input_paths: list[str],
         output_paths: list[str],
         referenced_paths: list[str],
-        storage_profile: Optional[StorageProfile] = None,
-        require_paths_exist: bool = False,
+        storage_profile: Optional[StorageProfile],
+        require_paths_exist: bool,
     ) -> list[AssetRootGroup]:
         """
         Resolves all of the paths that will be uploaded, sorting by storage profile location.

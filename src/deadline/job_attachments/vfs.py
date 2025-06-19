@@ -115,7 +115,7 @@ class VFSProcessManager(object):
         """
         fusermount3_path = os.path.join(cls.find_vfs_link_dir(), "fusermount3")
         if not os.path.exists(fusermount3_path):
-            log.warn(f"fusermount3 not found at {cls.find_vfs_link_dir()}")
+            log.warning(f"fusermount3 not found at {cls.find_vfs_link_dir()}")
             return None
         return ["sudo", "-u", os_user, fusermount3_path, "-u", mount_path]
 
@@ -133,7 +133,7 @@ class VFSProcessManager(object):
         try:
             run_result = subprocess.run(shutdown_args, check=True)
         except subprocess.CalledProcessError as e:
-            log.warn(f"Shutdown failed with error {e}")
+            log.warning(f"Shutdown failed with error {e}")
             # Don't reraise, check if mount is gone
         log.info(f"Shutdown returns {run_result.returncode}")
         return cls.wait_for_mount(mount_path, session_dir, expected=False)
@@ -195,7 +195,7 @@ class VFSProcessManager(object):
                         if os.path.exists(manifest_path):
                             return Path(manifest_path)
                         else:
-                            log.warn(f"Expected VFS input manifest at {manifest_path}")
+                            log.warning(f"Expected VFS input manifest at {manifest_path}")
                             return None
         except FileNotFoundError:
             log.warning(f"VFS pid file not found at {pid_file_path}")

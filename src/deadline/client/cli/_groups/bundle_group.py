@@ -6,9 +6,9 @@ All the `deadline bundle` commands.
 
 from __future__ import annotations
 
-import textwrap
 import json
 import logging
+import sys
 import re
 from typing import Any, Optional
 
@@ -16,17 +16,20 @@ import click
 from botocore.exceptions import ClientError
 
 from ... import api
-from ...config import config_file, get_setting, set_setting
+from ...config import config_file
 from ....job_attachments.exceptions import (
     AssetSyncError,
     AssetSyncCancelledError,
     MisconfiguredInputsError,
 )
-from ....job_attachments.models import AssetUploadGroup, JobAttachmentsFileSystem
-from ....job_attachments._path_summarization import human_readable_file_size, summarize_path_list
+from ....job_attachments.models import JobAttachmentsFileSystem
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
-from .._common import _apply_cli_options_to_config, _handle_error, _ProgressBarCallbackManager
+from .._common import (
+    _apply_cli_options_to_config,
+    _handle_error,
+    _ProgressBarCallbackManager,
+)
 from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger(__name__)
@@ -69,6 +72,20 @@ def validate_parameters(ctx, param, value):
         parameters_split.append({"name": regex_match[1], "value": regex_match[2]})
 
     return parameters_split
+
+
+def _interactive_confirmation_prompt(message: str, default_response: bool) -> bool:
+    """
+    Callback to decide if submission should continue or be canceled. Returns True to continue, False to cancel.
+
+    Args:
+        warning_message (str): The warning message to display.
+        default_response (bool): The default to present as the response (True to continue, False to cancel).
+    """
+    return click.confirm(
+        message,
+        default=default_response,
+    )
 
 
 @cli_bundle.command(name="submit")
@@ -128,13 +145,19 @@ def validate_parameters(ctx, param, value):
     type=click.STRING,
     help="Name of the application submitting the bundle.",
 )
+@click.option(
+    "--known-asset-path",
+    multiple=True,
+    help="Path that should not generate warnings when outside storage profile locations. "
+    "Can be specified multiple times for different paths.",
+)
 @click.argument("job_bundle_dir")
 @_handle_error
 def bundle_submit(
     job_bundle_dir,
     job_attachments_file_system,
     parameter,
-    yes,
+    known_asset_path,
     name,
     priority,
     max_failed_tasks_count,
@@ -156,60 +179,6 @@ def bundle_submit(
     def _check_create_job_wait_canceled() -> bool:
         return sigint_handler.continue_operation
 
-    def _decide_cancel_submission(upload_group: AssetUploadGroup) -> bool:
-        """
-        Callback to decide if submission should be cancelled or not. Return 'True' to cancel.
-        Prints a warning that requires confirmation if paths are found outside of configured storage profile locations.
-        """
-        warning_message = ""
-        warning_input_paths = set()
-        warning_output_paths = set()
-        for group in upload_group.asset_groups:
-            if not group.file_system_location_name:
-                warning_input_paths.update(group.inputs)
-                warning_output_paths.update(group.outputs)
-
-        if len(warning_input_paths) > 0:
-            warning_message += "Locations for upload:\n"
-            warning_message += textwrap.indent(summarize_path_list(warning_input_paths), "  ")
-        if len(warning_output_paths) > 0:
-            warning_message += "Locations to collect job outputs for download:\n"
-            # We expect the list of output paths to be small, but truncate it to an arbitrary limit just in case for the summary
-            warning_entry_count = 4
-            if len(warning_output_paths) == warning_entry_count + 1:
-                warning_entry_count += 1
-            for path in sorted(warning_output_paths)[:warning_entry_count]:
-                warning_message += f"  {path}\n"
-            if len(warning_output_paths) > warning_entry_count:
-                warning_message += (
-                    f"\n  ... and {len(warning_output_paths) - warning_entry_count} more\n"
-                )
-
-        # Exit early if there are no warnings and we've either set auto accept or there's no files to confirm
-        if not warning_message and (
-            yes
-            or config_file.str2bool(get_setting("settings.auto_accept", config=config))
-            or upload_group.total_input_files == 0
-        ):
-            return False
-
-        message_text = (
-            f"Job submission contains {upload_group.total_input_files} input files totaling {human_readable_file_size(upload_group.total_input_bytes)}. "
-            " All input files will be uploaded to S3 if they are not already present in the job attachments bucket."
-        )
-        if warning_message:
-            message_text += (
-                f"\n\nFiles were specified outside of the configured storage profile location(s). "
-                " Please confirm that you intend to submit a job that uses files from the following directories:\n"
-                f"{warning_message}\n"
-                "To permanently remove this warning you must only use files located within a storage profile location."
-            )
-        message_text += "\n\nDo you wish to proceed?"
-        return not click.confirm(
-            message_text,
-            default=not warning_message,
-        )
-
     try:
         job_id = api.create_job_from_job_bundle(
             job_bundle_dir=job_bundle_dir,
@@ -225,29 +194,29 @@ def bundle_submit(
             upload_progress_callback=upload_callback_manager.callback,
             create_job_result_callback=_check_create_job_wait_canceled,
             print_function_callback=click.echo,
-            decide_cancel_submission_callback=_decide_cancel_submission,
+            interactive_confirmation_callback=_interactive_confirmation_prompt,
             require_paths_exist=require_paths_exist,
-            submitter_name=submitter_name,
+            submitter_name=submitter_name or "CLI",
+            known_asset_paths=known_asset_path,
         )
 
         # Check Whether the CLI options are modifying any of the default settings that affect
         # the job id. If not, we'll save the job id submitted as the default job id.
         # If the submission is canceled by the user job_id will be None, so ignore this case as well.
         if (
-            job_id is not None
-            and args.get("profile") is None
+            args.get("profile") is None
             and args.get("farm_id") is None
             and args.get("queue_id") is None
             and args.get("storage_profile_id") is None
         ):
-            set_setting("defaults.job_id", job_id)
+            config_file.set_setting("defaults.job_id", job_id)
 
     except AssetSyncCancelledError as exc:
         if sigint_handler.continue_operation:
             raise DeadlineOperationError(f"Job submission unexpectedly canceled:\n{exc}") from exc
         else:
             click.echo("Job submission canceled.")
-            return
+            sys.exit(1)
     except AssetSyncError as exc:
         raise DeadlineOperationError(f"Failed to upload job attachments:\n{exc}") from exc
     except CreateJobWaiterCanceled as exc:
@@ -257,7 +226,7 @@ def bundle_submit(
             ) from exc
         else:
             click.echo("Canceled waiting for final status of CreateJob.")
-            return
+            sys.exit(1)
     except ClientError as exc:
         raise DeadlineOperationError(
             f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}"
@@ -265,7 +234,7 @@ def bundle_submit(
     except MisconfiguredInputsError as exc:
         click.echo(str(exc))
         click.echo("Job submission canceled.")
-        return
+        sys.exit(1)
     except Exception as exc:
         api.get_deadline_cloud_library_telemetry_client().record_error(
             event_details={"exception_scope": "on_submit"},
@@ -303,8 +272,16 @@ def bundle_submit(
     "JSON: Displays messages in JSON line format, so that the info can be easily "
     "parsed/consumed by custom scripts.",
 )
+@click.option(
+    "--known-asset-path",
+    multiple=True,
+    help="Path that should not generate warnings when outside storage profile locations. "
+    "Can be specified multiple times for different paths.",
+)
 @_handle_error
-def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, submitter_name, **args):
+def bundle_gui_submit(
+    job_bundle_dir, browse, output, install_gui, submitter_name, known_asset_path, **args
+):
     """
     Opens a GUI to submit an Open Job Description job bundle.
     """
@@ -320,7 +297,10 @@ def bundle_gui_submit(job_bundle_dir, browse, output, install_gui, submitter_nam
         output = output.lower()
 
         submitter = show_job_bundle_submitter(
-            input_job_bundle_dir=job_bundle_dir, browse=browse, submitter_name=submitter_name
+            input_job_bundle_dir=job_bundle_dir,
+            browse=browse,
+            submitter_name=submitter_name,
+            known_asset_paths=known_asset_path,
         )
 
         if not submitter:

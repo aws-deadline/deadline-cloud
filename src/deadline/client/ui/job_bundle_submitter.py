@@ -45,6 +45,7 @@ def show_job_bundle_submitter(
     parent=None,
     f=Qt.WindowFlags(),
     submitter_name: Optional[str] = None,
+    known_asset_paths: Optional[list[str]] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -84,7 +85,7 @@ def show_job_bundle_submitter(
         asset_references: AssetReferences,
         host_requirements: Optional[Dict[str, Any]] = None,
         purpose: JobBundlePurpose = JobBundlePurpose.SUBMISSION,
-    ) -> None:
+    ) -> dict[str, Any]:
         """
         Perform a submission when the submit button is pressed
 
@@ -120,12 +121,12 @@ def show_job_bundle_submitter(
         # First filter the queue parameters to exclude any from the job template,
         # then extend it with the job template parameters.
         job_parameter_names = {param["name"] for param in settings.parameters}
-        parameters_values: list[dict[str, Any]] = [
+        parameter_values: list[dict[str, Any]] = [
             {"name": param["name"], "value": param["value"]}
             for param in queue_parameters
             if param["name"] not in job_parameter_names
         ]
-        parameters_values.extend(
+        parameter_values.extend(
             {"name": param["name"], "value": param["value"]} for param in settings.parameters
         )
 
@@ -135,7 +136,7 @@ def show_job_bundle_submitter(
         )
 
         apply_job_parameters(
-            parameters_values,
+            parameter_values,
             job_bundle_dir,
             parameters,
             AssetReferences(),
@@ -150,12 +151,11 @@ def show_job_bundle_submitter(
             file_type=file_type,
             data=asset_references.to_dict(),
         )
-        save_yaml_or_json_to_file(
-            bundle_dir=job_bundle_dir,
-            filename="parameter_values",
-            file_type=file_type,
-            data={"parameterValues": parameters_values},
-        )
+
+        return {
+            "known_asset_paths": [os.path.abspath(settings.input_job_bundle_dir)],
+            "job_parameters": parameter_values,
+        }
 
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(input_job_bundle_dir)
@@ -197,6 +197,7 @@ def show_job_bundle_submitter(
         parent=parent,
         f=f,
         submitter_name=submitter_name,
+        known_asset_paths=known_asset_paths,
     )
     submitter_dialog.show()
     return submitter_dialog
