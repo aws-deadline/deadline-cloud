@@ -71,14 +71,14 @@ def _get_bucket_and_object_key(s3_path: str) -> Tuple[str, str]:
     return bucket, key
 
 
-def _normalize_windows_path(path: Path) -> Path:
+def _normalize_windows_path(path: Union[Path, str]) -> Path:
     """
     Strips \\\\?\\ prefix from Windows paths.
     """
     p_str = str(path)
     if p_str.startswith("\\\\?\\"):
         return Path(p_str[4:])
-    return path
+    return Path(path)
 
 
 def _is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:

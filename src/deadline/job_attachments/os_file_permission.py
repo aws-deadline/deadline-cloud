@@ -9,7 +9,7 @@ from enum import Enum
 from typing import List, Set, Union
 
 from .exceptions import AssetSyncError, PathOutsideDirectoryError
-from ._utils import _is_relative_to
+from ._utils import _is_relative_to, _normalize_windows_path
 
 
 @dataclass
@@ -127,7 +127,11 @@ def _set_fs_permission_for_windows(
 
         # Add the parent directories of each file to the set of directories whose
         # permissions will be changed.
-        path_components = Path(file_path_str).relative_to(local_root).parents
+        path_components = (
+            _normalize_windows_path(file_path_str)
+            .relative_to(_normalize_windows_path(local_root))
+            .parents
+        )
         for path_component in path_components:
             path_to_change = Path(local_root).joinpath(path_component)
             dir_paths_to_change_fs_group.add(path_to_change)
