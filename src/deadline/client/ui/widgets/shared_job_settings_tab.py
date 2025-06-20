@@ -415,12 +415,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         settings.name = self.sub_name_edit.text()
         settings.description = self.desc_edit.text()
 
+        # Set other fields only if they exist in the settings object
         SETTINGS_FIELDS = [
             ("initial_state", self.initial_status_box.currentText),
             ("max_failed_tasks_count", self.max_failed_tasks_count_box.value),
             ("max_retries_per_task", self.max_retries_per_task_box.value),
             ("priority", self.priority_box.value),
-            ("limited_max_worker_count", self.limited_max_worker_count.isChecked),
             ("max_worker_count", self.max_worker_count_box.value),
         ]
 
@@ -428,7 +428,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
             if hasattr(settings, attr_name):
                 if attr_name == "max_worker_count":
                     if self.unlimited_max_worker_count.isChecked():
-                        setattr(settings, attr_name, -1)
+                        setattr(settings, attr_name, -1)  # -1 denotes no max worker count limits.
                     else:
                         setattr(settings, attr_name, getter_func())
                 else:
