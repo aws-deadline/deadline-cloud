@@ -322,11 +322,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_failed_tasks_count_box.setValue(getattr(settings, "max_failed_tasks_count", 20))
         self.max_retries_per_task_box.setValue(getattr(settings, "max_retries_per_task", 5))
         self.priority_box.setValue(getattr(settings, "priority", 50))
-        is_limited = getattr(settings, "limited_max_worker_count", False)
-        self.unlimited_max_worker_count.setChecked(not is_limited)
-        self.limited_max_worker_count.setChecked(is_limited)
-        self.max_worker_count_box.setHidden(not is_limited)
-        self.max_worker_count_box.setValue(getattr(settings, "max_worker_count", 1))
+        has_limited_max_worker_count = getattr(settings, "max_worker_count", -1) > 0
+        self.unlimited_max_worker_count.setChecked(not has_limited_max_worker_count)
+        self.limited_max_worker_count.setChecked(has_limited_max_worker_count)
+        self.max_worker_count_box.setHidden(not has_limited_max_worker_count)
+        if has_limited_max_worker_count:
+            self.max_worker_count_box.setValue(settings.max_worker_count)
 
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
@@ -413,12 +414,25 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         """
         settings.name = self.sub_name_edit.text()
         settings.description = self.desc_edit.text()
-        settings.initial_state = self.initial_status_box.currentText()
-        settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
-        settings.max_retries_per_task = self.max_retries_per_task_box.value()
-        settings.priority = self.priority_box.value()
-        settings.limited_max_worker_count = self.limited_max_worker_count.isChecked()
-        settings.max_worker_count = self.max_worker_count_box.value()
+
+        SETTINGS_FIELDS = [
+            ("initial_state", self.initial_status_box.currentText),
+            ("max_failed_tasks_count", self.max_failed_tasks_count_box.value),
+            ("max_retries_per_task", self.max_retries_per_task_box.value),
+            ("priority", self.priority_box.value),
+            ("limited_max_worker_count", self.limited_max_worker_count.isChecked),
+            ("max_worker_count", self.max_worker_count_box.value),
+        ]
+
+        for attr_name, getter_func in SETTINGS_FIELDS:
+            if hasattr(settings, attr_name):
+                if attr_name == "max_worker_count":
+                    if self.unlimited_max_worker_count.isChecked():
+                        setattr(settings, attr_name, -1)
+                    else:
+                        setattr(settings, attr_name, getter_func())
+                else:
+                    setattr(settings, attr_name, getter_func())
 
 
 class DeadlineCloudSettingsWidget(QGroupBox):
