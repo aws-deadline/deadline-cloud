@@ -335,3 +335,8 @@ class MyCustomWidget(QWidget):
 
 ```
 
+# Profiling in Deadline Cloud
+
+Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`. 
+
+This will profile the current `deadline` command and open the results in an interactive window. 
