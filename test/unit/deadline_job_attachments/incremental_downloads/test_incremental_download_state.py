@@ -4,14 +4,13 @@ import os
 import json
 import pytest
 import tempfile
-import shutil
 from unittest.mock import MagicMock
 
 from deadline.job_attachments.incremental_downloads.incremental_download_state import (
+    IncrementalDownloadJob,
     IncrementalDownloadState,
 )
-from freezegun import freeze_time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class TestIncrementalDownloadState:
@@ -29,10 +28,8 @@ class TestIncrementalDownloadState:
         """
         Fixture to provide a temporary directory that is cleaned up after tests.
         """
-        temp_dir = tempfile.mkdtemp()
-        yield temp_dir
-        # Clean up after tests
-        shutil.rmtree(temp_dir)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
 
     @pytest.fixture
     def test_paths(self, temp_dir):
@@ -50,19 +47,10 @@ class TestIncrementalDownloadState:
         Fixture to provide sample state data.
         """
         return {
-            "lastLookbackTime": "2023-01-01T00:00:00Z",
-            "jobs": [
-                {
-                    "jobId": "job-123",
-                    "sessions": [
-                        {
-                            "sessionId": "session-123",
-                            "sessionLifecycleStatus": "RUNNING",
-                            "lastDownloadedSessActionId": 5,
-                        }
-                    ],
-                }
-            ],
+            "downloadsStartedTimestamp": "2023-01-01T00:00:00",
+            "downloadsCompletedTimestamp": "2023-01-02T00:00:00",
+            "eventualConsistencyMaxSeconds": 120,
+            "jobs": [],
         }
 
     @pytest.fixture
@@ -76,182 +64,64 @@ class TestIncrementalDownloadState:
         # Cleanup is handled by the temp_dir fixture
 
     @pytest.fixture
-    def mock_state(self):
+    def mock_download_state(self):
         """
         Fixture to create a sample IncrementalDownloadState.
         """
-        model = IncrementalDownloadState()
-        model.last_lookback_time = datetime.fromisoformat("2023-01-01T00:00:00")
-        model.jobs = [
+        return IncrementalDownloadState.from_dict(
             {
-                "jobId": "job-123",
-                "sessions": [
-                    {
-                        "sessionId": "session-123",
-                        "sessionLifecycleStatus": "RUNNING",
-                        "lastDownloadedSessActionId": 5,
-                    }
-                ],
+                "downloadsStartedTimestamp": "2023-01-01T00:00:00",
+                "downloadsCompletedTimestamp": "2023-01-02T00:00:00",
+                "eventualConsistencyMaxSeconds": 120,
+                "jobs": [],
             }
-        ]
-        return model
-
-    @freeze_time("2025-05-26 12:00:00+00:00")
-    def test_bootstrap_fresh_state(self, mock_logger):
-        """
-        Test bootstrap_fresh_state with lookback minutes.
-        """
-        # Setup
-        bootstrap_lookback_in_minutes = 60
-
-        # Execute
-        result = IncrementalDownloadState.from_bootstrap(
-            bootstrap_lookback_in_minutes,
-            mock_logger.echo,
         )
-
-        # Assert
-        assert result.last_lookback_time.isoformat() == "2025-05-26T11:00:00+00:00"
-        assert result.jobs == []
-
-    @freeze_time("2025-05-26 12:00:00+00:00")
-    def test_bootstrap_fresh_state_no_lookback(self, mock_logger):
-        """
-        Test bootstrap_fresh_state without lookback minutes.
-        """
-        # Execute
-        result = IncrementalDownloadState.from_bootstrap(
-            None,
-            mock_logger.echo,
-        )
-
-        # Assert
-        assert result.last_lookback_time.isoformat() == "2025-05-26T12:00:00+00:00"
-        assert result.jobs == []
-
-    def test_load_progress_from_state_file(self, mock_logger, state_file, sample_state_data):
-        """
-        Test load_progress_from_state_file successfully loads the state file.
-        Uses a real file instead of mocking.
-        """
-        # Execute
-        result = IncrementalDownloadState.from_file(
-            state_file,
-            mock_logger.echo,
-        )
-
-        # Assert
-        assert result.last_lookback_time == sample_state_data["lastLookbackTime"]
-        assert result.jobs == sample_state_data["jobs"]
-
-    def test_load_progress_from_state_file_exception(self, mock_logger, test_paths):
-        """
-        Test load_progress_from_state_file when the file doesn't exist.
-        """
-        # Use a non-existent file path
-        non_existent_file = os.path.join(test_paths["location"], "non_existent.json")
-
-        # Execute and Assert
-        with pytest.raises(Exception):
-            IncrementalDownloadState.from_file(
-                non_existent_file,
-                mock_logger.echo,
-            )
-
-    def test_save_progress_to_state_file(self, mock_logger, test_paths, mock_state):
-        """
-        Test save_progress_to_state_file successfully saves the state file.
-        Uses real file operations instead of mocking.
-        """
-        # Execute
-        mock_state.save_file(
-            test_paths["progress_file"],
-            mock_logger.echo,
-        )
-
-        # Assert
-        assert os.path.exists(test_paths["progress_file"])
-
-        # Verify file contents
-        with open(test_paths["progress_file"], "r") as f:
-            saved_data = json.load(f)
-
-        assert saved_data["lastLookbackTime"] == mock_state.last_lookback_time.isoformat()
-        assert saved_data["jobs"] == mock_state.jobs
 
     def test_incremental_download_state_init(self):
         """
         Test IncrementalDownloadState initialization.
         """
-        # Test with default values
-        state = IncrementalDownloadState()
-        assert state.last_lookback_time is None
+        bootstrap_time = datetime.fromisoformat("2023-01-01T00:00:00")
+        completed_time = datetime.fromisoformat("2023-01-02T00:00:00")
+
+        # Test with minimal bootstrapped construction
+        state = IncrementalDownloadState(bootstrap_time)
+        assert state.downloads_started_timestamp == bootstrap_time
+        assert state.downloads_completed_timestamp is None
+        assert state.eventual_consistency_max_duration == timedelta(minutes=2)
         assert state.jobs == []
 
         # Test with provided values
-        last_lookback_time = datetime.fromisoformat("2023-01-01T00:00:00")
-        jobs = [{"jobId": "job-123", "sessions": []}]
-        state = IncrementalDownloadState(last_lookback_time=last_lookback_time, jobs=jobs)
-        assert state.last_lookback_time == last_lookback_time
+        jobs = [IncrementalDownloadJob("job-123", [])]
+        state = IncrementalDownloadState(
+            downloads_started_timestamp=bootstrap_time,
+            downloads_completed_timestamp=completed_time,
+            jobs=jobs,
+        )
+        assert state.downloads_started_timestamp == bootstrap_time
+        assert state.downloads_completed_timestamp == completed_time
         assert state.jobs == jobs
 
-    def test_incremental_download_state_from_dict(self):
+    def test_incremental_download_state_dict_roundtrip(self, mock_download_state):
         """
-        Test IncrementalDownloadState.from_dict method.
+        Test IncrementalDownloadState.from_dict and to_dict methods, by roundtripping.
         """
-        # Test with empty dict
-        state = IncrementalDownloadState.from_dict({})
-        assert state.last_lookback_time is None
-        assert state.jobs == []
 
-        # Test with None
-        state = IncrementalDownloadState.from_dict(None)
-        assert state.last_lookback_time is None
-        assert state.jobs == []
+        dict_state = mock_download_state.to_dict()
 
-        # Test with valid data
-        data = {
-            "lastLookbackTime": "2023-01-01T00:00:00Z",
-            "jobs": [
-                {
-                    "jobId": "job-123",
-                    "sessions": [
-                        {
-                            "sessionId": "session-123",
-                            "sessionLifecycleStatus": "RUNNING",
-                            "lastDownloadedSessActionId": 5,
-                        }
-                    ],
-                }
-            ],
-        }
-        state = IncrementalDownloadState.from_dict(data)
-        assert state.last_lookback_time == "2023-01-01T00:00:00Z"
-        assert len(state.jobs) == 1
-        assert state.jobs[0]["jobId"] == "job-123"
+        assert dict_state == IncrementalDownloadState.from_dict(dict_state).to_dict()
 
-    def test_incremental_download_state_to_dict(self):
+    def test_incremental_download_state_file_roundtrip(
+        self, temp_dir, mock_download_state: IncrementalDownloadState
+    ):
         """
-        Test IncrementalDownloadState.to_dict method.
+        Test IncrementalDownloadState.from_file and save_file methods, by roundtripping.
         """
-        # Create a state
-        last_lookback_time = datetime.fromisoformat("2023-01-01T00:00:00")
-        jobs = [
-            {
-                "jobId": "job-123",
-                "sessions": [
-                    {
-                        "sessionId": "session-123",
-                        "sessionLifecycleStatus": "RUNNING",
-                        "lastDownloadedSessActionId": 5,
-                    }
-                ],
-            }
-        ]
-        state = IncrementalDownloadState(last_lookback_time=last_lookback_time, jobs=jobs)
 
-        # Convert to dict
-        result = state.to_dict()
+        dict_state = mock_download_state.to_dict()
 
-        # Assert
-        assert result == {"lastLookbackTime": last_lookback_time.isoformat(), "jobs": jobs}
+        file_path = os.path.join(temp_dir, "checkpoint.json")
+        mock_download_state.save_file(file_path)
+        roundtrip_state = IncrementalDownloadState.from_file(file_path)
+
+        assert roundtrip_state.to_dict() == dict_state
