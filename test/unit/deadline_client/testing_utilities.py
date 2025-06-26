@@ -10,6 +10,7 @@ import tempfile
 from typing import Dict, Optional, Tuple
 from unittest.mock import patch, Mock
 import boto3
+import re
 
 from deadline.client.api import _submit_job_bundle
 from deadline.job_attachments.models import (
@@ -90,6 +91,11 @@ else:
 
     def _format_end_args_check(args_index: int) -> str:
         return "fi\n"
+
+
+def snake_to_camel(value: str) -> str:
+    """Convertes snake_case_val to snakeCaseVal"""
+    return re.sub(r"_\S", lambda s: s[0][1].upper(), value)
 
 
 def _format_output_and_exit(program_output: str, exit_code: int) -> str:
