@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-This file implements a partial re-implementation of the deadline:SearchJobs API, so that
-we can unit tests queries that depend on its behavior in more complex ways.
+This file implements a partial re-implementation of the deadline:SearchJobs and deadline:GetJob APIs,
+so that we can unit tests queries that depend on its behavior in more complex ways.
 
 The function create_fake_job_list uses a random number generator to produce a list of
 job dictionaries. The mock_search_jobs_for_set takes such a list of jobs, and returns
@@ -17,7 +17,9 @@ from random import randrange, choice
 from typing import Any, Callable, Optional
 import uuid
 
-from ..testing_utilities import snake_to_camel
+import botocore.exceptions
+
+from .testing_utilities import snake_to_camel
 
 __all__ = ["create_fake_job_list", "mock_search_jobs_for_set"]
 
@@ -123,9 +125,6 @@ def mock_search_jobs_for_set(farmIdForJobs, queueIdForJobs, jobs):
     """Returns a fake "search_jobs" API that emulates a subset of Deadline Cloud's
     SearchJobs on the provided set of jobs.
 
-    These fake jobs only have the timestamp fields. If we decide to generalize this
-    function for more cases, we could move this to a conftest.py and extend it.
-
     See https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_SearchJobs.html
     """
 
@@ -150,8 +149,15 @@ def mock_search_jobs_for_set(farmIdForJobs, queueIdForJobs, jobs):
         result_jobs = [j for j in result_jobs if filter(j)]
         # Construct the API response
         nextItemOffset = min(len(result_jobs), itemOffset + pageSize)
+        response_jobs = deepcopy(result_jobs[itemOffset:nextItemOffset])
+
+        # Remove all "attachments" properties from the response, they are not returned by deadline:SearchJobs
+        for job in response_jobs:
+            if "attachments" in job:
+                del job["attachments"]
+
         response = {
-            "jobs": deepcopy(result_jobs[itemOffset:nextItemOffset]),
+            "jobs": response_jobs,
             "totalResults": len(result_jobs),
         }
         if nextItemOffset < len(result_jobs):
@@ -160,6 +166,28 @@ def mock_search_jobs_for_set(farmIdForJobs, queueIdForJobs, jobs):
         return response
 
     return _fake_search_jobs
+
+
+def mock_get_job_for_set(farmIdForJobs, queueIdForJobs, jobs):
+    """Returns a fake "get_job" API that emulates a subset of Deadline Cloud's
+    GetJob on the provided set of jobs.
+
+    See https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_GetJob.html
+    """
+
+    def _fake_get_job(farmId, queueId, jobId):
+        assert farmId == farmIdForJobs
+        assert queueId == queueIdForJobs
+
+        matching_jobs = [job for job in jobs if job["jobId"] == jobId]
+
+        if matching_jobs:
+            return matching_jobs[0]
+        else:
+            error_class = botocore.exceptions.from_code(404)
+            raise error_class(f"Resource of type job with id {jobId} does not exist.", "GetJob")
+
+    return _fake_get_job
 
 
 def create_fake_job_list(

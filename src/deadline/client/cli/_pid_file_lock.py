@@ -3,7 +3,6 @@
 import os
 import sys
 import psutil
-from typing import Callable
 from contextlib import contextmanager
 from ..exceptions import DeadlineOperationError
 import logging
@@ -46,7 +45,6 @@ def _claim_pid_lock_with_rename(tmp_file_name: str, pid_file_path: str) -> bool:
 def _try_acquire_pid_lock(
     pid_file_path: str,
     operation_name: str = "the operation",
-    print_function_callback: Callable[[str], None] = print,
 ):
     """
     Checks if the specified pid lock file exists and executes as per the following:
@@ -60,12 +58,8 @@ def _try_acquire_pid_lock(
         to handle concurrent processes making the same check. This will not work if primitive file locks are disabled.
 
     :param pid_file_full_path: full path of the pid lock file
-    :param print_function_callback: Callback to print messages produced in this function.
-                Used in the CLI to print to stdout using click.echo. By default, ignores messages.
     :return: boolean, True if pid lock was obtained successfully, throws an exception otherwise
     """
-    print_function_callback(f"Checking if another download is in progress at {pid_file_path}")
-
     current_process_id: int = os.getpid()
 
     # Generate a tmp file for writing the pid file as a whole and prevent corrupt data
@@ -108,7 +102,7 @@ def _try_acquire_pid_lock(
                 )
         except FileNotFoundError:
             # In this case, the pid lock is free to acquire
-            print_function_callback(f"Pid lock file does not exist at {pid_file_path}")
+            pass
 
         # After possibly cleaning up a stale lock, try claiming it again
         if _claim_pid_lock_with_rename(tmp_file_path, pid_file_path):
@@ -127,17 +121,13 @@ def _try_acquire_pid_lock(
                 logger.warning(f"Failed to clean up pid lock temporary file: {e}")
 
 
-def _release_pid_lock(pid_file_path: str, print_function_callback: Callable[[str], None] = print):
+def _release_pid_lock(pid_file_path: str):
     """
     Releases the pid lock by deleting the pid file.
 
     :param pid_file_full_path: full path of the pid lock file
-    :param print_function_callback: print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
-                Used in the CLI to print to stdout using click.echo. By default, ignores messages.
     :return: boolean, True if pid lock released successfully
     """
-    print_function_callback(f"Releasing pid lock at {pid_file_path}")
-
     # Get the current process's id to obtain lock
     current_process_id: int = os.getpid()
 
@@ -163,9 +153,6 @@ def _release_pid_lock(pid_file_path: str, print_function_callback: Callable[[str
     if lock_holder_pid == str(current_process_id):
         # Process pid from file is same as current process pid - release pid lock
         os.remove(pid_file_path)
-        print_function_callback(
-            f"Process with pid {lock_holder_pid} is the current process. Deleted pid lock file."
-        )
     else:
         # Process pid from file is different from current process pid.
         logger.warning(
@@ -177,7 +164,6 @@ def _release_pid_lock(pid_file_path: str, print_function_callback: Callable[[str
 def PidFileLock(
     lock_file_path: str,
     operation_name: str = "the operation",
-    print_function_callback: Callable[[str], None] = print,
 ):
     """
     A context manager for holding a pid (process id) lock file during the scope of a 'with' statement.
@@ -192,11 +178,9 @@ def PidFileLock(
     Args:
         lock_file_path (str): The file system path of the PID lock file.
         operation_name (Optional[str]): The name of the operation being performed in the lock, used for error messages.
-        print_function_callback (Optional[Callable]): A function that accepts a string to print debugging info.
-
     """
-    _try_acquire_pid_lock(lock_file_path, operation_name, print_function_callback)
+    _try_acquire_pid_lock(lock_file_path, operation_name)
     try:
         yield None
     finally:
-        _release_pid_lock(lock_file_path, print_function_callback)
+        _release_pid_lock(lock_file_path)
