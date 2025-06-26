@@ -9,8 +9,9 @@ from unittest.mock import MagicMock
 from deadline.job_attachments.incremental_downloads.incremental_download_state import (
     IncrementalDownloadJob,
     IncrementalDownloadState,
+    EVENTUAL_CONSISTENCY_MAX_SECONDS,
 )
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 class TestIncrementalDownloadState:
@@ -47,10 +48,10 @@ class TestIncrementalDownloadState:
         Fixture to provide sample state data.
         """
         return {
-            "downloadsStartedTimestamp": "2023-01-01T00:00:00",
-            "downloadsCompletedTimestamp": "2023-01-02T00:00:00",
-            "eventualConsistencyMaxSeconds": 120,
-            "jobs": [],
+            "downloadsStartedTimestamp": "2023-01-01T00:00:00+00:00",
+            "downloadsCompletedTimestamp": "2023-01-02T00:00:00+00:00",
+            "eventualConsistencyMaxSeconds": EVENTUAL_CONSISTENCY_MAX_SECONDS,
+            "jobs": [{"jobId": "job-123", "name": "Job 1"}, {"jobId": "job-124", "name": "Job 2"}],
         }
 
     @pytest.fixture
@@ -66,15 +67,15 @@ class TestIncrementalDownloadState:
     @pytest.fixture
     def mock_download_state(self):
         """
-        Fixture to create a sample IncrementalDownloadState.
+        Fixture to create a sample IncrementalDownloadState. This state matches the sample_state_data fixture.
         """
-        return IncrementalDownloadState.from_dict(
-            {
-                "downloadsStartedTimestamp": "2023-01-01T00:00:00",
-                "downloadsCompletedTimestamp": "2023-01-02T00:00:00",
-                "eventualConsistencyMaxSeconds": 120,
-                "jobs": [],
-            }
+        return IncrementalDownloadState(
+            downloads_started_timestamp=datetime.fromisoformat("2023-01-01T00:00:00+00:00"),
+            downloads_completed_timestamp=datetime.fromisoformat("2023-01-02T00:00:00+00:00"),
+            jobs=[
+                IncrementalDownloadJob({"jobId": "job-123", "name": "Job 1"}),
+                IncrementalDownloadJob({"jobId": "job-124", "name": "Job 2"}),
+            ],
         )
 
     def test_incremental_download_state_init(self):
@@ -87,12 +88,12 @@ class TestIncrementalDownloadState:
         # Test with minimal bootstrapped construction
         state = IncrementalDownloadState(bootstrap_time)
         assert state.downloads_started_timestamp == bootstrap_time
-        assert state.downloads_completed_timestamp is None
-        assert state.eventual_consistency_max_duration == timedelta(minutes=2)
+        assert state.downloads_completed_timestamp == bootstrap_time
+        assert state.eventual_consistency_max_seconds == 120
         assert state.jobs == []
 
         # Test with provided values
-        jobs = [IncrementalDownloadJob("job-123", [])]
+        jobs = [IncrementalDownloadJob({"jobId": "job-123"}, [])]
         state = IncrementalDownloadState(
             downloads_started_timestamp=bootstrap_time,
             downloads_completed_timestamp=completed_time,

@@ -4,19 +4,26 @@
 Tests for the CLI queue incremental output download command.
 """
 
-import json
 import os
 import pytest
 from unittest.mock import patch, MagicMock
+from datetime import datetime
 
 import boto3
 from freezegun import freeze_time
 from click.testing import CliRunner
 from deadline.client.cli import main
+import deadline.client
+import psutil
 
+from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID, MOCK_JOB_ID
+from ..mock_deadline_job_apis import (
+    mock_search_jobs_for_set,
+    create_fake_job_list,
+    mock_get_job_for_set,
+)
 
-MOCK_FARM_ID = "farm-0123456789abcdef"
-MOCK_QUEUE_ID = "queue-0123456789abcdef"
+ISO_FREEZE_TIME = "2025-05-26 12:00:00+00:00"
 
 
 # Fixtures for shared resources
@@ -31,21 +38,12 @@ def checkpoint_dir(tmp_path_factory):
 @pytest.fixture(scope="module")
 def boto3_session():
     """Create a mock boto3 session for all tests to use."""
-    return MagicMock(spec=boto3.Session)
-
-
-@pytest.fixture
-def progress_file(checkpoint_dir):
-    """Create a progress file path for tests that need it.
-
-    This has function scope so each test gets a fresh file.
-    """
-    progress_file_path = os.path.join(checkpoint_dir, f"{MOCK_QUEUE_ID}_download_progress.json")
-    # File will be created by the test that needs it
-    yield progress_file_path
-    # Clean up after each test
-    if os.path.exists(progress_file_path):
-        os.remove(progress_file_path)
+    mock_session = MagicMock(spec=boto3.Session)
+    mock_session.client().get_queue.return_value = {"displayName": "Mock Queue"}
+    with patch.object(boto3, "Session", return_value=mock_session), patch.object(
+        deadline.client.api, "get_deadline_cloud_library_telemetry_client"
+    ):
+        yield mock_session
 
 
 @pytest.fixture
@@ -59,361 +57,178 @@ def pid_lock_file(checkpoint_dir):
 
 
 @pytest.fixture
-def path_mapping_rules_file(tmp_path_factory):
-    """Create a path mapping rules file for tests that need it."""
-    # Create in a separate directory to avoid conflicts
-    rules_dir = tmp_path_factory.mktemp("rules")
-    rules_file_path = os.path.join(str(rules_dir), "rules.json")
-    yield rules_file_path
-    # Clean up
-    if os.path.exists(rules_file_path):
-        os.remove(rules_file_path)
+def with_incremental_download_enabled():
+    """Set the ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD environment variable to 1 for testing the incremental download command."""
+    os.environ["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"] = "1"
+    yield None
+    del os.environ["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"]
 
 
-@pytest.fixture
-def sample_progress_data():
-    """Sample progress data for testing."""
-    return {
-        "lastLookbackTime": "2025-04-04T05:30:00",
-        "jobs": [
-            {
-                "jobId": "job-1234353453443",
-                "sessions": [
-                    {
-                        "sessionId": "session-1324324354354",
-                        "sessionLifecycleStatus": "SUCCESSFUL",
-                        "lastDownloadedSessActionId": 3,
-                    },
-                    {
-                        "sessionId": "session-3423435435454",
-                        "sessionLifecycleStatus": "RUNNING",
-                        "lastDownloadedSessActionId": 6,
-                    },
-                ],
-            },
-            {
-                "jobId": "Job-3234324354345",
-                "sessions": [
-                    {
-                        "sessionId": "session-4235435434345",
-                        "sessionLifecycleStatus": "FAILED",
-                        "lastDownloadedSessActionId": 3,
-                    }
-                ],
-            },
-        ],
+def test_incremental_output_download_requires_beta_acknowledgement(boto3_session, checkpoint_dir):
+    # Run the CLI command once to bootstrap the operation
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    # Assert the command executed successfully
+    assert result.exit_code == 1, result.output
+
+    assert (
+        "The incremental-output-download command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
+        in result.output
+    ), result.output
+
+
+def test_incremental_output_download_simple_success(
+    with_incremental_download_enabled, boto3_session, checkpoint_dir
+):
+    """Test successful execution of incremental_output_download"""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {
+        "SUCCEEDED": 1,
+        "READY": 1,
     }
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@freeze_time("2025-05-26 12:00:00+00:00")
-@patch("deadline.client.api.get_boto3_session")
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-def test_incremental_output_download_success_load_from_progress(
-    mock_get_boto3_session, checkpoint_dir, progress_file, sample_progress_data
-):
-    """Test successful execution of incremental_output_download with loading progress from state file"""
-    # Create a real progress file with test data
-    with open(progress_file, "w") as f:
-        json.dump(sample_progress_data, f, indent=2)
-
-    # Mock boto3 session
-    mock_session = MagicMock(spec=boto3.Session)
-    mock_get_boto3_session.return_value = mock_session
-
-    # Run the CLI command
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
         ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    boto3_session.client().search_jobs = mock_search_jobs_for_set(
+        MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs
     )
+    boto3_session.client().get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
-    # Assert the command executed successfully
-    assert result.exit_code == 0
-
-    # Check that the progress file was updated
-    with open(progress_file, "r") as f:
-        updated_progress = json.load(f)
-
-    # Verify the lastLookbackTime was updated to the frozen time
-    assert updated_progress["lastLookbackTime"] == "2025-05-26T12:00:00+00:00"
-
-    # Verify the job data was preserved
-    assert len(updated_progress["jobs"]) == 2
-    assert updated_progress["jobs"][0]["jobId"] == "job-1234353453443"
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@freeze_time("2025-05-26 12:00:00+00:00")
-@patch("deadline.client.api.get_boto3_session")
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-@pytest.mark.parametrize("bootstrap_lookback_in_minutes", [60, None])
-def test_incremental_output_download_success_with_force_bootstrap(
-    mock_get_boto3_session, checkpoint_dir, progress_file, bootstrap_lookback_in_minutes
-):
-    """Test successful execution of incremental_output_download with bootstrapping"""
-    # Create a file that should be ignored due to force_bootstrap=True
-    with open(progress_file, "w") as f:
-        json.dump({"lastLookbackTime": "2025-01-01T00:00:00", "jobs": []}, f)
-
-    # Mock boto3 session
-    mock_session = MagicMock(spec=boto3.Session)
-    mock_get_boto3_session.return_value = mock_session
-
-    # Run the CLI command
+    # Run the CLI command once to bootstrap the operation
     runner = CliRunner()
-    cmd = [
-        "queue",
-        "incremental-output-download",
-        "--farm-id",
-        MOCK_FARM_ID,
-        "--queue-id",
-        MOCK_QUEUE_ID,
-        "--saved-progress-checkpoint-location",
-        checkpoint_dir,
-        "--force-bootstrap",
-    ]
-
-    if bootstrap_lookback_in_minutes is not None:
-        cmd.extend(["--bootstrap-lookback-in-minutes", str(bootstrap_lookback_in_minutes)])
-
-    result = runner.invoke(main, cmd)
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
 
     # Assert the command executed successfully
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
 
-    # Check that the progress file was updated
-    with open(progress_file, "r") as f:
-        updated_progress = json.load(f)
+    # Assert that the output contained information about the bootstrapping and the mocked resources
+    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert (
+        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_download_checkpoint.json')}"
+        in result.output
+    ), result.output
+    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    # Need to convert the freeze time to the local time zone for this print assertion
+    assert (
+        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        in result.output
+    ), result.output
+    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert "Succeeded tasks: 1 / 2" in result.output, result.output
+    assert "Jobs added: 1" in result.output, result.output
 
-    # Verify the lastLookbackTime was updated to the frozen time
-    assert updated_progress["lastLookbackTime"] == "2025-05-26T12:00:00+00:00"
+    # Edit the mock job to complete the task
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {
+        "SUCCEEDED": 2,
+        "READY": 0,
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
 
-    # Verify the jobs list is empty (as it would be with a fresh bootstrap)
-    assert updated_progress["jobs"] == []
+    # Run the CLI command again to "complete" the download that was started
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    # Assert the command executed successfully
+    assert result.exit_code == 0, result.output
+
+    # Assert that the output contained information about loading the checkpoint and the mocked resources
+    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert (
+        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_download_checkpoint.json')}"
+        in result.output
+    ), result.output
+    assert "Checkpoint found" in result.output, result.output
+    # Need to convert the freeze time to the local time zone for this print assertion
+    assert (
+        f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        in result.output
+    ), result.output
+    assert f"EXISTING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert "Succeeded tasks (before): 1 / 2" in result.output, result.output
+    assert "Succeeded tasks (now)   : 2 / 2" in result.output, result.output
+    assert "Jobs updated: 1" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch("psutil.pid_exists")
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
 def test_incremental_output_download_pid_lock_already_held_error(
-    mock_pid_exists, checkpoint_dir, pid_lock_file
+    with_incremental_download_enabled, boto3_session, checkpoint_dir, pid_lock_file
 ):
     """Test incremental_output_download when PidLockAlreadyHeld is raised"""
     # Write a fake PID to the file
     with open(pid_lock_file, "w") as f:
-        f.write("12345")  # Use a fake PID
-
-    # Make psutil.pid_exists return True to simulate the process is running
-    mock_pid_exists.return_value = True
+        f.write("12345678")  # Use a fake PID
 
     # Run the CLI command
     runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
-        ],
-    )
+    with patch.object(psutil, "pid_exists") as mock_pid_exists:
+        # Make psutil.pid_exists return True to simulate the process is running
+        mock_pid_exists.return_value = True
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
 
-    # Assert the command executed successfully but with a message about another download in progress
-    assert result.exit_code == 0
-    assert f"Another download is in progress at {checkpoint_dir}" in result.output
+    # Assert the command did not execute successfully and wrote a message about another download in progress
+    assert result.exit_code == 1, result.output
+    assert (
+        f"Unable to perform incremental output download as process with pid 12345678 already holds the lock {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_incremental_output_download.pid')}"
+        in result.output
+    ), result.output
 
     # Verify the PID file still exists since we're simulating another process holding the lock
     assert os.path.exists(pid_lock_file)
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-def test_validate_file_inputs_success(checkpoint_dir):
-    """Test successful validation of file inputs"""
-    # Run the CLI command with a valid directory
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
-        ],
-    )
-
-    # The command should execute
-    assert result.exit_code == 0
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "1"})
-def test_validate_file_inputs_invalid_directory(checkpoint_dir):
-    """Test validation when directory is invalid"""
-    # Create a path to a non-existent directory
-    nonexistent_dir = os.path.join(checkpoint_dir, "nonexistent_directory")
-
-    # Run the CLI command with an invalid directory
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            nonexistent_dir,
-        ],
-    )
-
-    # The command should execute but report the validation error
-    assert result.exit_code == 0
-    assert "Download failed" in result.output
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-def test_validate_file_inputs_with_mapping_rules_success(checkpoint_dir, path_mapping_rules_file):
-    """Test successful validation with path mapping rules"""
-    # Create the rules file with valid content
-    with open(path_mapping_rules_file, "w") as f:
-        f.write('{"rules": []}')
-
-    # Run the CLI command with valid rules file
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
-            "--path-mapping-rules",
-            path_mapping_rules_file,
-        ],
-    )
-
-    # The command should execute without validation errors
-    assert result.exit_code == 0
-    assert "Download failed" not in result.output
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-def test_validate_file_inputs_mapping_rules_not_exist(checkpoint_dir):
-    """Test validation when mapping rules file doesn't exist"""
-    # Create a path to a non-existent rules file
-    nonexistent_rules = os.path.join(checkpoint_dir, "nonexistent_rules.json")
-
-    # Run the CLI command with non-existent rules file
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
-            "--path-mapping-rules",
-            nonexistent_rules,
-        ],
-    )
-
-    # The command should execute but report the validation error
-    assert result.exit_code == 0
-    assert "Download failed" in result.output
-
-
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is None,
-    reason="Incremental output download is not enabled",
-)
-@patch("os.access")
-@patch.dict(os.environ, {"ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD": "True"})
-def test_validate_file_inputs_mapping_rules_not_readable(
-    mock_access, checkpoint_dir, path_mapping_rules_file
-):
-    """Test validation when mapping rules file is not readable"""
-    # Create the rules file
-    with open(path_mapping_rules_file, "w") as f:
-        f.write('{"rules": []}')
-
-    # Mock os.access to simulate a non-readable rules file
-    def access_side_effect(path, mode):
-        if path == path_mapping_rules_file and mode == os.R_OK:
-            return False
-        return True
-
-    mock_access.side_effect = access_side_effect
-
-    # Run the CLI command with non-readable rules file
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "queue",
-            "incremental-output-download",
-            "--farm-id",
-            MOCK_FARM_ID,
-            "--queue-id",
-            MOCK_QUEUE_ID,
-            "--saved-progress-checkpoint-location",
-            checkpoint_dir,
-            "--path-mapping-rules",
-            path_mapping_rules_file,
-        ],
-    )
-
-    # The command should execute but report the validation error
-    assert result.exit_code == 0
-    assert "Download failed" in result.output
