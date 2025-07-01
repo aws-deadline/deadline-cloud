@@ -12,6 +12,7 @@ from configparser import ConfigParser
 from typing import Optional
 import boto3
 from botocore.exceptions import ClientError  # type: ignore[import]
+from datetime import datetime, timedelta, timezone
 
 from ... import api
 from ...config import config_file
@@ -21,12 +22,11 @@ from ....job_attachments.models import (
     FileConflictResolution,
 )
 from .click_logger import ClickLogger
-from ...api import _queue_apis
-from ... import _pid_utils
+from .._incremental_download import _incremental_output_download
+from .._pid_file_lock import PidFileLock
 from ....job_attachments.incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
 )
-from ....job_attachments.incremental_downloads.exceptions import PidLockAlreadyHeld
 
 PID_FILE_NAME = "incremental_output_download.pid"
 DOWNLOAD_PROGRESS_FILE_NAME = "download_progress.json"
@@ -227,6 +227,7 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
     @click.option(
         "--bootstrap-lookback-in-minutes",
         default=0,
+        type=float,
         help="Downloads outputs for job-session-actions that have been completed since these many\n"
         "minutes at bootstrap. Default value is 0 minutes.",
     )
@@ -266,7 +267,7 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
     def incremental_output_download(
         path_mapping_rules: str,
         json: bool,
-        bootstrap_lookback_in_minutes: Optional[int],
+        bootstrap_lookback_in_minutes: float,
         saved_progress_checkpoint_location: str,
         force_bootstrap: bool,
         **args,
@@ -290,15 +291,17 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
 
         logger.echo("Started incremental download....")
 
-        try:
-            # Validate file path inputs for downloading outputs incrementally.
-            _queue_apis._validate_file_inputs_for_incremental_output_download(
-                saved_progress_checkpoint_location=saved_progress_checkpoint_location,
-                path_mapping_rules=path_mapping_rules,
+        # Check if download progress location is a valid directory on the os
+        if not os.path.isdir(saved_progress_checkpoint_location):
+            raise DeadlineOperationError(
+                f"Download progress location {saved_progress_checkpoint_location} is not a valid directory"
             )
-        except RuntimeError as e:
-            logger.echo(f"Download failed due to error: {e}")
-            return
+
+        # Check that download progress location is writable
+        if not os.access(saved_progress_checkpoint_location, os.W_OK):
+            raise DeadlineOperationError(
+                f"Download progress location {saved_progress_checkpoint_location} exists but is not writable, please provide write permissions"
+            )
 
         # Get a temporary config object with the standard options handled
         config: Optional[ConfigParser] = _apply_cli_options_to_config(
@@ -314,64 +317,46 @@ if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") is not None:
         download_progress_file_name: str = f"{queue_id}_{DOWNLOAD_PROGRESS_FILE_NAME}"
 
         # Get saved progress file full path now that we've validated all file inputs are valid
-        saved_progress_checkpoint_full_path: str = os.path.join(
+        checkpoint_file_path: str = os.path.join(
             saved_progress_checkpoint_location, download_progress_file_name
         )
 
-        # Begin incremental download flow starting with acquiring pid lock, now that all params are loaded
+        # Perform incremental download while holding a process id lock
 
-        # 1. Construct pid file full path
-        pid_file_full_path = os.path.join(
+        pid_lock_file_path: str = os.path.join(
             saved_progress_checkpoint_location, f"{queue_id}_{PID_FILE_NAME}"
         )
 
-        try:
-            # 2. Check if a download is already ongoing with pid lock checking mechanism
-            _pid_utils.try_acquire_pid_lock(pid_file_full_path, logger.echo)
+        with PidFileLock(
+            pid_lock_file_path,
+            operation_name="incremental output download",
+            print_function_callback=logger.echo,
+        ):
+            current_download_state: IncrementalDownloadState
 
-            current_download_progress: IncrementalDownloadState = IncrementalDownloadState()
-
-            # 3. If bootstrap is required, then bootstrap using helper function
-            if force_bootstrap or not os.path.exists(saved_progress_checkpoint_full_path):
-                current_download_progress = IncrementalDownloadState.from_bootstrap(
-                    bootstrap_lookback_in_minutes,
-                    logger.echo,
+            if force_bootstrap or not os.path.exists(checkpoint_file_path):
+                # Bootstrap with the specified lookback duration
+                current_download_state = IncrementalDownloadState(
+                    downloads_started_timestamp=datetime.now(timezone.utc)
+                    - timedelta(minutes=bootstrap_lookback_in_minutes)
                 )
-
-            # 4. If progress is available, load from the incremental download state file
             else:
-                current_download_progress = IncrementalDownloadState.from_file(
-                    saved_progress_checkpoint_full_path, logger.echo
+                # Load the incremental download checkpoint file
+                current_download_state = IncrementalDownloadState.from_file(
+                    checkpoint_file_path, logger.echo
                 )
 
-            # 5. Call the incremental output download api to download outputs
-            updated_download_progress: IncrementalDownloadState = (
-                _queue_apis._incremental_output_download(
-                    boto3_session=boto3_session,
-                    farm_id=farm_id,
-                    queue_id=queue_id,
-                    download_state=current_download_progress,
-                    path_mapping_rules=path_mapping_rules,
-                    print_function_callback=logger.echo,
-                )
+            updated_download_state: IncrementalDownloadState = _incremental_output_download(
+                boto3_session=boto3_session,
+                farm_id=farm_id,
+                queue_id=queue_id,
+                download_state=current_download_state,
+                path_mapping_rules=path_mapping_rules,
+                print_function_callback=logger.echo,
             )
 
-            # 6. Save progress to incremental download state file
-            updated_download_progress.save_file(
-                saved_progress_checkpoint_full_path,
+            # Save the checkpoint file
+            updated_download_state.save_file(
+                checkpoint_file_path,
                 logger.echo,
             )
-
-        except PidLockAlreadyHeld:
-            logger.echo(
-                f"Another download is in progress at {saved_progress_checkpoint_location}, wait for previous download to finish"
-            )
-            return
-        except Exception as e:
-            logger.echo(
-                f"Unexpected exception {e} in incremental output download for queue {queue_id}"
-            )
-            return
-        finally:
-            # 7. Release pid lock since operation is complete
-            _pid_utils.release_pid_lock(pid_file_full_path, logger.echo)
