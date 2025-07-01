@@ -318,7 +318,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
-        self.initial_status_box.setCurrentText(getattr(settings, "initial_state", "READY"))
+        self.initial_status_box.setCurrentText(getattr(settings, "initial_status", "READY"))
         self.max_failed_tasks_count_box.setValue(getattr(settings, "max_failed_tasks_count", 20))
         self.max_retries_per_task_box.setValue(getattr(settings, "max_retries_per_task", 5))
         self.priority_box.setValue(getattr(settings, "priority", 50))
@@ -417,7 +417,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
         # Set other fields only if they exist in the settings object
         SETTINGS_FIELDS = [
-            ("initial_state", self.initial_status_box.currentText),
+            ("initial_status", self.initial_status_box.currentText),
             ("max_failed_tasks_count", self.max_failed_tasks_count_box.value),
             ("max_retries_per_task", self.max_retries_per_task_box.value),
             ("priority", self.priority_box.value),
@@ -426,7 +426,9 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
         for attr_name, getter_func in SETTINGS_FIELDS:
             if hasattr(settings, attr_name):
+                # Preserve unlimited worker setting by using -1 instead of overriding with spin box value
                 if attr_name == "max_worker_count":
+                    # Handle `max_worker_count` based on UI selection:
                     if self.unlimited_max_worker_count.isChecked():
                         setattr(settings, attr_name, -1)  # -1 denotes no max worker count limits.
                     else:
