@@ -73,8 +73,12 @@ class TestIncrementalDownloadState:
             downloads_started_timestamp=datetime.fromisoformat("2023-01-01T00:00:00+00:00"),
             downloads_completed_timestamp=datetime.fromisoformat("2023-01-02T00:00:00+00:00"),
             jobs=[
-                IncrementalDownloadJob({"jobId": "job-123", "name": "Job 1"}),
-                IncrementalDownloadJob({"jobId": "job-124", "name": "Job 2"}),
+                IncrementalDownloadJob({"jobId": "job-123", "name": "Job 1"}, None, {}),
+                IncrementalDownloadJob(
+                    {"jobId": "job-124", "name": "Job 2"},
+                    datetime.fromisoformat("2023-01-02T00:00:00+00:00"),
+                    {},
+                ),
             ],
         )
 
@@ -93,7 +97,7 @@ class TestIncrementalDownloadState:
         assert state.jobs == []
 
         # Test with provided values
-        jobs = [IncrementalDownloadJob({"jobId": "job-123"}, [])]
+        jobs = [IncrementalDownloadJob({"jobId": "job-123"}, None, {})]
         state = IncrementalDownloadState(
             downloads_started_timestamp=bootstrap_time,
             downloads_completed_timestamp=completed_time,

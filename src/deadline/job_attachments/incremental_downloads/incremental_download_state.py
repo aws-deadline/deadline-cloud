@@ -31,25 +31,37 @@ class IncrementalDownloadJob:
     Model representing a job in the download progress state.
     """
 
-    _required_dict_fields = ["jobId", "job", "sessions"]
+    _required_dict_fields = ["job", "sessionEndedTimestamp", "sessionCompletedIndexes"]
 
-    job_id: str
     job: dict[str, Any]
-    sessions: list
+    session_ended_timestamp: Optional[datetime]
+    session_completed_indexes: dict[str, int]
 
-    def __init__(self, job: dict[str, Any], sessions: Optional[list] = None):
+    def __init__(
+        self,
+        job: dict[str, Any],
+        session_ended_timestamp: Optional[datetime],
+        session_completed_indexes: Optional[dict[str, int]],
+    ):
         """
         Initialize a Job instance.
         Args:
             job (dict[str, Any]): The job as returned by boto3 from deadline:SearchJobs.
-            sessions (list): List of JobSession objects
+            session_ended_timestamp (Optional[datetime]): The largest endedAt timestamp for a session
+                whose output has been downloaded. This can be None only when the job lacks job attachments.
+            session_completed_index (dict[str, int]): A mapping from session id to the index
+                of the latest completed session action download.
         """
-        self.job_id = job["jobId"]
         self.job = _datetimes_to_str(job)
-        self.sessions = sessions or []
+        self.session_ended_timestamp = session_ended_timestamp
+        self.session_completed_indexes = session_completed_indexes or {}
+
+    @property
+    def job_id(self) -> str:
+        return self.job["jobId"]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]):
+    def from_dict(cls, data: dict[str, Any]) -> "IncrementalDownloadJob":
         """
         Create a Job instance from a dictionary.
         Args:
@@ -63,8 +75,18 @@ class IncrementalDownloadJob:
         if missing_fields:
             raise ValueError(f"Input is missing required fields: {missing_fields}")
 
-        sessions = data["sessions"]
-        return cls(job=data["job"], sessions=sessions)
+        job = data["job"]
+        session_completed_indexes = data["sessionCompletedIndexes"]
+        session_ended_timestamp = (
+            datetime.fromisoformat(data["sessionEndedTimestamp"])
+            if data["sessionEndedTimestamp"] is not None
+            else None
+        )
+        return cls(
+            job=job,
+            session_ended_timestamp=session_ended_timestamp,
+            session_completed_indexes=session_completed_indexes,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -72,7 +94,13 @@ class IncrementalDownloadJob:
         Returns:
             dict: Dictionary representation of the job
         """
-        return {"jobId": self.job_id, "job": self.job, "sessions": self.sessions}
+        return {
+            "job": self.job,
+            "sessionEndedTimestamp": self.session_ended_timestamp
+            if self.session_ended_timestamp is None
+            else self.session_ended_timestamp.isoformat(),
+            "sessionCompletedIndexes": self.session_completed_indexes,
+        }
 
 
 class IncrementalDownloadState:
@@ -90,46 +118,12 @@ class IncrementalDownloadState:
     a stream by tracking state at three levels. Where possible, we use the resource state at one level to prune queries at lower levels:
 
     1. Job - The jobs list contains every job that is active and that we have downloaded output from in a previous incremental download command.
-    2. Session - Each session of a job represents a single worker running a sequence of tasks from the job. The sessions list in
-            a job contains all the sessions that are active and from which we have downloaded some output.
-    3. SessionAction - Session actions have sequential IDs, so for each session we track the highest index of session action
-            for which we have performed the download.
-
-
-
-    Model representing the download progress state file structure.
-    Incremental download state file structure:
-    {
-        "lastLookbackTime": "2025-04-04T05:30:00",
-        "jobs":
-        [
-            {
-                "jobId": "job-1234353453443",
-                "sessions": [
-                {
-                    "sessionId": "session-1324324354354",
-                    "sessionLifecycleStatus": "SUCCESSFUL",
-                    "lastDownloadedSessActionId": 3
-                },
-                {
-                    "sessionId": "session-3423435435454",
-                    "sessionLifecycleStatus": "RUNNING",
-                    "lastDownloadedSessActionId": 6
-                }
-                ]
-            },
-            {
-                "jobId": "job-3234324354345",
-                "sessions": [
-                {
-                    "sessionId": "session-4235435434345",
-                    "sessionLifecycleStatus": "FAILED",
-                    "lastDownloadedSessActionId": 3
-                }
-                ]
-            }
-        ]
-    }
+    2. Session - Each session of a job represents a single worker running a sequence of tasks from the job. The sessionCompletedIndexes
+            member of the IncrementalDownloadJob contains an entry for every session that is either still running, or whose
+            endedAt field is >= the downloadsCompletedTimestamp.
+    3. SessionAction - Session actions have sequential IDs, so for each session we store the highest index of session action
+            for which we have completed the download. A session action ID looks like "sessionaction-abc123-12" for session action
+            index 12.
     """
 
     _required_dict_fields = [
