@@ -446,40 +446,25 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         settings.description = self.desc_edit.text()
 
         # Set all fields with type checking
-        settings.initial_status = (
-            self.initial_status_box.currentText()
-            if self._has_compatible_attr(settings, "initial_status", str)
-            else "READY"
-        )
+        if self._has_compatible_attr(settings, "initial_status", str):
+            settings.initial_status = self.initial_status_box.currentText()
 
-        settings.max_failed_tasks_count = (
-            self.max_failed_tasks_count_box.value()
-            if self._has_compatible_attr(settings, "max_failed_tasks_count", int)
-            else 20
-        )
+        if self._has_compatible_attr(settings, "max_failed_tasks_count", int):
+            settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
 
-        settings.max_retries_per_task = (
-            self.max_retries_per_task_box.value()
-            if self._has_compatible_attr(settings, "max_retries_per_task", int)
-            else 5
-        )
+        if self._has_compatible_attr(settings, "max_retries_per_task", int):
+            settings.max_retries_per_task = self.max_retries_per_task_box.value()
 
-        settings.priority = (
-            self.priority_box.value()
-            if self._has_compatible_attr(settings, "priority", int)
-            else 50
-        )
+        if self._has_compatible_attr(settings, "priority", int):
+            settings.priority = self.priority_box.value()
 
         # Handle `max_worker_count` based on UI selection:
         # Preserve unlimited worker setting by using -1 instead of overriding with spin box value
-        settings.max_worker_count = (
-            self.max_worker_count_box.value()
-            if (
-                self._has_compatible_attr(settings, "max_worker_count", int)
-                and not self.unlimited_max_worker_count.isChecked()
-            )
-            else -1  # -1 denotes no max worker count limits.
-        )
+        if self._has_compatible_attr(settings, "max_worker_count", int):
+            if self.unlimited_max_worker_count.isChecked():
+                settings.max_worker_count = -1  # -1 denotes no max worker count limits.
+            else:
+                settings.max_worker_count = self.max_worker_count_box.value()
 
 
 class DeadlineCloudSettingsWidget(QGroupBox):
