@@ -15,6 +15,7 @@ Notable features include:
 * A library of functions that implement AWS Deadline Cloud's Job Attachments functionality.
 * A library of functions for creating a job submission UI within any content creation tool that supports Python 3.8+ based plugins and
   the Qt GUI framework.
+* A Model Context Protocol (MCP) server for AI assistant integration, enabling natural language interaction with AWS Deadline Cloud resources.
 
 [cas]: https://en.wikipedia.org/wiki/Content-addressable_storage
 [deadline-cloud]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html
@@ -220,6 +221,50 @@ $ aws s3 ls --profile deadline-queue
 Available modes:
 - `USER`: Credentials with full queue-role permissions.
 - `READ`: Credentials with read-only permissions for queue logs
+
+## Model Context Protocol (MCP) Server
+
+The AWS Deadline Cloud client includes an MCP server that enables AI assistants to interact with AWS Deadline Cloud resources through natural language. The MCP server uses FastMCP within the MCP Python SDK for simplified tool registration while maintaining full protocol compliance.
+
+### Starting the MCP Server
+
+```sh
+$ deadline-mcp
+```
+
+### Integration with AI Tools
+
+#### Cline (VSCode Extension)
+Add to your Cline configuration:
+```json
+{
+  "mcpServers": {
+    "deadline-server": {
+      "command": "deadline-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+### Available Tools
+
+The MCP server provides tools for:
+- **Farm Management**: List, create, and manage farms
+- **Queue Management**: List, create, and manage queues
+- **Job Management**: Submit, monitor, and manage jobs
+- **Fleet Management**: List and manage compute fleets
+- **Authentication**: Check status and manage credentials
+- **Job Attachments**: Upload and download job files
+
+### Example Natural Language Interactions
+
+```
+"List all my AWS Deadline Cloud farms"
+"Submit the render job in /path/to/job-bundle to my-queue"
+"What's the status of job job-67890?"
+"Show me the logs for the failed job"
+```
 
 
 ## Code of Conduct

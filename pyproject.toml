@@ -56,10 +56,14 @@ gui = [
   # If the version changes, update the version in deadline/client/ui/__init__.py
   "PySide6-essentials >= 6.6,< 6.10",
 ]
+mcp = [
+  "mcp >= 0.1.0",
+]
 
 [project.scripts]
 deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
 deadline = "deadline.client.cli:main"
+deadline-mcp = "deadline.mcp.server:main"
 
 [tool.hatch.build]
 artifacts = ["*_version.py"]
