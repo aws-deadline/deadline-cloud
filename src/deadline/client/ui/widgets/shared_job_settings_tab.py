@@ -319,12 +319,9 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         """
         Determine if attribute exists and if the type is correct.
         """
-        # Users can have anything in the settings object since they define their own dataclass to pass in.
+        # DCCs can have anything in the settings object since they define their own dataclass to pass in.
         # Changing what we look for below may cause breaking changes in usage of this library.
-        if hasattr(obj, attr_name) and isinstance(getattr(obj, attr_name), expected_type):
-            return True
-        else:
-            return False
+        return isinstance(getattr(obj, attr_name, None), expected_type)
 
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
