@@ -915,14 +915,26 @@ def test_cli_job_wait_succeeded(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED", failed_tasks=[], elapsed_time=10.5
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        # Verify get_job was called to get job name
+        boto3_client_mock().get_job.assert_called_once_with(
+            farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID
+        )
+
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: SUCCEEDED" in result.output
         assert "Elapsed time: 10.5 seconds" in result.output
         assert "No failed tasks found." in result.output
@@ -937,10 +949,15 @@ def test_cli_job_wait_timeout(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.side_effect = DeadlineOperationTimedOut(
             "Timeout waiting for job job-123 to complete after 30.0 seconds"
         )
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
 
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
@@ -957,7 +974,9 @@ def test_cli_job_wait_failed(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="FAILED",
             failed_tasks=[
@@ -972,9 +991,14 @@ def test_cli_job_wait_failed(fresh_deadline_config):
             elapsed_time=15.2,
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: FAILED" in result.output
         assert "Elapsed time: 15.2 seconds" in result.output
         assert "Found 1 failed tasks:" in result.output
@@ -989,14 +1013,21 @@ def test_cli_job_wait_canceled(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="CANCELED", failed_tasks=[], elapsed_time=5.0
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: CANCELED" in result.output
         assert "Elapsed time: 5.0 seconds" in result.output
         assert "No failed tasks found." in result.output
@@ -1011,14 +1042,21 @@ def test_cli_job_wait_archived(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="ARCHIVED", failed_tasks=[], elapsed_time=8.3
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: ARCHIVED" in result.output
         assert "Elapsed time: 8.3 seconds" in result.output
         assert "No failed tasks found." in result.output
@@ -1033,14 +1071,21 @@ def test_cli_job_wait_not_compatible(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="NOT_COMPATIBLE", failed_tasks=[], elapsed_time=2.1
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: NOT_COMPATIBLE" in result.output
         assert "Elapsed time: 2.1 seconds" in result.output
         assert "No failed tasks found." in result.output
@@ -1055,7 +1100,9 @@ def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(fresh_dead
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED",
             failed_tasks=[
@@ -1070,9 +1117,14 @@ def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(fresh_dead
             elapsed_time=12.0,
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job Name" in result.output
         assert "Job completed with status: SUCCEEDED" in result.output
         assert "Found 1 failed tasks:" in result.output
         assert result.exit_code == 2
@@ -1086,16 +1138,23 @@ def test_cli_job_wait_json_output_succeeded(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED", failed_tasks=[], elapsed_time=10.5
         )
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
 
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
         output_data = json.loads(result.output)
+        assert output_data["jobId"] == MOCK_JOB_ID
+        assert output_data["jobName"] == "Test Job Name"
         assert output_data["status"] == "SUCCEEDED"
         assert output_data["elapsedTime"] == pytest.approx(10.5)
         assert output_data["failedTasks"] == []
@@ -1110,7 +1169,9 @@ def test_cli_job_wait_json_output_failed(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as boto3_client_mock:
         mock_wait.return_value = api.JobCompletionResult(
             status="FAILED",
             failed_tasks=[
@@ -1125,11 +1186,16 @@ def test_cli_job_wait_json_output_failed(fresh_deadline_config):
             elapsed_time=15.2,
         )
 
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
         output_data = json.loads(result.output)
+        assert output_data["jobId"] == MOCK_JOB_ID
+        assert output_data["jobName"] == "Test Job Name"
         assert output_data["status"] == "FAILED"
         assert output_data["elapsedTime"] == pytest.approx(15.2)
         assert len(output_data["failedTasks"]) == 1
@@ -1148,7 +1214,12 @@ def test_cli_job_wait_unknown_status_returns_exit_code_2(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as mock_get_client:
+        mock_client = mock_get_client.return_value
+        mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
+
         mock_wait.return_value = api.JobCompletionResult(
             status="UNKNOWN_STATUS", failed_tasks=[], elapsed_time=3.0
         )
@@ -1156,6 +1227,8 @@ def test_cli_job_wait_unknown_status_returns_exit_code_2(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job" in result.output
         assert "Job completed with status: UNKNOWN_STATUS" in result.output
         assert result.exit_code == 2
 
@@ -1168,7 +1241,12 @@ def test_cli_job_wait_timeout_json_output(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as mock_get_client:
+        mock_client = mock_get_client.return_value
+        mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
+
         mock_wait.side_effect = DeadlineOperationTimedOut(
             "Timeout waiting for job job-123 to complete after 30.0 seconds"
         )
@@ -1182,6 +1260,8 @@ def test_cli_job_wait_timeout_json_output(fresh_deadline_config):
             output_data["error"] == "Timeout waiting for job job-123 to complete after 30.0 seconds"
         )
         assert output_data["timeout"] is True
+        assert output_data["jobId"] == MOCK_JOB_ID
+        assert output_data["jobName"] == "Test Job"
         assert result.exit_code == 1
 
 
@@ -1193,12 +1273,19 @@ def test_cli_job_wait_error_handling(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as mock_get_client:
+        mock_client = mock_get_client.return_value
+        mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
+
         mock_wait.side_effect = DeadlineOperationError("Test error message")
 
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
+        assert "Job ID: " + MOCK_JOB_ID in result.output
+        assert "Job Name: Test Job" in result.output
         assert "Error waiting for job completion: Test error message" in result.output
         assert result.exit_code == 2
 
@@ -1211,7 +1298,12 @@ def test_cli_job_wait_error_handling_json_output(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait:
+    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
+        api, "get_boto3_client"
+    ) as mock_get_client:
+        mock_client = mock_get_client.return_value
+        mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
+
         mock_wait.side_effect = DeadlineOperationError("Test error message")
 
         runner = CliRunner()
@@ -1220,6 +1312,8 @@ def test_cli_job_wait_error_handling_json_output(fresh_deadline_config):
         # Parse the JSON output
         output_data = json.loads(result.output)
         assert output_data["error"] == "Test error message"
+        assert output_data["jobId"] == MOCK_JOB_ID
+        assert output_data["jobName"] == "Test Job"
         assert result.exit_code == 2
 
 

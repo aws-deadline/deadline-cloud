@@ -6,8 +6,6 @@ import tempfile
 from unittest.mock import ANY, MagicMock, patch
 import pytest
 
-from deadline.client import api
-
 from deadline.job_attachments.api.manifest import _manifest_upload
 
 
@@ -35,19 +33,26 @@ class TestManifestUpload:
         return path
 
     @patch("deadline.job_attachments.api.manifest.S3AssetUploader")
-    def test_upload(self, mock_upload_assets: MagicMock, mock_manifest_file: str) -> None:
+    @patch("deadline.client.api.get_boto3_session")
+    def test_upload(
+        self,
+        mock_get_boto3_session: MagicMock,
+        mock_upload_assets: MagicMock,
+        mock_manifest_file: str,
+    ) -> None:
         """
         Upload is really simple. It is a pass through to S3AssetUploader. Make sure it is called correctly.
         """
         # Given
-        boto_session = api.get_boto3_session()
+        mock_boto_session = MagicMock()
+        mock_get_boto3_session.return_value = mock_boto_session
 
         # When the API is called....
         _manifest_upload(
             manifest_file=mock_manifest_file,
             s3_bucket_name=TEST_BUCKET_NAME,
             s3_cas_prefix=TEST_CAS_PREFIX,
-            boto_session=boto_session,
+            boto_session=mock_boto_session,
         )
 
         # Then
@@ -60,14 +65,19 @@ class TestManifestUpload:
         )
 
     @patch("deadline.job_attachments.api.manifest.S3AssetUploader")
+    @patch("deadline.client.api.get_boto3_session")
     def test_upload_with_prefix(
-        self, mock_upload_assets: MagicMock, mock_manifest_file: str
+        self,
+        mock_get_boto3_session: MagicMock,
+        mock_upload_assets: MagicMock,
+        mock_manifest_file: str,
     ) -> None:
         """
         Upload is really simple. It is a pass through to S3AssetUploader. Make sure it is called correctly with prefix
         """
         # Given
-        boto_session = api.get_boto3_session()
+        mock_boto_session = MagicMock()
+        mock_get_boto3_session.return_value = mock_boto_session
 
         # When the API is called....
         _manifest_upload(
@@ -75,7 +85,7 @@ class TestManifestUpload:
             s3_bucket_name=TEST_BUCKET_NAME,
             s3_cas_prefix=TEST_CAS_PREFIX,
             s3_key_prefix=TEST_KEY_PREFIX,
-            boto_session=boto_session,
+            boto_session=mock_boto_session,
         )
 
         # Then

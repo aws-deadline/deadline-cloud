@@ -219,7 +219,7 @@ The command blocks until the job reaches a terminal state (SUCCEEDED, FAILED, CA
 
 ### Retrieving Job Logs
 
-You can monitor job status and retrieve logs using the CLI. The logs lines are returned starting from the most recent log event.:
+You can monitor job status and retrieve logs using the CLI. The logs lines are returned starting from the most recent log event with timestamps in ISO 8601 format:
 
 ```sh
 # Get logs for a specific session
@@ -237,9 +237,26 @@ $ deadline job logs --session-id session-12345 --start-time 2023-01-01T12:00:00Z
 # Get logs in JSON format
 $ deadline job logs --session-id session-12345 --output json
 
+# Get logs with timestamps in local timezone (default is UTC)
+$ deadline job logs --session-id session-12345 --timezone local
+
+# Get logs with explicit UTC timestamps (default behavior)
+$ deadline job logs --session-id session-12345 --timezone utc
+
+# Combine timezone option with JSON output
+$ deadline job logs --session-id session-12345 --timezone local --output json
+
 # Paginate through logs
 $ deadline job logs --session-id session-12345 --next-token next-token-value
 ```
+
+**Timestamp Format**: All timestamps are displayed in ISO 8601 format with full microsecond precision and timezone information:
+- UTC format: `2025-07-03T10:49:33.821306+00:00`
+- Local format: `2025-07-03T03:49:33.821306-07:00` (example for PST)
+
+**Timezone Options**:
+- `--timezone utc` (default): Display timestamps in UTC with `+00:00` offset
+- `--timezone local`: Display timestamps converted to your local system timezone
 
 When using a Deadline Cloud monitor profile, the `job logs` command will use the Queue role credentials to read logs. Otherwise, the chosen profile credentials are used for all API invocations. This allows you to access logs with the appropriate permissions based on your authentication method.
 
