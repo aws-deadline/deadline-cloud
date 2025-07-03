@@ -16,6 +16,13 @@ class DeadlineOperationCanceled(DeadlineOperationError):
         super().__init__(message)
 
 
+class DeadlineOperationTimedOut(DeadlineOperationError):
+    """DeadlineOperationError for when an operation timed out"""
+
+    def __init__(self, message: str = "Operation timed out"):
+        super().__init__(message)
+
+
 class CreateJobWaiterCanceled(DeadlineOperationCanceled):
     """Error for when the waiter after CreateJob is interrupted"""
 

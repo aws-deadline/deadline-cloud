@@ -41,7 +41,7 @@ from deadline.job_attachments._path_summarization import (
 
 from ... import api
 from ...config import config_file
-from ...exceptions import DeadlineOperationError
+from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
 from ._sigint_handler import SigIntHandler
 
@@ -261,7 +261,11 @@ def _download_job_output(
         step = deadline.get_step(farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id)
     if task_id:
         task = deadline.get_task(
-            farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id, taskId=task_id
+            farmId=farm_id,
+            queueId=queue_id,
+            jobId=job_id,
+            stepId=step_id,
+            taskId=task_id,
         )
 
     click.echo(
@@ -296,7 +300,9 @@ def _download_job_output(
         session=queue_role_session,
     )
 
-    def _check_and_warn_long_output_paths(output_paths_by_root: dict[str, list[str]]) -> None:
+    def _check_and_warn_long_output_paths(
+        output_paths_by_root: dict[str, list[str]],
+    ) -> None:
         if sys.platform == "win32" and not _is_windows_long_path_registry_enabled():
             for root, paths in output_paths_by_root.items():
                 for output_path in paths:
@@ -358,7 +364,11 @@ def _download_job_output(
                 user_choice = click.prompt(
                     "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
                     type=click.Choice(
-                        [*[str(num) for num in list(range(0, len(asset_roots)))], "y", "n"]
+                        [
+                            *[str(num) for num in list(range(0, len(asset_roots)))],
+                            "y",
+                            "n",
+                        ]
                     ),
                     default="y",
                 )
@@ -450,7 +460,9 @@ def _download_job_output(
             # not annotating the type of download_progress.
             with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
 
-                def _update_download_progress(download_metadata: ProgressReportMetadata) -> bool:
+                def _update_download_progress(
+                    download_metadata: ProgressReportMetadata,
+                ) -> bool:
                     new_progress = int(download_metadata.progress) - download_progress.pos
                     if new_progress > 0:
                         download_progress.update(new_progress)
@@ -462,7 +474,9 @@ def _download_job_output(
                 )
         else:
 
-            def _update_download_progress(download_metadata: ProgressReportMetadata) -> bool:
+            def _update_download_progress(
+                download_metadata: ProgressReportMetadata,
+            ) -> bool:
                 click.echo(
                     _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
                 )
@@ -479,7 +493,10 @@ def _download_job_output(
 
 
 def _get_start_message(
-    job_name: str, step_name: Optional[str], task_parameters: Optional[dict], is_json_format: bool
+    job_name: str,
+    step_name: Optional[str],
+    task_parameters: Optional[dict],
+    is_json_format: bool,
 ) -> str:
     if is_json_format:
         return _get_json_line(JSON_MSG_TYPE_TITLE, job_name)
@@ -565,7 +582,8 @@ def _get_download_summary_message(
 ) -> str:
     if is_json_format:
         return _get_json_line(
-            JSON_MSG_TYPE_SUMMARY, f"Downloaded {download_summary.processed_files} files"
+            JSON_MSG_TYPE_SUMMARY,
+            f"Downloaded {download_summary.processed_files} files",
         )
     else:
         paths_joined = "\n        ".join(
@@ -706,6 +724,321 @@ def job_download_output(step_id, task_id, output, **args):
             raise DeadlineOperationError(f"Failed to download output:\n{e}") from e
 
 
+@cli_job.command(name="wait")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to wait for.")
+@click.option("--max-poll-interval", default=120, help="Maximum polling interval in seconds.")
+@click.option("--timeout", default=0, help="Timeout in seconds (0 for no timeout).")
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default="verbose",
+    help="Output format (verbose or json).",
+)
+@_handle_error
+def job_wait_for_completion(max_poll_interval, timeout, output, **args):
+    """
+    Wait for a job to complete and return failed step-task IDs.
+
+    This command blocks until the job's taskRunStatus reaches a terminal state (SUCCEEDED, FAILED, CANCELED, SUSPENDED, or NOT_COMPATIBLE),
+    then returns a list of any failed step-task combinations.
+
+    The command uses exponential backoff for polling, starting at 0.5 seconds and doubling
+    the interval after each check until it reaches the maximum polling interval.
+
+    Exit codes:
+    0 - Job succeeded
+    1 - Timeout waiting for job completion
+    2 - Job failed (any tasks failed)
+    3 - Job was canceled
+    4 - Job was suspended
+    5 - Job is not compatible
+    """
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+
+    is_json_output = output.lower() == "json"
+
+    # Define a status callback for verbose output
+    def status_callback(status, elapsed_time=0, total_timeout=0):
+        if not is_json_output:
+            timeout_info = ""
+            if total_timeout > 0:
+                remaining = max(0, total_timeout - elapsed_time)
+                timeout_info = f" [{elapsed_time:.1f}s elapsed, {remaining:.1f}s remaining]"
+            else:
+                timeout_info = f" [{elapsed_time:.1f}s elapsed]"
+
+            # Clear the current line and update in place
+            click.echo(
+                f"\rCurrent status: {status}.{timeout_info}",
+                nl=False,
+            )
+
+    if not is_json_output:
+        click.echo(f"Waiting for job {job_id} to complete...")
+
+    try:
+        result = api.wait_for_job_completion(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_id=job_id,
+            max_poll_interval=max_poll_interval,
+            timeout=timeout,
+            config=config,
+            status_callback=status_callback,
+        )
+
+        if is_json_output:
+            # Return everything as JSON
+            response = {
+                "status": result.status,
+                "elapsedTime": result.elapsed_time,
+                "failedTasks": [
+                    {
+                        "stepId": task.step_id,
+                        "taskId": task.task_id,
+                        "stepName": task.step_name,
+                        "sessionId": task.session_id,
+                    }
+                    for task in result.failed_tasks
+                ],
+            }
+            click.echo(json.dumps(response, indent=2))
+        else:
+            # Use verbose output with YAML formatting
+            click.echo(f"Job completed with status: {result.status}")
+            click.echo(f"Elapsed time: {result.elapsed_time:.1f} seconds")
+
+            if result.failed_tasks:
+                click.echo(f"Found {len(result.failed_tasks)} failed tasks:")
+                failed_tasks_dict = [
+                    {
+                        "stepId": task.step_id,
+                        "taskId": task.task_id,
+                        "stepName": task.step_name,
+                        "sessionId": task.session_id,
+                    }
+                    for task in result.failed_tasks
+                ]
+                click.echo(_cli_object_repr(failed_tasks_dict))
+            else:
+                click.echo("No failed tasks found.")
+
+        # Determine exit code based on job status
+        exit_code = 0
+        if result.status == "SUCCEEDED" and not result.failed_tasks:
+            exit_code = 0
+        elif result.status == "FAILED" or result.failed_tasks:
+            exit_code = 2
+        elif result.status == "CANCELED":
+            exit_code = 3
+        elif result.status == "SUSPENDED":
+            exit_code = 4
+        elif result.status == "ARCHIVED":
+            exit_code = 4
+        elif result.status == "NOT_COMPATIBLE":
+            exit_code = 5
+        else:
+            # Unknown status, treat as failure
+            exit_code = 2
+
+        sys.exit(exit_code)
+
+    except DeadlineOperationTimedOut as e:
+        if is_json_output:
+            error_response = {"error": str(e), "timeout": True}
+            click.echo(json.dumps(error_response, indent=2))
+        else:
+            click.echo(f"Error waiting for job completion: {e}")
+        sys.exit(1)
+    except DeadlineOperationError as e:
+        if is_json_output:
+            error_response = {"error": str(e)}
+            click.echo(json.dumps(error_response, indent=2))
+        else:
+            click.echo(f"Error waiting for job completion: {e}")
+        sys.exit(2)
+
+
+@cli_job.command(name="logs")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to get logs for.")
+@click.option(
+    "--session-id",
+    help="The session ID to get logs for. If not provided and job-id is specified, will use the latest session based on endedAt time.",
+)
+@click.option("--limit", default=100, help="Maximum number of log lines to return.")
+@click.option(
+    "--start-time",
+    help="Start time for logs in ISO format (e.g., 2023-01-01T12:00:00Z).",
+)
+@click.option("--end-time", help="End time for logs in ISO format (e.g., 2023-01-01T13:00:00Z).")
+@click.option("--next-token", help="Token for pagination of results.")
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default="verbose",
+    help="Output format (verbose or json).",
+)
+@_handle_error
+def job_logs(session_id, limit, start_time, end_time, next_token, output, **args):
+    """
+    Get CloudWatch logs for a specific session.
+
+    This command retrieves logs from CloudWatch for the specified session ID.
+    By default, it returns the most recent 100 log lines, but this can be
+    adjusted using the --limit parameter.
+
+    If session-id is not provided but job-id is, the command will automatically
+    select a session using the following priority:
+    1. If there are ongoing sessions (no endedAt time), always prefer them
+    2. Among ongoing sessions, select the one that started most recently
+    3. If no ongoing sessions exist, select the completed session that ended most recently
+
+    Use --next-token with the value from a previous response to get the next page of results.
+    """
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+
+    is_json_output = output.lower() == "json"
+
+    # If session_id is not provided but job_id is, try to find the session
+    if not session_id and job_id:
+        deadline = api.get_boto3_client("deadline", config=config)
+        try:
+            # Use paginator to get all sessions
+            paginator = deadline.get_paginator("list_sessions")
+            sessions = []
+
+            for page in paginator.paginate(farmId=farm_id, queueId=queue_id, jobId=job_id):
+                sessions.extend(page.get("sessions", []))
+
+            if not sessions:
+                raise DeadlineOperationError(f"No sessions found for job {job_id}")
+            elif len(sessions) == 1:
+                session_id = sessions[0]["sessionId"]
+                if not is_json_output:
+                    click.echo(f"Using the only available session: {session_id}")
+            else:
+                # Multiple sessions found, select the latest one
+                # Prioritize ongoing sessions (no endedAt) over completed ones
+                # Among ongoing sessions, select the one that started most recently
+                # Among completed sessions, select the one that ended most recently
+                ongoing_sessions = [s for s in sessions if "endedAt" not in s]
+                completed_sessions = [s for s in sessions if "endedAt" in s]
+
+                if ongoing_sessions:
+                    # Always prefer ongoing sessions, select the most recently started one
+                    latest_session = max(
+                        ongoing_sessions,
+                        key=lambda s: s.get(
+                            "startedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                        ),
+                    )
+                else:
+                    # No ongoing sessions, select the most recently completed one
+                    latest_session = max(
+                        completed_sessions,
+                        key=lambda s: s.get(
+                            "endedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                        ),
+                    )
+
+                session_id = latest_session["sessionId"]
+                if not is_json_output:
+                    click.echo(f"Using the latest session: {session_id}")
+        except ClientError as exc:
+            raise DeadlineOperationError(
+                f"Failed to list sessions for job {job_id}:\n{exc}"
+            ) from exc
+
+    # Ensure we have a session ID at this point
+    if not session_id:
+        raise DeadlineOperationError(
+            "Session ID is required. Provide it with --session-id or specify a --job-id with at least one session."
+        )
+
+    if not is_json_output:
+        click.echo(
+            f"Retrieving logs for session {session_id} from log group /aws/deadline/{farm_id}/{queue_id}..."
+        )
+
+    try:
+        result = api.get_session_logs(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            session_id=session_id,
+            limit=limit,
+            start_time=start_time,
+            end_time=end_time,
+            next_token=next_token,
+            config=config,
+        )
+
+        if is_json_output:
+            # Return everything as JSON
+            response = {
+                "events": [
+                    {
+                        "timestamp": event.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "message": event.message,
+                        "ingestionTime": (
+                            event.ingestion_time.strftime("%Y-%m-%d %H:%M:%S")
+                            if event.ingestion_time
+                            else None
+                        ),
+                        "eventId": event.event_id,
+                    }
+                    for event in result.events
+                ],
+                "count": result.count,
+                "nextToken": result.next_token,
+                "logGroup": result.log_group,
+                "logStream": result.log_stream,
+            }
+            click.echo(json.dumps(response, indent=2))
+        else:
+            # Display the logs in verbose format
+            if not result.events:
+                click.echo("No logs found for the specified session.")
+                return
+
+            for event in result.events:
+                timestamp = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                click.echo(f"[{timestamp}] {event.message}")
+
+            click.echo(f"\nRetrieved {result.count} log events.")
+
+            # If there are more logs available, inform the user
+            if result.next_token:
+                click.echo(
+                    f'More logs are available. Use --next-token "{result.next_token}" to retrieve the next page.'
+                )
+
+    except Exception as e:
+        if is_json_output:
+            error_response = {"error": str(e)}
+            click.echo(json.dumps(error_response, indent=2))
+            sys.exit(1)
+        else:
+            raise DeadlineOperationError(f"Error retrieving logs: {e}")
+
+
 @cli_job.command(name="trace-schedule")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -758,7 +1091,10 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     while "nextToken" in response:
         old_list = response["sessions"]
         response = deadline.list_sessions(
-            farmId=farm_id, queueId=queue_id, jobId=job_id, nextToken=response["nextToken"]
+            farmId=farm_id,
+            queueId=queue_id,
+            jobId=job_id,
+            nextToken=response["nextToken"],
         )
         response["sessions"] = old_list + response["sessions"]
     response.pop("ResponseMetadata", None)
@@ -768,7 +1104,10 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     click.echo("Getting all the session actions for the job...")
     for session in sessions:
         response = deadline.list_session_actions(
-            farmId=farm_id, queueId=queue_id, jobId=job_id, sessionId=session["sessionId"]
+            farmId=farm_id,
+            queueId=queue_id,
+            jobId=job_id,
+            sessionId=session["sessionId"],
         )
         while "nextToken" in response:
             old_list = response["sessionActions"]
@@ -802,7 +1141,10 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
                             step = steps[step_id]
                         else:
                             step = deadline.get_step(
-                                farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id
+                                farmId=farm_id,
+                                queueId=queue_id,
+                                jobId=job_id,
+                                stepId=step_id,
                             )
                             step.pop("ResponseMetadata", None)
                             steps[step_id] = step
