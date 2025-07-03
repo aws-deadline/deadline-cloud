@@ -227,6 +227,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.aws_profiles_box.currentTextChanged.connect(self.aws_profile_changed)
 
     def _build_profile_settings_ui(self, group, layout):
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+
         self.job_history_dir_edit = DirectoryPickerWidget(
             initial_directory="",
             directory_label="Job history directory",
