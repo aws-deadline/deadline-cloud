@@ -72,7 +72,7 @@ class DeadlineDumper(Emitter, Serializer, DeadlineRepresenter, Resolver):
         Resolver.__init__(self)
 
 
-def deadline_yaml_dump(data, stream=None, **kwds):
+def deadline_yaml_dump(data, stream=None, **kwds) -> str:
     """
     Works like pyyaml's safe_dump, but saves multi-line
     strings with the "|" style and defaults to sort_keys=False.

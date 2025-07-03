@@ -14,7 +14,7 @@ from deadline.client.api._list_jobs_by_filter_expression import (
 )
 
 # Constants for testing
-from .mock_search_jobs import create_fake_job_list, mock_search_jobs_for_set
+from ..mock_deadline_job_apis import create_fake_job_list, mock_search_jobs_for_set
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID
 
 MOCK_TIMESTAMP = datetime(2023, 1, 2, 3, 4, 5, tzinfo=timezone.utc)

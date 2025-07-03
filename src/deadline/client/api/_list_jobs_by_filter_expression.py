@@ -60,7 +60,8 @@ def _list_jobs_by_filter_expression(
       boto3_session (boto3.Session): The boto3 Session for AWS API access.
       farm_id (str): The Farm ID.
       queue_id (str): The Queue ID.
-      filter_expressions (dict[str, Any]): The filter expression to apply to jobs.
+      filter_expressions (dict[str, Any]): The filter expression to apply to jobs. This is nested one level in a
+            filter expression provided to deadline:SearchJobs, so cannot include a groupFilter.
 
     Returns:
       The list of all jobs in the queue that satisfy the provided filter expression. Each job is as returned by the deadline:SearchJobs API.
