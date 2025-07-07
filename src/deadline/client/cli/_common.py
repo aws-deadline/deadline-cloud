@@ -181,7 +181,7 @@ def _fix_multiline_strings(obj: Any) -> Any:
         return obj
 
 
-def _cli_object_repr(obj: Any):
+def _cli_object_repr(obj: Any) -> str:
     """
     Transforms an API response object into a string, for printing as
     CLI output. This formats the output as YAML, using the "|"-style

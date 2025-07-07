@@ -4,9 +4,26 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta
-from typing import Any, Optional, Callable
+from datetime import datetime
+from typing import Any, Optional
 import tempfile
+
+# This as an upper bound to allow for eventual consistency into the materialized view that
+# the deadline:SearchJobs API is based on. It's taken from numbers seen in heavy load testing,
+# increased by a generous amount.
+EVENTUAL_CONSISTENCY_MAX_SECONDS = 120
+
+
+def _datetimes_to_str(obj: Any) -> Any:
+    """Recursively applies the isoformat() function to all datetimes in the object"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, list):
+        return [_datetimes_to_str(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: _datetimes_to_str(value) for key, value in obj.items()}
+    else:
+        return obj
 
 
 class IncrementalDownloadJob:
@@ -14,19 +31,21 @@ class IncrementalDownloadJob:
     Model representing a job in the download progress state.
     """
 
-    _required_dict_fields = ["jobId", "sessions"]
+    _required_dict_fields = ["jobId", "job", "sessions"]
 
     job_id: str
+    job: dict[str, Any]
     sessions: list
 
-    def __init__(self, job_id: str, sessions: Optional[list] = None):
+    def __init__(self, job: dict[str, Any], sessions: Optional[list] = None):
         """
         Initialize a Job instance.
         Args:
-            job_id (str): The ID of the job
+            job (dict[str, Any]): The job as returned by boto3 from deadline:SearchJobs.
             sessions (list): List of JobSession objects
         """
-        self.job_id = job_id
+        self.job_id = job["jobId"]
+        self.job = _datetimes_to_str(job)
         self.sessions = sessions or []
 
     @classmethod
@@ -45,7 +64,7 @@ class IncrementalDownloadJob:
             raise ValueError(f"Input is missing required fields: {missing_fields}")
 
         sessions = data["sessions"]
-        return cls(job_id=data["jobId"], sessions=sessions)
+        return cls(job=data["job"], sessions=sessions)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -53,23 +72,24 @@ class IncrementalDownloadJob:
         Returns:
             dict: Dictionary representation of the job
         """
-        return {"jobId": self.job_id, "sessions": self.sessions}
+        return {"jobId": self.job_id, "job": self.job, "sessions": self.sessions}
 
 
 class IncrementalDownloadState:
     """
     Model for tracking all the job attachments downloads to perform for a queue over time.
-    A new download becomes available whenever a TASK_RUN session action completes. The state
-    includes some informational fields that are not strictly necessary, to help make the data
+    A new download becomes available whenever a TASK_RUN session action completes.
+
+    This class includes some informational fields that are not strictly necessary, to help make the data
     on disk easier to understand on inspection.
 
     * https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_GetSessionAction.html#API_GetSessionAction_ResponseSyntax
     * https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_SessionActionDefinition.html
 
-    We track state at three levels, and use the resource state at one level to prune queries at lower levels when we can:
+    The Deadline Cloud APIs do not provide direct access to a stream of completed session actions, so we reconstruct such
+    a stream by tracking state at three levels. Where possible, we use the resource state at one level to prune queries at lower levels:
 
-    1. Job - The jobs list contains every job that entered an active status within the time interval [downloads_started_timestamp, downloads_completed_timestamp],
-            where it can generate new task runs, and has not exited as complete or failed.
+    1. Job - The jobs list contains every job that is active and that we have downloaded output from in a previous incremental download command.
     2. Session - Each session of a job represents a single worker running a sequence of tasks from the job. The sessions list in
             a job contains all the sessions that are active and from which we have downloaded some output.
     3. SessionAction - Session actions have sequential IDs, so for each session we track the highest index of session action
@@ -121,9 +141,9 @@ class IncrementalDownloadState:
 
     downloads_started_timestamp: datetime
     """The timestamp of when the download state was bootstrapped."""
-    downloads_completed_timestamp: Optional[datetime]
+    downloads_completed_timestamp: datetime
     """The timestamp up to which we are confident downloads are complete."""
-    eventual_consistency_max_duration: timedelta = timedelta(seconds=120)
+    eventual_consistency_max_seconds: int = EVENTUAL_CONSISTENCY_MAX_SECONDS
     """The duration for deadline:SearchJobs query overlap, to account for eventual consistency."""
 
     jobs: list[IncrementalDownloadJob]
@@ -134,7 +154,7 @@ class IncrementalDownloadState:
         downloads_started_timestamp: datetime,
         downloads_completed_timestamp: Optional[datetime] = None,
         jobs: Optional[list] = None,
-        eventual_consistency_max_duration: Optional[timedelta] = None,
+        eventual_consistency_max_seconds: Optional[int] = None,
     ):
         """
         Initialize a IncrementalDownloadState instance. To bootstrap the state, construct with only the downloads_started_timestamp.
@@ -144,12 +164,15 @@ class IncrementalDownloadState:
             downloads_completed_timestamp (datetime): The timestamp up to which we are confident downloads are complete.
             jobs (list[IncrementalDownloadJob]): The list of jobs that entered 'active' status between downloads_started_timestamp
                     and downloads_completed_timestamp, and are not completed.
-            eventual_consistency_max_duration (Optional[timedelta]): The duration for deadline:SearchJobs query overlap, to account for eventual consistency.
+            eventual_consistency_max_seconds (Optional[int]): The duration, in seconds, for deadline:SearchJobs query overlap, to account for eventual consistency.
         """
         self.downloads_started_timestamp = downloads_started_timestamp
-        self.downloads_completed_timestamp = downloads_completed_timestamp
-        if eventual_consistency_max_duration:
-            self.eventual_consistency_max_duration = eventual_consistency_max_duration
+        if downloads_completed_timestamp is not None:
+            self.downloads_completed_timestamp = downloads_completed_timestamp
+        else:
+            self.downloads_completed_timestamp = downloads_started_timestamp
+        if eventual_consistency_max_seconds:
+            self.eventual_consistency_max_seconds = eventual_consistency_max_seconds
         self.jobs = jobs or []
 
     @classmethod
@@ -172,10 +195,8 @@ class IncrementalDownloadState:
             downloads_completed_timestamp=datetime.fromisoformat(
                 data["downloadsCompletedTimestamp"]
             ),
-            eventual_consistency_max_duration=timedelta(
-                seconds=int(data["eventualConsistencyMaxSeconds"])
-            ),
-            jobs=data["jobs"],
+            eventual_consistency_max_seconds=int(data["eventualConsistencyMaxSeconds"]),
+            jobs=[IncrementalDownloadJob.from_dict(job) for job in data["jobs"]],
         )
 
     def to_dict(self):
@@ -186,7 +207,7 @@ class IncrementalDownloadState:
         """
         result = {
             "downloadsStartedTimestamp": self.downloads_started_timestamp.isoformat(),
-            "eventualConsistencyMaxSeconds": self.eventual_consistency_max_duration.total_seconds(),
+            "eventualConsistencyMaxSeconds": self.eventual_consistency_max_seconds,
             "jobs": [job.to_dict() for job in self.jobs],
         }
         if self.downloads_completed_timestamp is not None:
@@ -198,7 +219,6 @@ class IncrementalDownloadState:
     def from_file(
         cls,
         file_path: str,
-        print_function_callback: Callable[[str], None] = print,
     ) -> "IncrementalDownloadState":
         """
         Loads progress from state file saved at saved_progress_checkpoint_full_path
@@ -213,15 +233,11 @@ class IncrementalDownloadState:
             state_data = json.load(file)
 
         download_state = IncrementalDownloadState.from_dict(state_data)
-        print_function_callback(
-            f"Loaded existing state file from download progress checkpoint location {file_path}"
-        )
         return download_state
 
     def save_file(
         self,
         file_path: str,
-        print_function_callback: Callable[[str], None] = print,
     ) -> None:
         """
         Save the current download progress to a state file atomically.
@@ -249,5 +265,3 @@ class IncrementalDownloadState:
 
         # Atomically replace the target file with the temporary file
         os.replace(tmpfile.name, file_path)
-
-        print_function_callback(f"Successfully saved state file to {file_path}")

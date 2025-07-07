@@ -315,16 +315,48 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         """
         self.max_worker_count_box.setHidden(not state)
 
+    def _has_compatible_attr(self, obj, attr_name, expected_type):
+        """
+        Determine if attribute exists and if the type is correct.
+        """
+        # DCCs can have anything in the settings object since they define their own dataclass to pass in.
+        # Changing what we look for below may cause breaking changes in usage of this library.
+        return isinstance(getattr(obj, attr_name, None), expected_type)
+
     def refresh_ui(self, settings: Any):
         self.sub_name_edit.setText(settings.name)
         self.desc_edit.setText(settings.description)
-        self.initial_status_box.setCurrentText("READY")
-        self.max_failed_tasks_count_box.setValue(20)
-        self.max_retries_per_task_box.setValue(5)
-        self.priority_box.setValue(50)
-        self.unlimited_max_worker_count.setChecked(True)
-        self.limited_max_worker_count.setChecked(False)
-        self.max_worker_count_box.setHidden(True)
+
+        # Set all fields with type checking
+        self.initial_status_box.setCurrentText(
+            settings.initial_status
+            if self._has_compatible_attr(settings, "initial_status", str)
+            else "READY"
+        )
+        self.max_failed_tasks_count_box.setValue(
+            settings.max_failed_tasks_count
+            if self._has_compatible_attr(settings, "max_failed_tasks_count", int)
+            else 20
+        )
+        self.max_retries_per_task_box.setValue(
+            settings.max_retries_per_task
+            if self._has_compatible_attr(settings, "max_retries_per_task", int)
+            else 5
+        )
+        self.priority_box.setValue(
+            settings.priority if self._has_compatible_attr(settings, "priority", int) else 50
+        )
+
+        has_limited_max_worker_count = (
+            (settings.max_worker_count > 0)
+            if self._has_compatible_attr(settings, "max_worker_count", int)
+            else False
+        )
+        self.unlimited_max_worker_count.setChecked(not has_limited_max_worker_count)
+        self.limited_max_worker_count.setChecked(has_limited_max_worker_count)
+        self.max_worker_count_box.setHidden(not has_limited_max_worker_count)
+        if has_limited_max_worker_count:
+            self.max_worker_count_box.setValue(settings.max_worker_count)
 
     def set_parameter_value(self, parameter: dict[str, Any]):
         """
@@ -409,8 +441,30 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         """
         Update a given instance of scene settings with updated values.
         """
+        # TODO: Extract sticky settings from per-DCC implementation to centralized.
         settings.name = self.sub_name_edit.text()
         settings.description = self.desc_edit.text()
+
+        # Set all fields with type checking
+        if self._has_compatible_attr(settings, "initial_status", str):
+            settings.initial_status = self.initial_status_box.currentText()
+
+        if self._has_compatible_attr(settings, "max_failed_tasks_count", int):
+            settings.max_failed_tasks_count = self.max_failed_tasks_count_box.value()
+
+        if self._has_compatible_attr(settings, "max_retries_per_task", int):
+            settings.max_retries_per_task = self.max_retries_per_task_box.value()
+
+        if self._has_compatible_attr(settings, "priority", int):
+            settings.priority = self.priority_box.value()
+
+        # Handle `max_worker_count` based on UI selection:
+        # Preserve unlimited worker setting by using -1 instead of overriding with spin box value
+        if self._has_compatible_attr(settings, "max_worker_count", int):
+            if self.unlimited_max_worker_count.isChecked():
+                settings.max_worker_count = -1  # -1 denotes no max worker count limits.
+            else:
+                settings.max_worker_count = self.max_worker_count_box.value()
 
 
 class DeadlineCloudSettingsWidget(QGroupBox):

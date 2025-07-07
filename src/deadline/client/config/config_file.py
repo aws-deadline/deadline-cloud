@@ -11,6 +11,7 @@ __all__ = [
     "clear_setting",
     "get_best_profile_for_farm",
     "str2bool",
+    "DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
 ]
 
 import getpass
@@ -37,9 +38,10 @@ DEFAULT_DEADLINE_ENDPOINT_URL = os.getenv(
     f"https://deadline.{boto3.Session().region_name}.amazonaws.com",
 )
 
-# The default directory within which to save the history of created jobs.
+# Default directories used by various Deadline CLI commands
 DEFAULT_JOB_HISTORY_DIR = os.path.join("~", ".deadline", "job_history", "{aws_profile_name}")
 DEFAULT_CACHE_DIR = os.path.join("~", ".deadline", "cache")
+DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR = os.path.join("~", ".deadline", "incremental_download")
 
 _TRUE_VALUES = {"yes", "on", "true", "1"}
 _FALSE_VALUES = {"no", "off", "false", "0"}
