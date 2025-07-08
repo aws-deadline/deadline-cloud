@@ -1,8 +1,8 @@
 # Job attachments
 
-[Job attachments][job-attachments] enable you to transfer files back and forth between your workstation and [AWS Deadline Cloud][deadline-cloud], using an Amazon S3 bucket in your AWS account associated with your [AWS Deadline Cloud queues][queue]. 
+[Job attachments][job-attachments] enable you to transfer files back and forth between your workstation and [AWS Deadline Cloud][deadline-cloud], using an Amazon S3 bucket in your AWS account associated with your [AWS Deadline Cloud queues][queue].
 
-Job attachments uses your configured S3 bucket as a [content-addressable storage](https://en.wikipedia.org/wiki/Content-addressable_storage), which creates a snapshot of the files used in your job submission in [asset manifests](#asset-manifests), only uploading files that aren't already in S3. This saves you time and bandwidth when iterating on jobs. When an [AWS Deadline Cloud worker agent][worker-agent] starts working on a job with job attachments, it recreates the file system snapshot in the worker agent session directory, and uploads any outputs back to your S3 bucket. 
+Job attachments uses your configured S3 bucket as a [content-addressable storage](https://en.wikipedia.org/wiki/Content-addressable_storage), which creates a snapshot of the files used in your job submission in [asset manifests](#asset-manifests), only uploading files that aren't already in S3. This saves you time and bandwidth when iterating on jobs. When an [AWS Deadline Cloud worker agent][worker-agent] starts working on a job with job attachments, it recreates the file system snapshot in the worker agent session directory, and uploads any outputs back to your S3 bucket.
 
 You can then easily download your outputs with the [deadline cli](../client/) `deadline job download-output` command, or using the [protocol handler](#protocol-handler) to download from a click of a button in the [AWS Deadline Cloud monitor][monitor].
 
@@ -68,14 +68,14 @@ Output manifests for tasks are stored under:
 Where:
 - `<root_prefix>` is the prefix configured in the queue's job attachment settings
 - `<farm_id>`, `<queue_id>`, `<job_id>`, `<step_id>`, `<task_id>`, and `<session_action_id>` are the respective identifiers (e.g., farm-1234567890abcdefg)
-- `<manifest_hash>` is a hash derived from the source root path
+- `<manifest_hash>` is a hash of the concatenation of `fileSystemLocationName` (if set) and `rootPath` fields in the job's `manifests` list.
 - `<timestamp>` is the time that the task started. It is formatted as an ISO8601 timestamp with microsecond precision and in the UTC timezone (e.g. `2025-04-01T17:27:28.044179Z`)
 
 Each manifest file also has an asset root which defines the local root path where files should be placed when downloaded. The asset root is stored in the user-defined metadata of the manifest S3 object. If the asset root can be encoded in ASCII, it is stored directly under the `asset-root` userdata property. If not, it is stored as a JSON-encoded string under `asset-root-json`.
 
 ## Asset Manifests
 
-When making a job submission, the job attachments library makes a snapshot of all of the files included in the submission. The contents of each file are hashed, and the files are uploaded to the S3 bucket associated with the queue you are submitting to. This way, if the files haven't changed since a previous submission, the hash will be the same and the files will not be re-uploaded. 
+When making a job submission, the job attachments library makes a snapshot of all of the files included in the submission. The contents of each file are hashed, and the files are uploaded to the S3 bucket associated with the queue you are submitting to. This way, if the files haven't changed since a previous submission, the hash will be the same and the files will not be re-uploaded.
 
 These snapshots are encapsulated in one or more [`asset_manifests`](asset_manifests). Asset manifests include the local file path and associated hash of every file included in the submission, plus some metadata such as the file size and last modified time. Asset manifests are uploaded to your job attachments S3 bucket alongside your files.
 
@@ -138,7 +138,7 @@ In order to further improve submission time, there are currently two local [`cac
 
 ## Protocol Handler
 
-On Windows and Linux operating systems, you can choose to install the [Deadline client](../client/) protocol handler in order to run AWS Deadline Cloud commands sent from a web browser. Of note is the ability to download job attachments outputs from your jobs through the [AWS Deadline Cloud monitor][downloading-output]. 
+On Windows and Linux operating systems, you can choose to install the [Deadline client](../client/) protocol handler in order to run AWS Deadline Cloud commands sent from a web browser. Of note is the ability to download job attachments outputs from your jobs through the [AWS Deadline Cloud monitor][downloading-output].
 
 You can install the protocol handler by running the command: `deadline handle-web-url --install`
 
