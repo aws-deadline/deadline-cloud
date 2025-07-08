@@ -39,7 +39,7 @@ class TestIncrementalDownloadState:
         """
         return {
             "location": temp_dir,
-            "progress_file": os.path.join(temp_dir, "download_progress.json"),
+            "progress_file": os.path.join(temp_dir, "download_checkpoint.json"),
         }
 
     @pytest.fixture

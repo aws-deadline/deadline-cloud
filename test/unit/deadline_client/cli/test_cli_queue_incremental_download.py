@@ -36,7 +36,7 @@ ISO_FREEZE_TIME_PLUS_7MIN = "2025-05-26 12:07:00+00:00"
 
 
 # Fixtures for shared resources
-@pytest.fixture()
+@pytest.fixture
 def checkpoint_dir(tmp_path_factory):
     """Create a checkpoint directory for all tests to use."""
     checkpoint_dir = tmp_path_factory.mktemp("checkpoint")
@@ -44,11 +44,18 @@ def checkpoint_dir(tmp_path_factory):
     # No cleanup needed here as tmp_path_factory handles it automatically
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def boto3_session():
     """Create a mock boto3 session for all tests to use."""
     mock_session = MagicMock(spec=boto3.Session)
-    mock_session.client().get_queue.return_value = {"displayName": "Mock Queue"}
+    mock_session.client().get_queue.return_value = {
+        "queueId": MOCK_QUEUE_ID,
+        "displayName": "Mock Queue",
+        "jobAttachmentSettings": {
+            "rootPrefix": "MockRootPrefix",
+            "s3BucketName": "mock-s3-bucket",
+        },
+    }
     with patch.object(boto3, "Session", return_value=mock_session), patch.object(
         deadline.client.api, "get_deadline_cloud_library_telemetry_client"
     ):
@@ -104,6 +111,40 @@ def test_incremental_output_download_requires_beta_acknowledgement(
         "The incremental-output-download command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
         in result.output
     ), result.output
+
+
+def test_incremental_output_download_requires_queue_with_job_attachments(
+    fresh_deadline_config, boto3_session, with_incremental_download_enabled, checkpoint_dir
+):
+    # The response does not include the "jobAttachmentSettings" field
+    boto3_session.client().get_queue.return_value = {
+        "queueId": MOCK_QUEUE_ID,
+        "displayName": "Mock Queue",
+    }
+
+    # Run the CLI command once to bootstrap the operation
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    # Assert the command executed successfully
+    assert result.exit_code == 1, result.output
+
+    assert "Queue 'Mock Queue' does not have job attachments configured." in result.output, (
+        result.output
+    )
 
 
 def test_incremental_output_download_pid_lock_already_held_error(
@@ -794,3 +835,69 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
     assert "Succeeded tasks: 1 / 2" in result.output, result.output
     assert "added: 1" in result.output, result.output
+
+
+def test_incremental_output_download_dry_run(
+    fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
+):
+    """Test a new job through bootstrap, completion, and retirement."""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {
+        "SUCCEEDED": 1,
+        "READY": 1,
+    }
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    boto3_session.client().search_jobs = mock_search_jobs_for_set(
+        MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs
+    )
+    boto3_session.client().get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    # RUN 1: Run the CLI command once to bootstrap the operation
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "incremental-output-download",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+                "--dry-run",
+            ],
+        )
+
+    # Assert the command executed successfully
+    assert result.exit_code == 0, result.output
+
+    # Assert that the output contained information about the bootstrapping and the mocked resources
+    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert (
+        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_download_checkpoint.json')}"
+        in result.output
+    ), result.output
+    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    # Need to convert the freeze time to the local time zone for this print assertion
+    assert (
+        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        in result.output
+    ), result.output
+    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert "Skipping downloads due to DRY RUN" in result.output, result.output
+    assert (
+        "Summary of DRY RUN for incremental output download (no files were downloaded to the file system):"
+        in result.output
+    ), result.output
+    assert "This is a DRY RUN so the checkpoint was not saved" in result.output, result.output

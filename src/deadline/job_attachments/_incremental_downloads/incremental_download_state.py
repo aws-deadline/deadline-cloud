@@ -31,7 +31,7 @@ class IncrementalDownloadJob:
     Model representing a job in the download progress state.
     """
 
-    _required_dict_fields = ["job", "sessionEndedTimestamp", "sessionCompletedIndexes"]
+    _required_dict_fields = ["job"]
 
     job: dict[str, Any]
     session_ended_timestamp: Optional[datetime]
@@ -76,10 +76,10 @@ class IncrementalDownloadJob:
             raise ValueError(f"Input is missing required fields: {missing_fields}")
 
         job = data["job"]
-        session_completed_indexes = data["sessionCompletedIndexes"]
+        session_completed_indexes = data.get("sessionCompletedIndexes", {})
         session_ended_timestamp = (
             datetime.fromisoformat(data["sessionEndedTimestamp"])
-            if data["sessionEndedTimestamp"] is not None
+            if data.get("sessionEndedTimestamp") is not None
             else None
         )
         return cls(
@@ -94,13 +94,14 @@ class IncrementalDownloadJob:
         Returns:
             dict: Dictionary representation of the job
         """
-        return {
+        result: dict[str, Any] = {
             "job": self.job,
-            "sessionEndedTimestamp": self.session_ended_timestamp
-            if self.session_ended_timestamp is None
-            else self.session_ended_timestamp.isoformat(),
-            "sessionCompletedIndexes": self.session_completed_indexes,
         }
+        if self.session_ended_timestamp is not None:
+            result["sessionEndedTimestamp"] = self.session_ended_timestamp.isoformat()
+        if self.session_completed_indexes != {}:
+            result["sessionCompletedIndexes"] = self.session_completed_indexes
+        return result
 
 
 class IncrementalDownloadState:
@@ -118,9 +119,12 @@ class IncrementalDownloadState:
     a stream by tracking state at three levels. Where possible, we use the resource state at one level to prune queries at lower levels:
 
     1. Job - The jobs list contains every job that is active and that we have downloaded output from in a previous incremental download command.
+            When a job becomes inactive, it tracks a minimal stub including the sessionEndedTimestamp value, to use for detecting
+            requeued jobs later.
     2. Session - Each session of a job represents a single worker running a sequence of tasks from the job. The sessionCompletedIndexes
             member of the IncrementalDownloadJob contains an entry for every session that is either still running, or whose
-            endedAt field is >= the downloadsCompletedTimestamp.
+            endedAt field is >= the downloadsCompletedTimestamp. When a job gets requeued, the sessionEndedTimestamp stored in the minimal
+            stub lets us skip sessions from before the job was requeued.
     3. SessionAction - Session actions have sequential IDs, so for each session we store the highest index of session action
             for which we have completed the download. A session action ID looks like "sessionaction-abc123-12" for session action
             index 12.

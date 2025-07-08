@@ -250,12 +250,19 @@ def queue_get(**args):
     "OVERWRITE (default): Download and replace the existing file.\n"
     "Default behaviour is to OVERWRITE.",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Perform a dry run of the operation, don't actually download the output files.",
+    default=False,
+)
 @_handle_error
 def incremental_output_download(
     json: bool,
     bootstrap_lookback_minutes: float,
     checkpoint_dir: str,
     force_bootstrap: bool,
+    dry_run: bool,
     **args,
 ):
     """
@@ -303,8 +310,13 @@ def incremental_output_download(
     checkpoint_file_path: str = os.path.join(checkpoint_dir, download_checkpoint_file_name)
 
     deadline = boto3_session.client("deadline")
-    response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
-    logger.echo(f"Started incremental download for queue: {response['displayName']}")
+    queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+    if "jobAttachmentSettings" not in queue:
+        raise DeadlineOperationError(
+            f"Queue '{queue['displayName']}' does not have job attachments configured."
+        )
+
+    logger.echo(f"Started incremental download for queue: {queue['displayName']}")
     logger.echo(f"Checkpoint: {checkpoint_file_path}")
     logger.echo()
 
@@ -350,10 +362,15 @@ def incremental_output_download(
         updated_download_state: IncrementalDownloadState = _incremental_output_download(
             boto3_session=boto3_session,
             farm_id=farm_id,
-            queue_id=queue_id,
-            download_state=current_download_state,
+            queue=queue,
+            checkpoint=current_download_state,
             print_function_callback=logger.echo,
+            dry_run=dry_run,
         )
 
-        # Save the checkpoint file
-        updated_download_state.save_file(checkpoint_file_path)
+        # Save the checkpoint file if it's not a dry run
+        if not dry_run:
+            updated_download_state.save_file(checkpoint_file_path)
+            logger.echo("Checkpoint saved")
+        else:
+            logger.echo("This is a DRY RUN so the checkpoint was not saved")

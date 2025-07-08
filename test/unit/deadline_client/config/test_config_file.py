@@ -351,15 +351,11 @@ def test_write_config_directory_permission_windows(
         str(path.resolve()), win32security.DACL_SECURITY_INFORMATION
     ).GetSecurityDescriptorDacl()
 
-    assert new_dacl.GetAceCount() == dacl.GetAceCount()
-    for i in range(dacl.GetAceCount()):
-        # Assert the access control entries are identical
-        (acetype, aceflags), access, sid = dacl.GetAce(i)
-        (new_acetype, new_aceflags), new_access, new_sid = new_dacl.GetAce(i)
-        assert acetype == new_acetype
-        assert aceflags == new_aceflags
-        assert access == new_access
-        assert sid == new_sid
+    new_dacl_aces = [new_dacl.GetAce(i) for i in range(new_dacl.GetAceCount())]
+    dacl_aces = [dacl.GetAce(i) for i in range(dacl.GetAceCount())]
+
+    # Assert the access control entries are identical
+    assert new_dacl_aces == dacl_aces
 
 
 @pytest.mark.skipif(

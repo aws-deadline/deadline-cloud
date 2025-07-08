@@ -204,7 +204,11 @@ def _get_output_manifest_prefix(
 
 
 def _get_tasks_manifests_keys_from_s3(
-    manifest_prefix: str, s3_bucket: str, session: Optional[boto3.Session] = None
+    manifest_prefix: str,
+    s3_bucket: str,
+    session: Optional[boto3.Session] = None,
+    *,
+    select_latest_per_task=True,
 ) -> List[str]:
     """
     Returns the keys of all output manifests from the given s3 prefix.
@@ -262,12 +266,16 @@ def _get_tasks_manifests_keys_from_s3(
     except Exception as e:
         raise AssetSyncError(e) from e
 
-    # 2. Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
-    for task_folder, files in task_prefixes.items():
-        last_subfolder = sorted(
-            set(f.split("/")[len(task_folder.split("/"))] for f in files), reverse=True
-        )[0]
-        manifests_keys += [f for f in files if f.startswith(f"{task_folder}/{last_subfolder}/")]
+    if select_latest_per_task:
+        # 2. Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
+        for task_folder, files in task_prefixes.items():
+            last_subfolder = sorted(
+                set(f.split("/")[len(task_folder.split("/"))] for f in files), reverse=True
+            )[0]
+            manifests_keys += [f for f in files if f.startswith(f"{task_folder}/{last_subfolder}/")]
+    else:
+        # Include all the keys, not just the latest per task
+        manifests_keys = [f for _, files in task_prefixes.items() for f in files]
 
     # Now `manifests_keys` is a list of the keys of files in the last folder (alphabetically) under each "task-" folder.
     return manifests_keys
