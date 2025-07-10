@@ -24,7 +24,7 @@ from ....job_attachments.models import (
 from .click_logger import ClickLogger
 from .._incremental_download import _incremental_output_download
 from .._pid_file_lock import PidFileLock
-from ....job_attachments.incremental_downloads.incremental_download_state import (
+from ....job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
 )
 

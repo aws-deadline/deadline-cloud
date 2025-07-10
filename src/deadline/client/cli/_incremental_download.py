@@ -12,7 +12,7 @@ from .. import api
 from typing import Any, Callable
 import boto3
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
-from ...job_attachments.incremental_downloads.incremental_download_state import (
+from ...job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
     IncrementalDownloadJob,
     _datetimes_to_str,

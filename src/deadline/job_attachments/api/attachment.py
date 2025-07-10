@@ -52,19 +52,52 @@ def attachment_download(
     file_name_manifest_dict: Dict[str, BaseAssetManifest] = _read_manifests(
         manifest_paths=manifests
     )
+
     path_mapping_rule_list: List[PathMappingRule] = _process_path_mapping(
         path_mapping_rules=path_mapping_rules
     )
 
+    _attachment_download_with_root_manifests(
+        boto3_session,
+        file_name_manifest_dict,
+        s3_root_uri,
+        conflict_resolution,
+        path_mapping_rule_list,
+        logger,
+    )
+
+
+def _attachment_download_with_root_manifests(
+    boto3_session: boto3.Session,
+    file_name_manifest_dict: Dict[str, BaseAssetManifest],
+    s3_root_uri: str,
+    conflict_resolution: FileConflictResolution,
+    path_mapping_rule_list: Optional[List[PathMappingRule]] = None,
+    logger: ClickLogger = ClickLogger(False),
+):
+    """
+    Function to use for attachment download when the caller has manifests and path mapping rule list,
+    instead of reading these from input files.
+    We should make this the default API Interface eventually to make it flexible
+
+    :param boto3_session: boto3 session
+    :param file_name_manifest_dict: Dictionary mapping manifest file names to their
+                                   corresponding manifest objects.
+    :param s3_root_uri: root uri for s3
+    :param conflict_resolution: conflict resolution method for repeated files
+    :param path_mapping_rule_list: path mapping rule list to map paths
+    :param logger: logger
+    :return:
+    """
+
     merged_manifests_by_root: Dict[str, BaseAssetManifest] = dict()
-    for file_name in file_name_manifest_dict:
-        manifest: BaseAssetManifest = file_name_manifest_dict[file_name]
+    for file_name, manifest in file_name_manifest_dict.items():
         # File name is supposed to be prefixed by a hash of source path in path mapping, use that to determine destination
         # If it doesn't appear in path mapping or mapping doesn't exist, download to current directory instead
         destination = next(
             (
                 rule.destination_path
-                for rule in path_mapping_rule_list
+                for rule in (path_mapping_rule_list or [])
                 if rule.get_hashed_source_path(manifest.get_default_hash_alg()) in file_name
             ),
             # Write to current directory partitioned by manifest name when no path mapping defined
@@ -73,7 +106,7 @@ def attachment_download(
         # Assuming the manifest is already aggregated and correspond to a single destination
         if merged_manifests_by_root.get(destination):
             raise NonValidInputError(
-                f"{destination} is already in use, one desination path maps to one manifest file only."
+                f"{destination} is already in use, one destination path maps to one manifest file only."
             )
 
         merged_manifests_by_root[destination] = manifest

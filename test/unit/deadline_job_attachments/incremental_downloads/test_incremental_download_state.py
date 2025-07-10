@@ -6,7 +6,7 @@ import pytest
 import tempfile
 from unittest.mock import MagicMock
 
-from deadline.job_attachments.incremental_downloads.incremental_download_state import (
+from deadline.job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadJob,
     IncrementalDownloadState,
     EVENTUAL_CONSISTENCY_MAX_SECONDS,

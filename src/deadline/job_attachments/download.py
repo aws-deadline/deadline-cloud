@@ -92,6 +92,22 @@ def get_manifest_from_s3(
 def get_asset_root_and_manifest_from_s3(
     manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
 ) -> Tuple[Optional[str], BaseAssetManifest]:
+    asset_root, _, asset_manifest = _get_asset_root_and_manifest_from_s3_with_last_modified(
+        manifest_key, s3_bucket, session
+    )
+    return (asset_root, asset_manifest)
+
+
+def _get_asset_root_and_manifest_from_s3_with_last_modified(
+    manifest_key: str, s3_bucket: str, session: Optional[boto3.Session] = None
+) -> Tuple[Optional[str], datetime, BaseAssetManifest]:
+    """
+    Gets manifest with its asset root and last modified from s3 using the manifest key in s3
+    :param manifest_key: key for searching in s3
+    :param s3_bucket: s3 bucket
+    :param session: boto3 session
+    :return: Returns Tuple of asset root, manifest's last modified time and the manifest
+    """
     s3_client = get_s3_client(session=session)
     try:
         # Assumption: the manifest is less than 5GB. S3 objects larger than 5GB will be truncated.
@@ -105,8 +121,9 @@ def get_asset_root_and_manifest_from_s3(
         asset_root = _get_asset_root_from_metadata(metadata=res["Metadata"])
         contents = res["Body"].read().decode("utf-8")
         asset_manifest = decode_manifest(contents)
+        last_modified = res["LastModified"]
 
-        return (asset_root, asset_manifest)
+        return (asset_root, last_modified, asset_manifest)
     except ClientError as exc:
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
         status_code_guidance = {
@@ -254,6 +271,59 @@ def _get_tasks_manifests_keys_from_s3(
 
     # Now `manifests_keys` is a list of the keys of files in the last folder (alphabetically) under each "task-" folder.
     return manifests_keys
+
+
+def _update_manifest_output_paths_for_session_actions(
+    s3_settings: JobAttachmentS3Settings,
+    farm_id: str,
+    queue_id: str,
+    session_actions: list[dict[str, Any]],
+    session: Optional[boto3.Session],
+) -> None:
+    """
+    Updates the manifests field in each session action with output manifest paths from s3.
+    The session action is updated with the manifests in same format as would be expected from ListSessionActions API.
+    This function is a fallback for until we get the manifests from the ListSessionActions API.
+
+    :param s3_settings: Job attachment S3 settings
+    :param farm_id: The farm ID
+    :param queue_id: The queue ID
+    :param session_actions: List of session action dictionaries
+    :param session: Optional boto3 session
+    :return: None
+    """
+
+    # Update manifests for each session action
+    for session_action in session_actions:
+        # Check if any session action already has output manifests
+        if session_action.get("manifests"):
+            # If this session action already has output manifests, no need to update
+            continue
+
+        # Get the manifest prefix using session action info
+        manifest_prefix: str = _get_output_manifest_prefix(
+            s3_settings,
+            farm_id,
+            queue_id,
+            session_action["job_id"],
+            session_action["step_id"],
+            session_action["task_id"],
+            session_action["session_action_id"],
+        )
+
+        # Get manifest paths from S3 using prefix
+        manifest_paths = _get_tasks_manifests_keys_from_s3(
+            manifest_prefix, s3_settings.s3BucketName, session=session
+        )
+
+        # Convert paths to the expected format
+        manifests = []
+        # TODO verify if ordering of output manifest paths matters here
+        for path in manifest_paths:
+            manifests.append({"outputManifestPath": path})
+
+        # Set the session action manifests in the incoming object
+        session_action["manifests"] = manifests
 
 
 def get_job_input_paths_by_asset_root(
@@ -741,6 +811,45 @@ def get_output_manifests_by_asset_root(
     return outputs
 
 
+def _get_output_manifest_files_by_asset_root_with_last_modified(
+    s3_settings: JobAttachmentS3Settings,
+    output_manifest_paths: List[str],
+    session: Optional[boto3.Session] = None,
+) -> list[Tuple[str, datetime, BaseAssetManifest]]:
+    """
+    For a given list of output manifest paths, returns a list of tuples containing
+    (asset_root, last_modified, manifest) that exactly mirrors the provided output_manifest_paths.
+
+    Returns:
+        A list of tuples containing (asset_root, last_modified, manifest) in the same order as
+        the provided output_manifest_paths.
+    """
+    outputs: List[Tuple[str, datetime, BaseAssetManifest]] = [None] * len(output_manifest_paths)  # type: ignore[list-item]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
+        # Submit all tasks and store futures in a list that preserves the original order
+        futures = []
+        for key in output_manifest_paths:
+            future = executor.submit(
+                _get_asset_root_and_manifest_from_s3_with_last_modified,
+                key,
+                s3_settings.s3BucketName,
+                session,
+            )
+            futures.append(future)
+
+        # Process results using explicit index-based iteration to ensure order preservation
+        for index in range(len(output_manifest_paths)):
+            asset_root, last_modified, asset_manifest = futures[index].result()
+            if not asset_root:
+                raise MissingAssetRootError(
+                    f"Failed to get asset root from metadata of output manifest: {output_manifest_paths[index]}"
+                )
+            outputs[index] = (asset_root, last_modified, asset_manifest)
+
+    return outputs
+
+
 def download_files_from_manifests(
     s3_bucket: str,
     manifests_by_root: dict[str, BaseAssetManifest],
@@ -906,6 +1015,38 @@ def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManife
     output_manifest: BaseAssetManifest = first_manifest.__class__(**manifest_args)
 
     return output_manifest
+
+
+def _merge_asset_manifests_sorted_asc_by_last_modified(
+    manifests_with_last_modified_timestamps: list[Tuple[datetime, BaseAssetManifest]],
+) -> BaseAssetManifest | None:
+    """Merge files from multiple manifests into a single list, sorting them by last modified timestamp asc.
+    This function first sorts the manifests by their timestamps (oldest first) and then merges them,
+    ensuring that newer files overwrite older ones with the same path.
+
+    Args:
+        manifests_with_last_modified_timestamps (list[Tuple[datetime, BaseAssetManifest]]): A list of tuples containing
+            (timestamp, manifest) to be sorted and merged.
+
+    Raises:
+        NotImplementedError: When two manifests have different hash algorithms.
+            All manifests must use the same hash algorithm.
+
+    Returns:
+        BaseAssetManifest | None: A single manifest containing the merged paths of all provided manifests
+            or None if no manifests were provided
+    """
+    if not manifests_with_last_modified_timestamps:
+        return None
+
+    # Sort manifests by timestamp (oldest first)
+    sorted_manifests_with_timestamps = sorted(manifests_with_last_modified_timestamps)
+
+    # Extract just the manifests in the sorted order
+    sorted_manifests = [manifest for _, manifest in sorted_manifests_with_timestamps]
+
+    # Use the existing merge function with the sorted manifests
+    return merge_asset_manifests(sorted_manifests)
 
 
 def _write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:

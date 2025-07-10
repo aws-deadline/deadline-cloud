@@ -22,7 +22,7 @@ from ..mock_deadline_job_apis import (
     create_fake_job_list,
     mock_get_job_for_set,
 )
-from deadline.job_attachments.incremental_downloads.incremental_download_state import (
+from deadline.job_attachments._incremental_downloads.incremental_download_state import (
     EVENTUAL_CONSISTENCY_MAX_SECONDS,
 )
 
