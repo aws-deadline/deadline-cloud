@@ -252,7 +252,7 @@ class AssetSync:
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
         os_env_vars: dict[str, str] | None = None,
-    ) -> None:
+    ) -> bool:
         """
         Args:
             s3_settings: S3-specific Job Attachment settings.
@@ -261,8 +261,7 @@ class AssetSync:
                                     to be set on the downloaded (synchronized) input files and directories.
             merged_manifests_by_root: Merged manifests produced by
                                     _aggregate_asset_root_manifests()
-        Returns: None
-        Raises: VFSExecutableMissingError If VFS is not startable.
+        Returns: bool indicating if VFS was able to be launched. True if VFS launched successfully.
         """
 
         try:
@@ -276,11 +275,12 @@ class AssetSync:
                 os_env_vars=os_env_vars,  # type: ignore[arg-type]
                 cas_prefix=s3_settings.full_cas_prefix(),
             )
-
+            return True
         except VFSExecutableMissingError:
             logger.error(
                 f"Virtual File System not found, falling back to {JobAttachmentsFileSystem.COPIED} for JobAttachmentsFileSystem."
             )
+            return False
 
     def copied_download(
         self,
