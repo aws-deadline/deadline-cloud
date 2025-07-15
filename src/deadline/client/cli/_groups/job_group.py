@@ -57,6 +57,31 @@ JSON_MSG_TYPE_ERROR = "error"
 JSON_MSG_TYPE_WARNING = "warning"
 
 
+def _format_timestamp(timestamp: datetime.datetime, use_local_time: bool = False) -> str:
+    """
+    Format a timestamp in ISO 8601 format with timezone information.
+
+    Args:
+        timestamp: The datetime object to format
+        use_local_time: If True, convert to local time; if False, keep as UTC
+
+    Returns:
+        Formatted timestamp string in ISO 8601 format with timezone
+    """
+    if use_local_time and timestamp.tzinfo is not None:
+        # Convert to local time
+        local_timestamp = timestamp.astimezone()
+        return local_timestamp.isoformat()
+    else:
+        # Keep as UTC - ensure it has timezone info
+        if timestamp.tzinfo is None:
+            # Assume naive datetime is UTC
+            utc_timestamp = timestamp.replace(tzinfo=datetime.timezone.utc)
+        else:
+            utc_timestamp = timestamp
+        return utc_timestamp.isoformat()
+
+
 # Set up the signal handler for handling Ctrl + C interruptions.
 sigint_handler = SigIntHandler()
 
@@ -767,6 +792,11 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
 
     is_json_output = output.lower() == "json"
 
+    # Get job name for output
+    deadline = api.get_boto3_client("deadline", config=config)
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job_name = job["name"]
+
     # Define a status callback for verbose output
     def status_callback(status, elapsed_time=0, total_timeout=0):
         if not is_json_output:
@@ -800,6 +830,8 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
         if is_json_output:
             # Return everything as JSON
             response = {
+                "jobId": job_id,
+                "jobName": job_name,
                 "status": result.status,
                 "elapsedTime": result.elapsed_time,
                 "failedTasks": [
@@ -815,6 +847,8 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
             click.echo(json.dumps(response, indent=2))
         else:
             # Use verbose output with YAML formatting
+            click.echo(f"Job ID: {job_id}")
+            click.echo(f"Job Name: {job_name}")
             click.echo(f"Job completed with status: {result.status}")
             click.echo(f"Elapsed time: {result.elapsed_time:.1f} seconds")
 
@@ -855,16 +889,29 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
 
     except DeadlineOperationTimedOut as e:
         if is_json_output:
-            error_response = {"error": str(e), "timeout": True}
+            error_response = {
+                "error": str(e),
+                "timeout": True,
+                "jobId": job_id,
+                "jobName": job_name,
+            }
             click.echo(json.dumps(error_response, indent=2))
         else:
+            click.echo(f"Job ID: {job_id}")
+            click.echo(f"Job Name: {job_name}")
             click.echo(f"Error waiting for job completion: {e}")
         sys.exit(1)
     except DeadlineOperationError as e:
         if is_json_output:
-            error_response = {"error": str(e)}
+            error_response = {
+                "error": str(e),
+                "jobId": job_id,
+                "jobName": job_name,
+            }
             click.echo(json.dumps(error_response, indent=2))
         else:
+            click.echo(f"Job ID: {job_id}")
+            click.echo(f"Job Name: {job_name}")
             click.echo(f"Error waiting for job completion: {e}")
         sys.exit(2)
 
@@ -891,8 +938,14 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     default="verbose",
     help="Output format (verbose or json).",
 )
+@click.option(
+    "--timezone",
+    type=click.Choice(["utc", "local"], case_sensitive=False),
+    default="utc",
+    help="Timezone for timestamps (utc or local). Default is utc.",
+)
 @_handle_error
-def job_logs(session_id, limit, start_time, end_time, next_token, output, **args):
+def job_logs(session_id, limit, start_time, end_time, next_token, output, timezone, **args):
     """
     Get CloudWatch logs for a specific session.
 
@@ -917,9 +970,15 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, **args
 
     is_json_output = output.lower() == "json"
 
+    # Get job name if job_id is available
+    deadline = api.get_boto3_client("deadline", config=config)
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job_name = job["name"]
+
+    use_local_time = timezone.lower() == "local"
+
     # If session_id is not provided but job_id is, try to find the session
     if not session_id and job_id:
-        deadline = api.get_boto3_client("deadline", config=config)
         try:
             # Use paginator to get all sessions
             paginator = deadline.get_paginator("list_sessions")
@@ -993,12 +1052,14 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, **args
         if is_json_output:
             # Return everything as JSON
             response = {
+                "jobId": job_id,
+                "jobName": job_name,
                 "events": [
                     {
-                        "timestamp": event.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": _format_timestamp(event.timestamp, use_local_time),
                         "message": event.message,
                         "ingestionTime": (
-                            event.ingestion_time.strftime("%Y-%m-%d %H:%M:%S")
+                            _format_timestamp(event.ingestion_time, use_local_time)
                             if event.ingestion_time
                             else None
                         ),
@@ -1018,8 +1079,12 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, **args
                 click.echo("No logs found for the specified session.")
                 return
 
+            # Display job information if available
+            click.echo(f"Job ID: {job_id}")
+            click.echo(f"Job Name: {job_name}")
+
             for event in result.events:
-                timestamp = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = _format_timestamp(event.timestamp, use_local_time)
                 click.echo(f"[{timestamp}] {event.message}")
 
             click.echo(f"\nRetrieved {result.count} log events.")
