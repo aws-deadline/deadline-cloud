@@ -1,3 +1,34 @@
+## 1.0.0 (2025-07-17)
+
+
+### Features
+* **experimental**: Download outputs for the auto download feature ([`9b3d17a`](https://github.com/aws-deadline/deadline-cloud/commit/9b3d17a38a8cb9568d2838ab566844b91d3a6ca8))
+* Add job name/id to job wait/log output and improve timestamp handling in the 'logs' command. (#725) ([`a7883e0`](https://github.com/aws-deadline/deadline-cloud/commit/a7883e082edcd2b9cefd4059a1a679e8926fdab5))
+* make _launch_vfs return a boolean indicating VFS launch success (#731) ([`e517659`](https://github.com/aws-deadline/deadline-cloud/commit/e5176598cc859584217eaea00d5e6a14a40070d5))
+* **experimental**: downloading session action outputs with merged manifest attachment download for incremental download cli (#706) ([`67a43e3`](https://github.com/aws-deadline/deadline-cloud/commit/67a43e323f26eb2cf2ffbe495e71b8e269ad1c44))
+* **experimental**: Retrieve sessions/session actions for auto download ([`5fdc5bf`](https://github.com/aws-deadline/deadline-cloud/commit/5fdc5bf7ce03599286d48cbbfdf6f4701724dec7))
+* Remember last used priority, max retries per task, max failed t… (#711) ([`358e6c7`](https://github.com/aws-deadline/deadline-cloud/commit/358e6c7d4fa2cf194d77c400803415eeb4dd5ffa))
+* **experimental**: Track jobs list for incremental download over time ([`9a9d59e`](https://github.com/aws-deadline/deadline-cloud/commit/9a9d59edc6474410452bbb3ed9b1f860c25d96a6))
+* **cli**: Add job 'wait' and 'logs' API/CLI commands (#697) ([`8ea699f`](https://github.com/aws-deadline/deadline-cloud/commit/8ea699f1a28d7b3ebe4ad31573e72b5380af21fe))
+* **experimental**: Add client library API to list jobs by filter expr ([`93c71a6`](https://github.com/aws-deadline/deadline-cloud/commit/93c71a6ed266197317cdc18f9c3d0f550963e4e0))
+* **experimental**: Refine the IncrementalDownloadState class ([`8c922de`](https://github.com/aws-deadline/deadline-cloud/commit/8c922debfc3b30317cf86ae310c53ef594cedb2c))
+* **experimental**: Add client library API to list recently updated jobs ([`bd32564`](https://github.com/aws-deadline/deadline-cloud/commit/bd325640e573bfabc8865b8a91f6158a733c7e75))
+* **experimental**: command bootstrap logic and reading from, saving to state file for incremental downloads cli (#691) ([`7acfcba`](https://github.com/aws-deadline/deadline-cloud/commit/7acfcba3271e633c81c0887d1a049ebd933a97d0))
+* **experimental**: command bootstrap logic and reading from, saving to state file for incremental downloads cli ([`7acfcba`](https://github.com/aws-deadline/deadline-cloud/commit/7acfcba3271e633c81c0887d1a049ebd933a97d0))
+* **experimental**: command bootstrap logic and reading from, saving to state file for incremental downloads cli (#691) ([`b0488a6`](https://github.com/aws-deadline/deadline-cloud/commit/b0488a62bad8927b888dff0f0617a9cbc477d729))
+* **experimental**: command bootstrap logic and reading from, saving to state file for incremental downloads cli ([`b0488a6`](https://github.com/aws-deadline/deadline-cloud/commit/b0488a62bad8927b888dff0f0617a9cbc477d729))
+* Adding a helper to initialize the lru_cached get_s3_client method. Adding a cached get_session_client method to allow get_boto3_client calls which end up using the same session and same service name to use cached clients. (#708) ([`5665fa8`](https://github.com/aws-deadline/deadline-cloud/commit/5665fa8813ef8bb5c01a57c9604bbaed7015d859))
+* **experimental**: fix atomicity for pid lock & add release lock support for incremental downloads cli (#682) ([`da853ac`](https://github.com/aws-deadline/deadline-cloud/commit/da853ac0b5e1d15e7e2c60d908e71f81d0b39521))
+* **experimental**: pid locking atomicity fixes for automatic incremental downloads ([`da853ac`](https://github.com/aws-deadline/deadline-cloud/commit/da853ac0b5e1d15e7e2c60d908e71f81d0b39521))
+
+### Bug Fixes
+* installer_version.txt was not uninstalled (#736) ([`3f880b8`](https://github.com/aws-deadline/deadline-cloud/commit/3f880b8114bd65ffa5d6663ca7e0c99a5399ef79))
+* profile settings gui widget widths are truncated (#724) ([`5fdb0f1`](https://github.com/aws-deadline/deadline-cloud/commit/5fdb0f1ca347ba082bb48556aa57e9128d930e11))
+* normalize paths in windows so relative_to works properly (#715) ([`2e70d5d`](https://github.com/aws-deadline/deadline-cloud/commit/2e70d5d9b894630d8711369ca1509bf2f0a082fb))
+* Implement improved job attachments containment warning ([`a8bf21b`](https://github.com/aws-deadline/deadline-cloud/commit/a8bf21bc1af85b6f67694defdb93fee49f3516a6))
+* handle normalizing windows paths when they are larger than MAX_PATH ([`b841f61`](https://github.com/aws-deadline/deadline-cloud/commit/b841f617047cc6a6354a6f694b7bac2423e2dcee))
+* fix PATH env var deletion on uninstall ([`fcf4a75`](https://github.com/aws-deadline/deadline-cloud/commit/fcf4a75c01d733c37ee509a156589ff8911dc4cf))
+
 ## 0.50.1 (2025-06-04)
 
 
