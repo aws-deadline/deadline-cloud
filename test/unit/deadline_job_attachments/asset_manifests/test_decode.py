@@ -54,38 +54,7 @@ def test_validate_manifest_manifest_not_valid_manifest(manifest_params: list[Man
         valid, error_str = decode.validate_manifest(manifest, manifest_param.manifest_version)
         assert not valid
         assert error_str is not None
-        assert error_str.startswith(
-            "'hashAlg' is a required property\n\nFailed validating 'required' in schema:\n"
-        )
-
-
-def test_validate_manifest_not_valid_schema(manifest_params: list[ManifestParam]):
-    """
-    Test that a manifest is returned as not valid with an expected error string if the schema isn't valid
-    """
-    for manifest_param in manifest_params:
-        manifest: dict[str, Any] = json.loads(manifest_param.manifest_str)
-
-        bad_schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "title": "AWS Deadline Cloud Asset Manifest Schema",
-            "type": "bad_type",
-            "required": ["hashAlg"],
-            "properties": {
-                "manifestVersion": {
-                    "const": "yes",
-                }
-            },
-        }
-
-        with patch(
-            f"{deadline.__package__}.job_attachments.asset_manifests.decode._get_schema",
-            return_value=bad_schema,
-        ):
-            valid, error_str = decode.validate_manifest(manifest, manifest_param.manifest_version)
-            assert not valid
-            assert error_str is not None
-            assert error_str.startswith("'bad_type' is not valid under any of the given schemas")
+        assert error_str.startswith("manifest is missing required field(s) ['hashAlg']")
 
 
 def test_decode_manifest_v2023_03_03(default_manifest_str_v2023_03_03: str):
@@ -164,7 +133,7 @@ def test_decode_manifest_not_valid_manifest():
     Test that a ManifestDecodeValidationError is raised if the manifest passed in is not valid.
     """
     with pytest.raises(
-        ManifestDecodeValidationError, match=r".*Failed validating 'required' in schema:.*"
+        ManifestDecodeValidationError, match=r"manifest is missing required field\(s\).*"
     ):
         decode.decode_manifest('{"manifestVersion": "2023-03-03"}')
 

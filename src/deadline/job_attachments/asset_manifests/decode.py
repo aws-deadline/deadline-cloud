@@ -6,24 +6,15 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import Any, Optional, Tuple
-
-import jsonschema
 
 from ..exceptions import ManifestDecodeValidationError
 from .base_manifest import BaseAssetManifest
 from .manifest_model import ManifestModelRegistry
 from .versions import ManifestVersion
+from .v2023_03_03.validate import validate_manifest_2023_03_03
 
 alphanum_regex = re.compile("[a-zA-Z0-9]+")
-
-
-def _get_schema(version) -> dict[str, Any]:
-    schema_filename = Path(__file__).parent.joinpath("schemas", version + ".json").resolve()
-
-    with open(schema_filename) as schema_file:
-        return json.load(schema_file)
 
 
 def validate_manifest(
@@ -33,13 +24,10 @@ def validate_manifest(
     Checks if the given manifest is valid for the given manifest version. Returns True if the manifest
     is valid for the given version. Returns False and a string explaining the error if the manifest is not valid.
     """
-    try:
-        jsonschema.validate(manifest, _get_schema(version))
-
-    except (jsonschema.ValidationError, jsonschema.SchemaError) as e:
-        return False, str(e)
-
-    return True, None
+    if version == ManifestVersion.v2023_03_03:
+        return validate_manifest_2023_03_03(manifest)
+    else:
+        return False, f"Version {version} is not supported"
 
 
 def decode_manifest(manifest: str) -> BaseAssetManifest:
