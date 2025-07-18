@@ -60,7 +60,8 @@ def aws_config(monkeypatch):
         temp_dir = tempfile.TemporaryDirectory()
         temp_dir_path = Path(temp_dir.name)
         temp_file_path = temp_dir_path / "aws_config"
-        monkeypatch.setenv("AWS_CONFIG_FILE", temp_file_path)
+        monkeypatch.setenv("AWS_CONFIG_FILE", str(temp_file_path))
+        monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
 
         yield temp_file_path
 
