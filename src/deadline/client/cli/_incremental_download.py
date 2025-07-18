@@ -5,16 +5,20 @@ __all__ = ["_incremental_output_download"]
 
 from datetime import datetime, timedelta, timezone
 import difflib
-from typing import Optional
+from typing import Optional, Dict
 from configparser import ConfigParser
 from typing import Any, Callable
 import time
 import concurrent.futures
 
+from botocore.exceptions import ClientError
+
 from .. import api
 import boto3
 from botocore.client import BaseClient  # type: ignore[import]
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
+from ..config import get_setting
+from ..exceptions import DeadlineOperationError
 from ...job_attachments.api import summarize_path_list
 from ...job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
@@ -902,6 +906,20 @@ def _incremental_output_download(
         queue_display_name=queue["displayName"],
     )
 
+    # Fetch the storage profile data that's currently selected in the config
+    local_storage_profile_id = get_setting("settings.storage_profile_id", config)
+    local_storage_profile: Optional[Dict[str, Any]] = None
+    if local_storage_profile_id:
+        try:
+            local_storage_profile = deadline.get_storage_profile(
+                farmId=farm_id,
+                storageProfileId=local_storage_profile_id,
+            )
+        except ClientError as exc:
+            raise DeadlineOperationError(
+                f"Failed to get Storage Profile Information from Deadline Cloud:\n{exc}"
+            ) from exc
+
     print_function_callback("Updating download state across time interval:")
     print_function_callback(
         f"    From: {checkpoint.downloads_completed_timestamp.astimezone().isoformat()}"
@@ -968,6 +986,7 @@ def _incremental_output_download(
     downloaded_manifests: list[tuple[datetime, BaseAssetManifest]] = (
         _download_all_manifests_with_absolute_paths(
             queue,
+            local_storage_profile,
             download_candidate_jobs,
             job_sessions,
             boto3_session_for_s3,

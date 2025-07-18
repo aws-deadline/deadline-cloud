@@ -199,6 +199,8 @@ def _download_manifest_and_make_paths_absolute(
     index: int,
     queue: dict[str, Any],
     root_path: str,
+    manifest_file_system_location_name: Optional[str],
+    local_file_system_locations: dict[str, str],
     manifest_s3_key: str,
     boto3_session_for_s3: boto3.Session,
     output_manifests: list,
@@ -213,8 +215,27 @@ def _download_manifest_and_make_paths_absolute(
     )
     # Convert all the manifest paths to have absolute normalized local paths
     for manifest_path in manifest.paths:
-        manifest_path.path = os.path.normpath(os.path.join(root_path, manifest_path.path))
-        # TODO: Apply path mapping rules to manifest_path.path right here
+        original_path = manifest_path.path
+        if (
+            manifest_file_system_location_name
+            and manifest_file_system_location_name in local_file_system_locations
+        ):
+            local_file_system_root_path = local_file_system_locations[
+                manifest_file_system_location_name
+            ]
+            absolute_path = os.path.join(local_file_system_root_path, original_path)
+
+        else:
+            absolute_path = os.path.join(root_path, original_path)
+
+        # Validate path compatibility
+        is_compatible, error_message = _validate_path_compatibility(absolute_path)
+        if not is_compatible:
+            raise PathCompatibilityError(
+                path=absolute_path, original_path=original_path, error_message=error_message
+            )
+
+        manifest_path.path = os.path.normpath(absolute_path)
     output_manifests[index] = (last_modified, manifest)
 
 
@@ -222,7 +243,7 @@ def _get_manifests_to_download(
     job_attachments_root_prefix: str,
     download_candidate_jobs: dict[str, dict[str, Any]],
     job_sessions: dict[str, list],
-) -> list[tuple[str, str]]:
+) -> list[tuple[str, str, str]]:
     """
     Collect a list of (rootPath, manifest_s3_key) tuples for all the job attachments that need to be downloaded.
 
@@ -236,7 +257,7 @@ def _get_manifests_to_download(
     Returns:
         A list of (rootPath, manifest_s3_key) tuples for the manifest objects that need to be downloaded.
     """
-    manifests_to_download: list[tuple[str, str]] = []
+    manifests_to_download: list[tuple[str, str, str]] = []
     for job_id, session_list in job_sessions.items():
         job = download_candidate_jobs[job_id]
         for session in session_list:
@@ -250,6 +271,7 @@ def _get_manifests_to_download(
                         manifests_to_download.append(
                             (
                                 job_manifest["rootPath"],
+                                job_manifest.get("fileSystemLocationName", None),
                                 "/".join(
                                     [
                                         job_attachments_root_prefix,
@@ -264,6 +286,7 @@ def _get_manifests_to_download(
 
 def _download_all_manifests_with_absolute_paths(
     queue: dict[str, Any],
+    local_storage_profile: Optional[dict[str, Any]],
     download_candidate_jobs: dict[str, dict[str, Any]],
     job_sessions: dict[str, list],
     boto3_session_for_s3: boto3.Session,
@@ -285,9 +308,17 @@ def _download_all_manifests_with_absolute_paths(
         A list of BaseAssetManifest objects containing local absolute file paths sorted by the last_modified timestamp.
     """
     # Get the list of (rootPath, manifest_s3_key) tuples to download from S3.
-    manifests_to_download: list[tuple[str, str]] = _get_manifests_to_download(
+    manifests_to_download: list[tuple[str, str, str]] = _get_manifests_to_download(
         queue["jobAttachmentSettings"]["rootPrefix"], download_candidate_jobs, job_sessions
     )
+
+    # Build a mapping between the file system location names and their path from the local storage profile.
+    local_file_system_locations = {}
+    if local_storage_profile is not None:
+        local_file_system_locations = {
+            file_system_location["name"]: file_system_location["path"]
+            for file_system_location in local_storage_profile["fileSystemLocations"]
+        }
 
     print_function_callback(f"Downloading {len(manifests_to_download)} asset manifests from S3...")
     start_time = datetime.now(tz=timezone.utc)
@@ -300,13 +331,17 @@ def _download_all_manifests_with_absolute_paths(
     print_function_callback(f"Using {max_workers} threads")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
-        for index, (root_path, manifest_s3_key) in enumerate(manifests_to_download):
+        for index, (root_path, manifest_file_system_location_name, manifest_s3_key) in enumerate(
+            manifests_to_download
+        ):
             futures.append(
                 executor.submit(
                     _download_manifest_and_make_paths_absolute,
                     index,
                     queue,
                     root_path,
+                    manifest_file_system_location_name,
+                    local_file_system_locations,
                     manifest_s3_key,
                     boto3_session_for_s3,
                     downloaded_manifests,
@@ -602,3 +637,67 @@ def _download_manifest_paths(
     # to report progress 100% at the end
     if progress_tracker:
         progress_tracker.report_progress()
+
+
+class PathCompatibilityError(JobAttachmentsError):
+    """
+    Exception raised when a path is not compatible with the host operating system.
+
+    This exception is raised when a manifest path cannot be used on the current operating system,
+    such as when a Windows path is used on Linux/macOS or vice versa, or when the path contains
+    invalid characters for the current operating system.
+    """
+
+    def __init__(self, path: str, original_path: str, error_message: Optional[str] = None):
+        """
+        Initialize a PathCompatibilityError.
+
+        Args:
+            path: The absolute path that is incompatible.
+            original_path: The original relative path from the manifest.
+            error_message: Optional additional error details with suggestions for resolution.
+        """
+        self.path = path
+        self.original_path = original_path
+        self.error_message = error_message
+        message = f"Path '{path}' is not compatible with the host operating system."
+        if error_message:
+            message += f" {error_message}"
+
+        message += (
+            " This is a likely a result of the selected storage profile missing file system location names"
+            " required to map the outputs to the local storage"
+        )
+        super().__init__(message)
+
+
+def _validate_path_compatibility(path: str) -> tuple[bool, Optional[str]]:
+    """
+    Validates that a path is compatible with the host operating system.
+
+    Args:
+        path: The absolute path to validate.
+
+    Returns:
+        A tuple containing:
+        - A boolean indicating whether the path is compatible.
+        - An optional string with an error message if the path is not compatible.
+    """
+    # Check for OS-specific compatibility
+    if os.name == "nt":  # Windows
+        # Check for Windows-specific path issues
+        if path.startswith("/"):
+            return (
+                False,
+                "Path starts with '/' which is not compatible with Windows. Windows paths should use drive letters (e.g., 'C:\\').",
+            )
+
+    else:  # Linux/macOS
+        # Check for Windows drive letters in Linux/macOS paths
+        if re.match(r"^[a-zA-Z]:\\", path):
+            return (
+                False,
+                "Path contains Windows drive letter which is not compatible with Linux/macOS. Use absolute paths starting with '/' instead.",
+            )
+
+    return True, None

@@ -12,7 +12,7 @@ from ..asset_manifests.decode import decode_manifest
 
 def _read_manifests(manifest_paths: List[str]) -> Dict[str, BaseAssetManifest]:
     """
-    Read in manfiests from the given file path list, and produce file name to manifest mapping.
+    Read in manifests from the given file path list, and produce file name to manifest mapping.
 
     Args:
         manifest_paths (List[str]): List of file paths to manifest file.

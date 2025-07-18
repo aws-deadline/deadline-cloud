@@ -11,14 +11,20 @@ retrieving output manifest paths from S3.
 from __future__ import annotations
 
 import json
-from typing import Any
-from unittest.mock import patch
+import os
+from datetime import datetime
+from typing import Any, Dict
+from unittest.mock import patch, MagicMock
 
 import boto3
+import pytest
 from moto import mock_aws
 
 from deadline.job_attachments._incremental_downloads._manifest_s3_downloads import (
     _add_output_manifests_from_s3,
+    _download_manifest_and_make_paths_absolute,
+    _validate_path_compatibility,
+    PathCompatibilityError,
 )
 from deadline.job_attachments.asset_manifests import hash_data as ja_hash_data
 from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import DEFAULT_HASH_ALG
@@ -513,3 +519,397 @@ def test_add_output_manifests_from_s3_edge_cases(fresh_deadline_config):
 
     # Validate root path hash matching for all populated manifests
     validate_root_path_hash_matching(job, mixed_session_actions, root_path_hashes)
+
+
+# Tests for path compatibility validation
+class TestPathCompatibilityValidation:
+    """Tests for the path compatibility validation functionality."""
+
+    @patch("os.name", "nt")  # Mock Windows environment
+    def test_validate_path_compatibility_windows_valid(self):
+        """Test that valid Windows paths pass validation on Windows."""
+
+        valid_paths = [
+            "C:\\Users\\example\\file.txt",
+            "D:\\Projects\\deadline\\data.json",
+            "E:\\Render\\Output\\frame_001.png",
+            "C:\\Program Files\\Application\\app.exe",
+        ]
+
+        for path in valid_paths:
+            is_compatible, error_message = _validate_path_compatibility(path)
+            assert is_compatible, (
+                f"Path {path} should be valid on Windows, but got error: {error_message}"
+            )
+            assert error_message is None, (
+                f"Error message should be None for valid path, got: {error_message}"
+            )
+
+    @patch("os.name", "nt")  # Mock Windows environment
+    def test_validate_path_compatibility_linux_path_on_windows(self):
+        """Test that Linux/macOS paths fail validation on Windows."""
+
+        linux_paths = [
+            "/home/user/file.txt",
+            "/var/log/app.log",
+            "/usr/local/bin/app",
+        ]
+
+        for path in linux_paths:
+            is_compatible, error_message = _validate_path_compatibility(path)
+            assert not is_compatible, f"Path {path} should be invalid on Windows"
+            assert error_message is not None, "Error message should be provided for invalid path"
+            assert "starts with '/'" in error_message, (
+                f"Error message should mention path starting with '/', got: {error_message}"
+            )
+            assert "Windows paths should use drive letters" in error_message, (
+                f"Error message should suggest using drive letters, got: {error_message}"
+            )
+
+    @patch("os.name", "posix")  # Mock Linux/macOS environment
+    def test_validate_path_compatibility_linux_valid(self):
+        """Test that valid Linux/macOS paths pass validation on Linux/macOS."""
+
+        valid_paths = [
+            "/home/user/file.txt",
+            "/var/log/app.log",
+            "/usr/local/bin/app",
+            "/tmp/render/output.png",
+        ]
+
+        for path in valid_paths:
+            is_compatible, error_message = _validate_path_compatibility(path)
+            assert is_compatible, (
+                f"Path {path} should be valid on Linux/macOS, but got error: {error_message}"
+            )
+            assert error_message is None, (
+                f"Error message should be None for valid path, got: {error_message}"
+            )
+
+    @patch("os.name", "posix")  # Mock Linux/macOS environment
+    def test_validate_path_compatibility_windows_path_on_linux(self):
+        """Test that Windows paths fail validation on Linux/macOS."""
+
+        windows_paths = [
+            "C:\\Users\\example\\file.txt",
+            "D:\\Projects\\deadline\\data.json",
+            "E:\\Render\\Output\\frame_001.png",
+        ]
+
+        for path in windows_paths:
+            is_compatible, error_message = _validate_path_compatibility(path)
+            assert not is_compatible, f"Path {path} should be invalid on Linux/macOS"
+            assert error_message is not None, "Error message should be provided for invalid path"
+            assert "Windows drive letter" in error_message, (
+                f"Error message should mention Windows drive letter, got: {error_message}"
+            )
+            assert "Use absolute paths starting with '/'" in error_message, (
+                f"Error message should suggest using paths starting with '/', got: {error_message}"
+            )
+
+
+class TestDownloadManifestAndMakePathsAbsolute:
+    """Tests for the _download_manifest_and_make_paths_absolute function with path validation."""
+
+    @patch("os.name", "nt")  # Mock Windows environment
+    def test_download_manifest_and_make_paths_absolute_valid_paths_windows(self):
+        """Test that _download_manifest_and_make_paths_absolute processes valid paths correctly on Windows."""
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "C:\\test\\root"
+        manifest_file_system_location_name = "test-location"
+        local_storage_root = "D:\\test\\location"
+        local_file_system_locations = {"test-location": local_storage_root}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with valid paths for Windows
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        valid_paths = ["file1.txt", "dir\\file2.txt"]
+        mock_manifest = MockManifest(valid_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            # Call the function
+            _download_manifest_and_make_paths_absolute(
+                0,
+                queue,
+                root_path,
+                manifest_file_system_location_name,
+                local_file_system_locations,
+                manifest_s3_key,
+                boto3_session,
+                output_manifests,
+            )
+
+        # Verify paths were processed correctly
+        _, manifest = output_manifests[0]
+        for i, path in enumerate(valid_paths):
+            expected_path = os.path.normpath(os.path.join(local_storage_root, path))
+            assert manifest.paths[i].path == expected_path
+
+    @patch("os.name", "posix")  # Mock Linux/macOS environment
+    def test_download_manifest_and_make_paths_absolute_valid_paths_linux(self):
+        """Test that _download_manifest_and_make_paths_absolute processes valid paths correctly on Linux/macOS."""
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "/test/root"
+        manifest_file_system_location_name = "test-location"
+        local_storage_root = "/test/location"
+        local_file_system_locations = {"test-location": local_storage_root}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with valid paths for Linux/macOS
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        valid_paths = ["file1.txt", "dir/file2.txt"]
+        mock_manifest = MockManifest(valid_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            # Call the function
+            _download_manifest_and_make_paths_absolute(
+                0,
+                queue,
+                root_path,
+                manifest_file_system_location_name,
+                local_file_system_locations,
+                manifest_s3_key,
+                boto3_session,
+                output_manifests,
+            )
+
+        # Verify paths were processed correctly
+        _, manifest = output_manifests[0]
+        for i, path in enumerate(valid_paths):
+            expected_path = os.path.normpath(os.path.join(local_storage_root, path))
+            assert manifest.paths[i].path == expected_path
+
+    @patch("os.name", "posix")  # Mock Linux/macOS environment
+    def test_download_manifest_and_make_paths_absolute_windows_paths_on_linux(self):
+        """
+        Test that _download_manifest_and_make_paths_absolute can resolve output manifest locations on linux when
+        the root path was originally windows based.
+        """
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "C:\\Users\example"
+        manifest_file_system_location_name = "test-location"
+        local_storage_root = "/test/location"
+        local_file_system_locations = {"test-location": local_storage_root}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with Windows paths
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        # This will result in a Linux-style path when joined with root_path
+        windows_paths = ["file.txt"]
+        mock_manifest = MockManifest(windows_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            _download_manifest_and_make_paths_absolute(
+                0,
+                queue,
+                root_path,
+                manifest_file_system_location_name,
+                local_file_system_locations,
+                manifest_s3_key,
+                boto3_session,
+                output_manifests,
+            )
+
+        # Verify paths were processed correctly
+        _, manifest = output_manifests[0]
+        for i, path in enumerate(windows_paths):
+            expected_path = os.path.normpath(os.path.join(local_storage_root, path))
+            assert manifest.paths[i].path == expected_path
+
+    @patch("os.name", "posix")  # Mock Linux/macOS environment
+    def test_download_manifest_and_raises_error_when_windows_paths_cant_resolve_on_linux(self):
+        """
+        Test that _download_manifest_and_make_paths_absolute raises error when it cannot resolve relative paths into
+        linux paths.
+        """
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "C:\\Users\example"
+        local_file_system_locations: Dict[str, str] = {}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with Windows paths
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        # This will result in a Linux-style path when joined with root_path
+        windows_paths = ["file.txt"]
+        mock_manifest = MockManifest(windows_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            # Call the function and expect an error
+            with pytest.raises(PathCompatibilityError) as context:
+                _download_manifest_and_make_paths_absolute(
+                    0,
+                    queue,
+                    root_path,
+                    None,
+                    local_file_system_locations,
+                    manifest_s3_key,
+                    boto3_session,
+                    output_manifests,
+                )
+
+            # Verify error details
+            error = context.value
+            assert error.original_path == windows_paths[0]
+
+    @patch("os.name", "nt")  # Mock Windows environment
+    def test_download_manifest_and_make_paths_absolute_linux_paths_on_windows(self):
+        """
+        Test that _download_manifest_and_make_paths_absolute can resolve output manifest locations on windows when
+        the root path was originally linux based.
+        """
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "/Users/userA"
+        manifest_file_system_location_name = "test-location"
+        local_storage_root = "D:\\test\\location"
+        local_file_system_locations = {"test-location": local_storage_root}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with Linux paths
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        # This will result in a Windows-style path when joined with root_path
+        linux_paths = ["test/file.txt"]
+        mock_manifest = MockManifest(linux_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            # Call the function and expect an error
+            _download_manifest_and_make_paths_absolute(
+                0,
+                queue,
+                root_path,
+                manifest_file_system_location_name,
+                local_file_system_locations,
+                manifest_s3_key,
+                boto3_session,
+                output_manifests,
+            )
+
+        # Verify paths were processed correctly
+        result_manifest = output_manifests[0][1]
+        for i, path in enumerate(linux_paths):
+            expected_path = os.path.normpath(os.path.join(local_storage_root, path))
+            assert result_manifest.paths[i].path == expected_path
+
+    @patch("os.name", "nt")  # Mock Linux/macOS environment
+    def test_download_manifest_and_raises_error_when_linux_paths_cant_resolve_on_windows(self):
+        """
+        Test that _download_manifest_and_make_paths_absolute raises error when it cannot resolve relative paths into
+        linux paths.
+        """
+
+        # Create mock objects
+        queue = {"jobAttachmentSettings": {"s3BucketName": "test-bucket"}}
+        root_path = "/Users/test-user"
+        local_file_system_locations: Dict[str, str] = {}
+        manifest_s3_key = "test-key"
+        boto3_session = MagicMock()
+
+        # Create mock manifest with Windows paths
+        class MockManifestPath:
+            def __init__(self, path):
+                self.path = path
+
+        class MockManifest:
+            def __init__(self, paths):
+                self.paths = [MockManifestPath(path) for path in paths]
+
+        # This will result in a Windows-style path when joined with root_path
+        linux_paths = ["directory/file.txt"]
+        mock_manifest = MockManifest(linux_paths)
+        output_manifests = [(0, mock_manifest)]
+
+        # Mock _get_asset_root_and_manifest_from_s3_with_last_modified
+        with patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads._get_asset_root_and_manifest_from_s3_with_last_modified",
+            return_value=(None, datetime.now(), mock_manifest),
+        ):
+            # Call the function and expect an error
+            with pytest.raises(PathCompatibilityError) as context:
+                _download_manifest_and_make_paths_absolute(
+                    0,
+                    queue,
+                    root_path,
+                    None,
+                    local_file_system_locations,
+                    manifest_s3_key,
+                    boto3_session,
+                    output_manifests,
+                )
+
+            # Verify error details
+            error = context.value
+            assert error.original_path == linux_paths[0]
