@@ -9,6 +9,7 @@ import uuid
 import random
 import time
 
+from botocore.exceptions import ClientError, ProfileNotFound, NoCredentialsError
 from configparser import ConfigParser
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -313,6 +314,16 @@ class TelemetryClient:
     def record_event(
         self, event_type: str, event_details: Dict[str, Any], *, from_gui: bool = False
     ):
+        # Include the account ID if we are authenticated
+        # If not (error), omit the ID and provid the error message
+        try:
+            self.update_common_details(
+                {"accountId": get_boto3_client("sts").get_caller_identity()["Account"]}
+            )
+        except (ClientError, ProfileNotFound, NoCredentialsError) as e:
+            logger.debug(f"Could not add account ID to telemetry: {str(e)}")
+            self.update_common_details({"accountId": None})
+
         event_details.update(self._common_details)
         event_details["usage_mode"] = "GUI" if from_gui else "CLI"
         self._put_telemetry_record(

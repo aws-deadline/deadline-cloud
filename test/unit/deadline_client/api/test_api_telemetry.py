@@ -213,14 +213,17 @@ def test_record_hashing_summary(fresh_deadline_config, mock_telemetry_client):
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
     expected_summary = asdict(test_summary)
     expected_summary["usage_mode"] = "CLI"
+    expected_summary["accountId"] = "111122223333"
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.job_attachments.hashing_summary",
         event_details=expected_summary,
     )
     mock_telemetry_client.event_queue = queue_mock
 
-    # WHEN
-    mock_telemetry_client.record_hashing_summary(test_summary)
+    sts_client_mock = MagicMock(**{"get_caller_identity.return_value": {"Account": "111122223333"}})
+    with patch.object(api._telemetry, "get_boto3_client", MagicMock(return_value=sts_client_mock)):
+        # WHEN
+        mock_telemetry_client.record_hashing_summary(test_summary)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -233,14 +236,17 @@ def test_record_upload_summary(fresh_deadline_config, mock_telemetry_client):
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
     expected_summary = asdict(test_summary)
     expected_summary["usage_mode"] = "GUI"
+    expected_summary["accountId"] = "111122223333"
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.job_attachments.upload_summary",
         event_details=expected_summary,
     )
     mock_telemetry_client.event_queue = queue_mock
 
-    # WHEN
-    mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
+    sts_client_mock = MagicMock(**{"get_caller_identity.return_value": {"Account": "111122223333"}})
+    with patch.object(api._telemetry, "get_boto3_client", MagicMock(return_value=sts_client_mock)):
+        # WHEN
+        mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -256,14 +262,17 @@ def test_record_error(fresh_deadline_config, mock_telemetry_client):
         "some_field": "some_value",
         "exception_type": str(type(test_exc)),
         "usage_mode": "CLI",
+        "accountId": "111122223333",
     }
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
     )
     mock_telemetry_client.event_queue = queue_mock
 
-    # WHEN
-    mock_telemetry_client.record_error(test_error_details, str(type(test_exc)))
+    sts_client_mock = MagicMock(**{"get_caller_identity.return_value": {"Account": "111122223333"}})
+    with patch.object(api._telemetry, "get_boto3_client", MagicMock(return_value=sts_client_mock)):
+        # WHEN
+        mock_telemetry_client.record_error(test_error_details, str(type(test_exc)))
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -313,6 +322,7 @@ def test_record_decorator_success(fresh_deadline_config):
         expected_summary: Dict[str, Any] = dict()
         expected_summary["is_success"] = True
         expected_summary["usage_mode"] = "CLI"
+        expected_summary["accountId"] = None
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.successful",
             event_details=expected_summary,
@@ -341,6 +351,7 @@ def test_record_decorator_fails(fresh_deadline_config):
         expected_summary: Dict[str, Any] = dict()
         expected_summary["is_success"] = False
         expected_summary["usage_mode"] = "CLI"
+        expected_summary["accountId"] = None
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.fails",
             event_details=expected_summary,
@@ -371,6 +382,7 @@ def test_latency_decorator(fresh_deadline_config):
         expected_summary["latency"] = 0
         expected_summary["function_call"] = "test_call"
         expected_summary["usage_mode"] = "CLI"
+        expected_summary["accountId"] = None
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.latency",
             event_details=expected_summary,
