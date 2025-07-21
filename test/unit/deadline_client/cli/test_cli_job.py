@@ -1540,9 +1540,6 @@ You are about to download files which may come from multiple root directories. H
 """
             in result.output
         )
-
-        print(result.output)
-
         assert "Download Summary:" in result.output
         assert result.exit_code == 0
         mock_expanduser.assert_any_call("~")

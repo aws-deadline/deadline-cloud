@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import atexit
+from functools import lru_cache
 import json
 import logging
 import os
@@ -24,6 +25,7 @@ from ._session import (
     get_monitor_id,
     get_user_and_identity_store_id,
     get_boto3_client,
+    get_boto3_session,
 )
 from ..config import config_file
 from .. import version
@@ -314,15 +316,11 @@ class TelemetryClient:
     def record_event(
         self, event_type: str, event_details: Dict[str, Any], *, from_gui: bool = False
     ):
-        # Include the account ID if we are authenticated
-        # If not (error), omit the ID and provid the error message
         try:
-            self.update_common_details(
-                {"accountId": get_boto3_client("sts").get_caller_identity()["Account"]}
-            )
-        except (ClientError, ProfileNotFound, NoCredentialsError) as e:
-            logger.debug(f"Could not add account ID to telemetry: {str(e)}")
-            self.update_common_details({"accountId": None})
+            self.update_common_details({"accountId": self.get_account_id(get_boto3_session())})
+        except ProfileNotFound as pnf:
+            # Print any errors when getting the boto3 session, then proceed
+            logger.debug(f"Could not add account ID to telemetry: {str(pnf)}")
 
         event_details.update(self._common_details)
         event_details["usage_mode"] = "GUI" if from_gui else "CLI"
@@ -332,6 +330,19 @@ class TelemetryClient:
                 event_details=event_details,
             )
         )
+
+    @lru_cache
+    def get_account_id(self, boto3_session) -> Optional[str]:
+        """
+        Retrieves the AWS account ID for the current user.
+
+        If the user is not authenticated, print an error message
+        """
+        try:
+            return boto3_session.client("sts").get_caller_identity()["Account"]
+        except (ClientError, NoCredentialsError) as e:
+            print(f"Could not add account ID to telemetry: {str(e)}")
+            return None
 
     def update_common_details(self, details: Dict[str, Any]):
         """Updates the dict of common data that is included in every telemetry request."""
