@@ -39,6 +39,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QStyle,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
 )
 
 import os
@@ -85,14 +86,36 @@ class DeadlineConfigDialog(QDialog):
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
 
+    def sizeHint(self):
+        # Get available screen space for adaptive sizing
+        screen = QApplication.primaryScreen().availableGeometry()
+        available_height = screen.height()
+
+        # Calculate optimal dialog height based on screen size
+        content_height = 850  # Height needed to show all content without scroll bars
+        max_dialog_height = int(available_height * 0.9)  # 90% of screen height
+
+        # Use smaller of content height or max screen percentage
+        optimal_height = min(content_height, max_dialog_height)
+
+        return QSize(650, optimal_height)
+
     def _build_ui(self):
         self.layout = QVBoxLayout(self)
 
         self.config_box = DeadlineWorkstationConfigWidget(parent=self)
-        self.layout.addWidget(self.config_box)
-        self.config_box.refreshed.connect(self.on_refresh)
 
-        self.layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.scrollArea = DeadlineScrollArea(self)
+        self.scrollArea.setWidget(self.config_box)
+        # Enable widget resizing within scroll area
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        # Hide the scroll area border for a cleaner appearance
+        self.scrollArea.setStyleSheet("QScrollArea { border: none; }")
+
+        self.layout.addWidget(self.scrollArea)
+
+        self.config_box.refreshed.connect(self.on_refresh)
 
         self.auth_status_box = DeadlineAuthenticationStatusWidget(self)
         self.layout.addWidget(self.auth_status_box)
@@ -156,6 +179,14 @@ class DeadlineConfigDialog(QDialog):
             self.config_box.refresh_lists()
 
 
+class DeadlineScrollArea(QScrollArea):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def sizeHint(self):
+        return QSize(500, 400)
+
+
 class DeadlineWorkstationConfigWidget(QWidget):
     """
     A widget that displays and edits the AWS Deadline Cloud local workstation.
@@ -186,41 +217,74 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.refresh()
 
     def minimumSizeHint(self):
-        return QSize(500, 200)
+        return QSize(500, 700)
 
     def _build_ui(self):
-        self.layout = QVBoxLayout(self)
+        # Ensure the widget expands horizontally
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.v_layout = QVBoxLayout(self)
+        self.setLayout(self.v_layout)
+
+        # Set consistent spacing between group boxes and margins
+        self.v_layout.setSpacing(20)  # 20px spacing between group boxes
+        self.v_layout.setContentsMargins(10, 10, 10, 10)  # 10px margins around content
+
+        # Simplified stylesheet - focus only on title positioning, use layout for spacing
+        GROUP_BOX_STYLE_SHEET = """
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            padding-left: 5px;
+            top: 0px;
+        }
+        QGroupBox {
+            margin-top: 20px;
+        }
+        """
 
         self.labels = {}
         self._refresh_callbacks: List[Callable] = []
 
         # Global settings
         self.global_settings_group = QGroupBox(parent=self, title="Global settings")
-        self.layout.addWidget(self.global_settings_group)
+        self.global_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
+        self.global_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_layout.addWidget(self.global_settings_group)
         global_settings_layout = QFormLayout(self.global_settings_group)
         self._build_global_settings_ui(self.global_settings_group, global_settings_layout)
 
         # AWS Profile-specific settings
         self.profile_settings_group = QGroupBox(parent=self, title="Profile settings")
-        self.layout.addWidget(self.profile_settings_group)
+        self.profile_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
+        self.profile_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_layout.addWidget(self.profile_settings_group)
         profile_settings_layout = QFormLayout(self.profile_settings_group)
         self._build_profile_settings_ui(self.profile_settings_group, profile_settings_layout)
 
         # Farm-specific settings
         self.farm_settings_group = QGroupBox(parent=self, title="Farm settings")
-        self.layout.addWidget(self.farm_settings_group)
+        self.farm_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
+        self.farm_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_layout.addWidget(self.farm_settings_group)
         farm_settings_layout = QFormLayout(self.farm_settings_group)
         self._build_farm_settings_ui(self.farm_settings_group, farm_settings_layout)
 
         # General settings
         self.general_settings_group = QGroupBox(parent=self, title="General settings")
-        self.layout.addWidget(self.general_settings_group)
+        self.general_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
+        self.general_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.v_layout.addWidget(self.general_settings_group)
         general_settings_layout = QFormLayout(self.general_settings_group)
         self._build_general_settings_ui(self.general_settings_group, general_settings_layout)
+
+        # Add vertical spacer to push content to top and prevent group boxes from expanding
+        self.v_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
         self._background_exception.connect(self.handle_background_exception)
 
     def _build_global_settings_ui(self, group, layout):
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+
         self.aws_profiles_box = QComboBox(parent=group)
         aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel("AWS profile")
         layout.addRow(aws_profile_label, self.aws_profiles_box)
@@ -289,6 +353,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
         )
 
     def _build_general_settings_ui(self, group, layout):
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+
         self.auto_accept = self._init_checkbox_setting(
             group, layout, "settings.auto_accept", "Auto accept prompt defaults"
         )
@@ -322,6 +388,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.labels["settings.known_asset_paths"] = known_paths_label
 
         known_paths_widget = QWidget(parent=group)
+        known_paths_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         known_paths_layout = QVBoxLayout(known_paths_widget)
         known_paths_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -337,7 +404,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         button_layout.addWidget(self.add_known_path_button)
         button_layout.addWidget(self.edit_known_path_button)
         button_layout.addWidget(self.remove_known_path_button)
-        button_layout.addStretch()
         button_layout.addWidget(self.known_paths_status)
         known_paths_layout.addLayout(button_layout)
 
