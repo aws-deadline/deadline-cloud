@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 from .attachment import attachment_download, attachment_upload
-from .._path_summarization import (
+from ...common.path_utils import (
     human_readable_file_size,
     summarize_paths_by_nested_directory,
     summarize_paths_by_sequence,

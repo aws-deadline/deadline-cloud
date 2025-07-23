@@ -15,7 +15,7 @@ from .. import api
 import boto3
 from botocore.client import BaseClient  # type: ignore[import]
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
-from ...job_attachments.api import summarize_path_list
+from ...common.path_utils import summarize_path_list, human_readable_file_size
 from ...job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
     IncrementalDownloadJob,
@@ -41,7 +41,6 @@ from ...job_attachments.progress_tracker import (
     ProgressReportMetadata,
 )
 from ._common import _cli_object_repr, sigint_handler
-from ...job_attachments._path_summarization import human_readable_file_size
 
 
 SESSIONS_API_MAX_CONCURRENCY = 3
