@@ -1469,7 +1469,7 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
         job_group.os.path,
         "expanduser",
         return_value=tmp_path,
-    ) as mock_expanduser:
+    ) as mock_expanduser, patch.object(api._telemetry.TelemetryClient, "record_event", MagicMock()):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=12,

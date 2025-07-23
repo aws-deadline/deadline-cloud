@@ -4,9 +4,11 @@
 Common fixtures for Deadline Client Library tests.
 """
 
+from deadline.client.api._telemetry import TelemetryClient
 import tempfile
 import os
 
+from unittest.mock import patch
 import pytest
 
 
@@ -45,3 +47,13 @@ def temp_cwd():
         finally:
             # Restore the original current working directory
             os.chdir(original_cwd)
+
+
+@pytest.fixture(scope="function")
+def mock_telemetry():
+    """
+    Fixture to avoid calling telemetry code in unrelated unit tests.
+    """
+
+    with patch.object(TelemetryClient, "record_event") as mock_telemetry:
+        yield mock_telemetry

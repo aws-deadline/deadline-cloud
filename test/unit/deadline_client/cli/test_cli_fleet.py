@@ -49,7 +49,7 @@ MOCK_FLEETS_LIST = [
 os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
 
-def test_cli_fleet_list(fresh_deadline_config):
+def test_cli_fleet_list(fresh_deadline_config, mock_telemetry):
     """
     Confirm that the CLI interface prints out the expected list of
     fleets, given mock data.
