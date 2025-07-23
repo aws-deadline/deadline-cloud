@@ -455,6 +455,9 @@ ${_fnAddEnvironmentVariable_list}
             <path>${installdir}/DeadlineClient/installer_version.txt</path>
             <text>${project.version}</text>
         </writeFile>
+        <addFilesToUninstaller>
+            <files>${installdir}/DeadlineClient/installer_version.txt</files>
+        </addFilesToUninstaller>
         <changePermissions permissions="0644" files="${installdir}/DeadlineClient/installer_version.txt"/>
         <addDirectoriesToUninstaller>
           <files>${installdir}/DeadlineClient</files>
