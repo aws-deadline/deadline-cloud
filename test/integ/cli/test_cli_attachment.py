@@ -146,7 +146,7 @@ class TestAttachment:
         assert "HTTP Status Code: 403, Forbidden or Access denied." in result.output
 
     def _run_attachment_basic_flow(
-        self, temp_dir, job_attachment_resources, manifest_case_key
+        self, temp_dir, job_attachment_resources, manifest_case_key, asset_type="other"
     ) -> Tuple[str, str, str]:
         """
         Helper function that runs the basic attachment flow and returns file info.
@@ -181,6 +181,8 @@ class TestAttachment:
                 "default",
                 "--s3-root-uri",
                 s3_root_uri,
+                "--asset-type",
+                asset_type,
             ],
         )
         # Then
@@ -275,6 +277,8 @@ class TestAttachment:
                 "default",
                 "--s3-root-uri",
                 s3_root_uri,
+                "--asset-type",
+                "other",
             ],
         )
         # Then
@@ -362,3 +366,96 @@ class TestAttachment:
         # Make sure the files are named correctly and what we expected to download.
         for file in expected_files:
             assert file in asset_files
+
+    @pytest.mark.integ
+    def test_attachment_upload_with_asset_type(self, temp_dir, job_attachment_resources):
+        """Test the attachment upload with different asset types."""
+        # Given
+        hashed_source_path = hash_data(temp_dir.encode("utf-8"), HashAlgorithm.XXH128)
+        file_name: str = f"{hashed_source_path}_original_file_name"
+        manifest_path: str = os.path.join(temp_dir, file_name)
+
+        with open(
+            manifest_path,
+            "w",
+            encoding="utf8",
+        ) as f:
+            json.dump(MOCK_MANIFEST_CASE["TEST_CASE_1"], f)
+
+        s3_root_uri = f"s3://{job_attachment_resources.bucket_name}/{job_attachment_resources.bucket_root_prefix}"
+
+        runner = CliRunner()
+
+        # Test upload with INPUT asset type
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--manifests",
+                manifest_path,
+                "--root-dirs",
+                temp_dir,
+                "--profile",
+                "default",
+                "--s3-root-uri",
+                s3_root_uri,
+                "--asset-type",
+                "input",
+            ],
+        )
+        assert result.exit_code == 0, f"Non-Zero exit code, CLI output {result.output}"
+        # Verify the manifest file name with "_input" suffix is in the output
+        expected_input_manifest = f"{hashed_source_path}_input"
+        assert expected_input_manifest in result.output, (
+            f"Expected manifest name '{expected_input_manifest}' not found in output: {result.output}"
+        )
+
+        # Test upload with OUTPUT asset type
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--manifests",
+                manifest_path,
+                "--root-dirs",
+                temp_dir,
+                "--profile",
+                "default",
+                "--s3-root-uri",
+                s3_root_uri,
+                "--asset-type",
+                "output",
+            ],
+        )
+        assert result.exit_code == 0, f"Non-Zero exit code, CLI output {result.output}"
+        # Verify the manifest file name with "_output" suffix is in the output
+        expected_output_manifest = f"{hashed_source_path}_output"
+        assert expected_output_manifest in result.output, (
+            f"Expected manifest name '{expected_output_manifest}' not found in output: {result.output}"
+        )
+
+        # Test upload with OTHER asset type
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--manifests",
+                manifest_path,
+                "--root-dirs",
+                temp_dir,
+                "--profile",
+                "default",
+                "--s3-root-uri",
+                s3_root_uri,
+                "--asset-type",
+                "other",
+            ],
+        )
+        assert result.exit_code == 0, f"Non-Zero exit code, CLI output {result.output}"
+        # Verify the original manifest file name (no suffix) is in the output
+        assert file_name in result.output, (
+            f"Expected manifest name '{file_name}' not found in output: {result.output}"
+        )

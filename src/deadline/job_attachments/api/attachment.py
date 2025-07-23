@@ -12,6 +12,7 @@ from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.download import download_files_from_manifests
 from deadline.job_attachments.models import (
+    AssetType,
     FileConflictResolution,
     JobAttachmentS3Settings,
     UploadManifestInfo,
@@ -131,6 +132,7 @@ def attachment_upload(
     root_dirs: List[str] = [],
     path_mapping_rules: Optional[str] = None,
     upload_manifest_path: Optional[str] = None,
+    asset_type: AssetType = AssetType.OTHER,
     logger: ClickLogger = ClickLogger(False),
 ) -> List[UploadManifestInfo]:
     """
@@ -146,6 +148,7 @@ def attachment_upload(
         root_dirs (List[str]): List of root directories holding attachments. Defaults to empty.
         path_mapping_rules (Optional[str], optional): Optional file path to a JSON file contains list of path mapping. Defaults to None.
         upload_manifest_path (Optional[str], optional): Optional path prefix for uploading given manifests. Defaults to None.
+        asset_type (AssetType, optional): Type of asset being uploaded (INPUT, OUTPUT, OTHER). Defaults to OTHER.
         logger (ClickLogger, optional): Logger to provide visibility. Defaults to ClickLogger(False).
 
     Returns:
@@ -184,7 +187,7 @@ def attachment_upload(
             (
                 rule
                 for rule in path_mapping_rule_list
-                if rule.get_hashed_source_path(manifest.get_default_hash_alg()) in file_name
+                if rule.get_hashed_source_path(manifest.hashAlg) in file_name
             ),
             None,
         )
@@ -208,12 +211,22 @@ def attachment_upload(
         if rule.source_path_format:
             metadata["Metadata"]["file-system-location-name"] = rule.source_path_format
 
+        # Determine manifest file name based on asset type
+        if asset_type == AssetType.INPUT:
+            hashed_source_path = rule.get_hashed_source_path(manifest.get_default_hash_alg())
+            manifest_file_name = f"{hashed_source_path}_input"
+        elif asset_type == AssetType.OUTPUT:
+            hashed_source_path = rule.get_hashed_source_path(manifest.get_default_hash_alg())
+            manifest_file_name = f"{hashed_source_path}_output"
+        else:  # AssetType.OTHER or any other type
+            manifest_file_name = file_name
+
         # Uploads all files to a CAS in the manifest, optionally upload manifest file
         key, data = asset_uploader.upload_assets(
             job_attachment_settings=s3_settings,
             manifest=manifest,
             partial_manifest_prefix=upload_manifest_path,
-            manifest_file_name=file_name,
+            manifest_file_name=manifest_file_name,
             manifest_metadata=metadata,
             source_root=Path(rule.source_path),
             asset_root=Path(rule.destination_path),

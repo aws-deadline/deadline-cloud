@@ -21,7 +21,11 @@ from deadline.client import api
 from deadline.job_attachments import api as attachment_api
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import MissingJobAttachmentSettingsError
-from deadline.job_attachments.models import FileConflictResolution, JobAttachmentS3Settings
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
+    AssetType,
+)
 
 
 @click.group(name="attachment")
@@ -154,6 +158,14 @@ def attachment_download(
 @click.option(
     "--upload-manifest-path", default=None, help="File path for uploading the manifests to CAS."
 )
+@click.option(
+    "--asset-type",
+    type=click.Choice(
+        [AssetType.INPUT.value, AssetType.OUTPUT.value, AssetType.OTHER.value], case_sensitive=False
+    ),
+    default=AssetType.OTHER.value,
+    help="Type of asset being uploaded (input, output, other). Affects manifest file naming.",
+)
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
@@ -167,6 +179,7 @@ def attachment_upload(
     path_mapping_rules: str,
     s3_root_uri: str,
     upload_manifest_path: str,
+    asset_type: str,
     json: bool,
     **args,
 ):
@@ -210,5 +223,6 @@ def attachment_upload(
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
         upload_manifest_path=upload_manifest_path,
+        asset_type=AssetType(asset_type),
         logger=logger,
     )

@@ -26,6 +26,7 @@ from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetMani
 from deadline.job_attachments.api.attachment import _process_path_mapping
 from deadline.job_attachments.upload import S3AssetUploader
 from deadline.job_attachments.models import (
+    AssetType,
     FileConflictResolution,
     JobAttachmentS3Settings,
     UploadManifestInfo,
@@ -336,6 +337,120 @@ class TestAttachmentUpload:
             assert result[0].output_manifest_path == "key1"
             assert result[0].output_manifest_hash == "hash1"
             assert result[0].source_path == "/local/home/test"
+
+    def test_upload_with_asset_type_input(self, temp_assets_dir, session_mock, mock_upload_assets):
+        """Test that attachment_upload with asset_type=INPUT uses the correct manifest file name."""
+        file_name: str = f"{PATH_MAPPING_HASH}.manifest"
+        with open(
+            os.path.join(temp_assets_dir, file_name),
+            "w",
+            encoding="utf8",
+        ) as f:
+            json.dump(MOCK_MANIFEST_CASE[PATH_MAPPING_HASH], f)
+
+        mapping_file_path = os.path.join(temp_assets_dir, "mapping")
+        with open(mapping_file_path, "w", encoding="utf8") as f:
+            json.dump([PATH_MAPPING], f)
+
+        attachment_api.attachment_upload(
+            manifests=[os.path.join(temp_assets_dir, file_name)],
+            s3_root_uri=TEST_S3_URI,
+            boto3_session=session_mock,
+            path_mapping_rules=mapping_file_path,
+            upload_manifest_path="test",
+            asset_type=AssetType.INPUT,
+        )
+
+        # Verify that the manifest_file_name is "{hashed_source_path}_input"
+        mock_upload_assets.assert_called_once()
+        call_args = mock_upload_assets.call_args[1]
+        assert call_args["manifest_file_name"] == f"{PATH_MAPPING_HASH}_input"
+
+    def test_upload_with_asset_type_output(self, temp_assets_dir, session_mock, mock_upload_assets):
+        """Test that attachment_upload with asset_type=OUTPUT uses the correct manifest file name."""
+        file_name: str = f"{PATH_MAPPING_HASH}.manifest"
+        with open(
+            os.path.join(temp_assets_dir, file_name),
+            "w",
+            encoding="utf8",
+        ) as f:
+            json.dump(MOCK_MANIFEST_CASE[PATH_MAPPING_HASH], f)
+
+        mapping_file_path = os.path.join(temp_assets_dir, "mapping")
+        with open(mapping_file_path, "w", encoding="utf8") as f:
+            json.dump([PATH_MAPPING], f)
+
+        attachment_api.attachment_upload(
+            manifests=[os.path.join(temp_assets_dir, file_name)],
+            s3_root_uri=TEST_S3_URI,
+            boto3_session=session_mock,
+            path_mapping_rules=mapping_file_path,
+            upload_manifest_path="test",
+            asset_type=AssetType.OUTPUT,
+        )
+
+        # Verify that the manifest_file_name is "{hashed_source_path}_output"
+        mock_upload_assets.assert_called_once()
+        call_args = mock_upload_assets.call_args[1]
+        assert call_args["manifest_file_name"] == f"{PATH_MAPPING_HASH}_output"
+
+    def test_upload_with_asset_type_other(self, temp_assets_dir, session_mock, mock_upload_assets):
+        """Test that attachment_upload with asset_type=OTHER uses the original file name."""
+        file_name: str = f"{PATH_MAPPING_HASH}.manifest"
+        with open(
+            os.path.join(temp_assets_dir, file_name),
+            "w",
+            encoding="utf8",
+        ) as f:
+            json.dump(MOCK_MANIFEST_CASE[PATH_MAPPING_HASH], f)
+
+        mapping_file_path = os.path.join(temp_assets_dir, "mapping")
+        with open(mapping_file_path, "w", encoding="utf8") as f:
+            json.dump([PATH_MAPPING], f)
+
+        attachment_api.attachment_upload(
+            manifests=[os.path.join(temp_assets_dir, file_name)],
+            s3_root_uri=TEST_S3_URI,
+            boto3_session=session_mock,
+            path_mapping_rules=mapping_file_path,
+            upload_manifest_path="test",
+            asset_type=AssetType.OTHER,
+        )
+
+        # Verify that the manifest_file_name is the original file name
+        mock_upload_assets.assert_called_once()
+        call_args = mock_upload_assets.call_args[1]
+        assert call_args["manifest_file_name"] == file_name
+
+    def test_upload_with_default_asset_type(
+        self, temp_assets_dir, session_mock, mock_upload_assets
+    ):
+        """Test that attachment_upload with default asset_type uses the original file name."""
+        file_name: str = f"{PATH_MAPPING_HASH}.manifest"
+        with open(
+            os.path.join(temp_assets_dir, file_name),
+            "w",
+            encoding="utf8",
+        ) as f:
+            json.dump(MOCK_MANIFEST_CASE[PATH_MAPPING_HASH], f)
+
+        mapping_file_path = os.path.join(temp_assets_dir, "mapping")
+        with open(mapping_file_path, "w", encoding="utf8") as f:
+            json.dump([PATH_MAPPING], f)
+
+        attachment_api.attachment_upload(
+            manifests=[os.path.join(temp_assets_dir, file_name)],
+            s3_root_uri=TEST_S3_URI,
+            boto3_session=session_mock,
+            path_mapping_rules=mapping_file_path,
+            upload_manifest_path="test",
+            # No asset_type specified, should default to OTHER
+        )
+
+        # Verify that the manifest_file_name is the original file name
+        mock_upload_assets.assert_called_once()
+        call_args = mock_upload_assets.call_args[1]
+        assert call_args["manifest_file_name"] == file_name
 
     def test_upload_invalid_input_manifests(self, session_mock):
         with pytest.raises(NonValidInputError):

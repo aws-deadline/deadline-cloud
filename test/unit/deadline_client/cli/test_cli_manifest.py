@@ -277,3 +277,59 @@ class TestSnapshot:
         actual_inputs = set(mock_prepare_paths_for_upload.call_args[1]["input_paths"])
         assert actual_inputs == expected_inputs
         mock_hash_attachments.assert_called_once()
+
+
+class TestManifestDownload:
+    """Test cases for the manifest download command"""
+
+    def test_asset_type_invalid_choices(self):
+        """
+        Test that invalid choices for --asset-type are rejected
+        """
+        runner = CliRunner()
+
+        # Test invalid choices
+        invalid_choices = ["other", "both", "everything", "none", ""]
+        for choice in invalid_choices:
+            result = runner.invoke(
+                main,
+                [
+                    "manifest",
+                    "download",
+                    "/tmp/test",
+                    "--job-id",
+                    "job-123",
+                    "--asset-type",
+                    choice,
+                ],
+            )
+            # Should fail with invalid value error
+            assert result.exit_code != 0, f"Invalid choice '{choice}' was accepted"
+            assert "Invalid value" in result.output or "Usage:" in result.output, (
+                f"Invalid choice '{choice}' did not show proper error"
+            )
+
+    def test_asset_type_valid_choices_case_insensitive(self):
+        """
+        Test that asset-type choices are case insensitive
+        """
+        runner = CliRunner()
+
+        # Test case variations
+        case_variations = ["INPUT", "Output", "ALL", "iNpUt", "oUtPuT", "aLl"]
+        for choice in case_variations:
+            result = runner.invoke(
+                main,
+                [
+                    "manifest",
+                    "download",
+                    "/tmp/test",
+                    "--job-id",
+                    "job-123",
+                    "--asset-type",
+                    choice,
+                ],
+                catch_exceptions=False,
+            )
+            # The command will fail due to missing config, but it should not fail due to invalid asset-type
+            assert "Invalid value" not in result.output, f"Case variation '{choice}' was rejected"

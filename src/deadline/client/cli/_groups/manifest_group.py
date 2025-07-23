@@ -257,8 +257,7 @@ def manifest_diff(
     "OUTPUT means download only output asset files for given job/step.\n"
     "ALL (default) means download all input & output asset files for given job/step.\n",
     type=click.Choice(
-        [e.value for e in AssetType],
-        case_sensitive=False,
+        [AssetType.INPUT.value, AssetType.OUTPUT.value, AssetType.ALL.value], case_sensitive=False
     ),
 )
 @click.option(

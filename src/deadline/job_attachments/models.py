@@ -140,6 +140,7 @@ class StorageProfileOperatingSystemFamily(str, Enum):
 class AssetType(str, Enum):
     INPUT = "input"
     OUTPUT = "output"
+    OTHER = "other"
     ALL = "all"
 
 
