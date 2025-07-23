@@ -16,7 +16,7 @@ from deadline.client.cli import main
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUES_LIST
 
 
-def test_cli_queue_list(fresh_deadline_config):
+def test_cli_queue_list(fresh_deadline_config, mock_telemetry):
     """
     Confirm that the CLI interface prints out the expected list of
     queues, given mock data.
@@ -41,7 +41,7 @@ def test_cli_queue_list(fresh_deadline_config):
         assert result.exit_code == 0
 
 
-def test_cli_queue_list_explicit_farm_id(fresh_deadline_config):
+def test_cli_queue_list_explicit_farm_id(fresh_deadline_config, mock_telemetry):
     """
     Confirm that the CLI interface prints out the expected list of
     queues, given mock data.
