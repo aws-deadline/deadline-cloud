@@ -8,6 +8,7 @@ import click
 import json
 import time
 import os
+import sys
 from configparser import ConfigParser
 from typing import Optional
 import boto3
@@ -279,6 +280,11 @@ def incremental_output_download(
     if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") != "1":
         raise DeadlineOperationError(
             "The incremental-output-download command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
+        )
+
+    if sys.version_info < (3, 9):
+        raise DeadlineOperationError(
+            "The incremental-output-download command requires Python version 3.9 or later"
         )
 
     logger: ClickLogger = ClickLogger(is_json=json)
