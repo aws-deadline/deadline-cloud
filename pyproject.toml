@@ -41,7 +41,6 @@ dependencies = [
   # Job Attachments
   "typing_extensions >= 4.8",
   "xxhash >= 3.4,< 3.6",
-  "jsonschema >= 4.17,< 5.0",
   "pywin32 >= 307,< 311; sys_platform == 'win32'",
   "QtPy == 2.4.*",
   "psutil >= 7.0.0"
@@ -101,7 +100,7 @@ explicit_package_bases = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["qtpy.*", "boto3.*", "botocore.*", "moto.*", "xxhash", "jsonschema"]
+module = ["qtpy.*", "boto3.*", "botocore.*", "moto.*", "xxhash"]
 
 [[tool.mypy.overrides]]
 module = "deadline.client.ui.*"

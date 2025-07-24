@@ -30,7 +30,7 @@ MOCK_FARMS_LIST = [
 os.environ["AWS_ENDPOINT_URL_DEADLINE"] = "https://fake-endpoint"
 
 
-def test_cli_farm_list(fresh_deadline_config):
+def test_cli_farm_list(fresh_deadline_config, mock_telemetry):
     """
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
