@@ -19,8 +19,6 @@ datas, binaries, hiddenimports = collect_all('deadline')
 # The 'datas' parameter adds data files to the bundle.
 # Each entry is a pair (local_filename, destination_path).
 datas += [
-    (b_module_path + '/job_attachments/asset_manifests/schemas/*.json',
-     'deadline_job_attachments/asset_manifests/schemas'),
     (b_module_path + '/../../THIRD_PARTY_LICENSES',
      '.')
 ]
