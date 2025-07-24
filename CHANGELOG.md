@@ -1,10 +1,12 @@
-## 0.51.0 (2025-07-18)
+## 0.51.0 (2025-07-24)
+
 
 ### BREAKING CHANGES
 * The behavior for the auto_accept configuration option has changed to automatically accept the default option that would be presented interactively. One exception is in a GUI context, when automatically accepting would cancel the operation.
 * The parameter decide_cancel_submission_callback is removed from api.create_job_from_job_bundle, and a new parameter interactive_confirmation_callback replaces it. The previous callback included business logic that is now in the create job function, and the callback's purpose is now solely to present an interactive confirmation prompt.
 
 ### Features
+* Add account IDs to telemetry events (#742) ([`43f7c0e`](https://github.com/aws-deadline/deadline-cloud/commit/43f7c0e4bb9c8988624067ad237a0f8ecb652aea))
 * Improved job identification in command output with clearer job names/IDs and more readable timestamps (#725) ([`a7883e0`](https://github.com/aws-deadline/deadline-cloud/commit/a7883e082edcd2b9cefd4059a1a679e8926fdab5))
 * Added ability to detect when virtual file system (VFS) fails to launch properly (#731) ([`e517659`](https://github.com/aws-deadline/deadline-cloud/commit/e5176598cc859584217eaea00d5e6a14a40070d5))
 * Persistent job submission settings that remember your previously used values for priority and retry settings (#711) ([`358e6c7`](https://github.com/aws-deadline/deadline-cloud/commit/358e6c7d4fa2cf194d77c400803415eeb4dd5ffa))
@@ -12,6 +14,8 @@
 * Performance improvements through better client caching for network operations (#708) ([`5665fa8`](https://github.com/aws-deadline/deadline-cloud/commit/5665fa8813ef8bb5c01a57c9604bbaed7015d859))
 
 ### Bug Fixes
+* Circular dependencies when importing deadline.job_attachements.api (#741) ([`f64ff50`](https://github.com/aws-deadline/deadline-cloud/commit/f64ff50cef6ad485519de5610a079b4acfa03c76))
+* UI Elements in Deadline Config Dialog stretch and squish in unpredictable ways (#746) ([`768b2e8`](https://github.com/aws-deadline/deadline-cloud/commit/768b2e8bafff429776fba9b36ab053007dc0ece8))
 * installer_version.txt remains after uninstallation (#736) ([`3f880b8`](https://github.com/aws-deadline/deadline-cloud/commit/3f880b8114bd65ffa5d6663ca7e0c99a5399ef79))
 * Profile settings GUI widget widths are truncated (#724) ([`5fdb0f1`](https://github.com/aws-deadline/deadline-cloud/commit/5fdb0f1ca347ba082bb48556aa57e9128d930e11))
 * Long paths on Windows cause relative_to function to operate unexpectedly (#715) ([`2e70d5d`](https://github.com/aws-deadline/deadline-cloud/commit/2e70d5d9b894630d8711369ca1509bf2f0a082fb))
@@ -34,9 +38,7 @@ These changes are experimental and are subject to change.
   * Prevention of race conditions in simultaneous download operations (#682) ([`da853ac`](https://github.com/aws-deadline/deadline-cloud/commit/da853ac0b5e1d15e7e2c60d908e71f81d0b39521))
   * Fix for reliability issues when multiple downloads run concurrently (#682) ([`da853ac`](https://github.com/aws-deadline/deadline-cloud/commit/da853ac0b5e1d15e7e2c60d908e71f81d0b39521))
 
-
 ## 0.50.1 (2025-06-04)
-
 
 
 ### Bug Fixes
