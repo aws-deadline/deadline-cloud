@@ -458,6 +458,10 @@ class ManifestDownloadResponse:
 
 @dataclass
 class PathMappingRule:
+    # Constants for manifest file name suffixes
+    INPUT_MANIFEST_SUFFIX = "_input"
+    OUTPUT_MANIFEST_SUFFIX = "_output"
+
     source_path_format: str
     """The path format associated with the source path (windows vs posix)"""
 
@@ -469,6 +473,32 @@ class PathMappingRule:
 
     def get_hashed_source_path(self, hash_alg: HashAlgorithm) -> str:
         return hash_data(self.source_path.encode("utf-8"), hash_alg)
+
+    def get_input_manifest_file_name(self, hash_alg: HashAlgorithm) -> str:
+        """
+        Generate the manifest file name for INPUT assets.
+
+        Args:
+            hash_alg: The hash algorithm to use for generating the hashed source path
+
+        Returns:
+            The generated input manifest file name in format: {hashed_source_path}_input
+        """
+        hashed_source_path = self.get_hashed_source_path(hash_alg)
+        return f"{hashed_source_path}{self.INPUT_MANIFEST_SUFFIX}"
+
+    def get_output_manifest_file_name(self, hash_alg: HashAlgorithm) -> str:
+        """
+        Generate the manifest file name for OUTPUT assets.
+
+        Args:
+            hash_alg: The hash algorithm to use for generating the hashed source path
+
+        Returns:
+            The generated output manifest file name in format: {hashed_source_path}_output
+        """
+        hashed_source_path = self.get_hashed_source_path(hash_alg)
+        return f"{hashed_source_path}{self.OUTPUT_MANIFEST_SUFFIX}"
 
 
 class FileStatus(Enum):

@@ -72,6 +72,66 @@ class TestModels:
             HashAlgorithm.XXH128
         )
 
+    def test_path_mapping_rule_get_input_manifest_file_name(self):
+        """
+        Test PathMappingRule.get_input_manifest_file_name method
+        """
+        path_mapping = PathMappingRule(
+            source_path_format="posix",
+            source_path="/tmp",
+            destination_path="/local/home/test/output",
+        )
+
+        # Test with XXH128 hash algorithm
+        result = path_mapping.get_input_manifest_file_name(HashAlgorithm.XXH128)
+        expected = "a0271fe0c8b1c1f99b82b442cd878122_input"
+        assert result == expected
+
+    def test_path_mapping_rule_get_output_manifest_file_name(self):
+        """
+        Test PathMappingRule.get_output_manifest_file_name method
+        """
+        path_mapping = PathMappingRule(
+            source_path_format="posix",
+            source_path="/tmp",
+            destination_path="/local/home/test/output",
+        )
+
+        # Test with XXH128 hash algorithm
+        result = path_mapping.get_output_manifest_file_name(HashAlgorithm.XXH128)
+        expected = "a0271fe0c8b1c1f99b82b442cd878122_output"
+        assert result == expected
+
+    @pytest.mark.parametrize(
+        "source_path",
+        [
+            "/home/user/project",
+            "/windows/path",
+            "",
+            "/path/with/multiple/segments",
+        ],
+    )
+    def test_path_mapping_rule_manifest_file_names_with_different_paths(self, source_path: str):
+        """
+        Test manifest file name generation with different source paths using XXH128
+        """
+        path_mapping = PathMappingRule(
+            source_path_format="posix",
+            source_path=source_path,
+            destination_path="/destination",
+        )
+
+        # Get the actual hash for comparison
+        actual_hash = path_mapping.get_hashed_source_path(HashAlgorithm.XXH128)
+
+        # Test input manifest file name
+        input_result = path_mapping.get_input_manifest_file_name(HashAlgorithm.XXH128)
+        assert input_result == f"{actual_hash}_input"
+
+        # Test output manifest file name
+        output_result = path_mapping.get_output_manifest_file_name(HashAlgorithm.XXH128)
+        assert output_result == f"{actual_hash}_output"
+
 
 class TestJobAttachmentS3SettingsModel:
     @pytest.mark.parametrize(

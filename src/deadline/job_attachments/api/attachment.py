@@ -99,7 +99,7 @@ def _attachment_download_with_root_manifests(
             (
                 rule.destination_path
                 for rule in (path_mapping_rule_list or [])
-                if rule.get_hashed_source_path(manifest.get_default_hash_alg()) in file_name
+                if rule.get_hashed_source_path(manifest.hashAlg) in file_name
             ),
             # Write to current directory partitioned by manifest name when no path mapping defined
             f"{os.getcwd()}/{file_name}",
@@ -213,13 +213,15 @@ def attachment_upload(
 
         # Determine manifest file name based on asset type
         if asset_type == AssetType.INPUT:
-            hashed_source_path = rule.get_hashed_source_path(manifest.get_default_hash_alg())
-            manifest_file_name = f"{hashed_source_path}_input"
+            manifest_file_name = rule.get_input_manifest_file_name(manifest.hashAlg)
         elif asset_type == AssetType.OUTPUT:
-            hashed_source_path = rule.get_hashed_source_path(manifest.get_default_hash_alg())
-            manifest_file_name = f"{hashed_source_path}_output"
-        else:  # AssetType.OTHER or any other type
+            manifest_file_name = rule.get_output_manifest_file_name(manifest.hashAlg)
+        elif asset_type == AssetType.OTHER:
             manifest_file_name = file_name
+        else:
+            raise ValueError(
+                f"Unsupported asset_type: {asset_type}. Only INPUT, OUTPUT, and OTHER are supported."
+            )
 
         # Uploads all files to a CAS in the manifest, optionally upload manifest file
         key, data = asset_uploader.upload_assets(
