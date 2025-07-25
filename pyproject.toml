@@ -41,7 +41,7 @@ dependencies = [
   # Job Attachments
   "typing_extensions >= 4.8",
   "xxhash >= 3.4,< 3.6",
-  "pywin32 >= 307,< 311; sys_platform == 'win32'",
+  "pywin32 >= 307,< 312; sys_platform == 'win32'",
   "QtPy == 2.4.*",
   "psutil >= 7.0.0"
 ]
