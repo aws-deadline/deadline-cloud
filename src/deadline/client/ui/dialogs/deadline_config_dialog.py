@@ -67,13 +67,21 @@ class DeadlineConfigDialog(QDialog):
     """
 
     @staticmethod
-    def configure_settings(parent=None) -> bool:
+    def configure_settings(parent=None, set_profile_focus=False) -> bool:
         """
         Static method that runs the Deadline Config Dialog.
+
+        Args:
+            parent: Parent widget
+            set_profile_focus: Optional boolean to set the initial focus to the profile selector
 
         Returns True if any changes were applied, False otherwise.
         """
         deadline_config = DeadlineConfigDialog(parent=parent)
+
+        if set_profile_focus:
+            deadline_config.config_box.aws_profiles_box.setFocus()
+
         deadline_config.exec_()
         return deadline_config.changes_were_applied
 
@@ -117,7 +125,9 @@ class DeadlineConfigDialog(QDialog):
 
         self.config_box.refreshed.connect(self.on_refresh)
 
-        self.auth_status_box = DeadlineAuthenticationStatusWidget(self)
+        self.auth_status_box = DeadlineAuthenticationStatusWidget(
+            parent=self, show_profile_switch=False
+        )
         self.layout.addWidget(self.auth_status_box)
         self.deadline_authentication_status.deadline_config_changed.connect(self.config_box.refresh)
         self.deadline_authentication_status.api_availability_changed.connect(
@@ -131,12 +141,8 @@ class DeadlineConfigDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.button_box.clicked.connect(self.on_button_box_clicked)
-        self.login_button = QPushButton("Login")
-        self.login_button.clicked.connect(self.on_login)
-        self.button_box.addButton(self.login_button, QDialogButtonBox.ResetRole)
-        self.logout_button = QPushButton("Logout")
-        self.logout_button.clicked.connect(self.on_logout)
-        self.button_box.addButton(self.logout_button, QDialogButtonBox.ResetRole)
+        self.auth_status_box.logout_clicked.connect(self.on_logout)
+        self.auth_status_box.login_clicked.connect(self.on_login)
         self.layout.addWidget(self.button_box)
 
         # Refresh the lists so queue/farm show the description instead of the ID
@@ -149,6 +155,10 @@ class DeadlineConfigDialog(QDialog):
     def accept(self):
         if self.config_box.apply():
             super().accept()
+
+    def reject(self):
+        self.deadline_authentication_status.set_config(config_file.read_config())
+        super().reject()
 
     def on_login(self):
         DeadlineLoginDialog.login(parent=self, config=self.config_box.config)
