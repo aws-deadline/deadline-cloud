@@ -668,3 +668,61 @@ def test_gui_submit_submitter_name(_mock_context):
     )
     _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
     assert kwargs["submitter_name"] == "MyDCC"
+
+
+def test_bundle_submit_with_target_task_run_status(fresh_deadline_config, temp_job_bundle_dir):
+    """
+    Test that the --target-task-run-status CLI option is passed through correctly.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    # Write a JSON template
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                "--target-task-run-status",
+                "SUSPENDED",
+                temp_job_bundle_dir,
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock.create_job_from_job_bundle.assert_called_once()
+        _, kwargs = mock.create_job_from_job_bundle.call_args
+        assert kwargs["target_task_run_status"] == "SUSPENDED"
+
+
+def test_bundle_submit_without_target_task_run_status(fresh_deadline_config, temp_job_bundle_dir):
+    """
+    Test that when --target-task-run-status is not specified, None is passed.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    # Write a JSON template
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                temp_job_bundle_dir,
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock.create_job_from_job_bundle.assert_called_once()
+        _, kwargs = mock.create_job_from_job_bundle.call_args
+        assert kwargs["target_task_run_status"] is None
