@@ -1,5 +1,4 @@
-## 0.51.0 (2025-07-25)
-
+## 0.51.0 (2025-07-28)
 
 
 ### BREAKING CHANGES
@@ -15,6 +14,7 @@
 * Performance improvements through better client caching for network operations (#708) ([`5665fa8`](https://github.com/aws-deadline/deadline-cloud/commit/5665fa8813ef8bb5c01a57c9604bbaed7015d859))
 
 ### Bug Fixes
+* Uncaught telemetry exception when collecting account ID (#754) ([`212b659`](https://github.com/aws-deadline/deadline-cloud/commit/212b659859f91ee14ebb551b3b1cce42ff8d64d8))
 * Circular dependencies when importing deadline.job_attachements.api (#741) ([`f64ff50`](https://github.com/aws-deadline/deadline-cloud/commit/f64ff50cef6ad485519de5610a079b4acfa03c76))
 * UI Elements in Deadline Config Dialog stretch and squish in unpredictable ways (#746) ([`768b2e8`](https://github.com/aws-deadline/deadline-cloud/commit/768b2e8bafff429776fba9b36ab053007dc0ece8))
 * installer_version.txt remains after uninstallation (#736) ([`3f880b8`](https://github.com/aws-deadline/deadline-cloud/commit/3f880b8114bd65ffa5d6663ca7e0c99a5399ef79))
