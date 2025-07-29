@@ -19,8 +19,6 @@ datas, binaries, hiddenimports = collect_all('deadline')
 # The 'datas' parameter adds data files to the bundle.
 # Each entry is a pair (local_filename, destination_path).
 datas += [
-    (b_module_path + '/job_attachments/asset_manifests/schemas/*.json',
-     'deadline_job_attachments/asset_manifests/schemas'),
     (b_module_path + '/../../THIRD_PARTY_LICENSES',
      '.')
 ]
@@ -36,7 +34,17 @@ cli_a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=['.'],
     runtime_hooks=[],
-    excludes=['cmd', 'code', 'pdb'],
+    excludes=[
+        'cmd',
+        'code',
+        'pdb',
+        'setuptools',
+        'jaraco',
+        'importlib_metadata',
+        'zipp',
+        'pkg_resources',
+        'pyinstaller_hooks_contrib',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=BLOCK_CIPHER,
