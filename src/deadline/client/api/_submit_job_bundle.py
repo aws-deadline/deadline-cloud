@@ -246,6 +246,7 @@ def create_job_from_job_bundle(
     max_failed_tasks_count: Optional[int] = None,
     max_retries_per_task: Optional[int] = None,
     max_worker_count: Optional[int] = None,
+    target_task_run_status: Optional[str] = None,
     require_paths_exist: bool = False,
     submitter_name: Optional[str] = None,
     known_asset_paths: Collection[str] = [],
@@ -311,6 +312,8 @@ def create_job_from_job_bundle(
         max_failed_tasks_count (int, optional): explicit value for the maximum allowed failed tasks.
         max_retries_per_task (int, optional): explicit value for the maximum retries per task.
         max_worker_count (int, optional): explicit value for the max worker count of the job.
+        target_task_run_status (str, optional): explicit value for the target task run status of the job.
+                Valid values are "READY" or "SUSPENDED".
         require_paths_exist (bool, optional): Whether to require that all input paths exist.
         submitter_name (str, optional): Name of the application submitting the bundle.
         known_asset_paths (list[str], optional): A list of paths that should not generate
@@ -616,6 +619,8 @@ def create_job_from_job_bundle(
         create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
     if max_retries_per_task is not None:
         create_job_args["maxRetriesPerTask"] = max_retries_per_task
+    if target_task_run_status is not None:
+        create_job_args["targetTaskRunStatus"] = target_task_run_status
 
     if logging.DEBUG >= logger.getEffectiveLevel():
         logger.debug(json.dumps(create_job_args, indent=1))
