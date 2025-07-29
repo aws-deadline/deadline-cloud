@@ -321,7 +321,7 @@ class TestAttachmentUpload:
             mock_upload_assets.return_value = ("key1", "hash1")
 
             # Call attachment_upload
-            result = attachment_api.attachment_upload(
+            result = attachment_api._attachment_upload(
                 manifests=[os.path.join(temp_assets_dir, file_name)],
                 s3_root_uri=TEST_S3_URI,
                 boto3_session=session_mock,
@@ -352,7 +352,7 @@ class TestAttachmentUpload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -380,7 +380,7 @@ class TestAttachmentUpload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -408,7 +408,7 @@ class TestAttachmentUpload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -438,7 +438,7 @@ class TestAttachmentUpload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -454,7 +454,7 @@ class TestAttachmentUpload:
 
     def test_upload_invalid_input_manifests(self, session_mock):
         with pytest.raises(NonValidInputError):
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=["file-not-found"],
                 s3_root_uri=TEST_S3_URI,
                 boto3_session=session_mock,
@@ -462,7 +462,7 @@ class TestAttachmentUpload:
 
     def test_upload_invalid_input_path_mapping_rules(self, session_mock):
         with pytest.raises(NonValidInputError):
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=[],
                 s3_root_uri=TEST_S3_URI,
                 boto3_session=session_mock,
@@ -471,7 +471,7 @@ class TestAttachmentUpload:
 
     def test_upload_invalid_input_s3_root_uri(self, temp_assets_dir, session_mock):
         with pytest.raises(MalformedAttachmentSettingError):
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=[],
                 s3_root_uri="MalformedPath",
                 root_dirs=[temp_assets_dir],
@@ -491,7 +491,7 @@ class TestAttachmentUpload:
         with open(mapping_file_path, "w", encoding="utf8") as f:
             json.dump([PATH_MAPPING], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -529,7 +529,7 @@ class TestAttachmentUpload:
         ) as f:
             json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
 
-        attachment_api.attachment_upload(
+        attachment_api._attachment_upload(
             manifests=[os.path.join(temp_assets_dir, file_name)],
             s3_root_uri=TEST_S3_URI,
             boto3_session=session_mock,
@@ -561,7 +561,7 @@ class TestAttachmentUpload:
 
         # Test No valid root defined for given manifest
         with pytest.raises(NonValidInputError) as error:
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=[os.path.join(temp_assets_dir, manifest_case_key)],
                 s3_root_uri="s3://bucket/assetRoot",
                 root_dirs=[temp_assets_dir],
@@ -572,7 +572,7 @@ class TestAttachmentUpload:
 
     def test_upload_no_root_dir_or_mapping(self, temp_assets_dir, session_mock):
         with pytest.raises(NonValidInputError) as error:
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=[],
                 s3_root_uri="s3://bucketName/rootPrefix",
                 boto3_session=session_mock,
@@ -582,7 +582,7 @@ class TestAttachmentUpload:
 
     def test_upload_both_root_dir_and_mapping(self, temp_assets_dir, session_mock):
         with pytest.raises(NonValidInputError) as error:
-            attachment_api.attachment_upload(
+            attachment_api._attachment_upload(
                 manifests=[],
                 path_mapping_rules="fakefilepath",
                 root_dirs=[temp_assets_dir],

@@ -125,7 +125,7 @@ def _attachment_download_with_root_manifests(
     logger.json(asdict(download_summary.convert_to_summary_statistics()))
 
 
-def attachment_upload(
+def _attachment_upload(
     manifests: List[str],
     s3_root_uri: str,
     boto3_session: boto3.Session,

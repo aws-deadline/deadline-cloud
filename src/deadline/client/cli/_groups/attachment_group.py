@@ -24,7 +24,6 @@ from deadline.job_attachments.exceptions import MissingJobAttachmentSettingsErro
 from deadline.job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
-    AssetType,
 )
 
 
@@ -158,14 +157,6 @@ def attachment_download(
 @click.option(
     "--upload-manifest-path", default=None, help="File path for uploading the manifests to CAS."
 )
-@click.option(
-    "--asset-type",
-    type=click.Choice(
-        [AssetType.INPUT.value, AssetType.OUTPUT.value, AssetType.OTHER.value], case_sensitive=False
-    ),
-    default=AssetType.OTHER.value,
-    help="Type of asset being uploaded (input, output, other). Affects manifest file naming.",
-)
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
@@ -173,13 +164,12 @@ def attachment_download(
 )
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
 @_handle_error
-def attachment_upload(
+def _attachment_upload(
     manifests: list[str],
     root_dirs: list[str],
     path_mapping_rules: str,
     s3_root_uri: str,
     upload_manifest_path: str,
-    asset_type: str,
     json: bool,
     **args,
 ):
@@ -216,13 +206,12 @@ def attachment_upload(
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
 
-    attachment_api.attachment_upload(
+    attachment_api._attachment_upload(
         root_dirs=root_dirs,
         manifests=manifests,
         s3_root_uri=s3_root_uri,
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
         upload_manifest_path=upload_manifest_path,
-        asset_type=AssetType(asset_type),
         logger=logger,
     )

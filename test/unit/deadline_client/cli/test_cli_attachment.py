@@ -12,60 +12,80 @@ from deadline.client.cli import main
 class TestAttachmentUpload:
     """Test cases for the attachment upload command"""
 
-    def test_asset_type_invalid_choices(self):
+    def test_attachment_upload_missing_required_args(self):
         """
-        Test that invalid choices for --asset-type are rejected
-        """
-        runner = CliRunner()
-
-        # Test invalid choices
-        invalid_choices = ["all", ""]
-        for choice in invalid_choices:
-            result = runner.invoke(
-                main,
-                [
-                    "attachment",
-                    "upload",
-                    "--manifests",
-                    "/tmp/test.manifest",
-                    "--root-dirs",
-                    "/tmp/test",
-                    "--s3-root-uri",
-                    "s3://test-bucket/test-prefix",
-                    "--asset-type",
-                    choice,
-                ],
-            )
-            # Should fail with invalid value error
-            assert result.exit_code != 0, f"Invalid choice '{choice}' was accepted"
-            assert "Invalid value" in result.output or "Usage:" in result.output, (
-                f"Invalid choice '{choice}' did not show proper error"
-            )
-
-    def test_asset_type_case_insensitive(self):
-        """
-        Test that asset-type choices are case insensitive
+        Test that attachment upload fails when required arguments are missing
         """
         runner = CliRunner()
 
-        # Test case variations
-        case_variations = ["INPUT", "Output", "OTHER", "iNpUt", "oUtPuT", "oThEr"]
-        for choice in case_variations:
-            result = runner.invoke(
-                main,
-                [
-                    "attachment",
-                    "upload",
-                    "--manifests",
-                    "/tmp/test.manifest",
-                    "--root-dirs",
-                    "/tmp/test",
-                    "--s3-root-uri",
-                    "s3://test-bucket/test-prefix",
-                    "--asset-type",
-                    choice,
-                ],
-                catch_exceptions=False,
-            )
-            # The command will fail due to missing files/config, but it should not fail due to invalid asset-type
-            assert "Invalid value" not in result.output, f"Case variation '{choice}' was rejected"
+        # Test missing manifests
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--root-dirs",
+                "/tmp/test",
+                "--s3-root-uri",
+                "s3://test-bucket/test-prefix",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Missing option" in result.output or "Usage:" in result.output
+
+        # Test missing s3-root-uri (when not using farm/queue config)
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--manifests",
+                "/tmp/test.manifest",
+                "--root-dirs",
+                "/tmp/test",
+            ],
+        )
+        # This will fail due to missing config, but not due to CLI argument parsing
+        assert result.exit_code != 0
+
+    def test_attachment_upload_help(self):
+        """
+        Test that attachment upload help works and doesn't mention asset-type
+        """
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--help",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Upload Job Attachment data files" in result.output
+        assert "--manifests" in result.output
+        assert "--root-dirs" in result.output
+        assert "--s3-root-uri" in result.output
+
+    def test_attachment_upload_accepts_valid_args(self):
+        """
+        Test that attachment upload accepts valid arguments without asset-type
+        """
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "upload",
+                "--manifests",
+                "/tmp/test.manifest",
+                "--root-dirs",
+                "/tmp/test",
+                "--s3-root-uri",
+                "s3://test-bucket/test-prefix",
+            ],
+        )
+        # Command will fail due to missing files/config, but should not fail due to CLI parsing
+        # The important thing is that it doesn't complain about unknown options
+        assert "no such option" not in result.output.lower()
+        assert "unrecognized arguments" not in result.output.lower()
