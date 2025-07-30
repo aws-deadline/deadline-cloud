@@ -98,6 +98,9 @@ class JobBundleSettingsWidget(QWidget):
         if not input_job_bundle_dir:
             return
 
+        # Update job bundle directory path
+        self.input_job_bundle_dir = input_job_bundle_dir
+
         # Warn the user if the Job Bundle could not be loaded
         try:
             validate_directory_symlink_containment(input_job_bundle_dir)
