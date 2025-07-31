@@ -1,0 +1,2 @@
+# This file ensures the work_dir directory is preserved in git
+# The work_dir is used as a working directory for job outputs

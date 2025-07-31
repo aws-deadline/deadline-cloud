@@ -1,0 +1,231 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: UI Controls Showcase
+description: Demonstrates all available OpenJD UI control types
+
+parameterDefinitions:
+# STRING type controls
+- name: LineEditString
+  type: STRING
+  default: "Hello World"
+  userInterface:
+    control: LINE_EDIT
+    label: Line Edit Control
+    groupLabel: String Controls
+  description: Single line text input
+
+- name: MultilineEditString
+  type: STRING
+  default: |
+    Line 1
+    Line 2
+    Line 3
+  userInterface:
+    control: MULTILINE_EDIT
+    label: Multiline Edit Control
+    groupLabel: String Controls
+  description: Multi-line text input
+
+- name: StringDropdown
+  type: STRING
+  default: "Option2"
+  allowedValues: ["Option1", "Option2", "Option3"]
+  userInterface:
+    control: DROPDOWN_LIST
+    label: String Dropdown
+    groupLabel: String Controls
+  description: Dropdown list with string values
+
+- name: CheckBoxString
+  type: STRING
+  default: "true"
+  allowedValues: ["true", "false"]
+  userInterface:
+    control: CHECK_BOX
+    label: Checkbox Control
+    groupLabel: String Controls
+  description: Boolean checkbox
+
+- name: HiddenString
+  type: STRING
+  default: "secret_value"
+  userInterface:
+    control: HIDDEN
+  description: Hidden string parameter
+
+# INT type controls
+- name: SpinBoxInt
+  type: INT
+  default: 42
+  minValue: 0
+  maxValue: 100
+  userInterface:
+    control: SPIN_BOX
+    label: Integer Spin Box
+    groupLabel: Integer Controls
+    singleStepDelta: 5
+  description: Integer spinner with step size 5
+
+- name: IntDropdown
+  type: INT
+  default: 10
+  allowedValues: [5, 10, 15, 20, 25]
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Integer Dropdown
+    groupLabel: Integer Controls
+  description: Dropdown with integer values
+
+- name: HiddenInt
+  type: INT
+  default: 999
+  userInterface:
+    control: HIDDEN
+  description: Hidden integer parameter
+
+# FLOAT type controls
+- name: SpinBoxFloat
+  type: FLOAT
+  default: 3.14159
+  minValue: 0.0
+  maxValue: 10.0
+  userInterface:
+    control: SPIN_BOX
+    label: Float Spin Box
+    groupLabel: Float Controls
+    decimals: 3
+    singleStepDelta: 0.1
+  description: Float spinner with 3 decimal places
+
+- name: FloatDropdown
+  type: FLOAT
+  default: 2.5
+  allowedValues: [1.0, 1.5, 2.0, 2.5, 3.0]
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Float Dropdown
+    groupLabel: Float Controls
+  description: Dropdown with float values
+
+- name: HiddenFloat
+  type: FLOAT
+  default: 123.456
+  userInterface:
+    control: HIDDEN
+  description: Hidden float parameter
+
+# PATH type controls
+- name: InputFile
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  default: "input.txt"
+  userInterface:
+    control: CHOOSE_INPUT_FILE
+    label: Input File Chooser
+    groupLabel: Path Controls
+    fileFilters:
+    - label: Text Files
+      patterns: ["*.txt", "*.log"]
+    - label: All Files
+      patterns: ["*"]
+  description: Choose an input file
+
+- name: OutputFile
+  type: PATH
+  objectType: FILE
+  dataFlow: OUT
+  default: "output.txt"
+  userInterface:
+    control: CHOOSE_OUTPUT_FILE
+    label: Output File Chooser
+    groupLabel: Path Controls
+    fileFilters:
+    - label: Text Files
+      patterns: ["*.txt"]
+    - label: All Files
+      patterns: ["*"]
+  description: Choose an output file
+
+- name: DirectoryPath
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: INOUT
+  default: "work_dir"
+  userInterface:
+    control: CHOOSE_DIRECTORY
+    label: Directory Chooser
+    groupLabel: Path Controls
+  description: Choose a working directory
+
+- name: PathDropdown
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  default: "file1.txt"
+  allowedValues: ["file1.txt", "file2.txt", "file3.txt"]
+  userInterface:
+    control: DROPDOWN_LIST
+    label: Path Dropdown
+    groupLabel: Path Controls
+  description: Dropdown with path values
+
+- name: HiddenPath
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  default: "hidden_file.txt"
+  userInterface:
+    control: HIDDEN
+  description: Hidden path parameter
+
+steps:
+- name: ShowAllControls
+  hostRequirements:
+    attributes:
+    - name: attr.worker.os.family
+      anyOf:
+      - linux
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ['{{Task.File.ShowControlsScript}}']
+    embeddedFiles:
+    - name: ShowControlsScript
+      type: TEXT
+      data: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== UI Controls Showcase ==="
+        echo ""
+        
+        echo "STRING CONTROLS:"
+        echo "  LineEditString: '{{Param.LineEditString}}'"
+        echo "  MultilineEditString: '{{Param.MultilineEditString}}'"
+        echo "  StringDropdown: '{{Param.StringDropdown}}'"
+        echo "  CheckBoxString: '{{Param.CheckBoxString}}'"
+        echo "  HiddenString: '{{Param.HiddenString}}'"
+        echo ""
+        
+        echo "INTEGER CONTROLS:"
+        echo "  SpinBoxInt: {{Param.SpinBoxInt}}"
+        echo "  IntDropdown: {{Param.IntDropdown}}"
+        echo "  HiddenInt: {{Param.HiddenInt}}"
+        echo ""
+        
+        echo "FLOAT CONTROLS:"
+        echo "  SpinBoxFloat: {{Param.SpinBoxFloat}}"
+        echo "  FloatDropdown: {{Param.FloatDropdown}}"
+        echo "  HiddenFloat: {{Param.HiddenFloat}}"
+        echo ""
+        
+        echo "PATH CONTROLS:"
+        echo "  InputFile: '{{Param.InputFile}}'"
+        echo "  OutputFile: '{{Param.OutputFile}}'"
+        echo "  DirectoryPath: '{{Param.DirectoryPath}}'"
+        echo "  PathDropdown: '{{Param.PathDropdown}}'"
+        echo "  HiddenPath: '{{Param.HiddenPath}}'"
+        echo ""
+        
+        echo "=== All controls demonstrated successfully ==="

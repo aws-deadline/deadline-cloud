@@ -1,0 +1,3 @@
+This is a sample attachment file for the AWS Deadline Cloud job bundle.
+It demonstrates how job attachments work.
+File created at: $(date)
