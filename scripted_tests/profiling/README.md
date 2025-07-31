@@ -21,7 +21,7 @@ uv pip install -e .
 uv pip install -r requirements-testing.txt
 
 python scripted_tests/profiling/profiling.py --output-dir path/where/you/want/output
-````
+```
 
 ### fish
 ```fish
@@ -37,7 +37,7 @@ uv pip install -e .
 uv pip install -r requirements-testing.txt
 
 python scripted_tests/profiling/profiling.py --output-dir path/where/you/want/output
-````
+```
 
 After running the script your output will be in the directory you specified. By default, the output will be an
 html file for each test.
