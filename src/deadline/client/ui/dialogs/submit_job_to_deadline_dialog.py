@@ -63,7 +63,7 @@ class OnCreateJobBundleCallback(Protocol):
         host_requirements: Optional[Dict[str, Any]] = None,
         *,
         purpose: JobBundlePurpose,
-    ) -> dict[str, Any]: ...
+    ) -> Optional[dict[str, Any]]: ...
 
 
 class SubmitJobToDeadlineDialog(QDialog):
