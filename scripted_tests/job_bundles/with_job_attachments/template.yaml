@@ -1,0 +1,62 @@
+specificationVersion: jobtemplate-2023-09
+name: Simple Job with Attachments
+description: A minimal job bundle for profiling job attachments with embedded script
+
+parameterDefinitions:
+- name: AttachmentFile
+  type: PATH
+  default: sample_attachment.txt
+  dataFlow: IN
+  objectType: FILE
+  description: Sample text attachment file to demonstrate job attachments
+
+- name: BinaryAttachment
+  type: PATH
+  default: sample_binary.dat
+  dataFlow: IN
+  objectType: FILE
+  description: Sample binary attachment file to demonstrate binary file handling
+
+steps:
+- name: ProcessAttachments
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ['{{Task.File.MainScript}}']
+    embeddedFiles:
+    - name: MainScript
+      type: TEXT
+      data: |
+        #!/bin/bash
+        echo "=== Job Attachments Demo ==="
+        echo "Script started at: $(date)"
+        echo "Working directory: $(pwd)"
+        echo ""
+        
+        echo "=== TEXT ATTACHMENT ==="
+        echo "Text attachment file: {{Param.AttachmentFile}}"
+        if [ -f "{{Param.AttachmentFile}}" ]; then
+          echo "Found text attachment file, contents:"
+          cat "{{Param.AttachmentFile}}"
+        else
+          echo "Text attachment file not found"
+        fi
+        echo ""
+        
+        echo "=== BINARY ATTACHMENT ==="
+        echo "Binary attachment file: {{Param.BinaryAttachment}}"
+        if [ -f "{{Param.BinaryAttachment}}" ]; then
+          echo "Found binary attachment file"
+          echo "File size: $(wc -c < "{{Param.BinaryAttachment}}") bytes"
+          echo "File type: $(file "{{Param.BinaryAttachment}}")"
+          echo "Hex dump (first 32 bytes):"
+          hexdump -C "{{Param.BinaryAttachment}}" | head -2
+        else
+          echo "Binary attachment file not found"
+        fi
+        echo ""
+        
+        echo "Sleeping for 10 seconds..."
+        sleep 10
+        echo "Job completed at: $(date)"

@@ -1,0 +1,3 @@
+This is a hidden file for the HiddenPath parameter.
+It won't be visible in the UI but is used by the job.
+Hidden parameter demonstration file.
