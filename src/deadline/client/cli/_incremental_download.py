@@ -11,6 +11,7 @@ from typing import Any, Callable
 import sys
 import time
 import concurrent.futures
+import textwrap
 
 from .. import api
 import boto3
@@ -29,6 +30,7 @@ from ...job_attachments._incremental_downloads._manifest_s3_downloads import (
     _merge_absolute_path_manifest_list,
     _download_manifest_paths,
 )
+from ...job_attachments._path_mapping import _generate_path_mapping_rules, _PathMappingRuleApplier
 from ...job_attachments.asset_manifests import (
     BaseAssetManifest,
     BaseManifestPath,
@@ -38,6 +40,8 @@ from ...job_attachments.asset_manifests import (
 )
 from ...job_attachments.models import (
     FileConflictResolution,
+    PathFormat,
+    StorageProfileOperatingSystemFamily,
 )
 from ...job_attachments.progress_tracker import (
     ProgressReportMetadata,
@@ -181,6 +185,9 @@ class CategorizedJobIds:
         completed: The job finished running so all output is available for download.
         inactive: The job can no longer have any new downloads unless it is requeued. Minimal
             metadata is tracked to detect if it is requeued.
+        missing_storage_profile: The job has no storage profile, but the operation requires one.
+            If incremental download was called with local_storage_profile_id=None, this set
+            will always be empty.
         attachments_free: The job has no job attachments associated that can produce
             outputs for download.
     """
@@ -190,6 +197,7 @@ class CategorizedJobIds:
     unchanged: set[str] = set()
     completed: set[str] = set()
     inactive: set[str] = set()
+    missing_storage_profile: set[str] = set()
     attachments_free: set[str] = set()
 
 
@@ -206,7 +214,7 @@ def _categorize_jobs_in_checkpoint(
     Categorizes the provided download candidate jobs by id into a CategorizedJobIds object,
     updating the jobs within download_candidate_jobs where necessary.
 
-    * Calls boto3 deadline.get_job() to get job attachments manifest information if it is not stored yet.
+    * Calls boto3 deadline.get_job() to get job attachments manifest information and storage profile id if it is not stored yet.
 
     Args:
         boto3_session: The boto3.Session for accessing AWS.
@@ -236,11 +244,12 @@ def _categorize_jobs_in_checkpoint(
     # The following sets get populated while analyzing the jobs
     unchanged_job_ids = set()
     attachments_free_job_ids = set()
+    missing_storage_profile = set()
     completed_job_ids = set()
 
-    # Copy the job attachments manifest data from the checkpoint to the new job objects. This data is not returned
-    # by deadline:SearchJobs, so we need to call deadline:GetJob on every job to retrieve it. The manifests on a job
-    # don't change, so after the call to deadline:GetJob we can cache it indefinitely.
+    # Copy the job attachments manifest data and storage profile id from the checkpoint to the new job objects. This data
+    # is not returned by deadline:SearchJobs, so we need to call deadline:GetJob on every job to retrieve it. This data
+    # on a job don't change, so after the call to deadline:GetJob we can cache it indefinitely.
     for job_id in updated_job_ids:
         ip_job = checkpoint_jobs[job_id]
         dc_job = download_candidate_jobs[job_id]
@@ -252,11 +261,18 @@ def _categorize_jobs_in_checkpoint(
             # Carry over the minimal placeholder identifying the job as not using job attachments
             download_candidate_jobs[job_id] = ip_job
             attachments_free_job_ids.add(job_id)
+        elif ip_job["storageProfileId"] is None and checkpoint.local_storage_profile_id is not None:
+            # Carry over the minimal placeholder identifying the job as missing a storage profile
+            download_candidate_jobs[job_id] = ip_job
+            missing_storage_profile.add(job_id)
         else:
             # Copy the attachments manifest metadata as it is not returned by deadline:SearchJobs
             dc_job["attachments"] = ip_job["attachments"]
+            dc_job["storageProfileId"] = ip_job["storageProfileId"]
+
     updated_job_ids.difference_update(attachments_free_job_ids)
     updated_job_ids.difference_update(new_job_ids)
+    updated_job_ids.difference_update(missing_storage_profile)
 
     # Prune jobs that we are (almost) certain have no changes by looking at its task status counts. We treat a job as unchanged if its
     # value job["taskRunStatusCounts"]["SUCCEEDED"] stayed the same and its timestamp job["endedAt"] stayed the same.
@@ -346,6 +362,7 @@ def _categorize_jobs_in_checkpoint(
         # Call deadline:GetJob to retrieve attachments manifest information
         job = deadline.get_job(jobId=job_id, queueId=queue_id, farmId=farm_id)
         dc_job["attachments"] = job.get("attachments")
+        dc_job["storageProfileId"] = job.get("storageProfileId")
         dc_succeeded_task_count = dc_job["taskRunStatusCounts"]["SUCCEEDED"]
         dc_total_task_count = sum(value for _, value in dc_job["taskRunStatusCounts"].items())
 
@@ -642,6 +659,120 @@ def _get_job_sessions(
     return job_sessions
 
 
+def _get_storage_profiles(
+    deadline: BaseClient,
+    farm_id: str,
+    queue: dict[str, Any],
+    job_sessions: dict[str, list],
+    checkpoint: IncrementalDownloadState,
+    download_candidate_jobs: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """
+    Retrieves all the needed storage profiles. To call this function,
+    checkpoint.local_storage_profile_id must be set.
+
+    Args:
+        deadline: An AWS client for calling deadline APIs.
+        farm_id: The farm id for the operation.
+        queue: The queue as returned by boto3 deadline.get_queue().
+        checkpoint: The checkpoint for the incremental download.
+        job_sessions: Contains each job's sessions and session actions, structured as job_sessions[job_id][session_index]["sessionActions"][session_action_index].
+                      See the function _get_job_sessions for more details.
+        download_candidate_jobs: The result of a _get_download_candidate_jobs call, {job_id: job} where
+            job is a result from a deadline.search_jobs() or deadline.get_job() call.
+    """
+    if checkpoint.local_storage_profile_id is None:
+        raise ValueError("The checkpoint local storage profile id must be set.")
+
+    # Collect all the storage profile ids
+    storage_profile_ids: set[str] = {checkpoint.local_storage_profile_id}
+    for job_id in job_sessions.keys():
+        storage_profile_ids.add(download_candidate_jobs[job_id]["storageProfileId"])
+
+    # Load all the storage profiles from Deadline Cloud
+    storage_profiles = {
+        storage_profile_id: deadline.get_storage_profile_for_queue(
+            farmId=farm_id,
+            queueId=queue["queueId"],
+            storageProfileId=storage_profile_id,
+        )
+        for storage_profile_id in storage_profile_ids
+    }
+
+    return storage_profiles
+
+
+def _create_path_mapping_rule_appliers(
+    storage_profiles: dict[str, dict[str, Any]],
+    checkpoint: IncrementalDownloadState,
+    download_candidate_jobs: dict[str, dict[str, Any]],
+    print_function_callback: Callable[[str], None] = lambda msg: None,
+) -> dict[str, Optional[_PathMappingRuleApplier]]:
+    """
+    Retrieves all the needed storage profiles and constructs path mapping rule applies for them.
+    To call this function, checkpoint.local_storage_profile_id must be set.
+
+    Args:
+        storage_profiles: A mapping from storage profile id to the storage profile as returned by boto3 deadline.get_storage_profile_for_queue.
+        checkpoint: The checkpoint for the incremental download.
+        job_sessions: Contains each job's sessions and session actions, structured as job_sessions[job_id][session_index]["sessionActions"][session_action_index].
+                      See the function _get_job_sessions for more details.
+        download_candidate_jobs: The result of a _get_download_candidate_jobs call, {job_id: job} where
+            job is a result from a deadline.search_jobs() or deadline.get_job() call.
+        print_function_callback: Callback for printing output to the terminal or log.
+    """
+    if checkpoint.local_storage_profile_id is None:
+        raise ValueError("The checkpoint local storage profile id must be set.")
+
+    path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]] = {}
+
+    # Create a path mapping rule applier for each storage profile
+    local_storage_profile = storage_profiles[checkpoint.local_storage_profile_id]
+    local_storage_profile_name = local_storage_profile["displayName"]
+    print_function_callback("")
+    print_function_callback(
+        f"Local storage profile is {local_storage_profile_name} ({checkpoint.local_storage_profile_id})"
+    )
+    print_function_callback(
+        f"  {len([job for job in download_candidate_jobs.values() if job.get('storageProfileId') == checkpoint.local_storage_profile_id])} download candidate jobs will have no path mapping because they use this storage profile"
+    )
+    for storage_profile_id, storage_profile in storage_profiles.items():
+        storage_profile_name = storage_profile["displayName"]
+        if storage_profile_id == checkpoint.local_storage_profile_id:
+            path_mapping_rule_appliers[storage_profile_id] = None
+        else:
+            rules = _generate_path_mapping_rules(storage_profile, local_storage_profile)
+            path_mapping_rule_appliers[storage_profile_id] = _PathMappingRuleApplier(rules)
+
+            # Print the path mapping rules for each source storage profile
+            print_function_callback("")
+            job_count = len(
+                [
+                    job
+                    for job in download_candidate_jobs.values()
+                    if job.get("storageProfileId") == storage_profile_id
+                ]
+            )
+            print_function_callback(
+                f"Path mapping rules for {job_count} download candidate jobs with storage profile {storage_profile_name} ({storage_profile_id})"
+            )
+            print_function_callback(
+                f"  job storage profile: {storage_profile_name} ({storage_profile['osFamily']})"
+            )
+            print_function_callback(
+                f"  local storage profile: {local_storage_profile_name} ({local_storage_profile['osFamily']})"
+            )
+            if rules:
+                for rule in rules:
+                    print_function_callback(f"  - from: {rule.source_path}")
+                    print_function_callback(f"    to:   {rule.destination_path}")
+            else:
+                print_function_callback(
+                    f"   No rules generated. Storage profiles {local_storage_profile_name} and {storage_profile_name} share no file system location names."
+                )
+    return path_mapping_rule_appliers
+
+
 def _add_missing_output_manifests_to_job_sessions(
     boto3_session_for_s3: boto3.Session,
     farm_id: str,
@@ -789,6 +920,23 @@ def _update_checkpoint_jobs_list(
                 {},
             )
         )
+    # This category keeps a signal that it is missing a storage profile by populating the attachments but
+    # having a storageProfileId field with None in it. By keeping the attachments in the checkpoint, someone
+    # inspecting the checkpoint to understand what's happening can get an idea about the paths for the job
+    # and diagnose problems quicker.
+    for job_id in categorized_job_ids.missing_storage_profile:
+        updated_jobs.append(
+            IncrementalDownloadJob(
+                {
+                    "jobId": job_id,
+                    "name": download_candidate_jobs[job_id]["name"],
+                    "attachments": download_candidate_jobs[job_id]["attachments"],
+                    "storageProfileId": None,
+                },
+                None,
+                {},
+            )
+        )
     # Keep completed jobs around until they become inactive
     for job_id in categorized_job_ids.completed:
         updated_jobs.append(
@@ -930,20 +1078,58 @@ def _incremental_output_download(
         print_function_callback,
     )
 
+    # If storage profiles are being used, get them and construct all the path mapping rules
+    path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]] = {}
+    if checkpoint.local_storage_profile_id:
+        storage_profiles = _get_storage_profiles(
+            deadline, farm_id, queue, job_sessions, checkpoint, download_candidate_jobs
+        )
+        path_mapping_rule_appliers = _create_path_mapping_rule_appliers(
+            storage_profiles,
+            checkpoint,
+            download_candidate_jobs,
+            print_function_callback,
+        )
+
     # Use the information collected so far to update the jobs list in checkpoint
     _update_checkpoint_jobs_list(
         checkpoint, download_candidate_jobs, categorized_job_ids, job_sessions
     )
 
+    unmapped_paths: dict[str, list[str]] = {}
     downloaded_manifests: list[tuple[datetime, BaseAssetManifest]] = (
         _download_all_manifests_with_absolute_paths(
             queue,
             download_candidate_jobs,
             job_sessions,
+            path_mapping_rule_appliers,
+            unmapped_paths,
             boto3_session_for_s3,
             print_function_callback,
         )
     )
+
+    # Print warning messages about all the output paths that will not be downloaded due to lack of path mapping.
+    if unmapped_paths:
+        print_function_callback("")
+        for job_id, unmapped_path_list in unmapped_paths.items():
+            print_function_callback(
+                f"WARNING: Job {download_candidate_jobs[job_id]['name']} ({job_id}) has outputs with unmapped paths"
+            )
+            storage_profile = storage_profiles[download_candidate_jobs[job_id]["storageProfileId"]]
+            print_function_callback(
+                f"         Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
+            )
+            print_function_callback("         Summary of unmapped paths:")
+            path_format = (
+                PathFormat.WINDOWS
+                if storage_profile["osFamily"] == StorageProfileOperatingSystemFamily.WINDOWS.value
+                else PathFormat.POSIX
+            )
+            paths_summary = summarize_path_list(
+                unmapped_path_list, max_entries=30, path_format=path_format
+            )
+            print_function_callback(textwrap.indent(paths_summary, "         "))
 
     # Merge the manifests ordered by the last modified timestamp
     manifest_paths_to_download: list[BaseManifestPath] = _merge_absolute_path_manifest_list(
@@ -1028,6 +1214,9 @@ def _incremental_output_download(
     print_function_callback("  Jobs without downloads:")
     print_function_callback(
         f"    not using job attachments: {len(categorized_job_ids.attachments_free)}"
+    )
+    print_function_callback(
+        f"    missing storage profile: {len(categorized_job_ids.missing_storage_profile)}"
     )
     print_function_callback(f"    unchanged: {len(categorized_job_ids.unchanged)}")
     print_function_callback(f"    inactive: {len(categorized_job_ids.inactive)}")

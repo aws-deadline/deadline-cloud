@@ -2,9 +2,13 @@
 from __future__ import annotations
 import os
 import re
-from typing import Optional, Iterable, Union
+from typing import Any, Optional, Iterable, Union
 from collections.abc import Collection
-from pathlib import Path
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
+import ntpath
+import posixpath
+
+from ..job_attachments.models import PathFormat
 
 
 def human_readable_file_size(size_in_bytes: int) -> str:
@@ -58,9 +62,7 @@ class _NumberedPath:
     number: Optional[int] = None
     """The number in the path, or None if the path is not numbered"""
 
-    def __init__(self, path: Union[Path, str]):
-        if isinstance(path, Path):
-            path = str(path)
+    def __init__(self, path: str):
         m = _NUMBERED_PATH_REGEX.match(path)
         if m:
             self.path = path
@@ -76,6 +78,9 @@ class _NumberedPath:
         else:
             self.path = self.grouping = path
             self.padding_min = self.padding_max = -1
+
+    def __repr__(self):
+        return f"_NumberedPath({self.path!r})"
 
 
 def _divide_numbered_path_group(group: list[_NumberedPath]) -> dict[str, set[int]]:
@@ -131,15 +136,26 @@ class PathSummary:
     children: Optional[dict[str, "PathSummary"]]
     """The children of this path, if the summary is nested"""
 
+    _os_path: Any
+    """Either ntpath or posixpath depending on the path_format from construction."""
+
     def __init__(
         self,
         path: str,
         *,
+        path_format: Optional[PathFormat] = None,
         index_set: Optional[set[int]] = None,
         file_count: Optional[int] = None,
         total_size: Optional[int] = None,
         children: Optional[dict[str, "PathSummary"]] = None,
     ):
+        if path_format is None:
+            self._os_path = os.path
+        elif path_format == PathFormat.WINDOWS:
+            self._os_path = ntpath
+        else:
+            self._os_path = posixpath
+
         self.path = path
         self.index_set = index_set or set()
         if index_set:
@@ -154,18 +170,18 @@ class PathSummary:
     def is_dir(self) -> bool:
         """Returns True if the path is a directory (indicated by a trailing '/')"""
         # On Windows, both '/' and '\\' are directory separators, so check both sep and altsep
-        return self.path.endswith(os.path.sep) or (
-            os.path.altsep and self.path.endswith(os.path.altsep)
+        return self.path.endswith(self._os_path.sep) or (
+            self._os_path.altsep and self.path.endswith(self._os_path.altsep)
         )  # type: ignore
 
-    def summary(self, *, include_totals=True, relative_to: Optional[Union[Path, str]] = None):
+    def summary(self, *, include_totals=True, relative_to: Optional[Union[PurePath, str]] = None):
         """Returns the path summary, including file count and size totals by default."""
         relpath = self.path
         if relative_to is not None:
-            relpath = os.path.relpath(self.path, relative_to)
+            relpath = self._os_path.relpath(self.path, relative_to)
             # Ensure a trailing separator for directories
             if self.is_dir():
-                relpath = os.path.join(relpath, "")
+                relpath = self._os_path.join(relpath, "")
 
         if include_totals:
             return f"{relpath} ({self.summary_totals()})"
@@ -246,7 +262,10 @@ def _int_set_to_range_expr(int_set: set[int]) -> str:
 
 
 def summarize_paths_by_sequence(
-    path_list: Collection[Union[Path, str]], *, total_size_by_path: Optional[dict[str, int]] = None
+    path_list: Collection[Union[PurePath, str]],
+    *,
+    path_format: Optional[PathFormat] = None,
+    total_size_by_path: Optional[dict[str, int]] = None,
 ) -> list[PathSummary]:
     """
     Identifies numbered sequences of files/directories within a list of paths.
@@ -262,9 +281,24 @@ def summarize_paths_by_sequence(
     if len(path_list) == 0:
         return []
 
+    if path_format is None:
+        path_format = PathFormat.get_host_path_format()
+
+    # Convert all the paths into strings, and deduplicate by converting into a set
+    path_list_as_str: set[str] = {
+        str(path) if isinstance(path, PurePath) else path for path in path_list
+    }
+    # On Windows, convert all "/" separators to "\\"
+    if path_format == PathFormat.WINDOWS:
+        path_list_as_str = {path.replace("/", "\\") for path in path_list_as_str}
+        if total_size_by_path:
+            total_size_by_path = {
+                path.replace("/", "\\"): size for path, size in total_size_by_path.items()
+            }
+
     # Group according to the _NumberedPath.grouping property
     raw_grouped_paths: dict[str, list[_NumberedPath]] = {}
-    for path in path_list:
+    for path in path_list_as_str:
         numbered_path = _NumberedPath(path)
         raw_grouped_paths.setdefault(numbered_path.grouping, []).append(numbered_path)
 
@@ -276,7 +310,7 @@ def summarize_paths_by_sequence(
 
     # Sort the result by the printf pattern and convert to PathSummary objects
     result = [
-        PathSummary(path, index_set=index_set)
+        PathSummary(path, path_format=path_format, index_set=index_set)
         for path, index_set in sorted(grouped_paths.items(), key=lambda x: x[0])
     ]
 
@@ -307,23 +341,43 @@ def _collapse_each_path_summary(path_summary_list: Iterable[PathSummary]) -> lis
 
 
 def summarize_paths_by_nested_directory(
-    path_list: Collection[Union[Path, str]], *, total_size_by_path: Optional[dict[str, int]] = None
+    path_list: Collection[Union[PurePath, str]],
+    *,
+    path_format: Optional[PathFormat] = None,
+    total_size_by_path: Optional[dict[str, int]] = None,
 ) -> list[PathSummary]:
-    """Summarizes the provided paths by sequence, and then nests them into
+    """
+    Summarizes the provided paths by sequence, and then nests them into
     common parent paths. The returned summaries do not contain a common parent,
     for example if they are different relative paths, or absolute paths for
-    different drives on Windows"""
+    different drives on Windows
+
+    By default, paths are for the current operating system. If path_format is provided, you can
+    override that to PathFormat.WINDOWS or PathFormat.POSIX as necessary.
+    """
     if len(path_list) == 0:
         return []
 
+    if path_format is None:
+        path_format = PathFormat.get_host_path_format()
+
+    if path_format == PathFormat.WINDOWS:
+        path_type: Any = PureWindowsPath
+        os_path: Any = ntpath
+    else:
+        path_type = PurePosixPath
+        os_path = posixpath
+
     # First summarize the paths by sequence
-    summary_list = summarize_paths_by_sequence(path_list, total_size_by_path=total_size_by_path)
+    summary_list = summarize_paths_by_sequence(
+        path_list, total_size_by_path=total_size_by_path, path_format=path_format
+    )
 
     # Put all the summaries into a temporary common root.
-    nested_summary = PathSummary("ROOT/")
+    nested_summary = PathSummary("ROOT/", path_format=path_format)
     for path_summary in summary_list:
         # Split the path into its components
-        path_components = Path(path_summary.path).parts
+        path_components = path_type(path_summary.path).parts
         # Start with the root component, and build up the nested structure
         current_level: PathSummary = nested_summary
         for i in range(len(path_components) - 1):
@@ -333,7 +387,8 @@ def summarize_paths_by_nested_directory(
                 current_level.children = {}
             if component not in current_level.children:
                 current_level.children[component] = PathSummary(
-                    os.path.join(*path_components[: i + 1], ""),
+                    os_path.join(*path_components[: i + 1], ""),
+                    path_format=path_format,
                     total_size=0 if total_size_by_path else None,
                 )
             # Descend into the new level
@@ -352,8 +407,9 @@ def summarize_paths_by_nested_directory(
 
 
 def summarize_path_list(
-    path_list: Collection[Union[Path, str]],
+    path_list: Collection[Union[PurePath, str]],
     *,
+    path_format: Optional[PathFormat] = None,
     total_size_by_path: Optional[dict[str, int]] = None,
     max_entries=10,
     include_totals=True,
@@ -362,6 +418,9 @@ def summarize_path_list(
     Creates a string summary of the files in the list provided,
     grouping numbered filenames by their sequence pattern, and nesting
     summaries of the directory into the specified maximum number of entries.
+
+    By default, paths are for the current operating system. If path_format is provided, you can
+    override that to PathFormat.WINDOWS or PathFormat.POSIX as necessary.
 
     If total_size_by_path is provided, it must provide a total size for every path in path_list.
 
@@ -372,9 +431,12 @@ def summarize_path_list(
     if len(path_list) == 0:
         return ""
 
+    if path_format is None:
+        path_format = PathFormat.get_host_path_format()
+
     lines = []
     summary_list = summarize_paths_by_nested_directory(
-        path_list, total_size_by_path=total_size_by_path
+        path_list, total_size_by_path=total_size_by_path, path_format=path_format
     )
 
     # If the summary list has one entry, and its path is a very shallow root like '/' or 'C:/',

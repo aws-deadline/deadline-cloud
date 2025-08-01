@@ -85,7 +85,7 @@ def attachment_download(
     config = _apply_cli_options_to_config(**args)
 
     # Assuming when passing with config, session constructs from the profile id for S3 calls
-    # TODO - add type for profile, if queue type, get queue sesson directly
+    # TODO - add type for profile, if queue type, get queue session directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
     # If profile is not provided via args, default to use local config file
@@ -179,7 +179,7 @@ def attachment_upload(
     config = _apply_cli_options_to_config(**args)
 
     # Assuming when passing with config, session constructs from the profile id for S3 calls
-    # TODO - add type for profile, if queue type, get queue sesson directly
+    # TODO - add type for profile, if queue type, get queue session directly
     boto3_session: boto3.session = api.get_boto3_session(config=config)
 
     # If profile is not provided via args, default to use local config file

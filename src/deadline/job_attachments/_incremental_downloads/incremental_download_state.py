@@ -134,8 +134,12 @@ class IncrementalDownloadState:
         "downloadsStartedTimestamp",
         "downloadsCompletedTimestamp",
         "eventualConsistencyMaxSeconds",
+        "localStorageProfileId",
         "jobs",
     ]
+
+    local_storage_profile_id: Optional[str]
+    """The storage profile of the host running the incremental download operation, or None if --ignore-storage-profiles is used."""
 
     downloads_started_timestamp: datetime
     """The timestamp of when the download state was bootstrapped."""
@@ -149,6 +153,7 @@ class IncrementalDownloadState:
 
     def __init__(
         self,
+        local_storage_profile_id: Optional[str],
         downloads_started_timestamp: datetime,
         downloads_completed_timestamp: Optional[datetime] = None,
         jobs: Optional[list] = None,
@@ -158,12 +163,17 @@ class IncrementalDownloadState:
         Initialize a IncrementalDownloadState instance. To bootstrap the state, construct with only the downloads_started_timestamp.
 
         Args:
+            local_storage_profile_id: The storage profile id for the host running the download command.
+                If set to None, all jobs will be downloaded to the paths specified in the job, even if the machine
+                that submitted the job has a different configuration.
             downloads_started_timestamp (datetime): The timestamp of when the download state was bootstrapped.
             downloads_completed_timestamp (datetime): The timestamp up to which we are confident downloads are complete.
             jobs (list[IncrementalDownloadJob]): The list of jobs that entered 'active' status between downloads_started_timestamp
-                    and downloads_completed_timestamp, and are not completed.
-            eventual_consistency_max_seconds (Optional[int]): The duration, in seconds, for deadline:SearchJobs query overlap, to account for eventual consistency.
+                and downloads_completed_timestamp, and are not completed.
+            eventual_consistency_max_seconds (Optional[int]): The duration, in seconds, for deadline:SearchJobs query overlap,
+                to account for eventual consistency.
         """
+        self.local_storage_profile_id = local_storage_profile_id
         self.downloads_started_timestamp = downloads_started_timestamp
         if downloads_completed_timestamp is not None:
             self.downloads_completed_timestamp = downloads_completed_timestamp
@@ -189,6 +199,7 @@ class IncrementalDownloadState:
             raise ValueError(f"Input is missing required fields: {missing_fields}")
 
         return cls(
+            local_storage_profile_id=data["localStorageProfileId"],
             downloads_started_timestamp=datetime.fromisoformat(data["downloadsStartedTimestamp"]),
             downloads_completed_timestamp=datetime.fromisoformat(
                 data["downloadsCompletedTimestamp"]
@@ -204,6 +215,7 @@ class IncrementalDownloadState:
             dict: Dictionary representation of the state file model
         """
         result = {
+            "localStorageProfileId": self.local_storage_profile_id,
             "downloadsStartedTimestamp": self.downloads_started_timestamp.isoformat(),
             "eventualConsistencyMaxSeconds": self.eventual_consistency_max_seconds,
             "jobs": [job.to_dict() for job in self.jobs],
