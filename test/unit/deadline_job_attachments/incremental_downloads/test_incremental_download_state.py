@@ -70,6 +70,7 @@ class TestIncrementalDownloadState:
         Fixture to create a sample IncrementalDownloadState. This state matches the sample_state_data fixture.
         """
         return IncrementalDownloadState(
+            "sp-123",
             downloads_started_timestamp=datetime.fromisoformat("2023-01-01T00:00:00+00:00"),
             downloads_completed_timestamp=datetime.fromisoformat("2023-01-02T00:00:00+00:00"),
             jobs=[
@@ -90,7 +91,7 @@ class TestIncrementalDownloadState:
         completed_time = datetime.fromisoformat("2023-01-02T00:00:00")
 
         # Test with minimal bootstrapped construction
-        state = IncrementalDownloadState(bootstrap_time)
+        state = IncrementalDownloadState("sp-123", bootstrap_time)
         assert state.downloads_started_timestamp == bootstrap_time
         assert state.downloads_completed_timestamp == bootstrap_time
         assert state.eventual_consistency_max_seconds == 120
@@ -99,6 +100,7 @@ class TestIncrementalDownloadState:
         # Test with provided values
         jobs = [IncrementalDownloadJob({"jobId": "job-123"}, None, {})]
         state = IncrementalDownloadState(
+            "sp-123",
             downloads_started_timestamp=bootstrap_time,
             downloads_completed_timestamp=completed_time,
             jobs=jobs,

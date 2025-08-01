@@ -10,6 +10,7 @@ from deadline.job_attachments.api import (
     summarize_paths_by_nested_directory,
     summarize_path_list,
 )
+from deadline.job_attachments.models import PathFormat
 
 
 PARAMETRIZE_CASES: tuple = (
@@ -192,8 +193,8 @@ PARAMETRIZE_CASES = (
     (
         ["a/b/c/frame_1.png", "a/b/c/frame_3.png", "a/b/c/frame_20.png", "a/b/d/readme.txt"],
         [
-            PathSummary("a/b/c/frame_%d.png", index_set={1, 3, 20}),
-            PathSummary("a/b/d/readme.txt"),
+            PathSummary("a/b/c/frame_%d.png".replace("/", os.path.sep), index_set={1, 3, 20}),
+            PathSummary("a/b/d/readme.txt".replace("/", os.path.sep)),
         ],
         [
             PathSummary(
@@ -205,7 +206,7 @@ PARAMETRIZE_CASES = (
                         file_count=3,
                         children={
                             "frame_%d.png": PathSummary(
-                                "a/b/c/frame_%d.png",
+                                "a/b/c/frame_%d.png".replace("/", os.path.sep),
                                 index_set={1, 3, 20},
                             )
                         },
@@ -213,7 +214,9 @@ PARAMETRIZE_CASES = (
                     "d": PathSummary(
                         "a/b/d/".replace("/", os.path.sep),
                         file_count=1,
-                        children={"readme.txt": PathSummary("a/b/d/readme.txt")},
+                        children={
+                            "readme.txt": PathSummary("a/b/d/readme.txt".replace("/", os.path.sep))
+                        },
                     ),
                 },
             )
@@ -223,21 +226,21 @@ PARAMETRIZE_CASES = (
         ["seq/frame_01.png", "frame_1.png", "seq/frame_30.png", "seq/frame_09.png"],
         [
             PathSummary("frame_1.png"),
-            PathSummary("seq/frame_%02d.png", index_set={1, 9, 30}),
+            PathSummary("seq/frame_%02d.png".replace("/", os.path.sep), index_set={1, 9, 30}),
         ],
         [
             PathSummary("frame_1.png"),
-            PathSummary("seq/frame_%02d.png", index_set={1, 9, 30}),
+            PathSummary("seq/frame_%02d.png".replace("/", os.path.sep), index_set={1, 9, 30}),
         ],
     ),
     (
         ["/abc/def/ghi/00", "/abc/xyz/02", "/abc/def/jkl/mno/03", "/www/07", "/abc/def/10"],
         [
-            PathSummary("/abc/def/10"),
-            PathSummary("/abc/def/ghi/00"),
-            PathSummary("/abc/def/jkl/mno/03"),
-            PathSummary("/abc/xyz/02"),
-            PathSummary("/www/07"),
+            PathSummary("/abc/def/10".replace("/", os.path.sep)),
+            PathSummary("/abc/def/ghi/00".replace("/", os.path.sep)),
+            PathSummary("/abc/def/jkl/mno/03".replace("/", os.path.sep)),
+            PathSummary("/abc/xyz/02".replace("/", os.path.sep)),
+            PathSummary("/www/07".replace("/", os.path.sep)),
         ],
         [
             PathSummary(
@@ -255,7 +258,11 @@ PARAMETRIZE_CASES = (
                                     "ghi": PathSummary(
                                         "/abc/def/ghi/".replace("/", os.path.sep),
                                         file_count=1,
-                                        children={"00": PathSummary("/abc/def/ghi/00")},
+                                        children={
+                                            "00": PathSummary(
+                                                "/abc/def/ghi/00".replace("/", os.path.sep)
+                                            )
+                                        },
                                     ),
                                     "jkl": PathSummary(
                                         "/abc/def/jkl/".replace("/", os.path.sep),
@@ -264,24 +271,32 @@ PARAMETRIZE_CASES = (
                                             "mno": PathSummary(
                                                 "/abc/def/jkl/mno/".replace("/", os.path.sep),
                                                 file_count=1,
-                                                children={"03": PathSummary("/abc/def/jkl/mno/03")},
+                                                children={
+                                                    "03": PathSummary(
+                                                        "/abc/def/jkl/mno/03".replace(
+                                                            "/", os.path.sep
+                                                        )
+                                                    )
+                                                },
                                             )
                                         },
                                     ),
-                                    "10": PathSummary("/abc/def/10"),
+                                    "10": PathSummary("/abc/def/10".replace("/", os.path.sep)),
                                 },
                             ),
                             "xyz": PathSummary(
                                 "/abc/xyz/".replace("/", os.path.sep),
                                 file_count=1,
-                                children={"02": PathSummary("/abc/xyz/02")},
+                                children={
+                                    "02": PathSummary("/abc/xyz/02".replace("/", os.path.sep))
+                                },
                             ),
                         },
                     ),
                     "www": PathSummary(
                         "/www/".replace("/", os.path.sep),
                         file_count=1,
-                        children={"07": PathSummary("/www/07")},
+                        children={"07": PathSummary("/www/07".replace("/", os.path.sep))},
                     ),
                 },
             )
@@ -305,6 +320,13 @@ def test_summarize_paths_with_nesting_without_sizes(
 PARAMETRIZE_CASES = (
     ([], {}, [], []),
     (
+        # Repeated paths will be deduplicated
+        ["a/b/c", "a/b/c", "a/b/c", "a/b/c"],
+        {"a/b/c": 1},
+        [PathSummary("a/b/c".replace("/", os.path.sep), total_size=1)],
+        [PathSummary("a/b/c".replace("/", os.path.sep), total_size=1)],
+    ),
+    (
         ["a/b/c/frame_1.png", "a/b/c/frame_3.png", "a/b/c/frame_20.png", "a/b/d/readme.txt"],
         {
             "a/b/c/frame_1.png": 1,
@@ -313,8 +335,10 @@ PARAMETRIZE_CASES = (
             "a/b/d/readme.txt": 8,
         },
         [
-            PathSummary("a/b/c/frame_%d.png", index_set={1, 3, 20}, total_size=7),
-            PathSummary("a/b/d/readme.txt", total_size=8),
+            PathSummary(
+                "a/b/c/frame_%d.png".replace("/", os.path.sep), index_set={1, 3, 20}, total_size=7
+            ),
+            PathSummary("a/b/d/readme.txt".replace("/", os.path.sep), total_size=8),
         ],
         [
             PathSummary(
@@ -328,7 +352,7 @@ PARAMETRIZE_CASES = (
                         total_size=7,
                         children={
                             "frame_%d.png": PathSummary(
-                                "a/b/c/frame_%d.png",
+                                "a/b/c/frame_%d.png".replace("/", os.path.sep),
                                 index_set={1, 3, 20},
                                 total_size=7,
                             )
@@ -338,7 +362,11 @@ PARAMETRIZE_CASES = (
                         "a/b/d/".replace("/", os.path.sep),
                         file_count=1,
                         total_size=8,
-                        children={"readme.txt": PathSummary("a/b/d/readme.txt", total_size=8)},
+                        children={
+                            "readme.txt": PathSummary(
+                                "a/b/d/readme.txt".replace("/", os.path.sep), total_size=8
+                            )
+                        },
                     ),
                 },
             )
@@ -349,11 +377,15 @@ PARAMETRIZE_CASES = (
         {"seq/frame_01.png": 1, "frame_1.png": 2, "seq/frame_30.png": 4, "seq/frame_09.png": 8},
         [
             PathSummary("frame_1.png", total_size=2),
-            PathSummary("seq/frame_%02d.png", index_set={1, 9, 30}, total_size=13),
+            PathSummary(
+                "seq/frame_%02d.png".replace("/", os.path.sep), index_set={1, 9, 30}, total_size=13
+            ),
         ],
         [
             PathSummary("frame_1.png", total_size=2),
-            PathSummary("seq/frame_%02d.png", index_set={1, 9, 30}, total_size=13),
+            PathSummary(
+                "seq/frame_%02d.png".replace("/", os.path.sep), index_set={1, 9, 30}, total_size=13
+            ),
         ],
     ),
     (
@@ -366,11 +398,11 @@ PARAMETRIZE_CASES = (
             "/abc/def/10": 16,
         },
         [
-            PathSummary("/abc/def/10", total_size=16),
-            PathSummary("/abc/def/ghi/00", total_size=1),
-            PathSummary("/abc/def/jkl/mno/03", total_size=4),
-            PathSummary("/abc/xyz/02", total_size=2),
-            PathSummary("/www/07", total_size=8),
+            PathSummary("/abc/def/10".replace("/", os.path.sep), total_size=16),
+            PathSummary("/abc/def/ghi/00".replace("/", os.path.sep), total_size=1),
+            PathSummary("/abc/def/jkl/mno/03".replace("/", os.path.sep), total_size=4),
+            PathSummary("/abc/xyz/02".replace("/", os.path.sep), total_size=2),
+            PathSummary("/www/07".replace("/", os.path.sep), total_size=8),
         ],
         [
             PathSummary(
@@ -393,7 +425,10 @@ PARAMETRIZE_CASES = (
                                         file_count=1,
                                         total_size=1,
                                         children={
-                                            "00": PathSummary("/abc/def/ghi/00", total_size=1)
+                                            "00": PathSummary(
+                                                "/abc/def/ghi/00".replace("/", os.path.sep),
+                                                total_size=1,
+                                            )
                                         },
                                     ),
                                     "jkl": PathSummary(
@@ -407,20 +442,29 @@ PARAMETRIZE_CASES = (
                                                 total_size=4,
                                                 children={
                                                     "03": PathSummary(
-                                                        "/abc/def/jkl/mno/03", total_size=4
+                                                        "/abc/def/jkl/mno/03".replace(
+                                                            "/", os.path.sep
+                                                        ),
+                                                        total_size=4,
                                                     )
                                                 },
                                             )
                                         },
                                     ),
-                                    "10": PathSummary("/abc/def/10", total_size=16),
+                                    "10": PathSummary(
+                                        "/abc/def/10".replace("/", os.path.sep), total_size=16
+                                    ),
                                 },
                             ),
                             "xyz": PathSummary(
                                 "/abc/xyz/".replace("/", os.path.sep),
                                 file_count=1,
                                 total_size=2,
-                                children={"02": PathSummary("/abc/xyz/02", total_size=2)},
+                                children={
+                                    "02": PathSummary(
+                                        "/abc/xyz/02".replace("/", os.path.sep), total_size=2
+                                    )
+                                },
                             ),
                         },
                     ),
@@ -428,7 +472,9 @@ PARAMETRIZE_CASES = (
                         "/www/".replace("/", os.path.sep),
                         file_count=1,
                         total_size=8,
-                        children={"07": PathSummary("/www/07", total_size=8)},
+                        children={
+                            "07": PathSummary("/www/07".replace("/", os.path.sep), total_size=8)
+                        },
                     ),
                 },
             )
@@ -628,3 +674,27 @@ def test_summarize_path_list(path_list, kwargs, expected_output):
     assert summarize_path_list(
         [path.replace("/", os.path.sep) for path in path_list], **kwargs
     ) == expected_output.replace("/", os.path.sep)
+
+
+PARAMETRIZE_CASES = (
+    (
+        PATH_LIST_NESTED_FILES,
+        dict(path_format=PathFormat.POSIX),
+        "doc/ (3 files):\n  images/ (1 file)\n  imagination.md (1 file)\n  sword.txt (1 file)\nseq/file%d.tar.gz (3 files, sequence 1-3)\nREADME.md (1 file)\n",
+    ),
+    (
+        PATH_LIST_NESTED_FILES,
+        dict(path_format=PathFormat.WINDOWS),
+        "doc\\ (3 files):\n  images\\ (1 file)\n  imagination.md (1 file)\n  sword.txt (1 file)\nseq\\file%d.tar.gz (3 files, sequence 1-3)\nREADME.md (1 file)\n",
+    ),
+    (
+        [path.replace("/", "\\") for path in PATH_LIST_NESTED_FILES],
+        dict(path_format=PathFormat.WINDOWS),
+        "doc\\ (3 files):\n  images\\ (1 file)\n  imagination.md (1 file)\n  sword.txt (1 file)\nseq\\file%d.tar.gz (3 files, sequence 1-3)\nREADME.md (1 file)\n",
+    ),
+)
+
+
+@pytest.mark.parametrize(("path_list", "kwargs", "expected_output"), PARAMETRIZE_CASES)
+def test_summarize_path_list_with_path_format(path_list, kwargs, expected_output):
+    assert summarize_path_list(path_list, **kwargs) == expected_output

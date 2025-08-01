@@ -15,6 +15,8 @@ import os
 import concurrent.futures
 from threading import Lock
 from pathlib import Path
+import posixpath
+import ntpath
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
@@ -40,6 +42,7 @@ from ..models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
     S3_MANIFEST_FOLDER_NAME,
+    PathFormat,
 )
 from ..exceptions import (
     COMMON_ERROR_GUIDANCE_FOR_S3,
@@ -60,6 +63,7 @@ from ..progress_tracker import (
     ProgressReportMetadata,
 )
 from .._utils import _get_long_path_compatible_path
+from ...job_attachments._path_mapping import _PathMappingRuleApplier
 
 
 """
@@ -198,10 +202,13 @@ def _add_output_manifests_from_s3(
 def _download_manifest_and_make_paths_absolute(
     index: int,
     queue: dict[str, Any],
+    job_id: str,
     root_path: str,
     manifest_s3_key: str,
+    path_mapping_rule_applier: Optional[_PathMappingRuleApplier],
     boto3_session_for_s3: boto3.Session,
     output_manifests: list,
+    output_unmapped_paths: list[tuple[str, str]],
 ):
     """
     Downloads the specified manifest, makes all its paths absolute using root_path,
@@ -211,10 +218,33 @@ def _download_manifest_and_make_paths_absolute(
     _, last_modified, manifest = _get_asset_root_and_manifest_from_s3_with_last_modified(
         manifest_s3_key, queue["jobAttachmentSettings"]["s3BucketName"], boto3_session_for_s3
     )
+    if path_mapping_rule_applier:
+        new_manifest_paths = []
+        if path_mapping_rule_applier.source_path_format == PathFormat.WINDOWS.value:
+            source_os_path: Any = ntpath
+        else:
+            source_os_path = posixpath
+    else:
+        source_os_path = os.path
+
     # Convert all the manifest paths to have absolute normalized local paths
     for manifest_path in manifest.paths:
-        manifest_path.path = os.path.normpath(os.path.join(root_path, manifest_path.path))
-        # TODO: Apply path mapping rules to manifest_path.path right here
+        manifest_path.path = source_os_path.normpath(
+            source_os_path.join(root_path, manifest_path.path)
+        )
+        if path_mapping_rule_applier:
+            try:
+                manifest_path.path = str(
+                    path_mapping_rule_applier.strict_transform(manifest_path.path)
+                )
+                new_manifest_paths.append(manifest_path)
+            except ValueError:
+                output_unmapped_paths.append((job_id, manifest_path.path))
+
+    if path_mapping_rule_applier:
+        # Update the manifest to only include the mapped paths
+        manifest.paths = new_manifest_paths
+
     output_manifests[index] = (last_modified, manifest)
 
 
@@ -222,9 +252,10 @@ def _get_manifests_to_download(
     job_attachments_root_prefix: str,
     download_candidate_jobs: dict[str, dict[str, Any]],
     job_sessions: dict[str, list],
-) -> list[tuple[str, str]]:
+    path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]],
+) -> list[tuple[Optional[_PathMappingRuleApplier], str, str, str]]:
     """
-    Collect a list of (rootPath, manifest_s3_key) tuples for all the job attachments that need to be downloaded.
+    Collect a list of (pathMappingRuleApplier, jobId, rootPath, manifest_s3_key) tuples for all the job attachments that need to be downloaded.
 
     Args:
         job_attachments_root_prefix: The queue.jobAttachmentSettings.rootPrefix field from the Deadline
@@ -232,11 +263,13 @@ def _get_manifests_to_download(
         download_candidate_jobs: A mapping from job id to jobs as returned by deadline.search_jobs.
         job_sessions: Contains each job's sessions and session actions, structured as job_sessions[job_id][session_index]["sessionActions"][session_action_index].
                       See the function _get_job_sessions for more details.
+        path_mapping_rule_appliers: A mapping from storage profile ID to the path mapping rule applier to use for it.
+            If no path mapping should be used, is the empty {}.
 
     Returns:
-        A list of (rootPath, manifest_s3_key) tuples for the manifest objects that need to be downloaded.
+        A list of (pathMappingRuleApplier, jobId, rootPath, manifest_s3_key) tuples for the manifest objects that need to be downloaded.
     """
-    manifests_to_download: list[tuple[str, str]] = []
+    manifests_to_download: list[tuple[Optional[_PathMappingRuleApplier], str, str, str]] = []
     for job_id, session_list in job_sessions.items():
         job = download_candidate_jobs[job_id]
         for session in session_list:
@@ -249,6 +282,10 @@ def _get_manifests_to_download(
                     if "outputManifestPath" in session_action_manifest:
                         manifests_to_download.append(
                             (
+                                path_mapping_rule_appliers[job["storageProfileId"]]
+                                if path_mapping_rule_appliers
+                                else None,
+                                job_id,
                                 job_manifest["rootPath"],
                                 "/".join(
                                     [
@@ -266,6 +303,8 @@ def _download_all_manifests_with_absolute_paths(
     queue: dict[str, Any],
     download_candidate_jobs: dict[str, dict[str, Any]],
     job_sessions: dict[str, list],
+    path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]],
+    output_unmapped_paths: dict[str, list[str]],
     boto3_session_for_s3: boto3.Session,
     print_function_callback: Callable[[str], None] = lambda msg: None,
 ) -> list[tuple[datetime, BaseAssetManifest]]:
@@ -278,43 +317,64 @@ def _download_all_manifests_with_absolute_paths(
         download_candidate_jobs: A mapping from job id to jobs as returned by deadline.search_jobs.
         job_sessions: Contains each job's sessions and session actions, structured as job_sessions[job_id][session_index]["sessionActions"][session_action_index].
                       See the function _get_job_sessions for more details.
+        path_mapping_rule_appliers: A mapping from storage profile ID to the path mapping rule applier to use for it.
+            If no path mapping should be used, is the empty {}.
         boto3_session_for_s3: The boto3.Session to use for accessing S3.
+        output_unmapped_paths: A mapping from the job id to a list of all the paths that were not mapped
+            and therefore will not be downloaded.
         print_function_callback: Callback for printing output to the terminal or log.
 
     Returns:
         A list of BaseAssetManifest objects containing local absolute file paths sorted by the last_modified timestamp.
     """
     # Get the list of (rootPath, manifest_s3_key) tuples to download from S3.
-    manifests_to_download: list[tuple[str, str]] = _get_manifests_to_download(
-        queue["jobAttachmentSettings"]["rootPrefix"], download_candidate_jobs, job_sessions
+    manifests_to_download: list[tuple[Optional[_PathMappingRuleApplier], str, str, str]] = (
+        _get_manifests_to_download(
+            queue["jobAttachmentSettings"]["rootPrefix"],
+            download_candidate_jobs,
+            job_sessions,
+            path_mapping_rule_appliers,
+        )
     )
 
+    print_function_callback("")
     print_function_callback(f"Downloading {len(manifests_to_download)} asset manifests from S3...")
     start_time = datetime.now(tz=timezone.utc)
 
     # Download all the manifest files from S3, and make the paths in the manifests absolute local paths
     # by joining with the root path and normalizing
     downloaded_manifests: list = [None] * len(manifests_to_download)
+    # All the unmapped paths get recorded here as (jobId, unmappedPath)
+    unmapped_paths: list[tuple[str, str]] = []
 
     max_workers = S3_DOWNLOAD_MAX_CONCURRENCY
     print_function_callback(f"Using {max_workers} threads")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
-        for index, (root_path, manifest_s3_key) in enumerate(manifests_to_download):
+        for index, (path_mapping_rule_applier, job_id, root_path, manifest_s3_key) in enumerate(
+            manifests_to_download
+        ):
             futures.append(
                 executor.submit(
                     _download_manifest_and_make_paths_absolute,
                     index,
                     queue,
+                    job_id,
                     root_path,
                     manifest_s3_key,
+                    path_mapping_rule_applier,
                     boto3_session_for_s3,
                     downloaded_manifests,
+                    unmapped_paths,
                 )
             )
         # surfaces any exceptions in the thread
         for future in concurrent.futures.as_completed(futures):
             future.result()
+
+    # Transform the unmapped paths into the output, grouping by job id
+    for job_id, unmapped_path in unmapped_paths:
+        output_unmapped_paths.setdefault(job_id, []).append(unmapped_path)
 
     duration = datetime.now(tz=timezone.utc) - start_time
     print_function_callback(f"...downloaded manifests in {duration}")
