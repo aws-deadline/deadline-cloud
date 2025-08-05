@@ -5,6 +5,7 @@ Tests for the CLI queue incremental output download command.
 """
 
 import os
+import sys
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
@@ -113,6 +114,9 @@ def test_incremental_output_download_requires_beta_acknowledgement(
     ), result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_requires_queue_with_job_attachments(
     fresh_deadline_config, boto3_session, with_incremental_download_enabled, checkpoint_dir
 ):
@@ -147,6 +151,9 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
     )
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_pid_lock_already_held_error(
     fresh_deadline_config,
     with_incremental_download_enabled,
@@ -189,6 +196,9 @@ def test_incremental_output_download_pid_lock_already_held_error(
     assert os.path.exists(pid_lock_file)
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_bootstrap_and_completion(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):
@@ -327,7 +337,7 @@ def test_incremental_output_download_bootstrap_and_completion(
         f"Continuing from: {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
         in result.output
     ), result.output
-    assert f"DROPPED Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert f"FINISHED TRACKING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
     assert "Job succeeded" in result.output, result.output
     assert "inactive: 1" in result.output, result.output
 
@@ -367,6 +377,9 @@ def test_incremental_output_download_bootstrap_and_completion(
     assert "inactive: 0" in result.output, result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):
@@ -499,6 +512,9 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     assert "inactive: 1" in result.output, result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_job_unchanged(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):
@@ -594,6 +610,9 @@ def test_incremental_output_download_job_unchanged(
     assert "unchanged: 1" in result.output, result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_job_canceled(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):
@@ -690,7 +709,7 @@ def test_incremental_output_download_job_canceled(
         f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
         in result.output
     ), result.output
-    assert f"DROPPED Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert f"FINISHED TRACKING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
     assert (
         "Job is not a download candidate anymore (likely suspended, canceled or failed)"
         in result.output
@@ -698,6 +717,9 @@ def test_incremental_output_download_job_canceled(
     assert "inactive: 1" in result.output, result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_job_completed_then_requeued(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):
@@ -837,6 +859,9 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert "added: 1" in result.output, result.output
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_dry_run(
     fresh_deadline_config, with_incremental_download_enabled, boto3_session, checkpoint_dir
 ):

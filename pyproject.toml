@@ -34,7 +34,8 @@ classifiers = [
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-  "boto3 >= 1.36.8",
+  "boto3 >= 1.39.10; python_version >= '3.9'",
+  "boto3 >= 1.36.8; python_version < '3.9'",
   # Click 8.2 dropped python 3.8/3.9 support
   "click >= 8.1.7",
   "pyyaml >= 6.0",

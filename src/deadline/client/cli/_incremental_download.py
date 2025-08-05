@@ -8,12 +8,14 @@ import difflib
 from typing import Optional
 from configparser import ConfigParser
 from typing import Any, Callable
+import sys
 import time
 import concurrent.futures
 
 from .. import api
 import boto3
 from botocore.client import BaseClient  # type: ignore[import]
+from ..exceptions import DeadlineOperationError
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
 from ...common.path_utils import summarize_path_list, human_readable_file_size
 from ...job_attachments._incremental_downloads.incremental_download_state import (
@@ -132,32 +134,6 @@ def _get_download_candidate_jobs(
     # - Any recently ended job (job went from active to terminal with a taskRunStatus
     #   in SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE), that has at least
     #   one SUCCEEDED task. The endedAt timestamp field gets updated when that occurs.
-    # TODO: Enable this when filtering by ENDED_AT works.
-    # download_candidate_jobs.update(
-    #     {
-    #         job["jobId"]: job
-    #         for job in _list_jobs_by_filter_expression(
-    #             boto3_session,
-    #             farm_id,
-    #             queue_id,
-    #             filter_expression={
-    #                 "filters": [
-    #                     {
-    #                         "dateTimeFilter": {
-    #                             "name": "ENDED_AT",
-    #                             "dateTime": starting_timestamp,
-    #                             "operator": "GREATER_THAN_EQUAL_TO",
-    #                         }
-    #                     }
-    #                 ],
-    #                 "operator": "AND",
-    #             },
-    #         )
-    #     }
-    # )
-    # WORKAROUND: Get all jobs with a SUCCEEDED, SUSPENDED, or FAILED task run status, and filter by endedAt client-side.
-    #             We want to download all parts of these jobs that succeeded, even when the whole did not.
-    #             We do not download anything more for a job that was CANCELED or is NOT_COMPATIBLE.
     recently_ended_jobs = _list_jobs_by_filter_expression(
         boto3_session,
         farm_id,
@@ -165,34 +141,24 @@ def _get_download_candidate_jobs(
         filter_expression={
             "filters": [
                 {
-                    "stringFilter": {
-                        "name": "TASK_RUN_STATUS",
-                        "operator": "EQUAL",
-                        "value": status_value,
-                    },
+                    "dateTimeFilter": {
+                        "name": "ENDED_AT",
+                        "dateTime": starting_timestamp,
+                        "operator": "GREATER_THAN_EQUAL_TO",
+                    }
                 }
-                for status_value in ["SUCCEEDED", "SUSPENDED", "FAILED"]
             ],
-            "operator": "OR",
+            "operator": "AND",
         },
     )
-    print(f"DEBUG: Got {len(recently_ended_jobs)} succeeded/suspended jobs")
-    print(f"DEBUG: Filtering to job[endedAt] >= {starting_timestamp.astimezone().isoformat()}")
-    # Jobs that are submitted with a SUSPENDED status will have no "endedAt" field
-    # Filter to jobs that:
-    # 1. Have an endedAt field. (jobs submitted as SUSPENDED will not have one)
-    # 2. Timestamp endedAt is after the timestamp threshold.
-    # 3. The count of SUCCEEDED tasks is positive.
-    recently_ended_jobs = [
-        job
-        for job in recently_ended_jobs
-        if "endedAt" in job
-        and job["endedAt"] >= starting_timestamp
-        and job["taskRunStatusCounts"]["SUCCEEDED"] > 0
-    ]
     print(
-        f"DEBUG: Filtered down to {len(recently_ended_jobs)} succeeded/suspended jobs based on endedAt timestamp threshold and SUCCEEDED task filter"
+        f"DEBUG: Got {len(recently_ended_jobs)} jobs with job[endedAt] >= {starting_timestamp.astimezone().isoformat()}"
     )
+    # Filter to jobs where the count of SUCCEEDED tasks is positive.
+    recently_ended_jobs = [
+        job for job in recently_ended_jobs if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
+    ]
+    print(f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter")
     download_candidate_jobs.update(
         {job["jobId"]: _datetimes_to_str(job) for job in recently_ended_jobs}
     )
@@ -264,7 +230,7 @@ def _categorize_jobs_in_checkpoint(
     )
     start_time = datetime.now(tz=timezone.utc)
 
-    became_inactive_job_ids = checkpoint_job_ids.difference(download_candidate_job_ids)
+    finished_tracking_job_ids = checkpoint_job_ids.difference(download_candidate_job_ids)
     updated_job_ids = checkpoint_job_ids.intersection(download_candidate_job_ids)
     new_job_ids = download_candidate_job_ids.difference(checkpoint_job_ids)
     # The following sets get populated while analyzing the jobs
@@ -313,8 +279,8 @@ def _categorize_jobs_in_checkpoint(
             unchanged_job_ids.add(job_id)
     updated_job_ids.difference_update(unchanged_job_ids)
 
-    # First make note of any jobs that were dropped, for example if they were canceled or they failed
-    for job_id in became_inactive_job_ids:
+    # First make note of any jobs that were dropped from tracking, for example if they were canceled or they failed
+    for job_id in finished_tracking_job_ids:
         ip_job = checkpoint_jobs[job_id]
         if "taskRunStatusCounts" in ip_job:
             ip_succeeded_task_count = ip_job["taskRunStatusCounts"]["SUCCEEDED"]
@@ -325,7 +291,7 @@ def _categorize_jobs_in_checkpoint(
 
         # Print something only if the job is more than a minimal "jobId" tracker
         if set(ip_job.keys()) != {"jobId"}:
-            print_function_callback(f"DROPPED Job: {ip_job['name']} ({job_id})")
+            print_function_callback(f"FINISHED TRACKING Job: {ip_job['name']} ({job_id})")
             if ip_job["attachments"] is None:
                 print_function_callback("  Job without job attachments is no longer active")
             elif ip_succeeded_task_count == ip_total_task_count:
@@ -417,7 +383,7 @@ def _categorize_jobs_in_checkpoint(
     result = CategorizedJobIds()
     result.attachments_free = attachments_free_job_ids
     result.completed = completed_job_ids
-    result.inactive = became_inactive_job_ids
+    result.inactive = finished_tracking_job_ids
     result.added = new_job_ids
     result.unchanged = unchanged_job_ids
     result.updated = updated_job_ids
@@ -881,6 +847,11 @@ def _incremental_output_download(
     Returns:
         An updated checkpoint object.
     """
+    if sys.version_info < (3, 9):
+        raise DeadlineOperationError(
+            "The incremental-output-download command requires Python version 3.9 or later"
+        )
+
     deadline = boto3_session.client("deadline")
 
     # When this function is done, we will be confident that downloads are complete up to
