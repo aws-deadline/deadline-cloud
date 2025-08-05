@@ -46,10 +46,6 @@ _ATTRIBUTIONS_ALLOW_LIST = {
         "license_sha256": "59ec4225bd380e349a82e6482437ff9475eeb1c2e676a2d1185bb53315d45bf9",
         "spdx": _MIT,
     },
-    "attrs": {
-        "license_sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f",
-        "spdx": _MIT,
-    },
     "boto3": {
         "license_sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
         "notice_sha256": "04fb1e61484a7810f1ba09bb42bc01ca58c9af33927d7c5a21556e4c4d1c7fa4",
@@ -79,10 +75,6 @@ _ATTRIBUTIONS_ALLOW_LIST = {
     "psutil": {
         "license_sha256": "b89c063b3786e28e0c0a38f1931db61fed35e69dd2a2966fbecffee0f46c8d10",
         "spdx": _BSD_3_CLAUSE,
-    },
-    "pyrsistent": {
-        "license_sha256": "3fd3d3d1ab9c733ee453fbf3bbbaa845440d0d8c20d7b5a039d2e46a2ed7fc01",
-        "spdx": _MIT,
     },
     # Parts are BSD-3-Clause and parts are Apache-2.0
     "python-dateutil": {
