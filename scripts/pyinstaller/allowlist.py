@@ -1,8 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 DEPENDENCIES = [
-    "attr",
-    "attrs",
     "boto3",
     "botocore",
     "click",
@@ -12,7 +10,6 @@ DEPENDENCIES = [
     "jmespath",
     "packaging",
     "psutil",
-    "pyrsistent",
     "dateutil",
     "yaml",
     "qtpy",
