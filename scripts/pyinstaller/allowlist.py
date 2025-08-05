@@ -65,6 +65,8 @@ ALLOWLIST = {
         "_internal/cli/_internal/api-ms-win-*.dll",
         "_internal/cli/_internal/libpython3.*.so.1.0",
         "_internal/libpython3.*.so.1.0",
+        "_internal/libpython3.*.dylib",
+        "_internal/cli/_internal/libpython3.*.dylib",
         "_internal/python3*.dll",
         "_internal/cli/_internal/python3*.dll",
         "_internal/pywin32_system32/pywintypes3*.dll",
