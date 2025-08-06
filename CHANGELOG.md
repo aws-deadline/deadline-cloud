@@ -1,3 +1,16 @@
+## 0.51.1 (2025-08-06)
+
+
+### Features
+* Add functions to support path mapping ([`5a28a64`](https://github.com/aws-deadline/deadline-cloud/commit/5a28a648604970280f505583567e1ad82a5ed86e))
+* refactor the autorization UI dialog (#751) ([`5882533`](https://github.com/aws-deadline/deadline-cloud/commit/5882533ca8a3e65a0cc36083998521b1631f92a1))
+* Adding target_task_run_status optional to create_job_from_job_bundle and deadline bundle submit (#753) ([`344b6f6`](https://github.com/aws-deadline/deadline-cloud/commit/344b6f67a6c1122833f227555b6f8b20a3f126f0))
+
+### Bug Fixes
+* QSpinBox values not updating without focus loss (#770) ([`fb6741d`](https://github.com/aws-deadline/deadline-cloud/commit/fb6741d8a54b5d7d317d4520107772c7ca6f643f))
+* Change the return type for OnCreateJobBundleCallback to accept None. (#760) ([`822052f`](https://github.com/aws-deadline/deadline-cloud/commit/822052fc7ddabcf9ebe0aaefc58e345e181eeb0d))
+* Switching job causes submission error in GUI submitter (#757) ([`a3a1eba`](https://github.com/aws-deadline/deadline-cloud/commit/a3a1eba49a75aeaad810e229acc27f29cf1369a0))
+
 ## 0.51.0 (2025-07-28)
 
 
