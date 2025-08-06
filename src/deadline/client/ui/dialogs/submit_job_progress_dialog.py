@@ -112,7 +112,6 @@ class SubmitJobProgressDialog(QDialog):
     to AWS Deadline Cloud.
     """
 
-    job_id: Optional[str] = None
     cancelation_flag: CancelationFlag
 
     # This signal is sent when the background thread raises an exception.
@@ -126,12 +125,14 @@ class SubmitJobProgressDialog(QDialog):
 
     # This signal is sent when the background thread succeeds.
     submission_thread_succeeded = Signal(str)
+    succeeded = threading.Event()  # Event set after dialog is closed when job submission succeeds
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
 
         # Use the CancelationFlag object to decouple the cancelation value
         # from the window lifetime.
+
         self.cancelation_flag = CancelationFlag()
         self.destroyed.connect(self.cancelation_flag.set_canceled)
         self._warning_dialog_canceled = False
@@ -144,6 +145,7 @@ class SubmitJobProgressDialog(QDialog):
         self.submission_thread_succeeded.connect(self.handle_create_job_thread_succeeded)
         self.submission_thread_request_warning_dialog.connect(self.handle_request_warning_dialog)
         self.submission_thread_exception.connect(self.handle_thread_exception)
+        self.__job_id = None
 
         self._build_ui()
 
@@ -152,7 +154,7 @@ class SubmitJobProgressDialog(QDialog):
         job_bundle_dir: str,
         job_parameters: list[dict[str, Any]] = [],
         **kwargs,
-    ):
+    ) -> None:
         """
         Starts a job submission background thread and returns immediately. It wires up
         appropriate callbacks and then forwards all arguments.
@@ -291,6 +293,7 @@ class SubmitJobProgressDialog(QDialog):
             self.status_label.setText("Submission complete")
             self.button_box.setStandardButtons(QDialogButtonBox.Ok)
             self.button_box.button(QDialogButtonBox.Ok).setDefault(True)
+            self.button_box.button(QDialogButtonBox.Ok).clicked.connect(self.succeeded.set)
         else:
             if self.cancelation_flag or self._warning_dialog_canceled:
                 self.status_label.setText("Submission canceled")
@@ -333,6 +336,23 @@ class SubmitJobProgressDialog(QDialog):
         if super().exec_() == QDialog.Accepted:
             return self.job_id
         return None
+
+    @property
+    def job_id(self) -> Optional[str]:
+        """
+        Returns the job ID if the submission was successful, otherwise None.
+        """
+        return self.__job_id
+
+    @job_id.setter
+    def job_id(self, value: str) -> None:
+        """
+        Sets the job ID if the submission was successful.
+        """
+        self.__job_id = value
+
+        # The submit job to deadline dialogn depends on having this value set.
+        self.parentWidget().job_id = value
 
 
 class JobAttachmentsProgressWidget(QGroupBox):

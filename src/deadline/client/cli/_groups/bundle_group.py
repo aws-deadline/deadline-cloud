@@ -318,28 +318,22 @@ def bundle_gui_submit(
 
         app.exec()
 
-        response = None
-        if submitter:
-            response = submitter.create_job_response
-
         _print_response(
             output=output,
-            submitted=True if response else False,
             job_bundle_dir=job_bundle_dir,
             job_history_bundle_dir=submitter.job_history_bundle_dir,
-            job_id=response["jobId"] if response else None,
+            job_id=submitter.job_id,
         )
 
 
 def _print_response(
     output: str,
-    submitted: bool,
     job_bundle_dir: str,
     job_history_bundle_dir: Optional[str],
     job_id: Optional[str],
 ):
     if output == "json":
-        if submitted:
+        if job_id:
             response: dict[str, Any] = {
                 "status": "SUBMITTED",
                 "jobId": job_id,
@@ -349,7 +343,7 @@ def _print_response(
         else:
             click.echo(json.dumps({"status": "CANCELED"}))
     else:
-        if submitted:
+        if job_id:
             click.echo("Submitted job bundle:")
             click.echo(f"   {job_bundle_dir}")
             click.echo(f"Job ID: {job_id}")

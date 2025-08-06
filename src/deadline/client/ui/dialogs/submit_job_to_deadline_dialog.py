@@ -11,7 +11,7 @@ import json
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
-from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
+from qtpy.QtCore import QSize, Qt, QTimer  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -124,11 +124,21 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.submitter_name = submitter_name or self.job_settings_type().submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
-        self.create_job_response: Optional[Dict[str, Any]] = None
+        self.__job_id = None
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
+        self.job_progress_dialog = None
+        self.should_close = False
+
+        if self.submitter_name != "JobBundle":
+            # We want to close the submitter on success, but this must be done from the main thread.
+            # Since job submission is done in a separate thread we start a timer which checks every
+            # 100ms if the submission has completed, and closes the submitter if it has.
+            self.close_check_timer = QTimer(self)
+            self.close_check_timer.timeout.connect(self._check_should_close)
+            self.close_check_timer.start(100)  # Check every 100ms
 
         self._build_ui(
             job_setup_widget_type,
@@ -141,6 +151,16 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         self.gui_update_counter: Any = None
         self.refresh_deadline_settings()
+
+    def _check_should_close(self):
+        """Check if we should close the dialog"""
+        if (
+            self.submitter_name != "JobBundle"
+            and self.job_progress_dialog
+            and self.job_progress_dialog.succeeded.is_set()
+        ):
+            self.close()
+            self.close_check_timer.stop()
 
     def sizeHint(self):
         return QSize(540, 700)
@@ -455,9 +475,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         """
         Perform a submission when the submit button is pressed
         """
-        # Unset any cached response
-        self.create_job_response = None
-
         # Retrieve all the settings into the dataclass
         settings = self.job_settings_type()
         self.shared_job_settings.update_settings(settings)
@@ -467,8 +484,8 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         asset_references = self.job_attachments.get_asset_references()
 
-        job_progress_dialog = SubmitJobProgressDialog(parent=self)
-        job_progress_dialog.show()
+        self.job_progress_dialog = SubmitJobProgressDialog(parent=self)
+        self.job_progress_dialog.show()
         QApplication.instance().processEvents()  # type: ignore[union-attr]
 
         # Submit the job
@@ -507,7 +524,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             if job_parameters:
                 self.save_job_parameters_to_job_bundle(self.job_history_bundle_dir, job_parameters)
 
-            job_id = job_progress_dialog.start_job_submission(
+            self.job_progress_dialog.start_job_submission(
                 job_bundle_dir=self.job_history_bundle_dir,
                 submitter_name=self.submitter_name,
                 config=config_file.read_config(),
@@ -516,16 +533,14 @@ class SubmitJobToDeadlineDialog(QDialog):
                 known_asset_paths=self.known_asset_paths
                 + parameters_from_callback.get("known_asset_paths", []),
             )
-            if job_id:
-                set_setting("defaults.job_id", job_id)
 
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
             QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))
-            job_progress_dialog.close()
+            self.job_progress_dialog.close()
         except NonValidInputError as nvie:
             QMessageBox.critical(self, "Non valid inputs detected", str(nvie))
-            job_progress_dialog.close()
+            self.job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
             api.get_deadline_cloud_library_telemetry_client().record_error(
@@ -534,10 +549,19 @@ class SubmitJobToDeadlineDialog(QDialog):
                 from_gui=True,
             )
             QMessageBox.critical(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
-            job_progress_dialog.close()
+            self.job_progress_dialog.close()
 
-        if self.create_job_response:
-            # Close the submitter window to signal the submission is done but
-            # keep the standalone gui submitter open
-            if self.submitter_name != "JobBundle":
-                self.close()
+    @property
+    def job_id(self) -> Optional[str]:
+        """
+        Returns the job ID if the submission was successful, otherwise None.
+        """
+        return self.__job_id
+
+    @job_id.setter
+    def job_id(self, value: str) -> None:
+        """
+        Sets the job ID locally and as a setting if the submission was successful.
+        """
+        self.__job_id = value
+        set_setting("defaults.job_id", value)
