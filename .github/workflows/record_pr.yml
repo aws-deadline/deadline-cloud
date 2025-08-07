@@ -1,0 +1,9 @@
+name: Record PR
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  call-record-workflow:
+    uses: aws-deadline/.github/.github/workflows/reusable_record_pr_details.yml@mainline
