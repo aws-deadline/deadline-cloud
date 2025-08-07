@@ -124,11 +124,12 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_type = type(initial_job_settings)
         self.submitter_name = submitter_name or self.job_settings_type().submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
-        self.create_job_response: Optional[Dict[str, Any]] = None
+        self.job_id = None
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
+        self.should_close = False
 
         self._build_ui(
             job_setup_widget_type,
@@ -141,6 +142,15 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         self.gui_update_counter: Any = None
         self.refresh_deadline_settings()
+
+    def _submission_succeeded_signal_receiver(self, job_id: str):
+        self.job_id = job_id
+
+        set_setting("defaults.job_id", job_id)
+
+    def _close_event_receiver(self):
+        if self.submitter_name != "JobBundle" and self.job_id:
+            self.close()
 
     def sizeHint(self):
         return QSize(540, 700)
@@ -455,9 +465,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         """
         Perform a submission when the submit button is pressed
         """
-        # Unset any cached response
-        self.create_job_response = None
-
         # Retrieve all the settings into the dataclass
         settings = self.job_settings_type()
         self.shared_job_settings.update_settings(settings)
@@ -468,6 +475,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         asset_references = self.job_attachments.get_asset_references()
 
         job_progress_dialog = SubmitJobProgressDialog(parent=self)
+        job_progress_dialog.submission_thread_succeeded.connect(
+            self._submission_succeeded_signal_receiver
+        )
+        job_progress_dialog.progress_window_closed.connect(self._close_event_receiver)
         job_progress_dialog.show()
         QApplication.instance().processEvents()  # type: ignore[union-attr]
 
@@ -507,7 +518,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             if job_parameters:
                 self.save_job_parameters_to_job_bundle(self.job_history_bundle_dir, job_parameters)
 
-            job_id = job_progress_dialog.start_job_submission(
+            job_progress_dialog.start_job_submission(
                 job_bundle_dir=self.job_history_bundle_dir,
                 submitter_name=self.submitter_name,
                 config=config_file.read_config(),
@@ -516,8 +527,6 @@ class SubmitJobToDeadlineDialog(QDialog):
                 known_asset_paths=self.known_asset_paths
                 + parameters_from_callback.get("known_asset_paths", []),
             )
-            if job_id:
-                set_setting("defaults.job_id", job_id)
 
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
@@ -535,9 +544,3 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
             QMessageBox.critical(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
             job_progress_dialog.close()
-
-        if self.create_job_response:
-            # Close the submitter window to signal the submission is done but
-            # keep the standalone gui submitter open
-            if self.submitter_name != "JobBundle":
-                self.close()
