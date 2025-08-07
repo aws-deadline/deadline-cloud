@@ -1,9 +1,22 @@
+## 0.51.1 (2025-08-07)
+
+
+
+### Bug Fixes
+* Submission window doesn't close after a successful submission (#775) ([`1fb33c7`](https://github.com/aws-deadline/deadline-cloud/commit/1fb33c7295ca9b6ee3f65277c457982994c3c13b))
+
+## DEPRECATIONS
+
+* The parameter `create_job_response` is being removed from `ui.dialogs.SubmitJobToDeadlineDialog` in `0.52.0`. It has been replaced with `job_id` which is set when a job submission has succeeded.
+
 ## 0.51.0 (2025-07-28)
 
 
 ### BREAKING CHANGES
-* The behavior for the auto_accept configuration option has changed to automatically accept the default option that would be presented interactively. One exception is in a GUI context, when automatically accepting would cancel the operation.
-* The parameter decide_cancel_submission_callback is removed from api.create_job_from_job_bundle, and a new parameter interactive_confirmation_callback replaces it. The previous callback included business logic that is now in the create job function, and the callback's purpose is now solely to present an interactive confirmation prompt.
+* The behavior for the `auto_accept` configuration option has changed to automatically accept the default option that would be presented interactively. One exception is in a GUI context, when automatically accepting would cancel the operation.
+* The parameter `decide_cancel_submission_callback` is removed from api.`create_job_from_job_bundle`, and a new parameter `interactive_confirmation_callback` replaces it. The previous callback included business logic that is now in the create job function, and the callback's purpose is now solely to present an interactive confirmation prompt.
+* The parameter `create_job_response` is no longer set after a job submission in `ui.dialogs.SubmitJobToDeadlineDialog`.
+* The function `start_submission` has been removed from `ui.dialogs.SubmitJobProgressDialog`. It has been replaced with `start_job_submission` which now starts job submission in a background thread. If you relied on the return value of `start_submission`, you must now connect to the `submission_thread_succeeded` parameter which is a `qtpy.QtCore.Signal`.
 
 ### Features
 * Add account IDs to telemetry events (#742) ([`43f7c0e`](https://github.com/aws-deadline/deadline-cloud/commit/43f7c0e4bb9c8988624067ad237a0f8ecb652aea))
