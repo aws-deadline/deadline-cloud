@@ -51,7 +51,10 @@ def _generate_path_mapping_rules(
         for location in destination_storage_profile["fileSystemLocations"]
     }
 
-    if source_storage_profile["osFamily"] == StorageProfileOperatingSystemFamily.WINDOWS.value:
+    if (
+        source_storage_profile["osFamily"].lower()
+        == StorageProfileOperatingSystemFamily.WINDOWS.value
+    ):
         source_path_format = PathFormat.WINDOWS.value
     else:
         source_path_format = PathFormat.POSIX.value
