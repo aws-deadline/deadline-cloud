@@ -1,0 +1,31 @@
+name: On Opened PR
+
+on:
+  workflow_run:
+    workflows: ["Record PR"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  get-pr-details:
+    permissions:
+      actions: read # download PR artifact
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    uses: aws-deadline/.github/.github/workflows/reusable_extract_pr_details.yml@mainline
+    with:
+      record_pr_workflow_id: ${{ github.event.workflow_run.id }}
+      artifact_name: "pr-info"
+      workflow_origin: ${{ github.repository }}
+
+  label-pr:
+    needs: get-pr-details
+    if: ${{ needs.get-pr-details.outputs.pr_action == 'opened' || needs.get-pr-details.outputs.pr_action == 'reopened' }}
+    uses: aws-deadline/.github/.github/workflows/reusable_label_pr.yml@mainline
+    with:
+      pr_number: ${{ needs.get-pr-details.outputs.pr_number }}
+      label_name: "waiting-on-maintainers"
+    permissions:
+      pull-requests: write
