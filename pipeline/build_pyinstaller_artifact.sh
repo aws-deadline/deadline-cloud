@@ -6,5 +6,7 @@ set -e
 pip3 install --upgrade pip
 pip3 install --upgrade hatch
 
+hatch run attributions:generate
 hatch run installer:build
 hatch run installer:make_exe
+hatch run installer:validate_exe

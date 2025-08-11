@@ -92,12 +92,13 @@ def _validate_files(installation_path: Path) -> None:
     cli_path = installation_path / "DeadlineClient" / "deadline"
     cli_result = subprocess.run([cli_path, "--version"], capture_output=True, text=True)
     version_regex = r"deadline, version (\d+)\.(\d+)\.(\d+)"
+    print(cli_result.stderr)
     match = re.search(version_regex, cli_result.stdout)
     assert match is not None, f"--version output is not as expected, got: {cli_result.stdout}"
     assert cli_result.returncode == 0
 
     # Just check that we have dependencies in this folder
-    cli_dir = installation_path / "DeadlineClient" / "cli"
+    cli_dir = installation_path / "DeadlineClient" / "_internal" / "cli" / "_internal"
     cli_dir_contents = [f.name for f in (cli_dir).iterdir()]
     assert "deadline" in cli_dir_contents
     assert "xxhash" in cli_dir_contents

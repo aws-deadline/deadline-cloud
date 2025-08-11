@@ -30,3 +30,4 @@ installer/components
 
 # Install builder license
 license.xml
+/THIRD_PARTY_LICENSES

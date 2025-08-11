@@ -5,8 +5,10 @@ import contextlib
 import fnmatch
 import hashlib
 import itertools
+import os
 import re
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -16,7 +18,6 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Optional
 
 from allowlist import ALLOWLIST, DEPENDENCIES
-from stdlib_modules import STANDARD_LIBRARY_MODULES
 
 _BLOCK_SIZE = 65536
 _PYI_CONTENTS_HEADER_REGEX = re.compile(r"^Contents of '(.+)' \((.+)\):$")
@@ -91,6 +92,12 @@ def _get_pyinstaller_contents_info(archive_path: Path) -> list[str]:
     return items
 
 
+def batched(iterable, n):
+    iterator = iter(iterable)
+    while chunk := list(itertools.islice(iterator, n)):
+        yield chunk
+
+
 @contextlib.contextmanager
 def temp_pyinstaller_archive_contents(archive_path: Path) -> Generator[Path, None, None]:
     """
@@ -103,7 +110,7 @@ def temp_pyinstaller_archive_contents(archive_path: Path) -> Generator[Path, Non
         # We have to batch the extractions into multiple
         # invocations of pyi-archive_viewer because if we try
         # to do too many at once on Windows it freezes.
-        for batch in itertools.batched(archive_contents, 16):
+        for batch in batched(archive_contents, 16):
             # pyi-archive_viewer doesn't seem to have arguments
             # for extracting from the archive, so we need to
             # start it in interactive mode and pipe commands
@@ -164,9 +171,10 @@ def _re_raise(e: Exception) -> None:
 
 def enumerate_directory(dirpath: Path) -> list[Path]:
     result = []
-    for root, dirs, files in dirpath.walk(follow_symlinks=False, on_error=_re_raise):
+    for root, dirs, files in os.walk(dirpath, followlinks=False, onerror=_re_raise):
+        root_path = Path(root)
         for name in files:
-            result.append((root / name).relative_to(dirpath))
+            result.append((root_path / name).relative_to(dirpath))
     return result
 
 
@@ -218,7 +226,7 @@ class Allowlist:
     def from_dict(raw: dict[str, Any]) -> "Allowlist":
         files = []
         globs = []
-        for dep in [*DEPENDENCIES, *STANDARD_LIBRARY_MODULES]:
+        for dep in [*DEPENDENCIES, *sys.stdlib_module_names]:
             files.extend(
                 [
                     Path(dep),
@@ -235,6 +243,14 @@ class Allowlist:
                     f"_internal/cli/_internal/{dep}-*.dist-info/*",
                     f"_internal/cli/_internal/{dep}/**/*",
                     f"_internal/cli/_internal/{dep}/*",
+                    f"_internal/lib-dynload/{dep}.cpython-3*-x86_64-linux-gnu.so",
+                    f"_internal/cli/_internal/lib-dynload/{dep}.cpython-3*-x86_64-linux-gnu.so",
+                    f"_internal/lib-dynload/{dep}.cpython-3*-darwin.so",
+                    f"_internal/cli/_internal/lib-dynload/{dep}.cpython-3*-darwin.so",
+                    f"_internal/lib-dynload/_{dep}.cpython-3*-x86_64-linux-gnu.so",
+                    f"_internal/cli/_internal/lib-dynload/_{dep}.cpython-3*-x86_64-linux-gnu.so",
+                    f"_internal/lib-dynload/_{dep}.cpython-3*-darwin.so",
+                    f"_internal/cli/_internal/lib-dynload/_{dep}.cpython-3*-darwin.so",
                 ]
             )
 

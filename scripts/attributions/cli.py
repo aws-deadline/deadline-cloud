@@ -1,12 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import argparse
+
+import difflib
 import hashlib
 import json
 import os
 import platform
 import re
 import subprocess
+import sys
 import tempfile
 
 from pathlib import Path
@@ -99,7 +102,7 @@ _ATTRIBUTIONS_ALLOW_LIST = {
         "spdx": _MIT,
     },
     "xxhash": {
-        "license_sha256": "f8e9ef00c78be4d2da526b2c37e4099c920c7fe0b9d943bf0daeb2efc30a3a5b",
+        "license_sha256": "b3c620adc9a8812cc0c3c7fc09567fa9a9930d3546de955dfb955b168cf989ac",
         "spdx": _BSD_2_CLAUSE,
     },
 }
@@ -112,34 +115,106 @@ _ADDITIONAL_ATTRIBUTIONS = [
     {
         "name": "python",
         "attribution_path": "PYTHON_LICENSE.txt",
+        "spdx": _PSF_2_0,
+        "url": "https://github.com/python/cpython",
     },
     {
         "name": "pyinstaller",
         "attribution_path": "PYINSTALLER_LICENSE.txt",
+        # Only the runtime hooks are distributed which are licensed under Apache-2.0
+        "spdx": _APACHE_2_0,
+        "url": "https://github.com/pyinstaller/pyinstaller",
     },
     {
         "name": "openssl",
         "attribution_path": "OPENSSL_LICENSE.txt",
+        "spdx": _APACHE_2_0,
+        "url": "https://github.com/openssl/openssl",
     },
     {
         "name": "sqlite",
         "attribution_path": "SQLITE_ACKNOWLEDGEMENT.txt",
+        "spdx": "blessing",
+        "url": "https://github.com/sqlite/sqlite",
     },
     {
         "name": "VCRedist",
         "attribution_path": "VCREDIST_ACKNOWLEDGEMENT.txt",
+        "platforms": ["Windows"],
     },
     {
         "name": "WindowsSDK",
         "attribution_path": "WINDOWS_SDK_ACKNOWLEDGEMENT.txt",
+        "platforms": ["Windows"],
     },
     {
         "name": "pywin32",
         "attribution_path": "PYWIN32_LICENSE.txt",
+        "spdx": _PSF_2_0,
+        "url": "https://github.com/mhammond/pywin32",
+        "platforms": ["Windows"],
+        "exclude_from_inventory": True,
     },
     {
         "name": "libffi",
         "attribution_path": "LIBFFI_LICENSE.txt",
+        "spdx": _MIT,
+        "url": "https://github.com/libffi/libffi",
+    },
+    {
+        "name": "ncurses",
+        "attribution_path": "NCURSES_LICENSE.txt",
+        "spdx": "X11",
+        "url": "https://invisible-island.net/ncurses/",
+        "platforms": ["Linux", "Darwin"],
+    },
+    {
+        "name": "liblzma",
+        "attribution_path": "LZMA_ACKNOWLEDGEMENT.txt",
+        "url": "https://tukaani.org/xz/",
+    },
+    {
+        "name": "libmpdec",
+        "attribution_path": "MPDEC_LICENSE.txt",
+        "spdx": _BSD_2_CLAUSE,
+        "url": "https://www.bytereef.org/mpdecimal/index.html",
+    },
+    {
+        "name": "tcl",
+        "attribution_path": "TCL_LICENSE.txt",
+        "url": "https://github.com/tcltk/tcl",
+        "platforms": ["Windows", "Darwin"],
+    },
+    {
+        "name": "tk",
+        "attribution_path": "TK_LICENSE.txt",
+        "url": "https://github.com/tcltk/tk",
+        "platforms": ["Windows", "Darwin"],
+    },
+    {
+        "name": "zlib",
+        "attribution_path": "ZLIB_LICENSE.txt",
+        "url": "https://github.com/madler/zlib",
+        "spdx": "Zlib",
+    },
+    {
+        "name": "libzstd",
+        "attribution_path": "LIBZSTD_LICENSE.txt",
+        "url": "https://github.com/facebook/zstd/",
+        "spdx": _BSD_3_CLAUSE,
+        "platforms": ["Linux"],
+    },
+    {
+        "name": "bzip2",
+        "attribution_path": "BZIP2_LICENSE.txt",
+        "url": "https://gitlab.com/bzip2/bzip2",
+        "spdx": "bzip2-1.0.6",
+    },
+    {
+        "name": "libexpat",
+        "attribution_path": "LIBEXPAT_LICENSE.txt",
+        "url": "https://github.com/libexpat/libexpat",
+        "spdx": _MIT,
     },
 ]
 
@@ -150,11 +225,11 @@ _EXPECTED_MISSING_LICENSE = {"pywin32"}
 
 def _get_desired_python_version() -> str:
     if platform.system() == "Darwin":
-        return "3.12"
+        return "3.13"
     elif platform.system() == "Windows":
-        return "3.10"
+        return "3.13"
     elif platform.system() == "Linux":
-        return "3.9"
+        return "3.13"
     raise RuntimeError("Platform not supported")
 
 
@@ -168,6 +243,7 @@ class PythonInstall:
         Create a python installation based in the passed in --python argument
         If the argument was "mise", query mise for an installed python interpreter of the desired version (only allowed in dev mode)
         If the argument was "uv", let uv install the desired python version (only allowed in dev mode)
+        If the argument is "current", use the current Python interpreter
         If the argument is anything else, check to see if it is a path to a file, if it is, assume this is the path to a Python interpreter
         """
         if arg == "mise":
@@ -176,6 +252,8 @@ class PythonInstall:
             if not dev:
                 raise RuntimeError("Cannot use uv for Python interpreter outside of dev mode")
             interpreter_path = None
+        elif arg == "current":
+            interpreter_path = Path(sys.executable)
         else:
             interpreter_path = Path(arg)
 
@@ -242,11 +320,32 @@ class PythonInstall:
             ]
 
 
-def uv_pip(args: list[str], venv: Path) -> None:
+def get_pip_index_url() -> Optional[str]:
+    try:
+        result = subprocess.check_output(
+            ["pip", "config", "get", "global.index-url"], text=True, stderr=subprocess.STDOUT
+        )
+        return result.strip()
+    except subprocess.CalledProcessError as e:
+        if "No such key" in e.output:
+            return None
+        raise
+
+
+def uv_pip(args: list[str], venv: Path, dev: bool) -> None:
     """
     Convenience function that calls `uv pip [args]` against the virtual envrionment at a given Path
     """
-    subprocess.check_call(["uv", "pip", *args], env={**os.environ, "VIRTUAL_ENV": str(venv)})
+    index_args = []
+    pip_index_url = get_pip_index_url()
+    if pip_index_url is not None:
+        index_args = ["--default-index", pip_index_url]
+    else:
+        if not dev:
+            raise RuntimeError("Expected a pip index url to be configured outside of dev mode.")
+    subprocess.check_call(
+        ["uv", "pip", *args, *index_args], env={**os.environ, "VIRTUAL_ENV": str(venv)}
+    )
 
 
 def _get_sha256(text: str) -> str:
@@ -259,10 +358,14 @@ class _PackageLicenseInfo:
     license_text: str
     notice_text: Optional[str]
     expect_missing_license: bool
+    url: Optional[str]
+    license: Optional[str]
 
     def __init__(self, venv: Path, pip_license_info: dict[str, str]):
         name = pip_license_info["Name"]
         version = pip_license_info["Version"]
+        url = pip_license_info["URL"]
+        license = pip_license_info["License"]
 
         if name == "UNKNOWN":
             raise RuntimeError("Package missing name")
@@ -272,6 +375,18 @@ class _PackageLicenseInfo:
             raise RuntimeError(f"Package {name} missing version")
         self.version = version
 
+        if url == "UNKNOWN":
+            self.url = None
+        else:
+            self.url = url
+
+        if name in _ATTRIBUTIONS_ALLOW_LIST and "spdx" in _ATTRIBUTIONS_ALLOW_LIST[name]:
+            self.license = _ATTRIBUTIONS_ALLOW_LIST[name]["spdx"]
+        elif license == "UNKNOWN":
+            self.license = None
+        else:
+            self.license = license
+
         discovered_license_text = pip_license_info["LicenseText"]
         discovered_notice_text = pip_license_info["NoticeText"]
 
@@ -280,7 +395,7 @@ class _PackageLicenseInfo:
 
         if license_text_override is not None:
             self.license_text = license_text_override
-        elif discovered_license_text == "UNKNOWN":
+        elif discovered_license_text == "UNKNOWN" and name not in _EXPECTED_MISSING_LICENSE:
             raise RuntimeError(f"Package {name} missing license text")
         else:
             self.license_text = discovered_license_text
@@ -372,7 +487,7 @@ class _PackageLicenseInfo:
             )
 
 
-def _get_license_info(python_interpreter: PythonInstall) -> list[_PackageLicenseInfo]:
+def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_PackageLicenseInfo]:
     repository_root = Path(__file__).parent.parent.parent
     with tempfile.TemporaryDirectory() as td:
         temp = Path(td)
@@ -380,7 +495,7 @@ def _get_license_info(python_interpreter: PythonInstall) -> list[_PackageLicense
         python_args = python_interpreter.get_uv_venv_python_args()
         uv_venv_args = ["uv", "venv", venv, *python_args]
         subprocess.check_call(uv_venv_args)
-        uv_pip(["install", repository_root], venv)
+        uv_pip(["install", repository_root], venv, dev)
         if platform.system() == "Windows":
             python_path = venv / "Scripts" / "python.exe"
         else:
@@ -395,9 +510,20 @@ def _get_license_info(python_interpreter: PythonInstall) -> list[_PackageLicense
                 "--with-notice-file",
                 "--format=json",
                 f"--python={python_path}",
-            ]
+            ],
+            text=True,
+            encoding="utf-8",
         )
         pip_licenses_parsed = json.loads(pip_licenses_output)
+
+        # Check for Unicode corruption
+        for package in pip_licenses_parsed:
+            license_text = package["LicenseText"]
+            if "�" in license_text:
+                raise RuntimeError(
+                    f"Corrupted Unicode detected in license text for package {package['Name']}"
+                )
+
         for package in pip_licenses_parsed:
             name = package["Name"]
             license_text = package["LicenseText"]
@@ -415,12 +541,6 @@ def _get_license_info(python_interpreter: PythonInstall) -> list[_PackageLicense
                     f"pip-licenses did not find a license file for {name} but it was expected to."
                 )
 
-        pip_licenses_parsed = [
-            package
-            for package in pip_licenses_parsed
-            if package["Name"] not in _EXPECTED_MISSING_LICENSE
-        ]
-
         return [
             _PackageLicenseInfo(
                 venv,
@@ -431,27 +551,90 @@ def _get_license_info(python_interpreter: PythonInstall) -> list[_PackageLicense
         ]
 
 
-def generate_attributions_document(out_file: Path, python_arg: Optional[str], dev: bool) -> None:
+def packages_to_markdown_table(
+    packages: list[_PackageLicenseInfo], additional: list[dict[str, str]]
+) -> str:
+    lines = ["| Name | Version | License | URL |", "| --- | --- | --- | --- |"]
+    for pkg in packages:
+        url = pkg.url or ""
+        license_name = pkg.license or ""
+        lines.append(f"| {pkg.name} | {pkg.version} | {license_name} | {url} |")
+    for pkg in additional:
+        if "platforms" not in pkg or platform.system() in pkg["platforms"]:
+            if pkg.get("exclude_from_inventory", False):
+                spdx = pkg.get("spdx", "")
+                url = pkg.get("url", "")
+                version = pkg.get("version", "")
+                lines.append(f"| {pkg['name']} | {version} | {spdx} | {url} |")
+    return "\n".join(lines)
+
+
+def generate_attributions_document(
+    out_file: Path,
+    python_arg: Optional[str],
+    dev: bool,
+    inventory_file: Optional[Path],
+    versions_file: Optional[Path],
+) -> None:
     """
     Generate an attributions document for this package and write it to `out_file`
     """
     desired_python_version = _get_desired_python_version()
     python_install = PythonInstall(python_arg, desired_python_version, dev)
-    license_info = _get_license_info(python_install)
+    license_info = _get_license_info(python_install, dev)
     attributions = []
+    versions: dict[str, str] = {}
 
-    for package in license_info:
-        package.check_against_attributions_allow_list()
-        attributions.append(package.get_attribution_text())
+    for package in sorted(license_info, key=lambda info: info.name):
+        versions[package.name] = package.version
+        if package.name not in _EXPECTED_MISSING_LICENSE:
+            package.check_against_attributions_allow_list()
+            attributions.append(package.get_attribution_text())
 
     additional_attributions_path = Path(__file__).parent / "additional"
-    for attribution in _ADDITIONAL_ATTRIBUTIONS:
-        with open(
-            additional_attributions_path / attribution["attribution_path"], "r", encoding="utf8"
-        ) as f:
-            attributions.append(f"{attribution['name']}\n\n{f.read()}\n")
+    for attribution in sorted(
+        _ADDITIONAL_ATTRIBUTIONS, key=lambda attribution: attribution["name"]
+    ):
+        if "platforms" not in attribution or platform.system() in attribution["platforms"]:
+            with open(
+                additional_attributions_path / attribution["attribution_path"], "r", encoding="utf8"
+            ) as f:
+                attributions.append(f"{attribution['name']}\n\n{f.read()}\n")
 
     attributions = "".join(attributions)
+
+    if inventory_file is not None:
+        inventory = packages_to_markdown_table(license_info, _ADDITIONAL_ATTRIBUTIONS)
+        with open(inventory_file, "w", encoding="utf8") as f:
+            f.write(inventory)
+
+    if versions_file is not None:
+        with open(versions_file, "w", encoding="utf8") as f:
+            json.dump(versions, f, indent=2)
+
+    approved_text_path = (
+        Path(__file__).parent / "approved_text" / platform.system() / "THIRD_PARTY_LICENSES"
+    )
+
+    # Read as bytes first, then decode explicitly
+    # because otherwise certain unicode characters
+    # are not decoded properly on Windows
+    with open(approved_text_path, "rb") as f:
+        raw_bytes = f.read()
+    approved_text = raw_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+    if approved_text != attributions:
+        diff = "".join(
+            difflib.unified_diff(
+                approved_text.splitlines(keepends=True),
+                attributions.replace("\r\n", "\n").replace("\r", "\n").splitlines(keepends=True),
+                lineterm="",
+            )
+        )
+        print("ERROR: Attributions generated did not match approved text:", file=sys.stderr)
+        print(diff, file=sys.stderr)
+        sys.exit(1)
+
     with open(out_file, "w", encoding="utf8") as f:
         f.write(attributions)
 
@@ -477,6 +660,20 @@ if __name__ == "__main__":
         required=False,
         help="If set, `--python-preference only-system --no-python-downloads` will not be passed to `uv venv` so that uv can download python.",
     )
+    parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        required=False,
+        help="The path to output the package inventory to",
+    )
+    parser.add_argument(
+        "--versions-file",
+        type=Path,
+        required=False,
+        help="The path to output the versions file to",
+    )
     args = parser.parse_args()
 
-    generate_attributions_document(args.out_file, args.python, args.dev)
+    generate_attributions_document(
+        args.out_file, args.python, args.dev, args.inventory_file, args.versions_file
+    )
