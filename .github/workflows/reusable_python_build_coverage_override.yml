@@ -34,21 +34,21 @@ jobs:
     env:
       PYTHON: ${{ inputs.python-version }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       if: ${{ !inputs.branch && !inputs.commit && !inputs.ref }}
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       if: ${{ inputs.branch }}
       with:
         ref: ${{ inputs.branch }}
         fetch-depth: 0
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       if: ${{ inputs.commit }}
       with:
         ref: ${{ inputs.commit }}
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       if: ${{ inputs.ref }}
       with:
         ref: ${{ inputs.ref }}
