@@ -281,59 +281,6 @@ def _get_tasks_manifests_keys_from_s3(
     return manifests_keys
 
 
-def _update_manifest_output_paths_for_session_actions(
-    s3_settings: JobAttachmentS3Settings,
-    farm_id: str,
-    queue_id: str,
-    session_actions: list[dict[str, Any]],
-    session: Optional[boto3.Session],
-) -> None:
-    """
-    Updates the manifests field in each session action with output manifest paths from s3.
-    The session action is updated with the manifests in same format as would be expected from ListSessionActions API.
-    This function is a fallback for until we get the manifests from the ListSessionActions API.
-
-    :param s3_settings: Job attachment S3 settings
-    :param farm_id: The farm ID
-    :param queue_id: The queue ID
-    :param session_actions: List of session action dictionaries
-    :param session: Optional boto3 session
-    :return: None
-    """
-
-    # Update manifests for each session action
-    for session_action in session_actions:
-        # Check if any session action already has output manifests
-        if session_action.get("manifests"):
-            # If this session action already has output manifests, no need to update
-            continue
-
-        # Get the manifest prefix using session action info
-        manifest_prefix: str = _get_output_manifest_prefix(
-            s3_settings,
-            farm_id,
-            queue_id,
-            session_action["job_id"],
-            session_action["step_id"],
-            session_action["task_id"],
-            session_action["session_action_id"],
-        )
-
-        # Get manifest paths from S3 using prefix
-        manifest_paths = _get_tasks_manifests_keys_from_s3(
-            manifest_prefix, s3_settings.s3BucketName, session=session
-        )
-
-        # Convert paths to the expected format
-        manifests = []
-        # TODO verify if ordering of output manifest paths matters here
-        for path in manifest_paths:
-            manifests.append({"outputManifestPath": path})
-
-        # Set the session action manifests in the incoming object
-        session_action["manifests"] = manifests
-
-
 def get_job_input_paths_by_asset_root(
     s3_settings: JobAttachmentS3Settings,
     attachments: Attachments,
