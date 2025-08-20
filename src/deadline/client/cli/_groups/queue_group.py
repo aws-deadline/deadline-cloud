@@ -209,7 +209,7 @@ def queue_get(**args):
     click.echo(_cli_object_repr(response))
 
 
-@cli_queue.command(name="incremental-output-download")
+@cli_queue.command(name="sync-output")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @click.option(
@@ -268,19 +268,21 @@ def queue_get(**args):
     default=False,
 )
 @_handle_error
-@api.record_success_fail_telemetry_event(metric_name="incremental_output_download")
-def incremental_output_download(
+@api.record_success_fail_telemetry_event(metric_name="queue_sync_output")
+def sync_output(
     json: bool,
     bootstrap_lookback_minutes: float,
     checkpoint_dir: str,
     force_bootstrap: bool,
     ignore_storage_profiles: bool,
+    conflict_resolution: str,
     dry_run: bool,
     **args,
 ):
     """
-    BETA - Downloads job attachments output incrementally for all jobs in a queue. When run for the
-    first time or with the --force-bootstrap option, it starts downloading from --bootstrap-lookback-minutes
+    BETA - Downloads any new job attachments output for all jobs in a queue since the last run of the same command.
+
+    When run for the first time or with the --force-bootstrap option, it starts downloading from --bootstrap-lookback-minutes
     in the past. When run each subsequent time, it loads  the previous checkpoint and continues
     where it left off.
 
@@ -291,13 +293,11 @@ def incremental_output_download(
     """
     if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") != "1":
         raise DeadlineOperationError(
-            "The incremental-output-download command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
+            "The sync-output command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
         )
 
     if sys.version_info < (3, 9):
-        raise DeadlineOperationError(
-            "The incremental-output-download command requires Python version 3.9 or later"
-        )
+        raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
 
     if ignore_storage_profiles and args.get("storage_profile_id") is not None:
         raise click.UsageError(
@@ -337,7 +337,7 @@ def incremental_output_download(
         )
         if not local_storage_profile_id:
             raise DeadlineOperationError(
-                "The incremental-output-download operation requires a storage profile configured locally\n"
+                "The sync-output operation requires a storage profile configured locally\n"
                 "or provided with the --storage-profile-id option in order to determine file system paths\n"
                 "for download. Storage profiles are used to generate path mappings when a job was submitted\n"
                 "from a machine with a different operating system or file system mount locations than the download machine. \n\n"
@@ -448,6 +448,7 @@ def incremental_output_download(
             farm_id=farm_id,
             queue=queue,
             checkpoint=checkpoint,
+            file_conflict_resolution=FileConflictResolution[conflict_resolution],
             config=config,
             print_function_callback=logger.echo,
             dry_run=dry_run,

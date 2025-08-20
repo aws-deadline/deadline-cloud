@@ -608,7 +608,6 @@ def _download_manifest_paths(
 ) -> None:
     """
     Downloads all files from the S3 bucket in the Job Attachment settings to the specified directory.
-    Returns a list of local paths of downloaded files.
 
     Args:
         manifest_paths_to_download: A list of manifest path objects to download, whose path is an absolute file system path.

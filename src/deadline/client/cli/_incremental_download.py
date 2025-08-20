@@ -368,6 +368,13 @@ def _categorize_jobs_in_checkpoint(
 
         print_function_callback(f"NEW Job: {dc_job['name']} ({job_id})")
 
+        if dc_job["storageProfileId"] is None and checkpoint.local_storage_profile_id is not None:
+            print_function_callback(
+                "  Job does not have a storage profile, will not download its output."
+            )
+            missing_storage_profile.add(job_id)
+            continue
+
         print_function_callback(
             f"  Succeeded tasks: {dc_succeeded_task_count} / {dc_total_task_count}"
         )
@@ -396,9 +403,11 @@ def _categorize_jobs_in_checkpoint(
             completed_job_ids.add(job_id)
     new_job_ids.difference_update(attachments_free_job_ids)
     new_job_ids.difference_update(completed_job_ids)
+    new_job_ids.difference_update(missing_storage_profile)
 
     result = CategorizedJobIds()
     result.attachments_free = attachments_free_job_ids
+    result.missing_storage_profile = missing_storage_profile
     result.completed = completed_job_ids
     result.inactive = finished_tracking_job_ids
     result.added = new_job_ids
@@ -965,6 +974,7 @@ def _incremental_output_download(
     queue: dict[str, Any],
     boto3_session: boto3.Session,
     checkpoint: IncrementalDownloadState,
+    file_conflict_resolution: FileConflictResolution,
     config: Optional[ConfigParser] = None,
     print_function_callback: Callable[[str], None] = lambda msg: None,
     *,
@@ -996,9 +1006,7 @@ def _incremental_output_download(
         An updated checkpoint object.
     """
     if sys.version_info < (3, 9):
-        raise DeadlineOperationError(
-            "The incremental-output-download command requires Python version 3.9 or later"
-        )
+        raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
 
     deadline = boto3_session.client("deadline")
 
@@ -1180,7 +1188,7 @@ def _incremental_output_download(
             HashAlgorithm.XXH128,
             queue,
             boto3_session_for_s3,
-            FileConflictResolution.OVERWRITE,
+            file_conflict_resolution,
             on_downloading_files=_update_download_progress,
             print_function_callback=print_function_callback,
         )

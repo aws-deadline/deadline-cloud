@@ -131,7 +131,7 @@ def test_incremental_output_download_requires_beta_acknowledgement(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -146,7 +146,7 @@ def test_incremental_output_download_requires_beta_acknowledgement(
     assert result.exit_code == 1, result.output
 
     assert (
-        "The incremental-output-download command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
+        "The sync-output command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
         in result.output
     ), result.output
 
@@ -170,7 +170,7 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -215,7 +215,7 @@ def test_incremental_output_download_pid_lock_already_held_error(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -257,7 +257,7 @@ def test_incremental_output_download_storage_profile_options_mutually_exclusive(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--storage-profile-id",
                 MOCK_STORAGE_PROFILE_ID,
@@ -320,7 +320,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
             ]
             + storage_profile_options
             + [
@@ -387,7 +387,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
             ]
             + storage_profile_options
             + [
@@ -427,7 +427,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
             ]
             + storage_profile_options
             + [
@@ -465,7 +465,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
             ]
             + storage_profile_options
             + [
@@ -607,7 +607,7 @@ def test_incremental_output_download_storage_profile_path_mapping(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--storage-profile-id",
                 MOCK_STORAGE_PROFILE_ID_LOCAL,
                 "--farm-id",
@@ -684,7 +684,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -730,7 +730,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -765,7 +765,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -826,7 +826,7 @@ def test_incremental_output_download_job_unchanged(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -862,7 +862,7 @@ def test_incremental_output_download_job_unchanged(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -924,7 +924,7 @@ def test_incremental_output_download_job_canceled(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -965,7 +965,7 @@ def test_incremental_output_download_job_canceled(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1033,7 +1033,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1071,7 +1071,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1111,7 +1111,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1174,7 +1174,7 @@ def test_incremental_output_download_dry_run(
             main,
             [
                 "queue",
-                "incremental-output-download",
+                "sync-output",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
