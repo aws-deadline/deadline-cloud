@@ -468,7 +468,7 @@ def _download_job_output(
     # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
 
-        @api.record_success_fail_telemetry_event(metric_name="download_job_output")  # type: ignore
+        @api.record_success_fail_telemetry_event(metric_name="download_job_output")
         def _download_job_output(
             file_conflict_resolution: Optional[
                 FileConflictResolution
