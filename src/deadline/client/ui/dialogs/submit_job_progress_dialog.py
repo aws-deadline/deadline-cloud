@@ -112,7 +112,6 @@ class SubmitJobProgressDialog(QDialog):
     to AWS Deadline Cloud.
     """
 
-    job_id: Optional[str] = None
     cancelation_flag: CancelationFlag
 
     # This signal is sent when the background thread raises an exception.
@@ -126,6 +125,9 @@ class SubmitJobProgressDialog(QDialog):
 
     # This signal is sent when the background thread succeeds.
     submission_thread_succeeded = Signal(str)
+    progress_window_closed = Signal(None)
+
+    job_id: Optional[str] = None
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
@@ -152,7 +154,7 @@ class SubmitJobProgressDialog(QDialog):
         job_bundle_dir: str,
         job_parameters: list[dict[str, Any]] = [],
         **kwargs,
-    ):
+    ) -> None:
         """
         Starts a job submission background thread and returns immediately. It wires up
         appropriate callbacks and then forwards all arguments.
@@ -291,6 +293,9 @@ class SubmitJobProgressDialog(QDialog):
             self.status_label.setText("Submission complete")
             self.button_box.setStandardButtons(QDialogButtonBox.Ok)
             self.button_box.button(QDialogButtonBox.Ok).setDefault(True)
+            self.button_box.button(QDialogButtonBox.Ok).clicked.connect(
+                self.progress_window_closed.emit
+            )
         else:
             if self.cancelation_flag or self._warning_dialog_canceled:
                 self.status_label.setText("Submission canceled")
@@ -314,6 +319,7 @@ class SubmitJobProgressDialog(QDialog):
         closing the dialog. If the submission is complete then any button, even
         'X', should result in the dialog being accepted.
         """
+        self.progress_window_closed.emit()
         if self._submission_complete:
             self.accept()
         else:

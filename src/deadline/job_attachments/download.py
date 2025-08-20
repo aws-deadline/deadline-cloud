@@ -550,9 +550,13 @@ def download_file(
         elif file_conflict_resolution == FileConflictResolution.OVERWRITE:
             pass
         elif file_conflict_resolution == FileConflictResolution.CREATE_COPY:
-            local_file_path = _get_new_copy_file_path(
+            copy_local_file_path = _get_new_copy_file_path(
                 local_file_path, collision_lock, collision_file_dict
             )
+
+            # Re-run _get_long_path_compatible_path for updated file name after file conflict resolution
+            # _get_long_path_compatible_path is idempotent, so it doesn't re-process an existing long path
+            local_file_path = _get_long_path_compatible_path(copy_local_file_path)
         else:
             raise ValueError(
                 f"Unknown choice for file conflict resolution: {file_conflict_resolution}"

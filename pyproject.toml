@@ -215,4 +215,4 @@ trim_blocks = true
 lstrip_blocks = true
 
 [tool.semantic_release.branches.release]
-match = "(mainline|release)"
+match = "(mainline|release|patch_.*)"

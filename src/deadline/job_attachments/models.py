@@ -136,6 +136,18 @@ class StorageProfileOperatingSystemFamily(str, Enum):
                 return member
         return None
 
+    @classmethod
+    def get_host_os_family(cls) -> StorageProfileOperatingSystemFamily:
+        """Get the current path format."""
+        if sys.platform.startswith("win"):
+            return cls.WINDOWS
+        if sys.platform.startswith("darwin"):
+            return cls.MACOS
+        if sys.platform.startswith("linux"):
+            return cls.LINUX
+        else:
+            raise NotImplementedError(f"Operating system {sys.platform} is not supported.")
+
 
 class AssetType(str, Enum):
     INPUT = "input"

@@ -452,6 +452,7 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
                 widget.setToolTip(parameter["description"])
 
     def value(self):
+        self.edit_control.interpretText()
         return self.edit_control.value()
 
     def set_value(self, value):
@@ -537,6 +538,7 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
                 widget.setToolTip(parameter["description"])
 
     def value(self):
+        self.edit_control.interpretText()
         return self.edit_control.value()
 
     def set_value(self, value):
