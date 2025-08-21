@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from queue import Queue, Full
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
@@ -383,14 +383,14 @@ def get_deadline_cloud_library_telemetry_client(
     return get_telemetry_client("deadline-cloud-library", version, config=config)
 
 
-def record_success_fail_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> Callable[..., F]:
+def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F], F]:
     """
     Decorator to try catch a function. Sends a success / fail telemetry event.
     :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
     """
 
     def inner(function: F) -> F:
-        def wrapper(*args: List[Any], **kwargs: Dict[str, Any]) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             """
             Wrapper to try-catch a function for telemetry
             :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
@@ -413,14 +413,14 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> C
     return inner
 
 
-def record_function_latency_telemetry_event(**decorator_kwargs: Dict[str, Any]) -> Callable[[F], F]:
+def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable[[F], F]:
     """
     Decorator to time a function. Sends a latency telemetry event.
     :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
     """
 
     def inner(function: F) -> F:
-        def wrapper(*args: List[Any], **kwargs: Dict[str, Any]) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             """
             Wrapper to time a function for latency telemetry
             :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter

@@ -149,7 +149,7 @@ def _generate_message_for_asset_paths(
     return "".join(warning_messages), default_prompt_response
 
 
-@api.record_success_fail_telemetry_event(metric_name="asset_upload")  # type: ignore
+@api.record_success_fail_telemetry_event(metric_name="asset_upload")
 def _upload_attachments(
     asset_manager: S3AssetManager,
     manifests: List[AssetRootManifest],
