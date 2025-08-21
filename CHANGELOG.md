@@ -1,3 +1,27 @@
+## 0.52.0 (2025-08-21)
+
+### BREAKING CHANGES
+
+* refactor the authorization UI dialog (#751) ([`5882533`](https://github.com/aws-deadline/deadline-cloud/commit/5882533ca8a3e65a0cc36083998521b1631f92a1))
+  * The DeadlineAuthenticationStatusWidget class has been rewritten and the AuthenticationStatusGroup widget class has been removed. Details that were present in the AuthenticationStatusGroup are now available in the DeadlineAuthenticationStatuswidget. The login/logout buttons are now defined in the DeadlineAuthenticationStatusWidget and have been removed from the SubmitJobToDeadlineDialog and the DeadlineConfigDialog.
+
+### Features
+* Added optional target_task_run_status parameter to create_job_from_job_bundle and deadline bundle submit (#753) ([`344b6f6`](https://github.com/aws-deadline/deadline-cloud/commit/344b6f67a6c1122833f227555b6f8b20a3f126f0))
+
+### Bug Fixes
+* Long path handling for CREATE_COPY file conflict resolution during job download (#782) ([`bbf5af1`](https://github.com/aws-deadline/deadline-cloud/commit/bbf5af1073fea4a639cc78d03b830f5eeff87f50))
+* Submission window doesn't close after a successful submission (#775) ([`3c40b37`](https://github.com/aws-deadline/deadline-cloud/commit/3c40b370d3ef1ef5aaca0100295ff366fe014f4c))
+* QSpinBox values not updating without focus loss (#770) ([`fb6741d`](https://github.com/aws-deadline/deadline-cloud/commit/fb6741d8a54b5d7d317d4520107772c7ca6f643f))
+* Change the return type for OnCreateJobBundleCallback to accept None. (#760) ([`822052f`](https://github.com/aws-deadline/deadline-cloud/commit/822052fc7ddabcf9ebe0aaefc58e345e181eeb0d))
+* Switching job causes submission error in GUI submitter (#757) ([`a3a1eba`](https://github.com/aws-deadline/deadline-cloud/commit/a3a1eba49a75aeaad810e229acc27f29cf1369a0))
+
+### Experimental
+These changes are experimental and are subject to change.
+
+* Incremental/Automatic Downloads
+  * Add storage profile support for incremental download (#773) ([`d7fd976`](https://github.com/aws-deadline/deadline-cloud/commit/d7fd976ab71695cc7bb9b5bae30a2e12aacfad2e))
+  * Add internal functions to support path mapping (#764) ([`5a28a64`](https://github.com/aws-deadline/deadline-cloud/commit/5a28a648604970280f505583567e1ad82a5ed86e))
+
 ## 0.51.1 (2025-08-07)
 
 
