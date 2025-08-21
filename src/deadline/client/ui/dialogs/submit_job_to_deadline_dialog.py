@@ -125,9 +125,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submitter_name = submitter_name or self.job_settings_type().submitter_name
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.job_id = None
-        self.create_job_response = (
-            None  # This parameter is deprecated and will be removed in 0.52.0
-        )
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
