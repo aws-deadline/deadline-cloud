@@ -3,6 +3,7 @@ from __future__ import annotations
 
 __all__ = ["_incremental_output_download"]
 
+from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
 import difflib
 from typing import Optional
@@ -50,6 +51,19 @@ from ._common import _cli_object_repr, sigint_handler
 
 
 SESSIONS_API_MAX_CONCURRENCY = 3
+
+
+@dataclass
+class IncrementalOutputDownloadLatencies:
+    """Dataclass for tracking latencies of operations in this command"""
+
+    _get_download_candidate_jobs: int = 0
+    _categorize_jobs_in_checkpoint: int = 0
+    _get_job_sessions: int = 0
+    _update_checkpoint_jobs_list: int = 0
+    _download_all_manifests_with_absolute_paths: int = 0
+    download: Optional[int] = None
+    path_mapping: Optional[int] = None
 
 
 def _get_download_candidate_jobs(
@@ -1008,6 +1022,7 @@ def _incremental_output_download(
     if sys.version_info < (3, 9):
         raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
 
+    durations = IncrementalOutputDownloadLatencies()
     deadline = boto3_session.client("deadline")
 
     # When this function is done, we will be confident that downloads are complete up to
@@ -1050,6 +1065,7 @@ def _incremental_output_download(
     }
 
     # Call deadline:SearchJobs to get a set of jobs that includes every job with downloads available.
+    start_t = time.perf_counter_ns()
     download_candidate_jobs: dict[str, dict[str, Any]] = _get_download_candidate_jobs(
         boto3_session,
         farm_id,
@@ -1057,10 +1073,12 @@ def _incremental_output_download(
         checkpoint.downloads_completed_timestamp,
         print_function_callback,
     )
+    durations._get_download_candidate_jobs = time.perf_counter_ns() - start_t
 
     print_function_callback("")
 
     # Compare the download candidates with the previously saved checkpoint state to categorize the jobs
+    start_t = time.perf_counter_ns()
     categorized_job_ids: CategorizedJobIds = _categorize_jobs_in_checkpoint(
         boto3_session,
         farm_id,
@@ -1070,10 +1088,12 @@ def _incremental_output_download(
         new_completed_timestamp,
         print_function_callback,
     )
+    durations._categorize_jobs_in_checkpoint = time.perf_counter_ns() - start_t
 
     print_function_callback("")
 
     # All the completed, added, and updated jobs might have downloads available. Retrieve the sessions for these jobs.
+    start_t = time.perf_counter_ns()
     job_sessions: dict[str, list] = _get_job_sessions(
         boto3_session,
         boto3_session_for_s3,
@@ -1085,10 +1105,12 @@ def _incremental_output_download(
         download_candidate_jobs,
         print_function_callback,
     )
+    durations._get_job_sessions = time.perf_counter_ns() - start_t
 
     # If storage profiles are being used, get them and construct all the path mapping rules
     path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]] = {}
     if checkpoint.local_storage_profile_id:
+        start_t = time.perf_counter_ns()
         storage_profiles = _get_storage_profiles(
             deadline, farm_id, queue, job_sessions, checkpoint, download_candidate_jobs
         )
@@ -1098,12 +1120,16 @@ def _incremental_output_download(
             download_candidate_jobs,
             print_function_callback,
         )
+        durations.path_mapping = time.perf_counter_ns() - start_t
 
     # Use the information collected so far to update the jobs list in checkpoint
+    start_t = time.perf_counter_ns()
     _update_checkpoint_jobs_list(
         checkpoint, download_candidate_jobs, categorized_job_ids, job_sessions
     )
+    durations._update_checkpoint_jobs_list = time.perf_counter_ns() - start_t
 
+    start_t = time.perf_counter_ns()
     unmapped_paths: dict[str, list[str]] = {}
     downloaded_manifests: list[tuple[datetime, BaseAssetManifest]] = (
         _download_all_manifests_with_absolute_paths(
@@ -1116,6 +1142,7 @@ def _incremental_output_download(
             print_function_callback,
         )
     )
+    durations._download_all_manifests_with_absolute_paths = time.perf_counter_ns() - start_t
 
     # Print warning messages about all the output paths that will not be downloaded due to lack of path mapping.
     if unmapped_paths:
@@ -1158,6 +1185,7 @@ def _incremental_output_download(
 
     if not dry_run:
         print_function_callback(f"Downloading {len(manifest_paths_to_download)} files from S3...")
+        start_t = time.perf_counter_ns()
         start_time = datetime.now(tz=timezone.utc)
 
         # Incremental download is mostly a background thing, so don't print status too often while downloading
@@ -1193,6 +1221,7 @@ def _incremental_output_download(
             print_function_callback=print_function_callback,
         )
 
+        durations.download = time.perf_counter_ns() - start_t
         duration = datetime.now(tz=timezone.utc) - start_time
         print_function_callback(f"...downloaded in {duration}")
     else:
@@ -1201,6 +1230,35 @@ def _incremental_output_download(
     # Update the timestamp in the state object to reflect the downloads that were completed
     checkpoint.downloads_completed_timestamp = new_completed_timestamp
 
+    stats: dict[str, Any] = {
+        "downloaded_session_actions": sum(
+            len(session.get("sessionActions", []))
+            for session_list in job_sessions.values()
+            for session in session_list
+        ),
+        "downloaded_files": len(manifest_paths_to_download),
+        "downloaded_bytes": sum(path.size for path in manifest_paths_to_download),
+        "jobs_with_downloads": {
+            "completed": len(categorized_job_ids.completed),
+            "added": len(categorized_job_ids.added),
+            "updated": len(categorized_job_ids.updated),
+        },
+        "jobs_without_downloads": {
+            "not_using_job_attachments": len(categorized_job_ids.attachments_free),
+            "missing_storage_profile": len(categorized_job_ids.missing_storage_profile),
+            "unchanged": len(categorized_job_ids.unchanged),
+            "inactive": len(categorized_job_ids.inactive),
+        },
+    }
+    api.get_deadline_cloud_library_telemetry_client().record_event(
+        event_type="com.amazon.rum.deadline.incremental_output_download_stats",
+        event_details={
+            "latencies": asdict(durations),
+            "dry_run": dry_run,
+            **stats,
+        },
+    )
+
     print_function_callback("")
     if dry_run:
         print_function_callback(
@@ -1208,25 +1266,23 @@ def _incremental_output_download(
         )
     else:
         print_function_callback("Summary of incremental output download:")
+    print_function_callback(f"  Downloaded session actions: {stats['downloaded_session_actions']}")
+    print_function_callback(f"  Downloaded files: {stats['downloaded_files']}")
     print_function_callback(
-        f"  Downloaded session actions: {sum(len(session.get('sessionActions', [])) for session_list in job_sessions.values() for session in session_list)}"
-    )
-    print_function_callback(f"  Downloaded files: {len(manifest_paths_to_download)}")
-    print_function_callback(
-        f"  Downloaded bytes: {human_readable_file_size(sum(path.size for path in manifest_paths_to_download))}"
+        f"  Downloaded bytes: {human_readable_file_size(stats['downloaded_bytes'])}"
     )
     print_function_callback("  Jobs with downloads:")
-    print_function_callback(f"    completed: {len(categorized_job_ids.completed)}")
-    print_function_callback(f"    added: {len(categorized_job_ids.added)}")
-    print_function_callback(f"    updated: {len(categorized_job_ids.updated)}")
+    print_function_callback(f"    completed: {stats['jobs_with_downloads']['completed']}")
+    print_function_callback(f"    added: {stats['jobs_with_downloads']['added']}")
+    print_function_callback(f"    updated: {stats['jobs_with_downloads']['updated']}")
     print_function_callback("  Jobs without downloads:")
     print_function_callback(
-        f"    not using job attachments: {len(categorized_job_ids.attachments_free)}"
+        f"    not using job attachments: {stats['jobs_without_downloads']['not_using_job_attachments']}"
     )
     print_function_callback(
-        f"    missing storage profile: {len(categorized_job_ids.missing_storage_profile)}"
+        f"    missing storage profile: {stats['jobs_without_downloads']['missing_storage_profile']}"
     )
-    print_function_callback(f"    unchanged: {len(categorized_job_ids.unchanged)}")
-    print_function_callback(f"    inactive: {len(categorized_job_ids.inactive)}")
+    print_function_callback(f"    unchanged: {stats['jobs_without_downloads']['unchanged']}")
+    print_function_callback(f"    inactive: {stats['jobs_without_downloads']['inactive']}")
 
     return checkpoint
