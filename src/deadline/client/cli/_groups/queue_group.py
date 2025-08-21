@@ -268,6 +268,7 @@ def queue_get(**args):
     default=False,
 )
 @_handle_error
+@api.record_success_fail_telemetry_event(metric_name="incremental_output_download")
 def incremental_output_download(
     json: bool,
     bootstrap_lookback_minutes: float,
