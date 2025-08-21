@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from datetime import datetime, timedelta, timezone
 
 from ... import api
+from ...api._session import get_session_client
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
@@ -291,6 +292,8 @@ def sync_output(
 
     [NOTE] This command is still WIP and partially implemented right now.
     """
+    api._session.session_context["cli-command-name"] = "deadline.queue.sync-output"
+
     if os.environ.get("ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD") != "1":
         raise DeadlineOperationError(
             "The sync-output command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
@@ -325,8 +328,7 @@ def sync_output(
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
     boto3_session: boto3.Session = api.get_boto3_session(config=config)
-
-    deadline = boto3_session.client("deadline")
+    deadline = get_session_client(boto3_session, "deadline")
 
     if ignore_storage_profiles:
         local_storage_profile_id = None

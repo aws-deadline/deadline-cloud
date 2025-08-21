@@ -19,6 +19,7 @@ import boto3
 from botocore.client import BaseClient  # type: ignore[import]
 from ..exceptions import DeadlineOperationError
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
+from ..api._session import get_session_client
 from ...common.path_utils import summarize_path_list, human_readable_file_size
 from ...job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
@@ -241,7 +242,7 @@ def _categorize_jobs_in_checkpoint(
             checkpoint.downloads_completed_timestamp when saving the checkpoint.
         print_function_callback: Callback for printing output to the terminal or log.
     """
-    deadline = boto3_session.client("deadline")
+    deadline = get_session_client(boto3_session, "deadline")
     checkpoint_jobs = {job.job_id: job.job for job in checkpoint.jobs}
     checkpoint_job_ids = set(checkpoint_jobs.keys())
 
@@ -600,7 +601,7 @@ def _get_job_sessions(
         if job.session_ended_timestamp is not None
     }
 
-    deadline = boto3_session.client("deadline")
+    deadline = get_session_client(boto3_session, "deadline")
     job_sessions: dict[str, list] = {}
 
     # Retrieve all the sessions with some parallelism
@@ -1027,7 +1028,7 @@ def _incremental_output_download(
         raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
 
     durations = IncrementalOutputDownloadLatencies()
-    deadline = boto3_session.client("deadline")
+    deadline = get_session_client(boto3_session, "deadline")
 
     # When this function is done, we will be confident that downloads are complete up to
     # new_completed_timestamp. We subtract a duration from now() that gives a generous amount of
