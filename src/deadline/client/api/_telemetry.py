@@ -8,6 +8,7 @@ import os
 import platform
 import uuid
 import random
+import sys
 import time
 
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -403,9 +404,16 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
                 return result
             finally:
                 event_name = decorator_kwargs.get("metric_name", function.__name__)
+
+                event_details: dict = decorator_kwargs.get("event_details", {})
+                event_details["is_success"] = success
+                raised_exception = sys.exc_info()[1]
+                if raised_exception is not None:
+                    event_details["exception_type"] = type(raised_exception).__name__
+
                 get_deadline_cloud_library_telemetry_client().record_event(
                     event_type=f"com.amazon.rum.deadline.{event_name}",
-                    event_details={"is_success": success},
+                    event_details=event_details,
                 )
 
         return cast(F, wrapper)

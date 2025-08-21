@@ -357,6 +357,7 @@ def test_record_decorator_fails(fresh_deadline_config):
         queue_mock = MagicMock()
         expected_summary: Dict[str, Any] = dict()
         expected_summary["is_success"] = False
+        expected_summary["exception_type"] = "RuntimeError"
         expected_summary["usage_mode"] = "CLI"
         expected_summary["accountId"] = "111122223333"
         expected_event = TelemetryEvent(
