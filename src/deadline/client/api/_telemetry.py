@@ -416,6 +416,7 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
                     event_details=event_details,
                 )
 
+        wrapper.__doc__ = function.__doc__
         return cast(F, wrapper)
 
     return inner
@@ -448,6 +449,7 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
 
             return ret_val
 
+        wrapper.__doc__ = function.__doc__
         return cast(F, wrapper)
 
     return inner
