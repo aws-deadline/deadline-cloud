@@ -1,0 +1,84 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: '{{Param.JobName}}'
+description: |
+  This is a test job for step-step dependencies with job attachments data
+  being produced in each step of the chain. This job makes assertions about
+  the data it sees, which will be wrong if the output manifest files get
+  layered in the wrong order.
+parameterDefinitions:
+  - name: JobName
+    type: STRING
+    default: Step-Step Chain JA Output Test
+  - name: OutputPath
+    type: PATH
+    objectType: DIRECTORY
+    dataFlow: OUT
+    default: output
+  - name: JobScriptDir
+    description: Directory containing embedded scripts
+    userInterface:
+      control: HIDDEN
+    type: PATH
+    objectType: DIRECTORY
+    dataFlow: IN
+    default: scripts
+steps:
+  - name: A
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'A', 'F']
+  - name: B
+    dependencies:
+      - dependsOn: A
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'B', 'F']
+  - name: C
+    dependencies:
+      - dependsOn: B
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'C', 'F']
+  - name: D
+    dependencies:
+      - dependsOn: C
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'D', 'F']
+  - name: E
+    dependencies:
+      - dependsOn: D
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'E', 'F']
+  - name: F
+    dependencies:
+      - dependsOn: E
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/create_files.sh', '{{Param.OutputPath}}', 'A', 'F', 'F']
+  - name: Verify
+    dependencies:
+      - dependsOn: A
+      - dependsOn: B
+      - dependsOn: C
+      - dependsOn: D
+      - dependsOn: E
+      - dependsOn: F
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ['{{Param.JobScriptDir}}/verify.sh', '{{Param.OutputPath}}', 'A', 'F']

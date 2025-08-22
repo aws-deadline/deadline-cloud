@@ -1,0 +1,51 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: make_many_small_files
+description: Job that creates many small files for testing
+parameterDefinitions:
+  - name: FilesPerTask
+    type: INT
+    default: 600
+    description: Number of files to create per task
+  - name: Tasks
+    type: STRING
+    default: "1-600"
+    description: Task range specification
+  - name: DataDir
+    type: PATH
+    objectType: DIRECTORY
+    dataFlow: OUT
+    description: Output directory for generated files
+jobEnvironments:
+  - name: default
+    script:
+      actions:
+        onEnter:
+          command: env
+steps:
+  - name: CreateFiles
+    parameterSpace:
+      taskParameterDefinitions:
+        - name: Task
+          type: INT
+          range: "{{Param.Tasks}}"
+    script:
+      actions:
+        onRun:
+          command: '{{Task.File.run}}'
+      embeddedFiles:
+        - name: run
+          filename: run.sh
+          type: TEXT
+          runnable: true
+          data: |
+            #!/bin/bash
+            set -euo pipefail
+            
+            echo "Creating {{Param.FilesPerTask}} files for task {{Task.Param.Task}}"
+            mkdir -p "{{Param.DataDir}}"
+            
+            for i in $(seq 0 $(({{Param.FilesPerTask}} - 1))); do
+                echo "Content of file $i from task {{Task.Param.Task}}" > "{{Param.DataDir}}/file_{{Task.Param.Task}}_$i.txt"
+            done
+            
+            echo "Task {{Task.Param.Task}} completed, created {{Param.FilesPerTask}} files"

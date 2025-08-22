@@ -1,0 +1,1 @@
+This file will be available to all steps in the job. However, if a step writes to this directory, that output will not be saved to the job's output attachments.
