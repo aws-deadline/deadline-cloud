@@ -31,7 +31,7 @@ pre-install-commands = [
 ]
 
 [envs.integ.scripts]
-test = "pytest --no-cov {args:test/integ} -vvv --numprocesses=10"
+test = "pytest --no-cov {args:test/integ} -vvv --numprocesses=1"
 
 [envs.installer.env-vars]
 SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
