@@ -7,13 +7,17 @@ Tests for the CLI generally.
 import subprocess
 import sys
 from unittest.mock import patch
+from typing import List
 
+import click
 import pytest
 from click.testing import CliRunner
 
 from deadline.client import api
 from deadline.client.cli import main
 from deadline.client.cli._common import _cli_object_repr
+from deadline.client.cli._main import ContextTrackingCommand, ContextTrackingGroup
+from deadline.client.api._session import get_default_client_config
 
 
 def test_cli_debug_logging_on(fresh_deadline_config):
@@ -162,3 +166,48 @@ def test_cli_object_repr(obj, expected):
     Test that the CLI object represntation is expected.
     """
     assert _cli_object_repr(obj) == expected
+
+
+def test_all_cli_commands_use_context_tracking_command():
+    """
+    Retrieves all click commands and verifies they all use the ContextTrackingCommand subclass
+    """
+
+    def _get_all_click_commands(
+        cmd: click.Command,
+        found_cmds: List[click.Command],
+    ) -> List[click.Command]:
+        """Gets all leaf commands under a given command"""
+        if isinstance(cmd, click.Group):
+            for subcmd in cmd.commands.values():
+                _get_all_click_commands(subcmd, found_cmds)
+        else:
+            found_cmds.append(cmd)
+        return found_cmds
+
+    all_commands = _get_all_click_commands(cmd=main, found_cmds=[])
+    assert all([isinstance(cmd, ContextTrackingCommand) for cmd in all_commands])
+
+
+def test_context_tracking_command_sets_boto_user_agent_extra():
+    """
+    Verifies that the ContextTrackingCommand sets the user_agent_extra in boto clients
+    """
+
+    @click.group(cls=ContextTrackingGroup, name="main")
+    def test_main():
+        pass
+
+    @test_main.group(name="subcommand")
+    def test_subcmd():
+        pass
+
+    @test_subcmd.command(name="command")
+    def test_command():
+        pass
+
+    CliRunner().invoke(test_main, args=["subcommand", "command"])
+
+    config = get_default_client_config()
+
+    assert "cli-command/main.subcommand.command" in config.user_agent_extra

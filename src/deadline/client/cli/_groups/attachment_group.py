@@ -16,6 +16,7 @@ from typing import Optional
 from .click_logger import ClickLogger
 from .._common import _apply_cli_options_to_config, _handle_error
 from ...config import config_file
+from .._main import main
 
 from deadline.client import api
 from deadline.job_attachments.api.attachment import (
@@ -27,7 +28,7 @@ from deadline.job_attachments.exceptions import MissingJobAttachmentSettingsErro
 from deadline.job_attachments.models import FileConflictResolution, JobAttachmentS3Settings
 
 
-@click.group(name="attachment")
+@main.group(name="attachment")
 @_handle_error
 def cli_attachment():
     """

@@ -12,6 +12,7 @@ import json
 import logging
 
 from ... import api
+from .._main import main
 from ...api._session import _modified_logging_level, AwsCredentialsSource
 from ...config import config_file, get_setting
 from .._common import _apply_cli_options_to_config, _handle_error
@@ -31,7 +32,7 @@ def _cli_on_pending_authorization(**kwargs):
         click.echo("Opening Deadline Cloud monitor. Please log in and then return here.")
 
 
-@click.group(name="auth")
+@main.group(name="auth")
 @_handle_error
 def cli_auth():
     """

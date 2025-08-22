@@ -24,6 +24,7 @@ from ....job_attachments.models import (
     FileConflictResolution,
 )
 from .click_logger import ClickLogger
+from .._main import main
 from .._incremental_download import _incremental_output_download
 from .._pid_file_lock import PidFileLock
 from ....job_attachments._incremental_downloads.incremental_download_state import (
@@ -33,7 +34,7 @@ from ....job_attachments._incremental_downloads.incremental_download_state impor
 DOWNLOAD_CHECKPOINT_FILE_NAME = "download_checkpoint.json"
 
 
-@click.group(name="queue")
+@main.group(name="queue")
 @_handle_error
 def cli_queue():
     """

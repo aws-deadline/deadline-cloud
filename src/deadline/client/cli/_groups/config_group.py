@@ -10,9 +10,10 @@ import textwrap
 
 from ...config import config_file
 from .._common import _handle_error
+from .._main import main
 
 
-@click.group(name="config")
+@main.group(name="config")
 @_handle_error
 def cli_config():
     """
