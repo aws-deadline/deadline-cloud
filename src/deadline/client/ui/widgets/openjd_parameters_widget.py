@@ -779,7 +779,7 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
             return self.false_value
 
     def set_value(self, value: str) -> None:
-        if value.lower() == "true":
+        if value == self.true_value:
             self.edit_control.setChecked(True)
         else:
             self.edit_control.setChecked(False)
