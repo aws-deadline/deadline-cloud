@@ -64,7 +64,7 @@ class IncrementalDownloadTest:
         cmd = [
             "deadline",
             "queue",
-            "incremental-output-download",
+            "sync-output",
             "--farm-id",
             self.farm_id,
             "--queue-id",
