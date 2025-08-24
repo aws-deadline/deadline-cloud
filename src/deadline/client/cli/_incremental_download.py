@@ -382,9 +382,13 @@ def _categorize_jobs_in_checkpoint(
 
         print_function_callback(f"NEW Job: {dc_job['name']} ({job_id})")
 
-        if dc_job["storageProfileId"] is None and checkpoint.local_storage_profile_id is not None:
+        if (
+            dc_job["attachments"] is not None
+            and dc_job["storageProfileId"] is None
+            and checkpoint.local_storage_profile_id is not None
+        ):
             print_function_callback(
-                "  Job does not have a storage profile, will not download its output."
+                "  WARNING: THE JOB OUTPUT WILL NOT BE DOWNLOADED, IT HAS NO STORAGE PROFILE."
             )
             missing_storage_profile.add(job_id)
             continue
@@ -757,7 +761,7 @@ def _create_path_mapping_rule_appliers(
         f"Local storage profile is {local_storage_profile_name} ({checkpoint.local_storage_profile_id})"
     )
     print_function_callback(
-        f"  {len([job for job in download_candidate_jobs.values() if job.get('storageProfileId') == checkpoint.local_storage_profile_id])} download candidate jobs will have no path mapping because they use this storage profile"
+        f"  {len([job for job in download_candidate_jobs.values() if job.get('storageProfileId') == checkpoint.local_storage_profile_id])} download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
     )
     for storage_profile_id, storage_profile in storage_profiles.items():
         storage_profile_name = storage_profile["displayName"]
@@ -1147,15 +1151,16 @@ def _incremental_output_download(
     # Print warning messages about all the output paths that will not be downloaded due to lack of path mapping.
     if unmapped_paths:
         print_function_callback("")
+        print_function_callback("WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED")
         for job_id, unmapped_path_list in unmapped_paths.items():
             print_function_callback(
-                f"WARNING: Job {download_candidate_jobs[job_id]['name']} ({job_id}) has outputs with unmapped paths"
+                f"    Job {download_candidate_jobs[job_id]['name']} ({job_id}) has outputs with unmapped paths that will not be downloaded"
             )
             storage_profile = storage_profiles[download_candidate_jobs[job_id]["storageProfileId"]]
             print_function_callback(
-                f"         Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
+                f"      Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
             )
-            print_function_callback("         Summary of unmapped paths:")
+            print_function_callback("      Summary of unmapped paths:")
             path_format = (
                 PathFormat.WINDOWS
                 if storage_profile["osFamily"] == StorageProfileOperatingSystemFamily.WINDOWS.value
@@ -1164,7 +1169,7 @@ def _incremental_output_download(
             paths_summary = summarize_path_list(
                 unmapped_path_list, max_entries=30, path_format=path_format
             )
-            print_function_callback(textwrap.indent(paths_summary, "         "))
+            print_function_callback(textwrap.indent(paths_summary, "      "))
 
     # Merge the manifests ordered by the last modified timestamp
     manifest_paths_to_download: list[BaseManifestPath] = _merge_absolute_path_manifest_list(
