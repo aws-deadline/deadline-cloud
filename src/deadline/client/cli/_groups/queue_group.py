@@ -337,14 +337,13 @@ def sync_output(
         )
         if not local_storage_profile_id:
             raise DeadlineOperationError(
-                "The sync-output operation requires a storage profile configured locally\n"
-                "or provided with the --storage-profile-id option in order to determine file system paths\n"
-                "for download. Storage profiles are used to generate path mappings when a job was submitted\n"
-                "from a machine with a different operating system or file system mount locations than the download machine. \n\n"
-                "See https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/modeling-your-shared-filesystem-locations-with-storage-profiles.html\n\n"
-                "If you only submit and download jobs from one machine, you can use the --ignore-storage-profiles option\n"
-                "to ignore the storage profiles, and download all job outputs to whereever the paths are configured.\n"
-                "This is not recommended if more than one machine will submit or download jobs."
+                "The sync-output operation requires a storage profile defined in the deadline client configuration or "
+                "provided with the --storage-profile-id option.\n\n"
+                "Storage profiles are used to generate path mappings when a job was submitted from a machine with a different "
+                "operating system or file system mount locations than the machine downloading outputs. See "
+                "https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/modeling-your-shared-filesystem-locations-with-storage-profiles.html "
+                "for more information.\n\n"
+                "If you only submit and download jobs from the same operating system and mount locations, you can use the --ignore-storage-profiles option."
             )
 
         try:

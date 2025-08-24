@@ -345,14 +345,14 @@ def test_incremental_output_download_bootstrap_and_completion(
     if storage_profile_id is None:
         assert "Local storage profile is" not in result.output, result.output
         assert (
-            "download candidate jobs will have no path mapping because they use this storage profile"
+            "download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
             not in result.output
         ), result.output
     else:
         assert "Local storage profile is" in result.output, result.output
         assert f"({storage_profile_id})" in result.output, result.output
         assert (
-            "1 download candidate jobs will have no path mapping because they use this storage profile"
+            "1 download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
             in result.output
         ), result.output
     # Assert that the output contained information about the bootstrapping and the mocked resources
@@ -628,7 +628,7 @@ def test_incremental_output_download_storage_profile_path_mapping(
         in result.output
     ), result.output
     assert (
-        "0 download candidate jobs will have no path mapping because they use this storage profile"
+        "0 download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
         in result.output
     ), result.output
     assert (
