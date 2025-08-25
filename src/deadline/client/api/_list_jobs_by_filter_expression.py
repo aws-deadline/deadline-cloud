@@ -7,7 +7,7 @@ __all__ = ["_list_jobs_by_filter_expression"]
 from typing import Any
 import boto3
 
-from deadline.client.api._session import get_default_client_config
+from deadline.client.api._session import get_session_client
 from botocore.exceptions import ClientError
 from deadline.client.exceptions import DeadlineOperationError
 
@@ -102,7 +102,7 @@ def _list_jobs_by_filter_expression(
     # This holds {job_id: job_from_search_jobs_call, ...}
     result_jobs = {}
 
-    deadline = boto3_session.client("deadline", config=get_default_client_config())
+    deadline = get_session_client(boto3_session, "deadline")
 
     # Sort jobs in ascending order of the timestamp field
     sort_expressions = [{"fieldSort": {"name": "CREATED_AT", "sortOrder": "ASCENDING"}}]
