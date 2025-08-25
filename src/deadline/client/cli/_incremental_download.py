@@ -1256,7 +1256,7 @@ def _incremental_output_download(
         },
     }
     api.get_deadline_cloud_library_telemetry_client().record_event(
-        event_type="com.amazon.rum.deadline.incremental_output_download_stats",
+        event_type="com.amazon.rum.deadline.queue_sync_output_stats",
         event_details={
             "latencies": asdict(durations),
             "dry_run": dry_run,
