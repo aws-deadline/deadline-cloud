@@ -189,7 +189,14 @@ def read_config() -> ConfigParser:
         # Read the config file with a fresh config parser, and update the last-modified time stamp
         __config = ConfigParser()
         __config_file_path = config_file_path
-        __config.read(config_file_path)
+        try:
+            with open(config_file_path, mode="r", encoding="utf-8") as fh:
+                config_contents = fh.read()
+            __config.read_string(config_contents, str(config_file_path))
+        except FileNotFoundError:
+            # If the config file doesn't exist, leave an empty ConfigParser() object, in all
+            # other cases let the error pass through.
+            pass
         if config_file_path.is_file():
             __config_mtime = config_file_path.stat().st_mtime
         else:
