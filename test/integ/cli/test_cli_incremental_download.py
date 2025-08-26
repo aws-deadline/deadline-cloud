@@ -387,7 +387,6 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
 
 @pytest.mark.integ
 @pytest.mark.timeout(900)  # 15 minutes timeout
-@pytest.mark.xfail(reason="Known bug with create_copy conflict resolution causes this to fail")
 @pytest.mark.parametrize("requeue_level", ["job", "step", "task"])
 def test_conflict_resolution_with_requeue(incremental_download_test, requeue_level, tmp_path):
     """Test incremental download with re-queuing at different levels and conflict resolution."""
