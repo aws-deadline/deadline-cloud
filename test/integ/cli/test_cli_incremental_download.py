@@ -83,14 +83,9 @@ class IncrementalDownloadTest:
         if lookback_window is not None:
             cmd.extend(["--bootstrap-lookback-minutes", str(lookback_window)])
 
-        env = os.environ.copy()
-        env["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"] = "1"
-
         # Run from the specified output directory so files are downloaded to their manifest paths
         # The CLI will create the necessary directory structure based on job manifests
-        return subprocess.run(
-            cmd, capture_output=True, text=True, check=False, env=env, cwd=output_dir
-        )
+        return subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
 
 
 @pytest.fixture(scope="session")
