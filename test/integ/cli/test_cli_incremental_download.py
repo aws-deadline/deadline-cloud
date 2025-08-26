@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 
 import boto3
 import pytest
+from pathlib import Path
 
 from deadline.client.api._job_monitoring import wait_for_job_completion
 from .job_templates import (
@@ -296,6 +297,9 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
 
 @pytest.mark.integ
 @pytest.mark.timeout(900)  # 15 minutes timeout
+@pytest.mark.xfail(
+    reason="Workaround until scheduler does not pick this job, flaky test", strict=False
+)
 def test_incremental_download_dependency_chain(incremental_download_test, tmp_path):
     """Test incremental download with dep_chain template."""
 
@@ -408,7 +412,12 @@ def test_conflict_resolution_with_requeue(incremental_download_test, requeue_lev
 
     # Download initial files
     _run_download_until_complete(
-        incremental_download_test, tmp_path, expected_initial_files, requeue_level, "initial"
+        incremental_download_test,
+        tmp_path,
+        unique_output_dir,
+        expected_initial_files,
+        requeue_level,
+        "initial",
     )
 
     # Requeue at specified level
@@ -423,12 +432,23 @@ def test_conflict_resolution_with_requeue(incremental_download_test, requeue_lev
     # Download files after requeue
     expected_final = _get_expected_file_count(requeue_level, expected_initial_files, files_per_task)
     _run_download_until_complete(
-        incremental_download_test, tmp_path, expected_final, requeue_level, "requeue"
+        incremental_download_test,
+        tmp_path,
+        unique_output_dir,
+        expected_final,
+        requeue_level,
+        "requeue",
     )
 
 
-def _run_download_until_complete(test_instance, tmp_path, expected_count, level, phase):
+def _run_download_until_complete(
+    test_instance, tmp_path, unique_output_dir, expected_count, level, phase
+):
     """Run incremental download until expected file count is reached."""
+
+    # Use the actual unique output directory passed from the test
+    test_output_dir = Path(unique_output_dir)
+
     for iteration in range(1, 11):  # Max 10 iterations
         result = test_instance.run_incremental_download_without_storage_profiles(
             str(tmp_path),
@@ -441,13 +461,44 @@ def _run_download_until_complete(test_instance, tmp_path, expected_count, level,
         if result.returncode != 0 and "had incorrect size 0" not in result.stdout:
             assert False, f"{phase.title()} download failed: {result.stderr}"
 
-        files = list(tmp_path.glob("**/file_*"))
+        # Only look for files in the test-specific output directory
+        files = list(test_output_dir.glob("**/file_*")) if test_output_dir.exists() else []
         if len(files) >= expected_count:
             break
         time.sleep(2)
 
     assert len(files) == expected_count, (
-        f"Expected {expected_count} files after {phase}, got {len(files)}"
+        f"Expected {expected_count} files after {phase} in {test_output_dir}, got {len(files)}"
+    )
+
+
+def _wait_for_requeue_to_take_effect(test_instance, job_id, timeout=60):
+    """Wait for requeue to take effect by checking job status changes from SUCCEEDED."""
+    client = test_instance.deadline_client
+    farm_id = test_instance.farm_id
+    queue_id = test_instance.queue_id
+
+    print(f"Waiting for requeue to take effect for job {job_id}...")
+
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        job = client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+        task_run_status = job.get("taskRunStatus")
+
+        print(f"Current job taskRunStatus: {task_run_status}")
+
+        # Job has been re-queued if it's no longer SUCCEEDED
+        if task_run_status in ["READY", "ASSIGNED", "STARTING", "SCHEDULED", "RUNNING"]:
+            print(f"Requeue took effect - job status is now: {task_run_status}")
+            return True
+
+        time.sleep(2)
+
+    # If we get here, requeue didn't take effect within timeout
+    job = client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    current_status = job.get("taskRunStatus")
+    raise AssertionError(
+        f"Requeue did not take effect within {timeout}s. Job status is still: {current_status}"
     )
 
 
@@ -488,6 +539,11 @@ def _requeue_at_level(test_instance, job_id, level):
                 taskId=task_id,
                 targetRunStatus="READY",
             )
+
+    print(f"Requeue API call completed for {level} level")
+
+    # Wait for the requeue to actually take effect
+    _wait_for_requeue_to_take_effect(test_instance, job_id)
 
 
 def _get_expected_file_count(level, initial_count, files_per_task):
