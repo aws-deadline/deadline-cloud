@@ -1,3 +1,13 @@
+## 0.52.1 (2025-08-26)
+
+
+### Features
+* Support automatic download of job attachments output (#804) ([`767bdb1`](https://github.com/aws-deadline/deadline-cloud/commit/767bdb150358650c064bc1c175145ab320ee1d81))
+
+### Bug Fixes
+* Fix config file corruption when file is locked by another process (#803) ([`76bdbb8`](https://github.com/aws-deadline/deadline-cloud/commit/76bdbb89c2cb680804d59d163a6268244f440a80))
+* CHECK_BOX parameter isn't enabled on load when value is ON, YES, or 1 (#799) ([`a8bb931`](https://github.com/aws-deadline/deadline-cloud/commit/a8bb9310695619f4fd8cda7a7c84ba63067bc06a))
+
 ## 0.52.0 (2025-08-21)
 
 ### BREAKING CHANGES
