@@ -109,53 +109,11 @@ def deadline_mock():
             yield deadline_magicmock
 
 
-@pytest.fixture
-def with_incremental_download_enabled():
-    """Set the ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD environment variable to 1 for testing the incremental download command."""
-    os.environ["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"] = "1"
-    yield None
-    del os.environ["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"]
-
-
-def test_incremental_output_download_requires_beta_acknowledgement(
-    fresh_deadline_config, deadline_mock, checkpoint_dir
-):
-    # Make sure the acknowledgement env var is not defined
-    if "ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD" in os.environ:
-        del os.environ["ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD"]
-
-    # Run the CLI command once to bootstrap the operation
-    runner = CliRunner()
-    with freeze_time(ISO_FREEZE_TIME):
-        result = runner.invoke(
-            main,
-            [
-                "queue",
-                "sync-output",
-                "--ignore-storage-profiles",
-                "--farm-id",
-                MOCK_FARM_ID,
-                "--queue-id",
-                MOCK_QUEUE_ID,
-                "--checkpoint-dir",
-                checkpoint_dir,
-            ],
-        )
-
-    # Assert the command executed successfully
-    assert result.exit_code == 1, result.output
-
-    assert (
-        "The sync-output command is not fully implemented. You must set the environment variable ENABLE_INCREMENTAL_OUTPUT_DOWNLOAD to 1 to acknowledge this."
-        in result.output
-    ), result.output
-
-
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
 def test_incremental_output_download_requires_queue_with_job_attachments(
-    fresh_deadline_config, deadline_mock, with_incremental_download_enabled, checkpoint_dir
+    fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     # The response does not include the "jobAttachmentSettings" field
     deadline_mock.GetQueue.return_value = {
@@ -194,7 +152,6 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
 )
 def test_incremental_output_download_pid_lock_already_held_error(
     fresh_deadline_config,
-    with_incremental_download_enabled,
     deadline_mock,
     checkpoint_dir,
 ):
@@ -242,7 +199,6 @@ def test_incremental_output_download_pid_lock_already_held_error(
 )
 def test_incremental_output_download_storage_profile_options_mutually_exclusive(
     fresh_deadline_config,
-    with_incremental_download_enabled,
     deadline_mock,
     checkpoint_dir,
 ):
@@ -283,7 +239,6 @@ def test_incremental_output_download_storage_profile_options_mutually_exclusive(
 @pytest.mark.parametrize("storage_profile_id", [None, MOCK_STORAGE_PROFILE_ID])
 def test_incremental_output_download_bootstrap_and_completion(
     fresh_deadline_config,
-    with_incremental_download_enabled,
     deadline_mock,
     checkpoint_dir,
     storage_profile_id,
@@ -503,7 +458,6 @@ def test_incremental_output_download_bootstrap_and_completion(
 )
 def test_incremental_output_download_storage_profile_path_mapping(
     fresh_deadline_config,
-    with_incremental_download_enabled,
     tmp_path,
     deadline_mock,
     checkpoint_dir,
@@ -662,7 +616,7 @@ def test_incremental_output_download_storage_profile_path_mapping(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
 def test_incremental_output_download_bootstrap_retire_job_without_attachments(
-    fresh_deadline_config, with_incremental_download_enabled, deadline_mock, checkpoint_dir
+    fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     """Test a new job through bootstrap and completion over two incremental download commands."""
     mock_jobs = create_fake_job_list(1)
@@ -798,7 +752,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
 def test_incremental_output_download_job_unchanged(
-    fresh_deadline_config, with_incremental_download_enabled, deadline_mock, checkpoint_dir
+    fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     """Test a new job through bootstrap and an 'UNCHANGED' message."""
     mock_jobs = create_fake_job_list(1)
@@ -896,7 +850,7 @@ def test_incremental_output_download_job_unchanged(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
 def test_incremental_output_download_job_canceled(
-    fresh_deadline_config, with_incremental_download_enabled, deadline_mock, checkpoint_dir
+    fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     """Test a new job through bootstrap and cancelation before it's complete"""
     mock_jobs = create_fake_job_list(1)
@@ -1003,7 +957,7 @@ def test_incremental_output_download_job_canceled(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
 def test_incremental_output_download_job_completed_then_requeued(
-    fresh_deadline_config, with_incremental_download_enabled, deadline_mock, checkpoint_dir
+    fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     """Test a new job through bootstrap, retirement, then requeue."""
     iso_freeze_time = datetime.fromisoformat(ISO_FREEZE_TIME)
@@ -1145,9 +1099,7 @@ def test_incremental_output_download_job_completed_then_requeued(
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
-def test_incremental_output_download_dry_run(
-    fresh_deadline_config, with_incremental_download_enabled, deadline_mock, checkpoint_dir
-):
+def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_mock, checkpoint_dir):
     """Test a new job through bootstrap, completion, and retirement."""
     mock_jobs = create_fake_job_list(1)
     mock_jobs[0]["name"] = "Mock Job"
