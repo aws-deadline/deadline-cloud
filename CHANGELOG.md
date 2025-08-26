@@ -2,6 +2,19 @@
 
 
 ### Features
+* Support automatic download of job attachments output ([`767bdb1`](https://github.com/aws-deadline/deadline-cloud/commit/767bdb150358650c064bc1c175145ab320ee1d81))
+* **experimental**: Added integ/e2e tests for incremental download CLI (#787) ([`15b0e13`](https://github.com/aws-deadline/deadline-cloud/commit/15b0e137525166e4e729c67ebecd6d60061e0594))
+* **experimental**: Added e2e tests for incremental download cli ([`15b0e13`](https://github.com/aws-deadline/deadline-cloud/commit/15b0e137525166e4e729c67ebecd6d60061e0594))
+
+### Bug Fixes
+* Improve config read robustness ([`76bdbb8`](https://github.com/aws-deadline/deadline-cloud/commit/76bdbb89c2cb680804d59d163a6268244f440a80))
+* CHECK_BOX parameter isn't enabled on load when value is ON, YES, or 1 (#799) ([`a8bb931`](https://github.com/aws-deadline/deadline-cloud/commit/a8bb9310695619f4fd8cda7a7c84ba63067bc06a))
+* Reverted number of workers running integ test to 1 as it throttles deadline APIs (#798) ([`cc721f5`](https://github.com/aws-deadline/deadline-cloud/commit/cc721f579b85c0e207eb8f4e2a4fcd6dbb054433))
+
+## 0.52.1 (2025-08-26)
+
+
+### Features
 * Support automatic download of job attachments output (#804) ([`767bdb1`](https://github.com/aws-deadline/deadline-cloud/commit/767bdb150358650c064bc1c175145ab320ee1d81))
 
 ### Bug Fixes
