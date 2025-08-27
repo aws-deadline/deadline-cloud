@@ -25,4 +25,8 @@ done
 echo "Files in output dir (after):"
 ls -al
 
+echo "Step $STEP_NAME starting work simulation..."
+# Sleep for 70 seconds to make each task run longer than 1 minute
+sleep 70
+
 echo "Step $STEP_NAME Done!"
