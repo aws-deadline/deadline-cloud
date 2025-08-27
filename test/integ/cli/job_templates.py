@@ -87,6 +87,31 @@ def submit_make_many_small_files_job(
     return submit_job_bundle(farm_id, queue_id, "make_many_small_files", parameters)
 
 
+def submit_make_many_small_files_slow_job(
+    farm_id: str,
+    queue_id: str,
+    files_per_task: int = 100,
+    task_count: int = 100,
+    output_dir: str = "output",
+) -> str:
+    """
+    Submit a job that creates many small files with longer task duration (for requeue tests).
+
+    Args:
+        farm_id: The farm ID to use
+        queue_id: The queue ID to use
+        files_per_task: Number of files to create per task
+        task_count: Number of tasks to run
+        output_dir: The output directory to use (defaults to "output")
+
+    Returns:
+        The job ID of the submitted job
+    """
+    parameters = {"FilesPerTask": files_per_task, "Tasks": f"1-{task_count}", "DataDir": output_dir}
+
+    return submit_job_bundle(farm_id, queue_id, "make_many_small_files_slow", parameters)
+
+
 def submit_dep_data_flow_job(
     farm_id: str, queue_id: str, data_dir: Optional[str] = None, input_dir: Optional[str] = None
 ) -> str:

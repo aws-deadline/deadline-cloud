@@ -18,6 +18,7 @@ from .job_templates import (
     submit_dep_chain_job,
     submit_dep_data_flow_job,
     submit_make_many_small_files_job,
+    submit_make_many_small_files_slow_job,
 )
 from .test_utils import DeadlineCliTest
 
@@ -397,7 +398,7 @@ def test_conflict_resolution_with_requeue(incremental_download_test, requeue_lev
     unique_output_dir = f"{tmp_path}/output_{requeue_level}"
 
     # Submit and wait for initial job
-    job_id = submit_make_many_small_files_job(
+    job_id = submit_make_many_small_files_slow_job(
         farm_id=incremental_download_test.farm_id,
         queue_id=incremental_download_test.queue_id,
         files_per_task=files_per_task,
