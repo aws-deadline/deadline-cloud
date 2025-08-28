@@ -211,6 +211,7 @@ def queue_get(**args):
 
 
 @cli_queue.command(name="sync-output")
+@click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use.")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use.")
 @click.option(
