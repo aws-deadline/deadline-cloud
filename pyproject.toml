@@ -131,7 +131,6 @@ known-first-party = ["deadline"]
 xfail_strict = true
 addopts = [
   "--durations=5",
-  "--color=yes",
   "--cov=src/deadline",
   "--cov-report=html:build/coverage",
   "--cov-report=xml:build/coverage/coverage.xml",
