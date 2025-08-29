@@ -78,6 +78,18 @@ api.list_farms()
 # {'farms': [{'farmId': 'farm-1234567890abcdefg', 'displayName': 'my-first-farm', ...},]}
 ```
 
+The `deadlinew` command can be used from GUIs to avoid displaying a terminal window in the background when on Windows.
+You can use the `--redirect-output` option to write the terminal output to a file.
+```sh
+$ deadlinew --redirect-output out.txt farm list
+$ cat out.txt
+- farmId: farm-1234567890abcdefg
+  displayName: my-first-farm
+```
+
+An example usage is to create a shortcut called "Deadline Settings" on your desktop that runs `C:\path\to\deadlinew.exe config gui`.
+Opening the shortcut will show the Deadline Settings dialog without a terminal window behind it.
+
 ## Job-related Files
 For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.
 
@@ -215,7 +227,7 @@ The command blocks until the job reaches a terminal state (SUCCEEDED, FAILED, CA
 - `2` - Job failed or has failed tasks
 - `3` - Job was canceled
 - `4` - Job was archived
-- `5` - Job is not compatible 
+- `5` - Job is not compatible
 
 ### Retrieving Job Logs
 

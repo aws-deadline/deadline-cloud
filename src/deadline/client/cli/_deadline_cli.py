@@ -6,6 +6,7 @@ The AWS Deadline Cloud CLI interface.
 
 import logging
 from logging import getLogger
+import sys
 
 import click
 
@@ -54,12 +55,30 @@ else:
     default=_CLI_DEFAULT_LOG_LEVEL,
     help="Set the logging level.",
 )
+@click.option(
+    "--redirect-output",
+    help="Redirects stdout and stderr messages to append to the specified file. "
+    "Useful for the 'deadlinew' command which does not produce terminal output by default on Windows.",
+)
+@click.option(
+    "--redirect-mode",
+    type=click.Choice(["append", "replace"], case_sensitive=False),
+    default="append",
+    help="When using the --redirect-output option, controls whether to append to or replace the output file.",
+)
 @click.pass_context
-def main(ctx: click.Context, log_level: str):
+def main(ctx: click.Context, log_level: str, redirect_output: str, redirect_mode: str):
     """
     The AWS Deadline Cloud CLI provides functionality to interact with the AWS Deadline Cloud
     service.
     """
+    if redirect_output:
+        # Set both stdout and stderr to write to the specified file, writing in line buffering mode
+        if redirect_mode == "append":
+            open_mode = "a"
+        else:
+            open_mode = "w"
+        sys.stdout = sys.stderr = open(redirect_output, open_mode, encoding="utf-8", buffering=1)
     logging.basicConfig(level=log_level)
     if log_level == "DEBUG":
         logger.debug("Debug logging is on")
