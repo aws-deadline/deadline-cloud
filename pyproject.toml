@@ -58,8 +58,11 @@ gui = [
 ]
 
 [project.scripts]
-deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
 deadline = "deadline.client.cli:main"
+
+[project.gui-scripts]
+deadline-dev-gui = "deadline.client.cli.deadline_dev_gui_main:main"
+deadlinew = "deadline.client.cli:main"
 
 [tool.hatch.build]
 artifacts = ["*_version.py"]

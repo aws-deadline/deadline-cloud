@@ -32,6 +32,83 @@ def test_cli_debug_logging_on(fresh_deadline_config):
     assert "Debug logging is on" in output
 
 
+def test_cli_redirect_output(fresh_deadline_config, tmp_path):
+    """
+    Confirm that --redirect-output FILENAME sends stdout/stderr to a file.
+    """
+    # The CliRunner environment already has the logger configured,
+    # so we instead run it as a subprocess to match the actual
+    # environment.
+    out_file = tmp_path / "out.txt"
+    output = subprocess.check_output(
+        args=[
+            sys.executable,
+            "-m",
+            "deadline",
+            "--redirect-output",
+            str(out_file),
+            "config",
+            "--help",
+        ],
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    # No output should be printed to stdout or stderr.
+    assert output == ""
+
+    # The help information should be in the provided output file.
+    with open(out_file, encoding="utf-8") as fh:
+        file_output = fh.read()
+    assert file_output.startswith("Usage: ")
+    assert "Manage Deadline's workstation configuration." in file_output
+
+
+@pytest.mark.parametrize("redirect_mode", ("append", "replace"))
+def test_cli_redirect_output_with_mode(fresh_deadline_config, tmp_path, redirect_mode):
+    """
+    Confirm that --redirect-output FILENAME sends stdout/stderr to a file,
+    and --redirect-mode controls appending vs replacing.
+    """
+
+    out_file = tmp_path / "out.txt"
+    with open(out_file, "w", encoding="utf-8") as fh:
+        fh.write("Initial contents\n")
+
+    # The CliRunner environment already has the logger configured,
+    # so we instead run it as a subprocess to match the actual
+    # environment.
+    output = subprocess.check_output(
+        args=[
+            sys.executable,
+            "-m",
+            "deadline",
+            "--redirect-output",
+            str(out_file),
+            "--redirect-mode",
+            redirect_mode,
+            "config",
+            "--help",
+        ],
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    # No output should be printed to stdout or stderr.
+    assert output == ""
+
+    # The help information should be in the provided output file.
+    with open(out_file, encoding="utf-8") as fh:
+        file_output = fh.read()
+    if redirect_mode == "append":
+        # Should be appended to the starting file contents.
+        assert file_output.startswith("Initial contents\nUsage: "), file_output
+    else:
+        # The starting file contents should be replaced
+        assert file_output.startswith("Usage: "), file_output
+    assert "Manage Deadline's workstation configuration." in file_output, file_output
+
+
 def test_cli_unfamiliar_exception(fresh_deadline_config):
     """
     Test that unfamiliar exceptions get the extra context
