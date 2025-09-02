@@ -609,6 +609,7 @@ def _get_download_summary_message(
         return _get_json_line(
             JSON_MSG_TYPE_SUMMARY,
             f"Downloaded {download_summary.processed_files} files",
+            extra_properties={"fileCount": download_summary.processed_files},
         )
     else:
         paths_joined = "\n        ".join(
@@ -649,8 +650,15 @@ def _get_conflicting_filenames(filenames_by_root: dict[str, list[str]]) -> list[
     return conflicting_filenames
 
 
-def _get_json_line(messageType: str, value: Union[str, list[str], dict[str, Any]]) -> str:
-    return json.dumps({"messageType": messageType, "value": value}, ensure_ascii=True)
+def _get_json_line(
+    messageType: str,
+    value: Union[str, list[str], dict[str, Any]],
+    extra_properties: Optional[dict[str, Any]] = None,
+) -> str:
+    json_obj = {"messageType": messageType, "value": value}
+    if extra_properties:
+        json_obj.update(extra_properties)
+    return json.dumps(json_obj, ensure_ascii=True)
 
 
 def _get_value_from_json_line(

@@ -21,7 +21,11 @@ from dateutil.tz import tzutc  # type: ignore[import]
 from deadline.client import api, config
 from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
-from deadline.client.cli._groups.job_group import _get_summary_of_files_to_download_message
+from deadline.client.cli._groups.job_group import (
+    _get_summary_of_files_to_download_message,
+    _get_json_line,
+    _get_download_summary_message,
+)
 from deadline.client.exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from deadline.job_attachments.models import (
     FileConflictResolution,
@@ -1543,3 +1547,97 @@ You are about to download files which may come from multiple root directories. H
         assert "Download Summary:" in result.output
         assert result.exit_code == 0
         mock_expanduser.assert_any_call("~")
+
+
+class TestJsonLineHelpers:
+    """Tests for JSON line helper functions."""
+
+    def test_get_json_line_basic(self):
+        """Test _get_json_line with basic parameters."""
+        result = _get_json_line("test", "value")
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "test"
+        assert parsed["value"] == "value"
+        assert len(parsed) == 2  # Only messageType and value
+
+    def test_get_json_line_with_none_extra_properties(self):
+        """Test _get_json_line with explicit None extra_properties."""
+        result = _get_json_line("test", "value", extra_properties=None)
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "test"
+        assert parsed["value"] == "value"
+        assert len(parsed) == 2  # Only messageType and value
+
+    def test_get_json_line_with_kwargs(self):
+        """Test _get_json_line with additional properties."""
+        result = _get_json_line(
+            "summary", "Downloaded 5 files", extra_properties={"fileCount": 5, "status": "complete"}
+        )
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "summary"
+        assert parsed["value"] == "Downloaded 5 files"
+        assert parsed["fileCount"] == 5
+        assert parsed["status"] == "complete"
+
+    def test_get_json_line_with_list_value(self):
+        """Test _get_json_line with list value and extra properties."""
+        result = _get_json_line("path", ["/path1", "/path2"], extra_properties={"count": 2})
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "path"
+        assert parsed["value"] == ["/path1", "/path2"]
+        assert parsed["count"] == 2
+
+    def test_get_download_summary_message_json_with_file_count(self):
+        """Test _get_download_summary_message includes fileCount in JSON format."""
+        from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+        # Create mock download summary
+        summary = DownloadSummaryStatistics()
+        summary.processed_files = 3
+        summary.processed_bytes = 1024
+        summary.total_time = 2.5
+        summary.transfer_rate = 409.6
+        summary.file_counts_by_root_directory = {"/downloads": 3}
+
+        result = _get_download_summary_message(summary, is_json_format=True)
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "summary"
+        assert parsed["value"] == "Downloaded 3 files"
+        assert parsed["fileCount"] == 3
+
+    def test_get_download_summary_message_json_zero_files(self):
+        """Test _get_download_summary_message with zero files."""
+        from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+        summary = DownloadSummaryStatistics()
+        summary.processed_files = 0
+
+        result = _get_download_summary_message(summary, is_json_format=True)
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "summary"
+        assert parsed["value"] == "Downloaded 0 files"
+        assert parsed["fileCount"] == 0
+
+    def test_get_download_summary_message_non_json_unchanged(self):
+        """Test _get_download_summary_message non-JSON format is unchanged."""
+        from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+        summary = DownloadSummaryStatistics()
+        summary.processed_files = 2
+        summary.processed_bytes = 512
+        summary.total_time = 1.0
+        summary.transfer_rate = 512.0
+        summary.file_counts_by_root_directory = {"/downloads": 2}
+
+        result = _get_download_summary_message(summary, is_json_format=False)
+
+        # Should be human-readable format, not JSON
+        assert "Download Summary:" in result
+        assert "Downloaded 2 files totaling" in result
+        assert not result.startswith('{"messageType":')
