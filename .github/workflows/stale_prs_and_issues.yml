@@ -1,0 +1,11 @@
+name: 'Check stale issues/PRs.'
+on: 
+  schedule:
+    # Run every hour on the hour
+    - cron: '0 * * * *'
+
+jobs:
+    check-for-stales:
+        uses: aws-deadline/.github/.github/workflows/reusable_stale_prs_and_issues.yml@mainline
+        secrets:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

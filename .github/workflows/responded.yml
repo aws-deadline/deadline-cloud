@@ -1,0 +1,10 @@
+name: Contributor Responded
+on:
+    issue_comment:
+        types: [created, edited]
+
+jobs:
+    check-for-response:
+        uses: aws-deadline/.github/.github/workflows/reusable_responded.yml@mainline
+        secrets:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
