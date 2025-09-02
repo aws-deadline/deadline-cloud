@@ -1,12 +1,59 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 from unittest.mock import MagicMock
+import tempfile
+from pathlib import Path
+import os
+
 import pytest
 from deadline.job_attachments import upload
+from deadline.client.config import config_file
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm, hash_file
 from deadline.job_attachments.asset_manifests.versions import ManifestVersion
 from .test_utils import JobAttachmentTest, UploadInputFilesOneAssetInCasOutputs, DeadlineCliTest
+
+
+@pytest.fixture(scope="function", autouse=True)
+def fresh_deadline_config():
+    """
+    Fixture to start with a blank AWS Deadline Cloud config file.
+
+    This fixture is configured for autouse, so that every test is isolated from
+    the user's config file.
+    """
+
+    # Clear the session cache as part of switching out the config.
+    from deadline.client.api._session import invalidate_boto3_session_cache
+
+    invalidate_boto3_session_cache()
+
+    try:
+        original_config_file_value = os.environ.get("DEADLINE_CONFIG_FILE_PATH")
+
+        # Create an empty temp file to set as the AWS Deadline Cloud config
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir_path = Path(temp_dir.name)
+        temp_file_path = temp_dir_path / "config"
+        with open(temp_file_path, "w+t", encoding="utf8") as temp_file:
+            temp_file.write("")
+
+        # Use the environment variable to override the path for both the
+        # current process and subprocesses
+        os.environ["DEADLINE_CONFIG_FILE_PATH"] = str(temp_file_path)
+
+        # Write a telemetry id to force it getting saved to the config file. If we don't, then
+        # an ID will get generated and force a save of the config file in the middle of a test.
+        # Writing the config file may be undesirable in the middle of a test.
+        config_file.set_setting("telemetry.identifier", "00000000-0000-0000-0000-000000000000")
+
+        yield str(temp_file_path)
+    finally:
+        if original_config_file_value is None:
+            del os.environ["DEADLINE_CONFIG_FILE_PATH"]
+        else:
+            os.environ["DEADLINE_CONFIG_FILE_PATH"] = original_config_file_value
+        temp_dir.cleanup()
 
 
 @pytest.fixture(scope="session")
