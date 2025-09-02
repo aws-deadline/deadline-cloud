@@ -24,7 +24,7 @@ from deadline.client.config import config_file
 from deadline.client.exceptions import NonValidInputError
 
 
-def attachment_download(
+def _attachment_download(
     manifests: List[str],
     s3_root_uri: str,
     boto3_session: boto3.Session,
@@ -124,12 +124,13 @@ def _attachment_download_with_root_manifests(
     logger.json(asdict(download_summary.convert_to_summary_statistics()))
 
 
-def attachment_upload(
+def _attachment_upload(
     manifests: List[str],
     s3_root_uri: str,
     boto3_session: boto3.Session,
     root_dirs: List[str] = [],
     path_mapping_rules: Optional[str] = None,
+    manifest_path_mapping: Optional[Dict[str, str]] = None,
     upload_manifest_path: Optional[str] = None,
     logger: ClickLogger = ClickLogger(False),
 ) -> List[UploadManifestInfo]:
