@@ -41,10 +41,11 @@ from deadline.job_attachments.models import (
 
 from ...exceptions import NonValidInputError
 from .._common import _apply_cli_options_to_config, _handle_error
+from .._main import main
 from .click_logger import ClickLogger
 
 
-@click.group(name="manifest")
+@main.group(name="manifest")
 @_handle_error
 def cli_manifest():
     """

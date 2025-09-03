@@ -23,10 +23,11 @@ from .._deadline_web_url import (
     uninstall_deadline_web_url_handler,
     validate_resource_ids,
 )
+from .._main import main
 from .job_group import _download_job_output
 
 
-@click.command(name="handle-web-url")
+@main.command(name="handle-web-url")
 @click.argument("url", required=False)
 @click.option(
     "--prompt-when-complete",

@@ -4,15 +4,14 @@
 Tests for the CLI config command.
 """
 
-import importlib
 import json
 import logging
-from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
+from unittest.mock import patch
 
-import deadline
+import deadline.client.cli._main
 from deadline.client import config
 from deadline.client.cli import main
 from deadline.client.config import config_file
@@ -63,15 +62,12 @@ def test_log_level_updated(fresh_deadline_config, caplog, log_level):
     """Tests that the logging level is set to debug"""
     # GIVEN
     config.set_setting("settings.log_level", log_level)
-    # because the log level gets passed into a click decorator we need to reload the module to get
-    # the updated setting. This is fine for CLI usage because the module is reloaded each invocation
-    importlib.reload(deadline.client.cli._deadline_cli)
-    # WHEN
+
     with caplog.at_level(logging.DEBUG), patch.object(
-        deadline.client.cli._deadline_cli.logging, "basicConfig"
+        deadline.client.cli._main.logging, "basicConfig"
     ) as mock_basic_config:
-        # THEN
-        CliRunner().invoke(deadline.client.cli._deadline_cli.main, ["config", "show"])
+        # WHEN
+        CliRunner().invoke(deadline.client.cli._main.main, ["config", "show"])
 
     # THEN
     assert (
@@ -80,7 +76,7 @@ def test_log_level_updated(fresh_deadline_config, caplog, log_level):
     ) == (log_level == "NOT_A_LOG_LEVEL")
     # This only ever gets logged if the log_level passed into click is DEBUG
     assert ("Debug logging is on" in caplog.text) == (log_level == "DEBUG")
-    mock_basic_config.assert_called_with(
+    mock_basic_config.assert_called_once_with(
         level=log_level if log_level != "NOT_A_LOG_LEVEL" else "WARNING"
     )
 

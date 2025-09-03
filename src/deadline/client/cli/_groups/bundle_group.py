@@ -30,6 +30,7 @@ from .._common import (
     _handle_error,
     _ProgressBarCallbackManager,
 )
+from .._main import main
 from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 sigint_handler = SigIntHandler()
 
 
-@click.group(name="bundle")
+@main.group(name="bundle")
 @_handle_error
 def cli_bundle():
     """

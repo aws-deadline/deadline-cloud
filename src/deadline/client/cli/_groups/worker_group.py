@@ -11,9 +11,10 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._main import main
 
 
-@click.group(name="worker")
+@main.group(name="worker")
 @_handle_error
 def cli_worker():
     """

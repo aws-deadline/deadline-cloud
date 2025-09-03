@@ -43,6 +43,7 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._main import main
 from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger("deadline.client.cli")
@@ -86,7 +87,7 @@ def _format_timestamp(timestamp: datetime.datetime, use_local_time: bool = False
 sigint_handler = SigIntHandler()
 
 
-@click.group(name="job")
+@main.group(name="job")
 @_handle_error
 def cli_job():
     """
