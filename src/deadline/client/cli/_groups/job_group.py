@@ -19,22 +19,22 @@ import textwrap
 import click
 from botocore.exceptions import ClientError
 
-from deadline.client.api._session import _modified_logging_level
-from deadline.job_attachments.download import OutputDownloader
-from deadline.job_attachments.models import (
+from ...api._session import _modified_logging_level
+from ....job_attachments.download import OutputDownloader
+from ....job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
     PathFormat,
 )
-from deadline.job_attachments._utils import (
+from ....job_attachments._utils import (
     WINDOWS_MAX_PATH_LENGTH,
     _is_windows_long_path_registry_enabled,
 )
-from deadline.job_attachments.progress_tracker import (
+from ....job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
 )
-from deadline.job_attachments._path_summarization import (
+from ....job_attachments._path_summarization import (
     human_readable_file_size,
     summarize_path_list,
 )
@@ -45,6 +45,7 @@ from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
 from .._main import main
 from ._sigint_handler import SigIntHandler
+from ...api._session import get_default_client_config
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -186,14 +187,14 @@ def job_get(**args):
 @click.option("--job-id", help="The job to cancel.")
 @click.option(
     "--mark-as",
-    type=click.Choice(["CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
+    type=click.Choice(["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"], case_sensitive=False),
     default="CANCELED",
     help="The status to apply to all active tasks in the job.",
 )
 @click.option(
     "--yes",
     is_flag=True,
-    help="Skip any confirmation prompts",
+    help="Automatically accept any confirmation prompts",
 )
 @_handle_error
 def job_cancel(mark_as: str, yes: bool, **args):
@@ -259,6 +260,158 @@ def job_cancel(mark_as: str, yes: bool, **args):
     else:
         click.echo(f"Canceling job and marking as {mark_as}...")
     deadline.update_job(farmId=farm_id, queueId=queue_id, jobId=job_id, targetTaskRunStatus=mark_as)
+
+
+@cli_job.command(name="requeue-tasks")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to requeue tasks for.")
+@click.option(
+    "--run-status",
+    type=click.Choice(
+        ["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"], case_sensitive=False
+    ),
+    multiple=True,
+    help="Requeue tasks of this status. Repeat the option to provide multiple statuses.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Automatically accept any confirmation prompts",
+)
+@_handle_error
+def job_requeue_tasks(run_status: Optional[list[str]], **args):
+    """
+    Requeue tasks of a job. By default, requeues all FAILED, CANCELED, and SUSPENDED tasks.
+
+    Use the --run-status option to requeue tasks of different status.
+    """
+    # Get a temporary config object with the standard options handled
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+
+    if not run_status:
+        run_status_set = {"SUSPENDED", "CANCELED", "FAILED"}
+    else:
+        run_status_set = {status.upper() for status in run_status}
+
+    session = api.get_boto3_session(config=config)
+    deadline_client = api.get_boto3_client("deadline", config=config)
+
+    # Create a separate API client for the update_task calls, using the "adaptive" retry strategy.
+    # This strategy is better suited to repeatedly calling the API for a longer duration, because it
+    # retains backoff data across calls instead of starting fresh each time.
+    requeues_client_config = get_default_client_config(
+        retries=dict(mode="adaptive", total_max_attempts=5)
+    )
+    deadline_client_for_requeues = session.client("deadline", config=requeues_client_config)
+
+    # Print a summary of the job's task run statuses
+    job = deadline_client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+
+    click.echo(f"Job: {job['name']} ({job['jobId']})")
+    # Remove the zero-count status counts for a shorter summary
+    task_run_status_counts = {
+        name.upper(): count for name, count in job["taskRunStatusCounts"].items() if count != 0
+    }
+    click.echo(_cli_object_repr({"taskRunStatusCounts": task_run_status_counts}))
+    click.echo(f"Requeuing all tasks with run status among: {', '.join(sorted(run_status_set))}")
+
+    total_task_count_to_requeue = sum(
+        count for name, count in task_run_status_counts.items() if name in run_status_set
+    )
+    summary_task_count_by_status = ", ".join(
+        f"{count} {name} tasks"
+        for name, count in task_run_status_counts.items()
+        if name in run_status_set and count != 0
+    )
+    summary_tasks_message = f"{total_task_count_to_requeue} total tasks"
+
+    if total_task_count_to_requeue == 0:
+        click.echo("No tasks to requeue.")
+        return
+
+    # Ask for confirmation about requeuing the selected tasks
+    if config_file.str2bool(config_file.get_setting("settings.auto_accept", config=config)):
+        click.echo(
+            f"Estimated {summary_tasks_message} ({summary_task_count_by_status}) to requeue."
+        )
+    else:
+        click.echo(
+            f"This action will requeue an estimated {summary_tasks_message} ({summary_task_count_by_status})"
+        )
+        if not click.confirm(
+            "Are you sure you want to requeue these tasks?",
+            default=None,
+        ):
+            click.echo("No tasks were requeued.")
+            sys.exit(1)
+        click.echo("Requeuing tasks...")
+
+    total_count_requeued = 0
+    # Use a paginator to get all the steps
+    paginator = deadline_client.get_paginator("list_steps")
+    steps = []
+    for page in paginator.paginate(farmId=farm_id, queueId=queue_id, jobId=job_id):
+        steps.extend(page["steps"])
+
+    # For each step, requeue all the tasks matching the run statuses
+    for step in steps:
+        click.echo(f"\nStep: {step['name']} ({step['stepId']})")
+        step_task_count_to_requeue = sum(
+            count for name, count in step["taskRunStatusCounts"].items() if name in run_status_set
+        )
+        summary_task_count_by_status = ", ".join(
+            f"{count} {name} tasks"
+            for name, count in step["taskRunStatusCounts"].items()
+            if name in run_status_set and count != 0
+        )
+        summary_tasks_message = f"{step_task_count_to_requeue} total tasks"
+        if step_task_count_to_requeue == 0:
+            click.echo("  Step has no tasks to requeue.")
+            continue
+        else:
+            click.echo(
+                f"  Requeuing an estimated {summary_tasks_message} ({summary_task_count_by_status})..."
+            )
+
+        paginator = deadline_client.get_paginator("list_tasks")
+        for page in paginator.paginate(
+            farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step["stepId"]
+        ):
+            for task in page["tasks"]:
+                if task["runStatus"].upper() in run_status_set:
+                    parameters = task.get("parameters", {})
+                    if parameters:
+                        task_summary = (
+                            ",".join(
+                                f"{param}={list(parameters[param].values())[0]}"
+                                for param in parameters
+                            )
+                            + f" ({task['taskId']})"
+                        )
+                    else:
+                        task_summary = task["taskId"]
+                    click.echo(f"    {task['runStatus']} {task_summary}")
+                    # Requeue means to set the target run status to PENDING. If a task has no dependencies,
+                    # it will switch to READY immediately.
+                    deadline_client_for_requeues.update_task(
+                        farmId=farm_id,
+                        queueId=queue_id,
+                        jobId=job_id,
+                        stepId=step["stepId"],
+                        taskId=task["taskId"],
+                        targetRunStatus="PENDING",
+                    )
+                    total_count_requeued += 1
+
+    click.echo(f"\nRequeued a total of {total_count_requeued} tasks.")
 
 
 def _download_job_output(
@@ -715,7 +868,7 @@ def _assert_valid_path(path: str) -> None:
 @click.option(
     "--yes",
     is_flag=True,
-    help="Skip any confirmation prompts",
+    help="Automatically accept any confirmation prompts",
 )
 @click.option(
     "--output",
