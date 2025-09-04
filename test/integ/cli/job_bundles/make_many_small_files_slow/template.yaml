@@ -49,7 +49,7 @@ steps:
             done
             
             echo "Task {{Task.Param.Task}} starting work simulation..."
-            # Sleep for 70 seconds to make each task run longer than 1 minute
-            sleep 70
+            # Sleep for 120 seconds to make each each task run longer than 1 minute
+            sleep 120
             
             echo "Task {{Task.Param.Task}} completed, created {{Param.FilesPerTask}} files"

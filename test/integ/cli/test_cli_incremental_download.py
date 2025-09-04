@@ -14,6 +14,7 @@ import pytest
 from pathlib import Path
 
 from deadline.client.api._job_monitoring import wait_for_job_completion
+from deadline.job_attachments._utils import _retry
 from .job_templates import (
     submit_dep_chain_job,
     submit_dep_data_flow_job,
@@ -48,6 +49,61 @@ class IncrementalDownloadTest:
             return result.status == "SUCCEEDED", result.status
         except Exception as e:
             return False, f"TIMEOUT! Received downstream exception: {e}"
+
+    @_retry(tries=60, delay=2, backoff=1.0)
+    def wait_for_all_files(
+        self,
+        tmp_path: Path,
+        expected_files: dict,
+        test_name: str,
+        file_pattern: str = "**/*.out",
+        content_check: Optional[str] = None,
+        exact_match: bool = False,
+        count_only: bool = False,
+    ):
+        """Generic function to wait for all expected files to be downloaded with correct content."""
+        result = self.run_incremental_download_without_storage_profiles(
+            str(tmp_path), test_name=test_name
+        )
+        assert result.returncode == 0, f"Download failed: {result.stderr}"
+
+        downloaded_files = list(tmp_path.glob(file_pattern))
+
+        if count_only:
+            # For tests that only care about file count (like make_many_small_files)
+            expected_count = expected_files.get("count", 0)
+            print(f"[{test_name}] Found {len(downloaded_files)}/{expected_count} files")
+            assert len(downloaded_files) == expected_count, (
+                f"Expected exactly {expected_count} files, but found {len(downloaded_files)}"
+            )
+            return
+
+        verified_files = []
+
+        for downloaded_file in downloaded_files:
+            filename = downloaded_file.name
+            if filename in expected_files:
+                expected_marker = expected_files[filename]
+                content = downloaded_file.read_text()
+
+                if exact_match:
+                    # For exact content matching (like dep_chain)
+                    if content.strip() == expected_marker:
+                        verified_files.append(filename)
+                else:
+                    # For content containing markers (like dep_data_flow)
+                    content_valid = True
+                    if content_check:
+                        content_valid = content_check in content
+
+                    if content_valid and expected_marker in content:
+                        verified_files.append(filename)
+
+        expected_count = len(expected_files)
+        print(f"[{test_name}] Found {len(verified_files)}/{expected_count} files")
+        assert len(verified_files) == expected_count, (
+            f"Expected exactly {expected_count} verified output files, found {len(verified_files)}: {verified_files}"
+        )
 
     def run_incremental_download_without_storage_profiles(
         self,
@@ -157,21 +213,15 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
     )
 
     # Run final incremental download to ensure all files are captured
-    time.sleep(5)
-    final_result = incremental_download_test.run_incremental_download_without_storage_profiles(
-        str(tmp_path), test_name="make_many_small_files"
+    incremental_download_test.wait_for_all_files(
+        tmp_path=tmp_path,
+        expected_files={"count": total_files},
+        test_name="make_many_small_files",
+        file_pattern="**/*.txt",
+        count_only=True,
     )
-    assert final_result.returncode == 0, f"Final incremental download failed: {final_result.stderr}"
 
-    # Find all downloaded files in tmp_path
-    downloaded_files = list(tmp_path.glob("**/*.txt"))
-
-    # Validate exact file count, 10,000
-    if len(downloaded_files) != total_files:
-        print(
-            f"[make_many_small_files] ERROR: Expected {total_files} files, found {len(downloaded_files)}"
-        )
-        assert False, f"Expected exactly {total_files} files, but found {len(downloaded_files)}"
+    print(f"[make_many_small_files] Successfully verified all {total_files} files were downloaded")
 
 
 @pytest.mark.integ
@@ -245,15 +295,7 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
         f"[dep_data_flow] Job completed after {incremental_download_iteration_number} download iterations"
     )
 
-    # Run final incremental download to ensure all files are captured
-    time.sleep(5)
-    final_result = incremental_download_test.run_incremental_download_without_storage_profiles(
-        str(tmp_path), test_name="dep_data_flow"
-    )
-    assert final_result.returncode == 0, f"Final incremental download failed: {final_result.stderr}"
-
-    # Verify expected output files from dep_data_flow template
-    # Based on template: Step1 + Step1-2 (frames 8-11) + Step1-2-3 + Step1-2-4 + Step1-2-34-5 = 8 files total
+    # Wait for all output files to be available with incremental download
     expected_files = {
         "Step1.out": "2. Processed in Step1",
         "Step1-2.8.out": "3.8 Processed in Step1-2.8",
@@ -265,35 +307,15 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
         "Step1-2-34-5.out": "5. Processed in Step1-2-34-5",
     }
 
-    # Check data dir for output files
-    data_files = list(unique_data_dir.glob("**/*.out"))
-    downloaded_files = list(data_files)
-
-    verified_files = []
-
-    for downloaded_file in downloaded_files:
-        filename = downloaded_file.name
-        if filename in expected_files:
-            expected_marker = expected_files[filename]
-            content = downloaded_file.read_text()
-            # Verify file contains the original input
-            if "1. Input to CreateJob from data_dir" in content and expected_marker in content:
-                verified_files.append(filename)
-            else:
-                print(f"[dep_data_flow] WARNING: {filename} missing expected content")
-
-    # Verify all 8 expected files were created and have correct content
-    assert len(verified_files) == 8, (
-        f"Expected exactly 8 verified output files, found {len(verified_files)}: {verified_files}"
+    incremental_download_test.wait_for_all_files(
+        tmp_path=unique_data_dir,
+        expected_files=expected_files,
+        test_name="dep_data_flow",
+        file_pattern="**/*.out",
+        content_check="1. Input to CreateJob from data_dir",
     )
 
-    # Verify we have the complete set of expected files
-    missing_files = set(expected_files.keys()) - set(verified_files)
-    assert not missing_files, f"Missing expected files: {missing_files}"
-
-    print(
-        f"[dep_data_flow] Successfully verified all {len(verified_files)} expected output files with correct content"
-    )
+    print("[dep_data_flow] Successfully verified all 8 expected output files with correct content")
 
 
 @pytest.mark.integ
@@ -342,10 +364,6 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
 
     # Run final incremental download to ensure all files are captured
     time.sleep(5)
-    final_result = incremental_download_test.run_incremental_download_without_storage_profiles(
-        str(tmp_path), test_name="dep_chain"
-    )
-    assert final_result.returncode == 0, f"Final incremental download failed: {final_result.stderr}"
 
     # Verify expected output files from dep_chain template
     expected_files = {}
@@ -357,36 +375,19 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
 
     print(f"[dep_chain] Expected files: {expected_files}")
 
-    # Check tmp_path for downloaded files
-    downloaded_files = list(tmp_path.glob("**/*.txt"))
-    print(
-        f"[dep_chain] Found {len(downloaded_files)} downloaded files: {[f.name for f in downloaded_files]}"
+    incremental_download_test.wait_for_all_files(
+        tmp_path=tmp_path,
+        expected_files=expected_files,
+        test_name="dep_chain",
+        file_pattern="**/*.txt",
+        exact_match=True,
     )
 
-    verified_files = []
-
-    for downloaded_file in downloaded_files:
-        filename = downloaded_file.name
-        if filename in expected_files:
-            expected_content = expected_files[filename]
-            content = downloaded_file.read_text().strip()
-            if content == expected_content:
-                verified_files.append(filename)
-
-    # Verify all 6 expected files were created with correct content
-    assert len(verified_files) == 6, (
-        f"Expected exactly 6 verified chain files (A.txt-F.txt), found {len(verified_files)}: {sorted(verified_files)}"
-    )
-
-    # Verify we have the complete chain
-    expected_filenames = set(expected_files.keys())
-    verified_filenames = set(verified_files)
-    missing_files = expected_filenames - verified_filenames
-    assert not missing_files, f"Missing expected chain files: {sorted(missing_files)}"
+    print("[dep_chain] Successfully verified all 6 expected chain files with correct content")
 
 
 @pytest.mark.integ
-@pytest.mark.timeout(900)  # 15 minutes timeout
+@pytest.mark.timeout(1200)  # 20 minutes timeout, update step & task add latency
 @pytest.mark.parametrize("requeue_level", ["job", "step", "task"])
 def test_conflict_resolution_with_requeue(incremental_download_test, requeue_level, tmp_path):
     """Test incremental download with re-queuing at different levels and conflict resolution."""
@@ -395,7 +396,11 @@ def test_conflict_resolution_with_requeue(incremental_download_test, requeue_lev
     task_count = 2
     expected_initial_files = files_per_task * task_count
 
-    unique_output_dir = f"{tmp_path}/output_{requeue_level}"
+    unique_output_dir = tmp_path / f"output_{requeue_level}"
+    unique_output_dir.mkdir()
+
+    # Added this to be sure that the unique output directory is not being shared
+    assert os.listdir(unique_output_dir) == []
 
     # Submit and wait for initial job
     job_id = submit_make_many_small_files_slow_job(

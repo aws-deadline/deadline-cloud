@@ -66,6 +66,10 @@ steps:
           cp create_job_in.txt $STEP.out
           echo "2. Processed in $STEP" >> $STEP.out
           
+          echo "$STEP starting work simulation..."
+          # Sleep for 70 seconds to make each task run longer than 1 minute
+          sleep 70
+          
           echo Finished $STEP!
 - name: Step1-2
   dependencies:
@@ -124,6 +128,10 @@ steps:
           cp create_job_in.txt $STEP.out
           echo "2. Processed in $STEP" >> $STEP.out
           
+          echo "$STEP starting work simulation..."
+          # Sleep for 70 seconds to make each task run longer than 1 minute
+          sleep 70
+          
           echo Finished $STEP!
 - name: Step1-2-3
   dependencies:
@@ -173,6 +181,10 @@ steps:
           cd '{{Param.InputDir}}'
           cp create_job_in.txt $STEP.out
           echo "2. Processed in $STEP" >> $STEP.out
+          
+          echo "$STEP starting work simulation..."
+          # Sleep for 70 seconds to make each task run longer than 1 minute
+          sleep 70
           
           echo Finished $STEP!
 - name: Step1-2-4
@@ -224,6 +236,10 @@ steps:
           cp create_job_in.txt $STEP.out
           echo "2. Processed in $STEP" >> $STEP.out
           
+          echo "$STEP starting work simulation..."
+          # Sleep for 70 seconds to make each task run longer than 1 minute
+          sleep 70
+          
           echo Finished $STEP!
 - name: Step1-2-34-5
   dependencies:
@@ -273,5 +289,9 @@ steps:
           cd '{{Param.InputDir}}'
           cp create_job_in.txt $STEP.out
           echo "2. Processed in $STEP" >> $STEP.out
+          
+          echo "$STEP starting work simulation..."
+          # Sleep for 70 seconds to make each task run longer than 1 minute
+          sleep 70
           
           echo Finished $STEP!
