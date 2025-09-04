@@ -1255,6 +1255,7 @@ def _incremental_output_download(
             "unchanged": len(categorized_job_ids.unchanged),
             "inactive": len(categorized_job_ids.inactive),
         },
+        "unmapped_paths": len(unmapped_paths),
     }
     api.get_deadline_cloud_library_telemetry_client().record_event(
         event_type="com.amazon.rum.deadline.queue_sync_output_stats",

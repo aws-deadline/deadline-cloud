@@ -60,7 +60,13 @@ def checkpoint_dir(tmp_path_factory):
 
 
 @pytest.fixture
-def deadline_mock():
+def deadline_telemetry_client_mock():
+    with patch.object(deadline.client.api, "get_deadline_cloud_library_telemetry_client") as m:
+        yield m
+
+
+@pytest.fixture
+def deadline_mock(deadline_telemetry_client_mock):
     """Create a mock boto3 session for all tests to use."""
     os.environ["AWS_ACCESS_KEY_ID"] = "ACCESSKEY"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -103,9 +109,7 @@ def deadline_mock():
             }
         }
 
-        with patch(
-            "botocore.client.BaseClient._make_api_call", new=mock_make_api_call
-        ), patch.object(deadline.client.api, "get_deadline_cloud_library_telemetry_client"):
+        with patch("botocore.client.BaseClient._make_api_call", new=mock_make_api_call):
             yield deadline_magicmock
 
 
@@ -1160,3 +1164,78 @@ def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_moc
         in result.output
     ), result.output
     assert "This is a DRY RUN so the checkpoint was not saved" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_stats_telemetry(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+    deadline_telemetry_client_mock,
+):
+    """Verifies the telemetry event for statistics matches the expected format"""
+    mock_job = create_fake_job_list(1)[0]
+    mock_job.update(
+        {
+            "name": "Mock Job",
+            "jobId": MOCK_JOB_ID,
+            "taskRunStatus": "READY",
+            "taskRunStatusCounts": {"SUCCEEDED": 1},
+            "storageProfileId": MOCK_STORAGE_PROFILE_ID,
+            "attachments": {
+                "manifests": [{"rootPath": "/", "rootPathFormat": "posix"}],
+                "fileSystem": "VIRTUAL",
+            },
+        }
+    )
+    del mock_job["endedAt"]
+    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
+    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--storage-profile-id",
+                MOCK_STORAGE_PROFILE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    deadline_telemetry_client_mock().record_event.assert_called_once_with(
+        event_type="com.amazon.rum.deadline.queue_sync_output_stats",
+        event_details={
+            # All latencies will be zero due to freeze_time()
+            "latencies": {
+                "_get_download_candidate_jobs": 0,
+                "_categorize_jobs_in_checkpoint": 0,
+                "_get_job_sessions": 0,
+                "_update_checkpoint_jobs_list": 0,
+                "_download_all_manifests_with_absolute_paths": 0,
+                "download": 0,
+                "path_mapping": 0,
+            },
+            "dry_run": False,
+            "downloaded_session_actions": 0,
+            "downloaded_files": 0,
+            "downloaded_bytes": 0,
+            "jobs_with_downloads": {"completed": 0, "added": 1, "updated": 0},
+            "jobs_without_downloads": {
+                "not_using_job_attachments": 0,
+                "missing_storage_profile": 0,
+                "unchanged": 0,
+                "inactive": 0,
+            },
+            "unmapped_paths": 0,
+        },
+    )
