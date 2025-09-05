@@ -28,7 +28,7 @@ def add_mocks_for_job_requeue_tasks(deadline_mock):
     the different 'deadline job requeue-tasks' tests.
     """
     # These mock returns only contain the properties that requeue-tasks needs
-    deadline_mock.GetJob.return_value = {
+    deadline_mock.get_job.return_value = {
         "jobId": MOCK_JOB_ID,
         "name": "Mock Job",
         "taskRunStatus": "RUNNING",
@@ -41,7 +41,7 @@ def add_mocks_for_job_requeue_tasks(deadline_mock):
             "RUNNING": 1,
         },
     }
-    deadline_mock.ListSteps.return_value = {
+    deadline_mock.list_steps.return_value = {
         "steps": [
             {
                 "stepId": MOCK_STEP_ID,
@@ -58,7 +58,7 @@ def add_mocks_for_job_requeue_tasks(deadline_mock):
             }
         ]
     }
-    deadline_mock.ListTasks.return_value = {
+    deadline_mock.list_tasks.return_value = {
         "tasks": [
             {
                 "taskId": f"{MOCK_TASK_ID_PREFIX}-0",
@@ -92,7 +92,7 @@ def add_mocks_for_job_requeue_tasks(deadline_mock):
             },
         ]
     }
-    deadline_mock.UpdateTask.return_value = {}
+    deadline_mock.update_task.return_value = {}
 
 
 def test_cli_job_requeue_tasks(fresh_deadline_config, deadline_mock):
@@ -145,7 +145,7 @@ Requeued a total of 3 tasks.
     mock_confirm.assert_called_once_with(
         "Are you sure you want to requeue these tasks?", default=None
     )
-    assert deadline_mock.UpdateTask.call_args_list == [
+    assert deadline_mock.update_task.call_args_list == [
         call(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
@@ -215,7 +215,7 @@ No tasks were requeued.
     mock_confirm.assert_called_once_with(
         "Are you sure you want to requeue these tasks?", default=None
     )
-    assert deadline_mock.UpdateTask.call_args_list == []
+    assert deadline_mock.update_task.call_args_list == []
 
 
 @pytest.mark.parametrize(
@@ -275,7 +275,7 @@ Step: Step Name ({MOCK_STEP_ID})
 Requeued a total of 1 tasks.
 """
     )
-    assert deadline_mock.UpdateTask.call_args_list == [
+    assert deadline_mock.update_task.call_args_list == [
         call(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,
@@ -336,7 +336,7 @@ Step: Step Name ({MOCK_STEP_ID})
 Requeued a total of 2 tasks.
 """
     )
-    assert deadline_mock.UpdateTask.call_args_list == [
+    assert deadline_mock.update_task.call_args_list == [
         call(
             farmId=MOCK_FARM_ID,
             queueId=MOCK_QUEUE_ID,

@@ -10,6 +10,7 @@ import deadline.client.api
 from deadline.client.api._telemetry import TelemetryClient
 import tempfile
 import os
+import re
 from datetime import datetime
 
 from unittest.mock import patch, MagicMock
@@ -90,13 +91,16 @@ def deadline_mock():
             service_name = self._service_model.service_name
 
             if service_name == "deadline":
-                # Send the "GetQueue" operation, i.e. the get_queue call, to deadline_magicmock.GetQueue()
-                return getattr(deadline_magicmock, operation_name)(**kwarg)
+                # Send the "GetQueue" operation, i.e. the get_queue call, to
+                # deadline_magicmock.get_queue()
+                operation_words = re.findall("[A-Z][a-z]+", operation_name)
+                snake_operation = "_".join(word.lower() for word in operation_words)
+                return getattr(deadline_magicmock, snake_operation)(**kwarg)
 
             # If we don't want to patch the API call
             return original_make_api_call(self, operation_name, kwarg)
 
-        deadline_magicmock.GetQueue.return_value = {
+        deadline_magicmock.get_queue.return_value = {
             "queueId": MOCK_QUEUE_ID,
             "displayName": "Mock Queue",
             "jobAttachmentSettings": {
@@ -104,9 +108,9 @@ def deadline_mock():
                 "s3BucketName": "mock-s3-bucket",
             },
         }
-        deadline_magicmock.ListSessions.return_value = {"sessions": []}
-        deadline_magicmock.ListSessionActions.return_value = {"sessionActions": []}
-        deadline_magicmock.AssumeQueueRoleForUser.return_value = {
+        deadline_magicmock.list_sessions.return_value = {"sessions": []}
+        deadline_magicmock.list_session_actions.return_value = {"sessionActions": []}
+        deadline_magicmock.assume_queue_role_for_user.return_value = {
             "credentials": {
                 "accessKeyId": "ACCESSKEY",
                 "secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
