@@ -140,7 +140,7 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
 @click.option(
     "--yes",
     is_flag=True,
-    help="Skip any confirmation prompts",
+    help="Automatically accept any confirmation prompts",
 )
 @click.option(
     "--require-paths-exist",

@@ -110,17 +110,18 @@ def invalidate_boto3_session_cache() -> None:
     _get_queue_user_boto3_session.cache_clear()
 
 
-def get_default_client_config() -> botocore.config.Config:
+def get_default_client_config(**kwargs) -> botocore.config.Config:
     """
     Gets the default botocore Config object to use with `boto3 clients`.
     This method adds user agent version and submitter context into botocore calls.
+    Additional arguments are forwarded to the Config constructor.
     """
     user_agent_extra = f"app/deadline-client#{version}"
     if session_context.get("submitter-name"):
         user_agent_extra += f" submitter/{session_context['submitter-name']}"
     if session_context.get("cli-command-name"):
         user_agent_extra += f" cli-command/{session_context['cli-command-name']}"
-    client_config = botocore.config.Config(user_agent_extra=user_agent_extra)
+    client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)
     return client_config
 
 
