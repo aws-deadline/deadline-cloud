@@ -70,7 +70,7 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
     # The response does not include the "jobAttachmentSettings" field
-    deadline_mock.GetQueue.return_value = {
+    deadline_mock.get_queue.return_value = {
         "queueId": MOCK_QUEUE_ID,
         "displayName": "Mock Queue",
     }
@@ -214,8 +214,8 @@ def test_incremental_output_download_bootstrap_and_completion(
         "fileSystem": "VIRTUAL",
     }
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     if storage_profile_id is None:
@@ -434,8 +434,8 @@ def test_incremental_output_download_storage_profile_path_mapping(
     }
     mock_jobs[0]["storageProfileId"] = MOCK_STORAGE_PROFILE_ID
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # Mock enough of get_storage_profile_for_queue two return two for mapping between them
     def mock_get_storage_profile_for_queue(farmId: str, queueId: str, storageProfileId: str):
@@ -462,9 +462,9 @@ def test_incremental_output_download_storage_profile_path_mapping(
                 ],
             }
 
-    deadline_mock.GetStorageProfileForQueue = mock_get_storage_profile_for_queue
+    deadline_mock.get_storage_profile_for_queue = mock_get_storage_profile_for_queue
     # Mock list_sessions to return one session
-    deadline_mock.ListSessions.return_value = {
+    deadline_mock.list_sessions.return_value = {
         "sessions": [
             {
                 "sessionId": MOCK_SESSION_ID,
@@ -476,7 +476,7 @@ def test_incremental_output_download_storage_profile_path_mapping(
         ]
     }
     # Mock list_session_actions to return one task run session action
-    deadline_mock.ListSessionActions.return_value = {
+    deadline_mock.list_session_actions.return_value = {
         "sessionActions": [
             {
                 "sessionActionId": MOCK_SESSION_ACTION_ID_1,
@@ -582,8 +582,8 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
         "READY": 1,
     }
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     runner = CliRunner()
@@ -724,8 +724,8 @@ def test_incremental_output_download_job_unchanged(
         "fileSystem": "VIRTUAL",
     }
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     runner = CliRunner()
@@ -822,8 +822,8 @@ def test_incremental_output_download_job_canceled(
         "fileSystem": "VIRTUAL",
     }
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     runner = CliRunner()
@@ -930,8 +930,8 @@ def test_incremental_output_download_job_completed_then_requeued(
         "fileSystem": "VIRTUAL",
     }
     mock_jobs[0]["endedAt"] = iso_freeze_time - timedelta(minutes=3)
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     # We've set up the job and timestamps so it bootstraps as completed
@@ -1070,8 +1070,8 @@ def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_moc
         "fileSystem": "VIRTUAL",
     }
     del mock_jobs[0]["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
 
     # RUN 1: Run the CLI command once to bootstrap the operation
     runner = CliRunner()
@@ -1141,8 +1141,8 @@ def test_incremental_output_download_stats_telemetry(
         }
     )
     del mock_job["endedAt"]
-    deadline_mock.SearchJobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
-    deadline_mock.GetJob = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [mock_job])
 
     runner = CliRunner()
     with freeze_time(ISO_FREEZE_TIME):
