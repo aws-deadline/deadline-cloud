@@ -216,6 +216,18 @@ class ManifestProperties:
             result["outputRelativeDirectories"] = self.outputRelativeDirectories
         return result
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ManifestProperties":
+        """Create ManifestProperties from a dictionary."""
+        return cls(
+            rootPath=data["rootPath"],
+            rootPathFormat=PathFormat(data["rootPathFormat"]),
+            fileSystemLocationName=data.get("fileSystemLocationName"),
+            inputManifestPath=data.get("inputManifestPath"),
+            inputManifestHash=data.get("inputManifestHash"),
+            outputRelativeDirectories=data.get("outputRelativeDirectories"),
+        )
+
 
 @dataclass
 class Attachments:

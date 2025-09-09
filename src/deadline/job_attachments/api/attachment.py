@@ -57,39 +57,6 @@ def _attachment_download(
         path_mapping_rules=path_mapping_rules
     )
 
-    _attachment_download_with_root_manifests(
-        boto3_session,
-        file_name_manifest_dict,
-        s3_root_uri,
-        conflict_resolution,
-        path_mapping_rule_list,
-        logger,
-    )
-
-
-def _attachment_download_with_root_manifests(
-    boto3_session: boto3.Session,
-    file_name_manifest_dict: Dict[str, BaseAssetManifest],
-    s3_root_uri: str,
-    conflict_resolution: FileConflictResolution,
-    path_mapping_rule_list: Optional[List[PathMappingRule]] = None,
-    logger: ClickLogger = ClickLogger(False),
-):
-    """
-    Function to use for attachment download when the caller has manifests and path mapping rule list,
-    instead of reading these from input files.
-    We should make this the default API Interface eventually to make it flexible
-
-    :param boto3_session: boto3 session
-    :param file_name_manifest_dict: Dictionary mapping manifest file names to their
-                                   corresponding manifest objects.
-    :param s3_root_uri: root uri for s3
-    :param conflict_resolution: conflict resolution method for repeated files
-    :param path_mapping_rule_list: path mapping rule list to map paths
-    :param logger: logger
-    :return:
-    """
-
     merged_manifests_by_root: Dict[str, BaseAssetManifest] = dict()
     for file_name, manifest in file_name_manifest_dict.items():
         # File name is supposed to be prefixed by a hash of source path in path mapping, use that to determine destination
@@ -276,3 +243,111 @@ def _process_path_mapping(
     )
 
     return path_mapping_rule_list
+
+
+def _process_s3_metadata(s3_metadata: Dict[str, str]) -> Dict[str, str]:
+    """
+    Process user metadata to ensure S3 ASCII compatibility.
+
+    S3 object metadata only supports ASCII characters for both keys and values.
+    This function converts non-ASCII keys and values to ASCII-compatible formats.
+
+    Args:
+        s3_metadata: Dictionary of metadata key-value pairs
+
+    Returns:
+        Dictionary with ASCII-compatible metadata keys and values
+
+    Raises:
+        NonValidInputError: If a metadata key contains non-ASCII characters
+    """
+    processed = {}
+
+    for key, value in s3_metadata.items():
+        # Validate key is ASCII-compatible
+        try:
+            key.encode("ascii")
+            processed_key = key  # Use original key if value is ASCII
+        except UnicodeEncodeError:
+            raise NonValidInputError(
+                f"S3 metadata key '{key}' contains non-ASCII characters. "
+                f"S3 metadata keys must be ASCII-only. Consider using ASCII alternatives like: "
+                f"'user-name' instead of '用户名', 'cafe-id' instead of 'café-id'."
+            )
+
+        # Process value for ASCII compatibility
+        try:
+            # Test if value is ASCII-compatible
+            value.encode("ascii")
+            processed_value = value  # Use as-is if ASCII
+        except UnicodeEncodeError:
+            # When value has non-ASCII characters, append "-json" to key and JSON-encode value
+            processed_key = f"{key}-json"
+            processed_value = json.dumps(value, ensure_ascii=True)
+
+        processed[processed_key] = processed_value
+
+    return processed
+
+
+def _attachment_upload_single(
+    manifest: BaseAssetManifest,
+    s3_settings: JobAttachmentS3Settings,
+    boto3_session: boto3.Session,
+    source_root: Path,
+    s3_upload_manifest_name: str,
+    s3_upload_manifest_path: str,
+    s3_upload_manifest_metadata: Optional[Dict[str, str]] = None,
+    logger: ClickLogger = ClickLogger(False),
+) -> UploadManifestInfo:
+    """
+    This API processes individual manifests with explicit path correlation,
+    eliminating the need for hash-based correlation used in the internal APIs.
+
+    Args:
+        manifest (BaseAssetManifest): The manifest object to upload
+        s3_settings (JobAttachmentS3Settings): S3-specific Job Attachment settings for upload
+        boto3_session (boto3.Session): Boto3 session for S3 operations
+        source_root (Path): Source root path for the manifest
+        s3_upload_manifest_name (str): Name for the uploaded manifest file to s3
+        s3_upload_manifest_path (str): S3 path prefix for manifest upload
+        s3_upload_manifest_metadata (Optional[Dict[str, str]]): Optional key-value pairs for S3 metadata tags.
+            Non-ASCII values will be automatically JSON-encoded with "-json" suffix to ensure S3 compatibility.
+        logger (ClickLogger, optional): Logger for progress reporting. Defaults to ClickLogger(False).
+
+    Returns:
+        UploadManifestInfo: Information about uploaded manifest including output path, hash, and source path
+
+    Raises:
+        NonValidInputError: If input for upload is invalid
+    """
+
+    # Process user metadata to handle non-ASCII values
+    metadata: Dict[str, Dict[str, str]] = {"Metadata": {}}
+    if s3_upload_manifest_metadata:
+        processed_metadata = _process_s3_metadata(s3_upload_manifest_metadata)
+        metadata["Metadata"].update(processed_metadata)
+
+    # Initialize S3 uploader
+    asset_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
+
+    # Upload the assets
+    key, data = asset_uploader.upload_assets(
+        job_attachment_settings=s3_settings,
+        manifest=manifest,
+        partial_manifest_prefix=s3_upload_manifest_name,
+        manifest_file_name=s3_upload_manifest_name,
+        manifest_metadata=metadata,
+        source_root=source_root,
+        s3_check_cache_dir=config_file.get_cache_directory(),
+    )
+
+    logger.echo(
+        f"Uploaded assets from {source_root}, to {s3_settings.to_s3_root_uri()}/Manifests/{key}, hashed data {data}"
+    )
+
+    return UploadManifestInfo(
+        output_manifest_path=key,
+        output_manifest_hash=data,
+        source_path=str(source_root),
+    )

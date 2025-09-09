@@ -8,6 +8,7 @@ from deadline.job_attachments.models import (
     PathMappingRule,
     JobAttachmentS3Settings,
     ManifestSnapshot,
+    ManifestProperties,
 )
 from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
 from deadline.job_attachments.exceptions import MalformedAttachmentSettingError
@@ -182,3 +183,150 @@ class TestManifestSnapshotModel:
         # Verify the special characters are preserved
         assert recreated.root == '/path/with spaces/and"quotes"/and\\backslashes'
         assert recreated.manifest == "manifest-with-unicode-€-£-¥"
+
+
+class TestManifestPropertiesModel:
+    """Tests for the ManifestProperties class"""
+
+    def test_from_dict_minimal_required_fields(self):
+        """Test ManifestProperties.from_dict with only required fields"""
+        data = {"rootPath": "/test/path", "rootPathFormat": "posix"}
+
+        manifest_props = ManifestProperties.from_dict(data)
+
+        assert manifest_props.rootPath == "/test/path"
+        assert manifest_props.rootPathFormat == PathFormat.POSIX
+        assert manifest_props.fileSystemLocationName is None
+        assert manifest_props.inputManifestPath is None
+        assert manifest_props.inputManifestHash is None
+        assert manifest_props.outputRelativeDirectories is None
+
+    def test_from_dict_all_fields_populated(self):
+        """Test ManifestProperties.from_dict with all fields populated"""
+        data = {
+            "rootPath": "/test/path",
+            "rootPathFormat": "windows",
+            "fileSystemLocationName": "test-location",
+            "inputManifestPath": "s3://bucket/manifest.json",
+            "inputManifestHash": "abc123hash",
+            "outputRelativeDirectories": ["output1", "output2", "subdir/output3"],
+        }
+
+        manifest_props = ManifestProperties.from_dict(data)
+
+        assert manifest_props.rootPath == "/test/path"
+        assert manifest_props.rootPathFormat == PathFormat.WINDOWS
+        assert manifest_props.fileSystemLocationName == "test-location"
+        assert manifest_props.inputManifestPath == "s3://bucket/manifest.json"
+        assert manifest_props.inputManifestHash == "abc123hash"
+        assert manifest_props.outputRelativeDirectories == ["output1", "output2", "subdir/output3"]
+
+    @pytest.mark.parametrize(
+        ("path_format", "expected_enum"),
+        [
+            ("posix", PathFormat.POSIX),
+            ("windows", PathFormat.WINDOWS),
+        ],
+    )
+    def test_from_dict_path_format_variations(self, path_format: str, expected_enum: PathFormat):
+        """Test ManifestProperties.from_dict with different path format values"""
+        data = {"rootPath": "/test/path", "rootPathFormat": path_format}
+
+        manifest_props = ManifestProperties.from_dict(data)
+        assert manifest_props.rootPathFormat == expected_enum
+
+    def test_from_dict_missing_required_field_root_path(self):
+        """Test ManifestProperties.from_dict raises KeyError when rootPath is missing"""
+        data = {"rootPathFormat": "posix"}
+
+        with pytest.raises(KeyError, match="rootPath"):
+            ManifestProperties.from_dict(data)
+
+    def test_from_dict_missing_required_field_root_path_format(self):
+        """Test ManifestProperties.from_dict raises KeyError when rootPathFormat is missing"""
+        data = {"rootPath": "/test/path"}
+
+        with pytest.raises(KeyError, match="rootPathFormat"):
+            ManifestProperties.from_dict(data)
+
+    def test_from_dict_invalid_path_format(self):
+        """Test ManifestProperties.from_dict raises ValueError for invalid path format"""
+        data = {"rootPath": "/test/path", "rootPathFormat": "invalid_format"}
+
+        with pytest.raises(ValueError):
+            ManifestProperties.from_dict(data)
+
+    def test_from_dict_with_empty_optional_lists(self):
+        """Test ManifestProperties.from_dict with empty lists for optional fields"""
+        data = {
+            "rootPath": "/test/path",
+            "rootPathFormat": "posix",
+            "outputRelativeDirectories": [],
+        }
+
+        manifest_props = ManifestProperties.from_dict(data)
+        assert manifest_props.outputRelativeDirectories == []
+
+    def test_from_dict_roundtrip_with_to_dict(self):
+        """Test that from_dict and to_dict are inverse operations"""
+        # Create a ManifestProperties instance with all fields
+        original = ManifestProperties(
+            rootPath="/original/path",
+            rootPathFormat=PathFormat.POSIX,
+            fileSystemLocationName="test-location",
+            inputManifestPath="s3://bucket/manifest.json",
+            inputManifestHash="hash123",
+            outputRelativeDirectories=["out1", "out2"],
+        )
+
+        # Convert to dict and back
+        data = original.to_dict()
+        recreated = ManifestProperties.from_dict(data)
+
+        # Verify they are equal
+        assert recreated.rootPath == original.rootPath
+        assert recreated.rootPathFormat == original.rootPathFormat
+        assert recreated.fileSystemLocationName == original.fileSystemLocationName
+        assert recreated.inputManifestPath == original.inputManifestPath
+        assert recreated.inputManifestHash == original.inputManifestHash
+        assert recreated.outputRelativeDirectories == original.outputRelativeDirectories
+
+    def test_from_dict_with_special_characters_in_paths(self):
+        """Test ManifestProperties.from_dict with special characters in paths"""
+        data = {
+            "rootPath": '/path/with spaces/and"quotes"/and\\backslashes',
+            "rootPathFormat": "posix",
+            "fileSystemLocationName": "location-with-unicode-€-£-¥",
+            "inputManifestPath": "s3://bucket-name/path with spaces/manifest.json",
+            "outputRelativeDirectories": ["output with spaces", "output/with/slashes"],
+        }
+
+        manifest_props = ManifestProperties.from_dict(data)
+
+        assert manifest_props.rootPath == '/path/with spaces/and"quotes"/and\\backslashes'
+        assert manifest_props.fileSystemLocationName == "location-with-unicode-€-£-¥"
+        assert manifest_props.inputManifestPath == "s3://bucket-name/path with spaces/manifest.json"
+        assert manifest_props.outputRelativeDirectories == [
+            "output with spaces",
+            "output/with/slashes",
+        ]
+
+    def test_from_dict_with_none_values_in_optional_fields(self):
+        """Test ManifestProperties.from_dict with explicit None values for optional fields"""
+        data = {
+            "rootPath": "/test/path",
+            "rootPathFormat": "posix",
+            "fileSystemLocationName": None,
+            "inputManifestPath": None,
+            "inputManifestHash": None,
+            "outputRelativeDirectories": None,
+        }
+
+        manifest_props = ManifestProperties.from_dict(data)
+
+        assert manifest_props.rootPath == "/test/path"
+        assert manifest_props.rootPathFormat == PathFormat.POSIX
+        assert manifest_props.fileSystemLocationName is None
+        assert manifest_props.inputManifestPath is None
+        assert manifest_props.inputManifestHash is None
+        assert manifest_props.outputRelativeDirectories is None
