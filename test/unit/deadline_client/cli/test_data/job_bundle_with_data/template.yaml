@@ -1,0 +1,31 @@
+specificationVersion: jobtemplate-2023-09
+name: "Job Bundle with data"
+description: This bundle is for testing 'deadline bundle submit'.
+parameterDefinitions:
+- name: InputDir
+  type: PATH
+  default: input
+  dataFlow: IN
+  objectType: DIRECTORY
+- name: OutputDir
+  type: PATH
+  default: output
+  dataFlow: OUT
+  objectType: DIRECTORY
+- name: InputOutputDir
+  type: PATH
+  default: input_output
+  dataFlow: INOUT
+  objectType: DIRECTORY
+steps:
+- name: Step
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ["--help"]
+  hostRequirements:
+    attributes:
+    - name: attr.worker.os.family
+      anyOf:
+      - linux

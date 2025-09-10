@@ -1,0 +1,15 @@
+{
+ "manifests": [
+  {
+   "rootPath": "ROOT_PATH_0",
+   "rootPathFormat": "ROOT_PATH_FORMAT_0",
+   "inputManifestPath": "farm-0123456789abcdefabcdefabcdefabcd/queue-0123456789abcdefabcdefabcdefabcd/Inputs/00000000000000000000000000000000/MANIFEST_NAME_0",
+   "inputManifestHash": "911480369624b171bf9609baa781f2f9",
+   "outputRelativeDirectories": [
+    "input_output",
+    "output"
+   ]
+  }
+ ],
+ "fileSystem": "COPIED"
+}

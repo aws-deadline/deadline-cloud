@@ -16,6 +16,8 @@ from configparser import ConfigParser
 from typing import Any, Callable, Dict, List, Optional, Tuple, Iterable
 from collections.abc import Collection
 from pathlib import Path
+import shlex
+from datetime import datetime
 
 from botocore.client import BaseClient
 
@@ -196,6 +198,50 @@ def _upload_attachments(
     return attachment_settings.to_dict()
 
 
+@api.record_success_fail_telemetry_event(metric_name="asset_snapshot")
+def _snapshot_attachments(
+    snapshot_dir: str,
+    asset_manager: S3AssetManager,
+    manifests: List[AssetRootManifest],
+    print_function_callback: Callable,
+    snapshot_progress_callback: Optional[Callable],
+    config: Optional[ConfigParser] = None,
+    from_gui: bool = False,
+) -> Dict[str, Any]:
+    """
+    Starts the job attachments upload and handles the progress reporting callback.
+    Returns the attachment settings from the upload.
+    """
+
+    def _default_update_snapshot_progress(upload_metadata: ProgressReportMetadata) -> bool:
+        return True
+
+    if not snapshot_progress_callback:
+        snapshot_progress_callback = _default_update_snapshot_progress
+
+    upload_summary, attachment_settings = asset_manager.snapshot_assets(
+        snapshot_dir=snapshot_dir,
+        manifests=manifests,
+        on_snapshotting_assets=snapshot_progress_callback,
+    )
+
+    if upload_summary.total_files > 0:
+        print_function_callback("Snapshot Summary:")
+        print_function_callback(textwrap.indent(str(upload_summary), "    "))
+    else:
+        # Ensure to call the callback once if no files were processed
+        snapshot_progress_callback(
+            ProgressReportMetadata(
+                status=ProgressStatus.UPLOAD_IN_PROGRESS,
+                progress=100,
+                transferRate=0,
+                progressMessage="No files to upload",
+            )
+        )
+
+    return attachment_settings.to_dict()
+
+
 def _filter_redundant_known_paths(known_asset_paths: Iterable[str]) -> list[str]:
     """
     Filters out redundant paths from the known asset paths list.
@@ -233,6 +279,93 @@ def _filter_redundant_known_paths(known_asset_paths: Iterable[str]) -> list[str]
     return filtered_paths
 
 
+def _save_debug_snapshot(
+    debug_snapshot_dir: str,
+    create_job_args: dict,
+    asset_manager: S3AssetManager,
+    queue: dict,
+    storage_profile_id: str,
+    storage_profile: Optional[StorageProfile],
+):
+    # Save the full set of arguments for passing to the deadline.create_job API
+    with open(
+        os.path.join(debug_snapshot_dir, "create_job_args.json"), "w", encoding="utf-8"
+    ) as fh:
+        json.dump(create_job_args, fh, indent=1)
+
+    # Add all the parameters, saving JSON values and multi-line strings in files.
+    cli_args: list[tuple] = []
+    for param_name, param_value in create_job_args.items():
+        words = re.findall("(?:^|[A-Z])[a-z]+", param_name)
+        kebab_name = "-".join(word.lower() for word in words)
+        if isinstance(param_value, (dict, list)):
+            param_file = f"{kebab_name}_param.json"
+            with open(os.path.join(debug_snapshot_dir, param_file), "w", encoding="utf-8") as fh:
+                json.dump(param_value, fh, indent=1)
+            cli_args.append((f"--{kebab_name}", f"file://{param_file}"))
+        elif isinstance(param_value, str) and "\n" in param_value:
+            param_file = f"{kebab_name}_param.data"
+            with open(os.path.join(debug_snapshot_dir, param_file), "w", encoding="utf-8") as fh:
+                fh.write(param_value)
+            cli_args.append((f"--{kebab_name}", f"file://{param_file}"))
+        else:
+            cli_args.append((f"--{kebab_name}", str(param_value)))
+
+    def write_commands(write_line: Callable, continuation: str):
+        if "attachments" in create_job_args:
+            for subdir in ("Data", "Manifests"):
+                write_line(f"aws s3 cp {continuation}")
+                write_line(f"    --recursive {continuation}")
+                write_line(f"    ./{subdir} {continuation}")
+                write_line(
+                    f"    s3://{asset_manager.job_attachment_settings.s3BucketName}/{asset_manager.job_attachment_settings.rootPrefix}/{subdir}"  # type: ignore
+                )
+                write_line()
+        write_line(f"aws deadline create-job {continuation}")
+        for param_opts in cli_args[:-1]:
+            write_line(f"    {shlex.join(param_opts)} {continuation}")
+        write_line(f"    {shlex.join(cli_args[-1])}")
+
+    # Write a shell script that submits the job using AWS CLI commands
+    with open(os.path.join(debug_snapshot_dir, "submit_job.sh"), "wb") as sh_fh:
+
+        def sh_line(val: str = ""):
+            sh_fh.write(val.encode("utf-8"))  # type: ignore
+            sh_fh.write(b"\n")  # type: ignore
+
+        sh_line("#!/bin/sh")
+        sh_line("# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.")
+        sh_line("set -xeuo pipefail")
+        sh_line('cd "$(dirname "$0")"')
+        sh_line()
+        write_commands(sh_line, "\\")
+
+    # Write a batch file that submits the job using AWS CLI commands
+    with open(os.path.join(debug_snapshot_dir, "submit_job.bat"), "wb") as bat_fh:
+
+        def bat_line(val: str = ""):
+            bat_fh.write(val.encode("utf-8"))  # type: ignore
+            bat_fh.write(b"\r\n")  # type: ignore
+
+        bat_line("REM Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.")
+        bat_line('cd /d "%~dp0"')
+        bat_line()
+        write_commands(bat_line, "^")
+
+    # Write the queue and storage profile resources
+    with open(os.path.join(debug_snapshot_dir, "queue.json"), "w") as fh:
+        queue_with_str = {
+            key: (value.isoformat() if isinstance(value, datetime) else value)
+            for key, value in queue.items()
+            if key != "ResponseMetadata"
+        }
+        json.dump(queue_with_str, fh, indent=1)
+    if storage_profile_id and storage_profile is not None:
+        with open(os.path.join(debug_snapshot_dir, "storage_profile.json"), "w") as fh:
+            json.dump(storage_profile.to_dict(), fh, indent=1)
+    return None
+
+
 @api.record_function_latency_telemetry_event()
 def create_job_from_job_bundle(
     job_bundle_dir: str,
@@ -250,16 +383,19 @@ def create_job_from_job_bundle(
     require_paths_exist: bool = False,
     submitter_name: Optional[str] = None,
     known_asset_paths: Collection[str] = [],
+    debug_snapshot_dir: Optional[str] = None,
     from_gui: bool = False,
     print_function_callback: Callable[[str], None] = print,
     interactive_confirmation_callback: Optional[Callable[[str, bool], bool]] = None,
     hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
-) -> str:
+) -> Optional[str]:
     """
-    Creates a job in the farm/queue configured as default for the
-    workstation from the job bundle in the provided directory.
+    Creates a job in the farm/queue configured as default for the workstation from the job bundle in the provided directory.
+
+    The return value is the submitted job id except when debug_snapshot_dir is provided. When creating a debug snapshot,
+    no job is submitted.
 
     A job bundle has the following directory structure:
 
@@ -318,6 +454,8 @@ def create_job_from_job_bundle(
         submitter_name (str, optional): Name of the application submitting the bundle.
         known_asset_paths (list[str], optional): A list of paths that should not generate
                 warnings when outside storage profile locations. Defaults to an empty list.
+        debug_snapshot_dir (str, optional): A directory in which to save a debug snapshot of the data and commands
+                needed to exactly replicate the deadline:CreateJob service API call.
         print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
                 By default calls print(), Can be replaced by click.echo or a logging function of choice.
         interactive_confirmation_callback (Callable [str, bool] -> bool): Callback arguments are (confirmation_message, default_response).
@@ -365,7 +503,10 @@ def create_job_from_job_bundle(
         farmId=farm_id,
         queueId=queue_id,
     )
-    print_function_callback(f"Submitting to Queue: {queue['displayName']}\n")
+    if not debug_snapshot_dir:
+        print_function_callback(f"Submitting to Queue: {queue['displayName']}\n")
+    else:
+        print_function_callback(f"Snapshotting submission to Queue: {queue['displayName']}\n")
 
     create_job_args: Dict[str, Any] = {
         "farmId": farm_id,
@@ -571,13 +712,24 @@ def create_job_from_job_bundle(
                 hashing_progress_callback=hashing_progress_callback,
             )
 
-            attachment_settings = _upload_attachments(  # type: ignore
-                asset_manager,
-                asset_manifests,
-                print_function_callback,
-                upload_progress_callback,
-                from_gui=from_gui,
-            )
+            if not debug_snapshot_dir:
+                attachment_settings = _upload_attachments(  # type: ignore
+                    asset_manager,
+                    asset_manifests,
+                    print_function_callback,
+                    upload_progress_callback,
+                    from_gui=from_gui,
+                )
+            else:
+                attachment_settings = _snapshot_attachments(  # type: ignore
+                    debug_snapshot_dir,
+                    asset_manager,
+                    asset_manifests,
+                    print_function_callback,
+                    upload_progress_callback,
+                    from_gui=from_gui,
+                )
+
             attachment_settings["fileSystem"] = JobAttachmentsFileSystem(
                 job_attachments_file_system
             )
@@ -630,6 +782,16 @@ def create_job_from_job_bundle(
         event_details={"submitter_name": submitter_name},
         from_gui=from_gui,
     )
+
+    if debug_snapshot_dir:
+        return _save_debug_snapshot(
+            debug_snapshot_dir,
+            create_job_args,
+            asset_manager,
+            queue,
+            storage_profile_id,
+            storage_profile,
+        )
 
     create_job_response = deadline.create_job(**create_job_args)
     logger.debug("CreateJob Response %r", create_job_response)

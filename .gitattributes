@@ -1,2 +1,6 @@
 # Set shell scripts to always have 'lf' line endings
 *.sh text eol=lf
+
+# Files for testing that need to be byte-for-byte identical, explicitly marked as binary
+*.bin binary
+*.xxh128 binary

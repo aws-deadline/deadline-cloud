@@ -5,8 +5,10 @@ Common fixtures for Deadline Client Library tests.
 """
 
 import botocore
+import boto3
 from moto import mock_aws
 import deadline.client.api
+from deadline.client.api import _submit_job_bundle
 from deadline.client.api._telemetry import TelemetryClient
 import tempfile
 import os
@@ -16,7 +18,7 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 import pytest
 
-from .shared_constants import MOCK_QUEUE_ID
+from .shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID, MOCK_BUCKET_NAME
 
 
 @pytest.fixture(scope="function")
@@ -73,6 +75,9 @@ def deadline_mock():
     Mocks Deadline Cloud via the approach moto recommends for services that it
     lacks an implementation for.
 
+    As a special case, deadline.client.api.get_deadline_cloud_library_telemetry_client
+    is also redirected to deadline_mock.get_deadline_cloud_library_telemetry_client
+
     Returns a MagicMock that handles all the deadline client operations.
     """
     os.environ["AWS_ACCESS_KEY_ID"] = "ACCESSKEY"
@@ -100,12 +105,28 @@ def deadline_mock():
             # If we don't want to patch the API call
             return original_make_api_call(self, operation_name, kwarg)
 
+        # Create a moto mock S3 bucket for job attachments on the queue
+        boto3_session = boto3.Session(region_name="us-west-2")
+        s3_client = boto3_session.client("s3", region_name="us-west-2")
+        s3_client.create_bucket(
+            Bucket=MOCK_BUCKET_NAME, CreateBucketConfiguration={"LocationConstraint": "us-west-2"}
+        )
+
+        # Mock some defaults into the Deadline Cloud API calls
+        deadline_magicmock.get_farm.return_value = {
+            "farmId": MOCK_FARM_ID,
+            "displayName": "Mock Farm",
+            "description": "Farm for mock testing",
+            "kmsKeyArn": "",
+            "createdAt": datetime.fromisoformat("2024-08-01T01:01:44+00:00"),
+            "createdBy": "mock-user-id",
+        }
         deadline_magicmock.get_queue.return_value = {
             "queueId": MOCK_QUEUE_ID,
             "displayName": "Mock Queue",
             "jobAttachmentSettings": {
                 "rootPrefix": "MockRootPrefix",
-                "s3BucketName": "mock-s3-bucket",
+                "s3BucketName": MOCK_BUCKET_NAME,
             },
         }
         deadline_magicmock.list_sessions.return_value = {"sessions": []}
@@ -115,11 +136,19 @@ def deadline_mock():
                 "accessKeyId": "ACCESSKEY",
                 "secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
                 "sessionToken": "testing",
-                "expiration": datetime.fromisoformat("2025-08-07T01:01:44+00:00"),
+                "expiration": datetime.fromisoformat("2125-08-07T01:01:44+00:00"),
             }
         }
 
         with patch(
             "botocore.client.BaseClient._make_api_call", new=mock_make_api_call
-        ), patch.object(deadline.client.api, "get_deadline_cloud_library_telemetry_client"):
+        ), patch.object(
+            deadline.client.api,
+            "get_deadline_cloud_library_telemetry_client",
+            new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
+        ), patch.object(
+            _submit_job_bundle.api,
+            "get_deadline_cloud_library_telemetry_client",
+            new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
+        ):
             yield deadline_magicmock
