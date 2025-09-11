@@ -229,19 +229,35 @@ class SubmitJobToDeadlineDialog(QDialog):
     def _set_submit_button_state(self):
         # Enable/disable the Submit button based on whether the
         # AWS Deadline Cloud API is accessible and the farm+queue are configured.
-        enable = (
-            self.deadline_authentication_status.api_availability is True
-            and get_setting("defaults.farm_id") != ""
-            and get_setting("defaults.queue_id") != ""
-            and self.shared_job_settings.is_queue_valid()
-        )
+        api_available = self.deadline_authentication_status.api_availability is True
+        farm_configured = get_setting("defaults.farm_id") != ""
+        queue_configured = get_setting("defaults.queue_id") != ""
+        queue_valid = self.shared_job_settings.is_queue_valid()
+
+        enable = api_available and farm_configured and queue_configured and queue_valid
 
         self.submit_button.setEnabled(enable)
 
         if not enable:
-            self.submit_button.setToolTip(
-                "Cannot submit job to Deadline Cloud. Nonvalid credentials or queue parameters."
-            )
+            issues = []
+            if not api_available:
+                issues.append(
+                    "AWS Deadline Cloud API is not accessible. Check your authentication status."
+                )
+            if not farm_configured:
+                issues.append(
+                    "No farm is configured. Click Settings to select a farm for job submission."
+                )
+            if not queue_configured:
+                issues.append(
+                    "No queue is configured. Click Settings to select a queue within your farm."
+                )
+            if farm_configured and queue_configured and not queue_valid:
+                issues.append(
+                    "Queue parameters are not valid. Check Shared job settings tab for details."
+                )
+
+            self.submit_button.setToolTip("Cannot submit job:\n\n• " + "\n\n• ".join(issues))
         else:
             self.submit_button.setToolTip("")
 
