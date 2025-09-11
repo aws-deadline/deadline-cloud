@@ -1,3 +1,19 @@
+## 0.53.0 (2025-09-11)
+
+### BREAKING CHANGES
+
+* Removed `create_job_response` attribute of `ui.dialogs.SubmitJobToDeadlineDialog` (#791) ([`6587e4e`](https://github.com/aws-deadline/deadline-cloud/commit/6587e4e60b04d150c6f47eb526c883336a20ae22))
+  *  Since `0.51.1`, this was deprecated and its value was always set to `None`
+* Removed `deadline.api.attachment_upload` and `deadline.api.attachment_download` from the public API (#819) ([`832ac45`](https://github.com/aws-deadline/deadline-cloud/commit/832ac45355ab2c76d0bc8364323e2d834a84ed20))
+  *   These APIs are still under active development and will undergo iterations before being made public/stable
+
+### Features
+* Add detailed tooltips to grayed-out submit button (#833) ([`e5aeb45`](https://github.com/aws-deadline/deadline-cloud/commit/e5aeb457a305136f81bf7e6fdaa973ac48832d10))
+* Add `deadline job requeue-tasks` command ([`c593aee`](https://github.com/aws-deadline/deadline-cloud/commit/c593aeefed11dc4f64919f7f84c58795c4ce8840))
+* Add `fileCount` property to the `summary` JSON message output by `deadline job download-output --output json` (#816) ([`b9ed949`](https://github.com/aws-deadline/deadline-cloud/commit/b9ed9498830b8d186c9485d6e7da36b29221093a))
+* Add `deadlinew` command and `--redirect-output` option to `deadline` ([`86fa0a6`](https://github.com/aws-deadline/deadline-cloud/commit/86fa0a6d699dec42539363e7d0bc08ae0801d6f5))
+* Add `--profile` option to `deadline queue sync-output` ([`b5478d6`](https://github.com/aws-deadline/deadline-cloud/commit/b5478d6a863d8a3dfd5a3e4f2a5df90e1adff4d0))
+
 ## 0.52.1 (2025-08-26)
 
 ### Features
@@ -40,7 +56,7 @@ These changes are experimental and are subject to change.
 
 ## DEPRECATIONS
 
-* The parameter `create_job_response` is being removed from `ui.dialogs.SubmitJobToDeadlineDialog` in `0.52.0`. It has been replaced with `job_id` which is set when a job submission has succeeded.
+* The parameter `create_job_response` is being removed from `ui.dialogs.SubmitJobToDeadlineDialog` in `0.53.0`. It has been replaced with `job_id` which is set when a job submission has succeeded.
 
 ## 0.51.0 (2025-07-28)
 
