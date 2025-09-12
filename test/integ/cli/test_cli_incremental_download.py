@@ -143,7 +143,17 @@ class IncrementalDownloadTest:
 
         # Run from the specified output directory so files are downloaded to their manifest paths
         # The CLI will create the necessary directory structure based on job manifests
-        return subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+
+        # Print CLI output for debugging
+        if result.stdout:
+            print(f"[sync-output] STDOUT:\n{result.stdout}")
+        if result.stderr:
+            print(f"[sync-output] STDERR:\n{result.stderr}")
+        if result.returncode != 0:
+            print(f"[sync-output] Exit code: {result.returncode}")
+
+        return result
 
 
 @pytest.fixture(scope="session")
