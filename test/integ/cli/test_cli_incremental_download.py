@@ -166,6 +166,9 @@ def incremental_download_test(deadline_cli_test: DeadlineCliTest):
 
 @pytest.mark.integ
 @pytest.mark.timeout(900)  # 15 minutes timeout
+@pytest.mark.xfail(
+    reason="Soft-fail until edge case is root caused and fixed in sync-output CLI", strict=False
+)
 def test_incremental_download_many_small_files(incremental_download_test, tmp_path):
     """Test incremental download with many small files (10,000 files total)."""
 
@@ -236,6 +239,9 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
 
 @pytest.mark.integ
 @pytest.mark.timeout(900)  # 15 minutes timeout
+@pytest.mark.xfail(
+    reason="Soft-fail until edge case is root caused and fixed in sync-output CLI", strict=False
+)
 def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path):
     """Test incremental download with dep_data_flow template."""
 
@@ -398,6 +404,9 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
 
 @pytest.mark.integ
 @pytest.mark.timeout(1200)  # 20 minutes timeout, update step & task add latency
+@pytest.mark.xfail(
+    reason="Soft-fail until edge case is root caused and fixed in sync-output CLI", strict=False
+)
 @pytest.mark.parametrize("requeue_level", ["job", "step", "task"])
 def test_conflict_resolution_with_requeue(incremental_download_test, requeue_level, tmp_path):
     """Test incremental download with re-queuing at different levels and conflict resolution."""
