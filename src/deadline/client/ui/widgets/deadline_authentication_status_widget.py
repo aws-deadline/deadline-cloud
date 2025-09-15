@@ -16,13 +16,12 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QHBoxLayout,
     QLabel,
-    QWidget,
     QApplication,
     QStyle,
-    QFrame,
     QMenu,
     QPushButton,
     QMessageBox,
+    QGroupBox,
 )
 
 from ... import api
@@ -103,9 +102,9 @@ class AuthenticationState(enum.Enum):
     UNEXPECTED_ERROR = enum.auto()
 
 
-class DeadlineAuthenticationStatusWidget(QWidget):
+class DeadlineAuthenticationStatusWidget(QGroupBox):
     """
-    A Qt widget that displays the current AWS Deadline Cloud authentication status.
+    A Qt GroupBox widget that displays the current AWS Deadline Cloud authentication status.
 
     This widget provides a visual indicator of the authentication status, showing an appropriate
     icon, profile name, and relevant action buttons based on the current authentication status.
@@ -154,19 +153,12 @@ class DeadlineAuthenticationStatusWidget(QWidget):
             show_profile_switch (bool): Whether to enable profile switching functionality.
                 Defaults to True.
         """
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        frame = QFrame(self)
-        frame.setStyleSheet("QFrame {background-color: palette(base); border-radius: 4px;}")
-        frame.setFrameShape(QFrame.StyledPanel)
-        main_layout.addWidget(frame)
-
-        frame_layout = QHBoxLayout(frame)
-        frame_layout.setContentsMargins(5, 5, 5, 5)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
 
         self._status_icon = QLabel()
-        frame_layout.addWidget(self._status_icon)
+        layout.addWidget(self._status_icon)
 
         self._profile_button = QPushButton()
         self._profile_button.setStyleSheet("""
@@ -186,21 +178,23 @@ class DeadlineAuthenticationStatusWidget(QWidget):
         )
         self._logout_menu_action = self._auth_menu.addAction("Log out", self.logout_clicked.emit)
 
-        frame_layout.addWidget(self._profile_button)
+        layout.addWidget(self._profile_button)
 
-        frame_layout.addStretch()
+        layout.addStretch()
 
         self._switch_profile_button = QPushButton("Switch profile")
         self._switch_profile_button.clicked.connect(self.switch_profile_clicked.emit)
-        frame_layout.addWidget(self._switch_profile_button)
+        layout.addWidget(self._switch_profile_button)
 
         self._login_button = QPushButton("Log in")
         self._login_button.clicked.connect(self.login_clicked.emit)
-        frame_layout.addWidget(self._login_button)
+        layout.addWidget(self._login_button)
 
         self._more_info_button = QPushButton("More info")
         self._more_info_button.clicked.connect(self._show_more_info)
-        frame_layout.addWidget(self._more_info_button)
+        layout.addWidget(self._more_info_button)
+
+        self.setLayout(layout)
 
     def _get_profile_name(self) -> str:
         """
