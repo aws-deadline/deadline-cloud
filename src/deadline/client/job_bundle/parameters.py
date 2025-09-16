@@ -249,6 +249,101 @@ def validate_job_parameter(
     return cast(JobParameter, input)
 
 
+def validate_job_parameter_value(
+    job_parameter: JobParameter,
+    value: str | int | float,
+) -> str | int | float:
+    """
+    Validates a value for the specified parameter definition, returning the value with the correct type,
+    e.g. a string "19" for an INT parameter is returned as the integer 19.
+    Raises a ValueError if validation fails.
+
+    See https://github.com/OpenJobDescription/openjd-specifications/wiki/2023-09-Template-Schemas#2-jobparameterdefinition
+
+    Args:
+        job_parameter: The parameter definition.
+        value: The value to validate.
+    Returns:
+        The value, converted to the correct type for the parameter definition.
+    """
+    name = job_parameter["name"]
+    param_type = job_parameter["type"]
+
+    # First ensure the value has the correct type
+    if param_type in ("STRING", "PATH"):
+        if not isinstance(value, str):
+            raise TypeError(
+                f"Job parameter {name!r} has type {param_type} but got value {value!r} of type {type(value)}."
+            )
+    elif param_type == "INT":
+        original_value = value
+        try:
+            if isinstance(value, str):
+                value = int(value)
+            else:
+                value = int(value)
+                # In the case of converting a float to an integer, the value gets truncated.
+                # Check if the value was modified, and raise if so.
+                if not isinstance(original_value, str) and value != original_value:
+                    value = original_value
+                    raise ValueError()
+        except ValueError:
+            raise ValueError(
+                f"Job parameter {name!r} has type INT but got value {value!r} which is not an integer."
+            )
+    elif param_type == "FLOAT":
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError(
+                f"Job parameter {name!r} has type FLOAT but got value {value!r} which is not floating point."
+            )
+    else:
+        raise TypeError(
+            f"The definition for job parameter {name!r} has unsupported type {param_type!r}"
+        )
+
+    # Then ensure the value satisfies the constraints in the parameter definition.
+    # Assumes the parameter definition is already validated, so the existence or not
+    # of constraint fields is enough, don't need to gate by type.
+    min_length = job_parameter.get("minLength")
+    if min_length is not None:
+        if len(value) < min_length:  # type: ignore
+            raise ValueError(
+                f"Job parameter {name!r} value {value!r} is shorter than minLength {min_length}."
+            )
+
+    max_length = job_parameter.get("maxLength")
+    if max_length is not None:
+        if len(value) > max_length:  # type: ignore
+            raise ValueError(
+                f"Job parameter {name!r} value {value!r} is longer than maxLength {max_length}."
+            )
+
+    min_value = job_parameter.get("minValue")
+    if min_value is not None:
+        if value < min_value:  # type: ignore
+            raise ValueError(
+                f"Job parameter {name!r} value {value!r} is less than minValue {min_value}."
+            )
+
+    max_value = job_parameter.get("maxValue")
+    if max_value is not None:
+        if value > max_value:  # type: ignore
+            raise ValueError(
+                f"Job parameter {name!r} value {value!r} is greater than maxValue {max_value}."
+            )
+
+    allowed_values = job_parameter.get("allowedValues")
+    if allowed_values is not None:
+        if value not in allowed_values:  # type: ignore
+            raise ValueError(
+                f"Job parameter {name!r} value {value!r} is not an allowed value from {tuple(allowed_values)!r}."
+            )
+
+    return value
+
+
 def validate_user_interface_spec(input: Any, *, parameter_name: str) -> UserInterfaceSpec:
     """Validates a job parameter's "userInterface" field as defined by Open Job Description. The
     validation allows for the union of all possible parameter "type"s.

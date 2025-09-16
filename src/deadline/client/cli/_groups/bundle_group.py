@@ -98,7 +98,11 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
     "--parameter",
     multiple=True,
     callback=validate_parameters,
-    help='The values for the job template\'s parameters. Can be provided as key-value pairs, inline JSON strings, or as paths to a JSON or YAML document. If provided more than once, the values are combined in the order that they appear. Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"MyParam": "5"}\'',
+    help=(
+        "The values for the job template's parameters. Can be provided as key-value pairs, inline JSON strings, "
+        "or as paths to a JSON or YAML document. Later values for repeated parameter names take precedence. "
+        'Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"OtherParam": "10"}\''
+    ),
 )
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -285,6 +289,17 @@ def bundle_submit(
 
 
 @cli_bundle.command(name="gui-submit")
+@click.option(
+    "-p",
+    "--parameter",
+    multiple=True,
+    callback=validate_parameters,
+    help=(
+        "Initial values in the GUI for the job template's parameters. Can be provided as key-value pairs, inline JSON strings, "
+        "or as paths to a JSON or YAML document. Later values for repeated parameter names take precedence. "
+        'Examples: --parameter MyParam=5 -p file://parameter_file.json -p \'{"OtherParam": "10"}\''
+    ),
+)
 @click.argument("job_bundle_dir", required=False)
 @click.option(
     "--browse",
@@ -321,7 +336,7 @@ def bundle_submit(
 )
 @_handle_error
 def bundle_gui_submit(
-    job_bundle_dir, browse, output, install_gui, submitter_name, known_asset_path, **args
+    parameter, job_bundle_dir, browse, output, install_gui, submitter_name, known_asset_path, **args
 ):
     """
     Opens a GUI to submit an Open Job Description job bundle.
@@ -342,6 +357,7 @@ def bundle_gui_submit(
             browse=browse,
             submitter_name=submitter_name,
             known_asset_paths=known_asset_path,
+            job_parameters=parameter,
         )
 
         if not submitter:
