@@ -193,6 +193,9 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
     # Run incremental download in a loop until job completes
     job_complete = False
     incremental_download_iteration_number = 0
+    start_time = time.time()
+    job_completion_timeout = 600  # 10 minutes
+
     while not job_complete:
         incremental_download_iteration_number += 1
 
@@ -217,6 +220,11 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
         )
 
         job_complete = task_run_status in ["SUCCEEDED", "FAILED", "CANCELED"]
+
+        # Check timeout
+        if time.time() - start_time > job_completion_timeout:
+            assert False, f"Job {job_id} did not complete within {job_completion_timeout} seconds"
+
         # Wait 5 secs if job's still not complete
         if not job_complete:
             time.sleep(5)
@@ -274,6 +282,9 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
     job_complete = False
     incremental_download_iteration_number = 0
     force_bootstrap_first = True  # Force bootstrap on first run only
+    start_time = time.time()
+    job_completion_timeout = 600  # 10 minutes
+
     while not job_complete:
         incremental_download_iteration_number += 1
         print(
@@ -303,6 +314,10 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
 
         job_complete = task_run_status in ["SUCCEEDED", "FAILED", "CANCELED"]
 
+        # Check timeout
+        if time.time() - start_time > job_completion_timeout:
+            assert False, f"Job {job_id} did not complete within {job_completion_timeout} seconds"
+
         # Wait 5 secs if job's still not complete
         if not job_complete:
             time.sleep(5)
@@ -324,7 +339,7 @@ def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path)
     }
 
     incremental_download_test.wait_for_all_files(
-        tmp_path=unique_data_dir,
+        tmp_path=tmp_path,
         expected_files=expected_files,
         test_name="dep_data_flow",
         file_pattern="**/*.out",
@@ -353,6 +368,9 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
     # Run incremental download in a loop until job completes
     job_complete = False
     force_bootstrap = True
+    start_time = time.time()
+    job_completion_timeout = 600  # 10 minutes
+
     while not job_complete:
         job = incremental_download_test.deadline_client.get_job(
             farmId=incremental_download_test.farm_id,
@@ -375,6 +393,11 @@ def test_incremental_download_dependency_chain(incremental_download_test, tmp_pa
         force_bootstrap = False
 
         job_complete = task_run_status in ["SUCCEEDED", "FAILED", "CANCELED"]
+
+        # Check timeout
+        if time.time() - start_time > job_completion_timeout:
+            assert False, f"Job {job_id} did not complete within {job_completion_timeout} seconds"
+
         if not job_complete:
             time.sleep(5)
 
