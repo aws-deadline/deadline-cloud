@@ -1582,7 +1582,7 @@ class TestUpload:
         # WHEN
         test_entry = HashCacheEntry(test_file, HashAlgorithm.XXH128, "a", "123.45")
         hash_cache = MagicMock()
-        hash_cache.get_entry.return_value = test_entry
+        hash_cache.get_connection_entry.return_value = test_entry
 
         with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["b"]):
             asset_manager = S3AssetManager(
@@ -1616,7 +1616,7 @@ class TestUpload:
         # WHEN
         test_entry = HashCacheEntry(test_file, HashAlgorithm.XXH128, "a", file_time)
         hash_cache = MagicMock()
-        hash_cache.get_entry.return_value = test_entry
+        hash_cache.get_connection_entry.return_value = test_entry
 
         with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
             asset_manager = S3AssetManager(
@@ -2491,7 +2491,7 @@ class TestUpload:
     def test_verify_hash_cache_integrity_returns_true_when_cache_and_s3_match(self, cache_entry):
         # Given
         mock_s3_check_cache_impl = MagicMock()
-        mock_s3_check_cache_impl.get_entry.return_value = cache_entry
+        mock_s3_check_cache_impl.get_connection_entry.return_value = cache_entry
         mock_s3_check_cache = MagicMock()
         mock_s3_check_cache.__enter__.return_value = mock_s3_check_cache_impl
 
@@ -2537,7 +2537,7 @@ class TestUpload:
     def test_verify_hash_cache_integrity_returns_false_when_cache_and_s3_mismatch(self):
         # Given
         mock_s3_check_cache_impl = MagicMock()
-        mock_s3_check_cache_impl.get_entry.return_value = S3CheckCacheEntry(
+        mock_s3_check_cache_impl.get_connection_entry.return_value = S3CheckCacheEntry(
             s3_key="bucket/Data/test-hash",
             last_seen_time=str(datetime.now().timestamp()),
         )
@@ -2629,7 +2629,7 @@ class TestUpload:
         s3_key = f"{default_job_attachment_s3_settings.s3BucketName}/prefix/test-hash.xxh128"
         test_entry = S3CheckCacheEntry(s3_key, "123.45")
         s3_cache = MagicMock()
-        s3_cache.get_entry.return_value = test_entry
+        s3_cache.get_connection_entry.return_value = test_entry
 
         # When
         with patch.object(
@@ -2716,7 +2716,7 @@ class TestUpload:
         )
         s3_key = f"{default_job_attachment_s3_settings.s3BucketName}/prefix/test-hash.xxh128"
         s3_cache = MagicMock()
-        s3_cache.get_entry.return_value = None
+        s3_cache.get_connection_entry.return_value = None
         expected_new_entry = S3CheckCacheEntry(s3_key, "345.67")
 
         # When

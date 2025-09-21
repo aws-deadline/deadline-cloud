@@ -56,6 +56,29 @@ class S3CheckCache(CacheDB):
             cache_dir=cache_dir,
         )
 
+    def get_connection_entry(self, s3_key: str, connection) -> Optional[S3CheckCacheEntry]:
+        """
+        Checks if an entry exists in the cache, and returns it if it hasn't expired.
+        """
+
+        entry_vals = connection.execute(
+            f"SELECT * FROM {self.table_name} WHERE s3_key=?",
+            [s3_key],
+        ).fetchone()
+        if entry_vals:
+            entry = S3CheckCacheEntry(
+                s3_key=entry_vals[0],
+                last_seen_time=str(entry_vals[1]),
+            )
+            try:
+                last_seen = datetime.fromtimestamp(float(entry.last_seen_time))
+                if (datetime.now() - last_seen).days < self.ENTRY_EXPIRY_DAYS:
+                    return entry
+            except ValueError:
+                logger.warning(f"Timestamp for S3 key {s3_key} is not valid. Ignoring.")
+
+        return None
+
     def get_entry(self, s3_key: str) -> Optional[S3CheckCacheEntry]:
         """
         Checks if an entry exists in the cache, and returns it if it hasn't expired.
@@ -64,23 +87,7 @@ class S3CheckCache(CacheDB):
             return None
 
         with self.db_lock, self.db_connection:
-            entry_vals = self.db_connection.execute(
-                f"SELECT * FROM {self.table_name} WHERE s3_key=?",
-                [s3_key],
-            ).fetchone()
-            if entry_vals:
-                entry = S3CheckCacheEntry(
-                    s3_key=entry_vals[0],
-                    last_seen_time=str(entry_vals[1]),
-                )
-                try:
-                    last_seen = datetime.fromtimestamp(float(entry.last_seen_time))
-                    if (datetime.now() - last_seen).days < self.ENTRY_EXPIRY_DAYS:
-                        return entry
-                except ValueError:
-                    logger.warning(f"Timestamp for S3 key {s3_key} is not valid. Ignoring.")
-
-            return None
+            return self.get_connection_entry(s3_key, self.db_connection)
 
     def put_entry(self, entry: S3CheckCacheEntry) -> None:
         """Inserts or replaces an entry into the cache database."""
