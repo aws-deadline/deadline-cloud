@@ -848,18 +848,21 @@ def wait_for_create_job_to_complete(
     Wait until a job exits the CREATE_IN_PROGRESS state.
     """
 
-    delay_sec = 5  # Time to wait between checks in seconds.
-    max_attempts = 60
+    initial_delay = 0.3
+    max_delay = 5.0
+    timeout_seconds = 300
     creating_statuses = {
         "CREATE_IN_PROGRESS",
     }
     failure_statuses = {"CREATE_FAILED"}
 
-    for attempt in range(max_attempts):
-        logger.debug(
-            f"Waiting for creation of {job_id} to complete...attempt {attempt} of {max_attempts}"
-        )
+    start_time = time.time()
+    delay = initial_delay
 
+    # Initial wait before first attempt
+    time.sleep(initial_delay)
+
+    while time.time() - start_time < timeout_seconds:
         if not continue_callback():
             raise CreateJobWaiterCanceled()
 
@@ -867,12 +870,13 @@ def wait_for_create_job_to_complete(
 
         current_status = job["lifecycleStatus"] if "lifecycleStatus" in job else job["state"]
         if current_status in creating_statuses:
-            time.sleep(delay_sec)
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
         elif current_status in failure_statuses:
             return False, job["lifecycleStatusMessage"]
         else:
             return True, job["lifecycleStatusMessage"]
 
     raise TimeoutError(
-        f"Timed out after {delay_sec * max_attempts} seconds while waiting for Job to be created: {job_id}"
+        f"Timed out after {timeout_seconds} seconds while waiting for Job to be created: {job_id}"
     )

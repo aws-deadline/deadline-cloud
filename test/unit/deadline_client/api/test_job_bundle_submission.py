@@ -1039,7 +1039,23 @@ def test_wait_for_create_job_to_complete_timeout():
         "lifecycleStatusMessage": MOCK_STATUS_MESSAGE,
     }
 
-    with pytest.raises(TimeoutError), patch.object(time, "sleep"):
+    # Mock time.time to simulate timeout after a few iterations
+    mock_times = [
+        0,
+        0.5,
+        1.5,
+        3.5,
+        7.5,
+        12.5,
+        17.5,
+        22.5,
+        27.5,
+        32.5,
+        301,
+    ]  # Last value exceeds 300s timeout
+    with pytest.raises(TimeoutError), patch.object(time, "sleep"), patch.object(
+        time, "time", side_effect=mock_times
+    ):
         api.wait_for_create_job_to_complete(
             farm_id=MOCK_FARM_ID,
             queue_id=MOCK_QUEUE_ID,
