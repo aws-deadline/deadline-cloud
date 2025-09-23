@@ -1451,11 +1451,9 @@ class S3AssetManager:
         Computes the hashes for input files, and creates manifests using the local hash cache.
 
         Args:
-            input_paths: a list of input paths.
-            output_paths: a list of output paths.
             hash_cache_dir: a path to local hash cache directory. If it's None, use default path.
             on_preparing_to_submit: a callback to be called to periodically report progress to the caller.
-            The callback returns True if the operation should continue as normal, or False to cancel.
+                The callback returns True if the operation should continue as normal, or False to cancel.
 
         Returns:
             a tuple with (1) the summary statistics of the hash operation, and
@@ -1508,7 +1506,7 @@ class S3AssetManager:
         Args:
             manifests: a list of manifests that contain assets to be uploaded
             on_uploading_assets: a callback to be called to periodically report progress to the caller.
-            The callback returns True if the operation should continue as normal, or False to cancel.
+                The callback returns True if the operation should continue as normal, or False to cancel.
 
         Returns:
             a tuple with (1) the summary statistics of the upload operation, and

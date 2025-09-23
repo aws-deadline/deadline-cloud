@@ -727,6 +727,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
     it sets the value to that path relative to the job bundle directory.
 
     Return format:
+    ```
     [
         {
             "name": <parameter name>,
@@ -735,6 +736,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
         },
         ...
     ]
+    ```
     """
 
     template = read_yaml_or_json_object(bundle_dir=bundle_dir, filename="template", required=True)

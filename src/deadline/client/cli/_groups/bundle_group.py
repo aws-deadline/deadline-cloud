@@ -33,7 +33,7 @@ from .._common import (
     _handle_error,
     _ProgressBarCallbackManager,
 )
-from .._main import main
+from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,10 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_bundle():
     """
-    Commands to work with Open Job Description job bundles.
+    Commands to work with Open Job Description [job bundles]. Use these commands to
+    submit jobs to run on a Deadline Cloud queue.
+
+    [job bundles]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
     """
 
 
@@ -190,7 +193,12 @@ def bundle_submit(
     **args,
 ):
     """
-    Submits an Open Job Description job bundle.
+    Submits an Open Job Description [job bundle] to a
+    [Deadline Cloud queue]. You can provide options
+    to set parameter values, the job name, priority, and more.
+
+    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
     """
     # Apply the CLI args to the config
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -339,7 +347,13 @@ def bundle_gui_submit(
     parameter, job_bundle_dir, browse, output, install_gui, submitter_name, known_asset_path, **args
 ):
     """
-    Opens a GUI to submit an Open Job Description job bundle.
+    Opens a GUI to submit an Open Job Description [job bundle] to a
+    [Deadline Cloud queue]. You can provide options
+    to set the initial parameter values shown in the GUI.
+
+    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+
     """
     from ...ui import gui_context_for_cli
 

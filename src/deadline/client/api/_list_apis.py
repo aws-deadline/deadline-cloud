@@ -33,9 +33,11 @@ def _call_paginated_deadline_list_api(list_api, list_property_name, **kwargs):
 @api.record_function_latency_telemetry_event()
 def list_farms(config=None, **kwargs):
     """
-    Calls the deadline:ListFarms API call, applying the filter for user membership
+    Calls the [deadline:ListFarms] API call, applying the filter for user membership
     depending on the configuration. If the response is paginated, it repeated
     calls the API to get all the farms.
+
+    [deadline:ListFarms]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFarms.html
     """
     if "principalId" not in kwargs:
         user_id, _ = get_user_and_identity_store_id(config=config)
@@ -49,9 +51,11 @@ def list_farms(config=None, **kwargs):
 @api.record_function_latency_telemetry_event()
 def list_queues(config=None, **kwargs):
     """
-    Calls the deadline:ListQueues API call, applying the filter for user membership
+    Calls the [deadline:ListQueues] API call, applying the filter for user membership
     depending on the configuration. If the response is paginated, it repeated
     calls the API to get all the queues.
+
+    [deadline:ListQueues]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListQueues.html
     """
     if "principalId" not in kwargs:
         user_id, _ = get_user_and_identity_store_id(config=config)
@@ -65,9 +69,11 @@ def list_queues(config=None, **kwargs):
 @api.record_function_latency_telemetry_event()
 def list_jobs(config=None, **kwargs):
     """
-    Calls the deadline:ListJobs API call, applying the filter for user membership
+    Calls the [deadline:ListJobs] API call, applying the filter for user membership
     depending on the configuration. If the response is paginated, it repeated
     calls the API to get all the jobs.
+
+    [deadline:ListJobs]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListJobs.html
     """
     if "principalId" not in kwargs:
         user_id, _ = get_user_and_identity_store_id(config=config)
@@ -81,9 +87,11 @@ def list_jobs(config=None, **kwargs):
 @api.record_function_latency_telemetry_event()
 def list_fleets(config=None, **kwargs):
     """
-    Calls the deadline:ListFleets API call, applying the filter for user membership
+    Calls the [deadline:ListFleets] API call, applying the filter for user membership
     depending on the configuration. If the response is paginated, it repeated
     calls the API to get all the fleets.
+
+    [deadline:ListFleets]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFleets.html
     """
     if "principalId" not in kwargs:
         user_id, _ = get_user_and_identity_store_id(config=config)
@@ -97,9 +105,10 @@ def list_fleets(config=None, **kwargs):
 @api.record_function_latency_telemetry_event()
 def list_storage_profiles_for_queue(config=None, **kwargs):
     """
-    Calls the deadline:ListStorageProfilesForQueue API call, applying the filter for user membership
-    depending on the configuration. If the response is paginated, it repeated
+    Calls the [deadline:ListStorageProfilesForQueue] API call. If the response is paginated, it repeated
     calls the API to get all the storage profiles.
+
+    [deadline:ListStorageProfilesForQueue]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListStorageProfilesForQueue.html
     """
     deadline = get_boto3_client("deadline", config=config)
 

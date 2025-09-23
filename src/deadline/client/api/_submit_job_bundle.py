@@ -392,53 +392,44 @@ def create_job_from_job_bundle(
     create_job_result_callback: Optional[Callable[[], bool]] = None,
 ) -> Optional[str]:
     """
-    Creates a job in the farm/queue configured as default for the workstation from the job bundle in the provided directory.
+    Creates a [Deadline Cloud job] in the [queue] configured as default for the workstation
+    from the [job bundle] in the provided directory.
 
-    The return value is the submitted job id except when debug_snapshot_dir is provided. When creating a debug snapshot,
-    no job is submitted.
+    The return value is the submitted job id except when debug_snapshot_dir is provided.
+    When creating a debug snapshot, no job is submitted.
 
-    A job bundle has the following directory structure:
+    To customize with a different farm, queue, or setting from the local configuration, load the configuration
+    by calling [config_file.read_config][deadline.client.config.config_file.read_config], modifying the config
+    values like [set_setting][deadline.client.config.set_setting]("defaults.farm_id", farm_id, config=config),
+    and passing the temporary modified config object to create the job.
 
-    /template.json|yaml (required): An Open Job Description job template that specifies the work to be done. Job parameters
-            are embedded here.
-    /parameter_values.json|yaml (optional): If provided, these are parameter values for the job template and for
-            the render farm. AWS Deadline Cloud-specific parameters are like "deadline:priority".
-            Looks like:
-            {
-                "parameterValues": [
-                    {"name": "<name>", "value": "<value>"},
-                    ...
-                ]
-            }
-    /asset_references.json|yaml (optional): If provided, these are references to the input and output assets
-            of the job. Looks like:
-            {
-                "assetReferences": {
-                    "inputs": {
-                        "filenames": [
-                            "/mnt/path/to/file.txt",
-                            ...
-                        ],
-                        "directories": [
-                            "/mnt/path/to/directory",
-                            ...
-                        ],
-                    },
-                    "outputs": {
-                        "directories": [
-                            "/mnt/path/to/output_directory",
-                            ...
-                        ],
-                    }
-                }
-            }
+    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+
+    Example:
+        To submit the [CLI job sample] from the [Deadline Cloud samples] github repo,
+        first clone using git or download a zip snapshot of the samples, then run the following Python code
+        from the `deadline-cloud-samples` directory.
+
+        ```python
+        from deadline.client.api import create_job_from_job_bundle
+        job_parameters = [{"name": "BashScript", "value": "echo 'Hello from this example submission.'"},
+                          {"name": "DataDir", "value": "./queue_environments"}]
+        create_job_from_job_bundle("./job_bundles/cli_job",
+                                   job_parameters=job_parameters,
+                                   name="Sample Python job submission")
+        ```
+
+        [CLI job sample]: https://github.com/aws-deadline/deadline-cloud-samples/tree/mainline/job_bundles#cli-job
+        [Deadline Cloud samples]: https://github.com/aws-deadline/deadline-cloud-samples/
 
     Args:
         job_bundle_dir (str): The directory containing the job bundle.
         job_parameters (List[Dict[str, Any]], optional): A list of job parameters in the following format:
             [{"name": "<name>", "value": "<value>"}, ...]
         name (str, optional): The name of the job to submit, replacing the name defined in the job bundle.
-        queue_parameter_definitions (list[JobParameter], optional) A list of queue_parameters to use
+        queue_parameter_definitions (list[JobParameter], optional): A list of queue_parameters to use
                 instead of retrieving queue_parameters from the queue with get_queue_parameter_definitions.
         job_attachments_file_system (str, optional): define which file system to use;
                 (valid values: "COPIED", "VIRTUAL") instead of using the value in the config file.
@@ -461,11 +452,17 @@ def create_job_from_job_bundle(
         interactive_confirmation_callback (Callable [str, bool] -> bool): Callback arguments are (confirmation_message, default_response).
                 This function should present the provided prompt, using default_response as the default value to respond with if the user
                 does not make an explicit choice, and return True if the user wants to continue, False to cancel.
-        hashing_progress_callback / upload_progress_callback / create_job_result_callback (Callable -> bool):
-                Callbacks periodically called while hashing / uploading / waiting for job creation. If returns false,
+        hashing_progress_callback (Callable -> bool): Callbacks periodically called while hashing during job creation. If returns false,
                 the operation will be cancelled. If return true, the operation continues. Default behavior for each
                 is to not cancel the operation. hashing_progress_callback and upload_progress_callback both receive
                 ProgressReport as a parameter, which can be used for projecting remaining time, as in done in the CLI.
+        upload_progress_callback (Callable -> bool): Callbacks periodically called while uploading during job creation.
+                See hashing_progress_callback for more details.
+        create_job_result_callback (Callable -> bool): Callbacks periodically called while waiting for the deadline.create_job
+                result. See hashing_progress_callback for more details.
+
+    Returns:
+        Returns the submitted job id. If `debug_snapshot_dir` is provided then no job is submitted and it returns None.
     """
 
     if not submitter_name:

@@ -21,6 +21,7 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMessageBox,
+    QWidget,
 )
 
 from ... import api
@@ -50,7 +51,7 @@ class DeadlineLoginDialog(QMessageBox):
 
     @staticmethod
     def login(
-        parent=None,
+        parent: Optional[QWidget] = None,
         force_refresh=False,
         close_on_success=True,
         config: Optional[ConfigParser] = None,
@@ -75,7 +76,7 @@ class DeadlineLoginDialog(QMessageBox):
 
     def __init__(
         self,
-        parent=None,
+        parent: Optional[QWidget] = None,
         close_on_success=True,
         config: Optional[ConfigParser] = None,
     ) -> None:

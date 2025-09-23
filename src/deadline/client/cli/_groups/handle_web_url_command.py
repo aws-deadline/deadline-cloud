@@ -23,7 +23,7 @@ from .._deadline_web_url import (
     uninstall_deadline_web_url_handler,
     validate_resource_ids,
 )
-from .._main import main
+from .._main import deadline as main
 from .job_group import _download_job_output
 
 
@@ -64,21 +64,25 @@ def cli_handle_web_url(
     all_users: bool,
 ):
     """
-    Runs AWS Deadline Cloud commands sent from a web browser.
+    Runs commands sent from a web application such as [Deadline Cloud monitor].
 
-    Commands use the deadline:// URL scheme, with expected
-    format deadline://<handle-web-url-command>?args=value&args=value.
+    Use the `--install` and `--uninstall` options to set or remove the command as the `deadline://`
+    protocol handler in your operating system.
+
+    Commands use the format `deadline://<handle-web-url-command>?args=value&args=value`.
 
     This function automatically picks the best AWS profile to use
     based on the provided farm-id and queue-id.
 
-    Current supported commands:
+    \b
         deadline://download-output
             ?farm-id=<farm-id>
             &queue-id=<queue-id>
             &job-id=<job-id>
             &step-id=<step-id>                      # optional
             &task-id=<task-id>                      # optional
+
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
     """
     ctx.obj[_PROMPT_WHEN_COMPLETE] = prompt_when_complete
 

@@ -6,7 +6,7 @@ A UI Widget containing the timeout settings widget.
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Optional
 from datetime import timedelta
 
 from qtpy.QtWidgets import (  # type: ignore
@@ -212,7 +212,7 @@ class TimeoutTableWidget(QGroupBox):
         parent (QWidget, optional): Parent widget. Defaults to None.
     """
 
-    def __init__(self, *, timeouts: TimeoutTableEntries, parent=None):
+    def __init__(self, *, timeouts: TimeoutTableEntries, parent: Optional[QWidget] = None):
         super().__init__("Timeouts", parent=parent)
         self.timeout_rows: Dict[str, TimeoutEntryWidget] = {}
         self._build_ui(timeouts)
@@ -257,7 +257,7 @@ class TimeoutTableWidget(QGroupBox):
         """
         label = QLabel()
         label.setStyleSheet(f"""
-            QLabel {{ 
+            QLabel {{
                 background-color: {bg_color};
                 color: black;
                 padding: 5px;
@@ -303,7 +303,7 @@ class TimeoutTableWidget(QGroupBox):
         Refreshes all UI elements to reflect the current timeout settings.
 
         Args:
-            entries: List of TimeoutEntry objects containing the current settings
+            timeouts: List of TimeoutEntry objects containing the current settings
         """
         for label, entry in timeouts.entries.items():
             if label in self.timeout_rows:

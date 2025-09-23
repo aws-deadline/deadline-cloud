@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QWidget,
 )
 
 from ..exceptions import DeadlineOperationError
@@ -116,7 +117,7 @@ def show_job_bundle_submitter(
     *,
     input_job_bundle_dir: str = "",
     browse: bool = False,
-    parent=None,
+    parent: Optional[QWidget] = None,
     f=Qt.WindowFlags(),
     submitter_name: Optional[str] = None,
     known_asset_paths: Optional[list[str]] = None,

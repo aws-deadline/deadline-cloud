@@ -16,7 +16,7 @@ from deadline._mcp import server
 from deadline._mcp.registry import TOOL_REGISTRY, get_tool_definition
 
 from deadline.client.api import list_farms
-from deadline.client.cli._mcp_server import cli_mcp_server
+from deadline.client.cli._groups.mcp_server_command import cli_mcp_server
 from click.testing import CliRunner
 
 
