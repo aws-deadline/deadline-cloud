@@ -2787,6 +2787,157 @@ class TestUpload:
         assert hash_alg == HashAlgorithm.XXH128
         assert manifest_name == "da20652d1ff9f1dc55050b28b3ab6d36_suffix"
 
+    def test_get_total_size_of_files_with_valid_files(self, tmp_path: Path):
+        """Test that _get_total_size_of_files correctly calculates total size for valid files."""
+        # Create test files with known sizes
+        file1 = tmp_path / "file1.txt"
+        file2 = tmp_path / "file2.txt"
+        file1.write_text("hello")  # 5 bytes
+        file2.write_text("world!")  # 6 bytes
+
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        total_size = manager._get_total_size_of_files([str(file1), str(file2)])
+        assert total_size == 11
+
+    def test_get_total_size_of_files_with_missing_files(self, tmp_path: Path, caplog):
+        """Test that _get_total_size_of_files handles missing files gracefully."""
+        # Create one real file and reference non-existent files
+        real_file = tmp_path / "real.txt"
+        real_file.write_text("content")  # 7 bytes
+        missing_file = tmp_path / "missing.txt"
+
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        total_size = manager._get_total_size_of_files([str(real_file), str(missing_file)])
+        assert total_size == 7
+        assert "Skipping file in size calculation" in caplog.text
+
+    def test_get_total_size_of_files_uses_threadpool(self, tmp_path: Path):
+        """Test that _get_total_size_of_files uses ThreadPoolExecutor with correct configuration."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test")
+
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        with patch(
+            "deadline.job_attachments.upload.concurrent.futures.ThreadPoolExecutor"
+        ) as mock_executor:
+            mock_executor.return_value.__enter__.return_value.map.return_value = [4]
+
+            manager._get_total_size_of_files([str(test_file)])
+
+            mock_executor.assert_called_once_with(max_workers=8)
+
+    def test_get_total_size_of_files_empty_list(self):
+        """Test that _get_total_size_of_files returns 0 for empty file list."""
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        total_size = manager._get_total_size_of_files([])
+        assert total_size == 0
+
+    def test_get_total_input_size_from_manifests_uses_manifest_sizes(self):
+        """Test that _get_total_input_size_from_manifests uses manifest path sizes directly."""
+        from deadline.job_attachments.models import AssetRootManifest
+
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        # Create manifests with known file sizes
+        manifest1 = AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            total_size=150,
+            paths=[
+                BaseManifestPath(path="file1.txt", hash="hash1", size=100, mtime=1234567890),
+                BaseManifestPath(path="file2.txt", hash="hash2", size=50, mtime=1234567891),
+            ],
+        )
+
+        manifest2 = AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            total_size=75,
+            paths=[
+                BaseManifestPath(path="file3.txt", hash="hash3", size=75, mtime=1234567892),
+            ],
+        )
+
+        root_manifests = [
+            AssetRootManifest(root_path="/path1", asset_manifest=manifest1),
+            AssetRootManifest(root_path="/path2", asset_manifest=manifest2),
+            AssetRootManifest(root_path="/path3", asset_manifest=None),  # No manifest
+        ]
+
+        total_files, total_bytes = manager._get_total_input_size_from_manifests(root_manifests)
+
+        assert total_files == 3  # 2 files from manifest1 + 1 file from manifest2
+        assert total_bytes == 225  # 100 + 50 + 75
+
+    def test_get_total_input_size_from_manifests_empty_manifests(self):
+        """Test that _get_total_input_size_from_manifests handles empty manifest list."""
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        total_files, total_bytes = manager._get_total_input_size_from_manifests([])
+
+        assert total_files == 0
+        assert total_bytes == 0
+
+    def test_get_total_input_size_from_manifests_no_asset_manifests(self):
+        """Test that _get_total_input_size_from_manifests handles root manifests with no asset manifests."""
+        from deadline.job_attachments.models import AssetRootManifest
+
+        manager = S3AssetManager(
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName="test-bucket", rootPrefix="test-prefix"
+            ),
+        )
+
+        root_manifests = [
+            AssetRootManifest(root_path="/path1", asset_manifest=None),
+            AssetRootManifest(root_path="/path2", asset_manifest=None),
+        ]
+
+        total_files, total_bytes = manager._get_total_input_size_from_manifests(root_manifests)
+
+        assert total_files == 0
+        assert total_bytes == 0
+
 
 def assert_progress_report_last_callback(
     num_input_files: int,
