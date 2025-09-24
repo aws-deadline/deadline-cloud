@@ -436,6 +436,7 @@ def _download_job_output(
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
     step = {}
     task = {}
+    session_action_id = None
     if step_id:
         step = deadline.get_step(farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id)
     if task_id:
@@ -446,6 +447,7 @@ def _download_job_output(
             stepId=step_id,
             taskId=task_id,
         )
+        session_action_id = task.get("latestSessionActionId")
 
     click.echo(
         _get_start_message(job["name"], step.get("name"), task.get("parameters"), is_json_format)
@@ -476,6 +478,7 @@ def _download_job_output(
         job_id=job_id,
         step_id=step_id,
         task_id=task_id,
+        session_action_id=session_action_id,
         session=queue_role_session,
     )
 

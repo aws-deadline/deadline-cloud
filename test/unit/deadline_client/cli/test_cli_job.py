@@ -42,6 +42,9 @@ from ..shared_constants import (
     MOCK_FARM_ID,
     MOCK_JOB_ID,
     MOCK_QUEUE_ID,
+    MOCK_SESSION_ACTION_ID,
+    MOCK_STEP_ID,
+    MOCK_TASK_ID,
     MOCK_FLEET_ID,
     MOCK_WORKER_ID,
 )
@@ -421,6 +424,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -529,6 +533,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -624,6 +629,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -706,6 +712,7 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -797,6 +804,7 @@ def test_cli_job_download_output_stdout_with_json_format(
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -1356,6 +1364,10 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
         }
         boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
 
+        boto3_client_mock().get_task.return_value = {
+            "latestSessionActionId": MOCK_SESSION_ACTION_ID,
+        }
+
         runner = CliRunner()
         result = runner.invoke(
             main,
@@ -1382,6 +1394,7 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
             job_id=MOCK_JOB_ID,
             step_id="step-1",
             task_id="task-2",
+            session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
         )
         mock_download.assert_called_once_with(
@@ -1524,6 +1537,7 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
 
@@ -1641,3 +1655,73 @@ class TestJsonLineHelpers:
         assert "Download Summary:" in result
         assert "Downloaded 2 files totaling" in result
         assert not result.startswith('{"messageType":')
+
+
+def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
+    config.set_setting("settings.auto_accept", "true")
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
+        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {}
+
+        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+        boto3_client_mock().get_job.return_value = {
+            "name": "Test Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": "/root/path",
+                        "rootPathFormat": PathFormat(mock_host_path_format_name),
+                        "outputRelativeDirectories": ["."],
+                    },
+                ],
+            },
+        }
+        boto3_client_mock().get_step.return_value = {"name": "Test Step"}
+        boto3_client_mock().get_task.return_value = {
+            "latestSessionActionId": MOCK_SESSION_ACTION_ID,
+        }
+        boto3_client_mock().get_queue.return_value = MOCK_GET_QUEUE_RESPONSE
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "job",
+                "download-output",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--job-id",
+                MOCK_JOB_ID,
+                "--step-id",
+                MOCK_STEP_ID,
+                "--task-id",
+                MOCK_TASK_ID,
+            ],
+        )
+
+        assert result.exit_code == 0, f"CLI failed with output: {result.output}"
+        MockOutputDownloader.assert_called_once_with(
+            s3_settings=ANY,
+            farm_id=MOCK_FARM_ID,
+            queue_id=MOCK_QUEUE_ID,
+            job_id=MOCK_JOB_ID,
+            step_id=MOCK_STEP_ID,
+            task_id=MOCK_TASK_ID,
+            session_action_id=MOCK_SESSION_ACTION_ID,
+            session=ANY,
+        )

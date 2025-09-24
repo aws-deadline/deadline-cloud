@@ -38,6 +38,7 @@ from ..shared_constants import (
     MOCK_FARM_ID,
     MOCK_JOB_ID,
     MOCK_QUEUE_ID,
+    MOCK_SESSION_ACTION_ID,
     MOCK_STEP_ID,
     MOCK_TASK_ID,
     MOCK_PROFILE_NAME,
@@ -300,6 +301,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             job_id=MOCK_JOB_ID,
             step_id=None,
             task_id=None,
+            session_action_id=None,
             session=ANY,
         )
         mock_download.assert_called_once_with(
@@ -349,6 +351,10 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             + f"&step-id={MOCK_STEP_ID}&task-id={MOCK_TASK_ID}&profile={MOCK_PROFILE_NAME}"
         )
 
+        boto3_client_mock().get_task.return_value = {
+            "latestSessionActionId": MOCK_SESSION_ACTION_ID,
+        }
+
         runner = CliRunner()
         result = runner.invoke(main, ["handle-web-url", web_url])
         assert result.exit_code == 0, result.output
@@ -360,6 +366,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             job_id=MOCK_JOB_ID,
             step_id=MOCK_STEP_ID,
             task_id=MOCK_TASK_ID,
+            session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
         )
         mock_download.assert_called_once_with(

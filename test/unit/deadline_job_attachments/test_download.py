@@ -9,6 +9,7 @@ import shutil
 
 from collections import Counter
 from dataclasses import dataclass, fields
+from datetime import datetime
 from io import BytesIO
 import json
 from pathlib import Path
@@ -42,14 +43,18 @@ from deadline.job_attachments.download import (
     get_job_input_output_paths_by_asset_root,
     get_job_input_paths_by_asset_root,
     get_job_output_paths_by_asset_root,
+    get_output_manifests_by_asset_root,
     get_manifest_from_s3,
     handle_existing_vfs,
     mount_vfs_from_manifests,
     merge_asset_manifests,
     _ensure_paths_within_directory,
     _get_asset_root_from_metadata,
+    _get_manifests_by_session_action_id,
     _get_new_copy_file_path,
     _get_tasks_manifests_keys_from_s3,
+    _list_s3_objects_with_error_handling,
+    _merge_asset_manifests_sorted_asc_by_last_modified,
     VFS_CACHE_REL_PATH_IN_SESSION,
     VFS_MANIFEST_FOLDER_IN_SESSION,
     VFS_MANIFEST_FOLDER_PERMISSIONS,
@@ -98,14 +103,14 @@ class Manifest:
 
 MANIFESTS_v2022_03_03: List[Manifest] = [
     Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest1v2023-03-03_output",
+        "job-1/step-1/task-1-1/sessionaction-9-9/manifest1v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test1","mtime":1234000000,"path":"test1.txt","size":1},'
         b'{"hash":"test2","mtime":1234000000,"path":"test/test2.txt","size":1}],'
         b'"totalSize":2}',
     ),
     Manifest(
-        "job-1/step-1/task-1-1/session-action-9/manifest2v2023-03-03_output",
+        "job-1/step-1/task-1-1/sessionaction-9-9/manifest2v2023-03-03_output",
         b'{"hashAlg":"xxh128","manifestVersion":"2023-03-03",'
         b'"paths":[{"hash":"test3","mtime":1234000000,"path":"test/test3.txt","size":1},'
         b'{"hash":"test4","mtime":1234000000,"path":"test4.txt","size":1}],'
@@ -210,6 +215,7 @@ def assert_download_task_output(
             job_id="job-1",
             step_id="step-1",
             task_id="task-1-1",
+            session_action_id="sessionaction-9-9",
         )
 
         summary_statistics = output_downloader.download_job_output(
@@ -1249,6 +1255,7 @@ class TestFullDownload:
                 job_id="job-1",
                 step_id="step-1",
                 task_id="task-1-1",
+                session_action_id="sessionaction-9-9",
             )
 
         target_path = tmp_path / "target"
@@ -2649,6 +2656,418 @@ def test_mount_vfs_from_manifests(
         mock_vfs_start.assert_has_calls(
             [call(session_dir=temp_dir_path), call(session_dir=temp_dir_path)]
         )
+
+
+def test_get_manifests_by_session_action_id_task_based():
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    with patch(
+        "deadline.job_attachments.download._list_s3_objects_with_error_handling"
+    ) as mock_list:
+        mock_list.return_value = [
+            {
+                "Key": "farm-0/queue-0/job-0/step-0/task-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output"
+            }
+        ]
+
+        with patch(
+            "deadline.job_attachments.download.get_asset_root_and_manifest_from_s3"
+        ) as mock_get:
+            mock_get.return_value = ("/test/root", MagicMock())
+
+            result = _get_manifests_by_session_action_id(
+                s3_settings,
+                "farm-0",
+                "queue-0",
+                "job-0",
+                "step-0",
+                "task-0",
+                "sessionaction-0-0",
+                None,
+            )
+
+            assert "/test/root" in result
+            mock_list.assert_called_once()
+
+
+def test_get_manifests_by_session_action_id_chunked_fallback():
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    with patch(
+        "deadline.job_attachments.download._list_s3_objects_with_error_handling"
+    ) as mock_list:
+        mock_list.side_effect = [
+            [],  # Empty first call (task prefix)
+            [
+                {
+                    "Key": "farm-0/queue-0/job-0/step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output"
+                }
+            ],  # Found on fallback (step prefix)
+        ]
+
+        with patch(
+            "deadline.job_attachments.download.get_asset_root_and_manifest_from_s3"
+        ) as mock_get:
+            mock_get.return_value = ("/test/root", MagicMock())
+
+            result = _get_manifests_by_session_action_id(
+                s3_settings,
+                "farm-0",
+                "queue-0",
+                "job-0",
+                "step-0",
+                "task-0",
+                "sessionaction-0-0",
+                None,
+            )
+
+            assert "/test/root" in result
+            assert mock_list.call_count == 2
+
+
+def test_get_manifests_by_session_action_id_no_manifests_found():
+    """Test _get_manifests_by_session_action_id when no manifests are found in either task or step prefix."""
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    with patch(
+        "deadline.job_attachments.download._list_s3_objects_with_error_handling"
+    ) as mock_list:
+        mock_list.side_effect = [JobAttachmentsError("Not found"), JobAttachmentsError("Not found")]
+
+        result = _get_manifests_by_session_action_id(
+            s3_settings, "farm-0", "queue-0", "job-0", "step-0", "task-0", "sessionaction-0-0", None
+        )
+
+        assert result == {}
+        assert mock_list.call_count == 2
+
+
+def test_get_tasks_manifests_keys_chunked_and_task_based_with_latest():
+    mock_s3_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_s3_client.get_paginator.return_value = mock_paginator
+    mock_paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": "step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output"},  # Chunked
+                {
+                    "Key": "step-0/task-0/2025-05-06T02:58:03.824934Z_sessionaction-0-1/0_output"
+                },  # Newer task-based
+                {
+                    "Key": "step-0/task-0/2024-05-06T02:58:03.824934Z_sessionaction-1-1/0_output"
+                },  # Older task-based
+            ]
+        }
+    ]
+
+    with patch("deadline.job_attachments.download.get_s3_client", return_value=mock_s3_client):
+        result = _get_tasks_manifests_keys_from_s3(
+            "prefix/", "bucket", None, select_latest_per_task=True
+        )
+
+        assert len(result) == 2
+        assert "step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output" in result
+        assert "step-0/task-0/2025-05-06T02:58:03.824934Z_sessionaction-0-1/0_output" in result
+
+
+def test_get_manifests_by_session_action_id_regex_matching():
+    """Test that _get_manifests_by_session_action_id correctly matches session action IDs using regex."""
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    with patch(
+        "deadline.job_attachments.download._list_s3_objects_with_error_handling"
+    ) as mock_list:
+        # Mock S3 contents with various files, only one should match the session action ID
+        mock_list.return_value = [
+            {"Key": "prefix/20241225T120000_sessionaction-1-0/manifest_output"},  # Should match
+            {"Key": "prefix/other_file"},  # Should not match
+            {"Key": "prefix/20241225T130000_sessionaction-2-0/manifest_output"},  # Should not match
+            {"Key": "prefix/no_output_suffix"},  # Should not match
+        ]
+
+        with patch(
+            "deadline.job_attachments.download.get_asset_root_and_manifest_from_s3"
+        ) as mock_get:
+            mock_get.return_value = ("/test/root", MagicMock())
+
+            result = _get_manifests_by_session_action_id(
+                s3_settings,
+                "farm-0",
+                "queue-0",
+                "job-0",
+                "step-0",
+                "task-0",
+                "sessionaction-1-0",  # This should only match the first file
+                None,
+            )
+
+            assert "/test/root" in result
+            # Should only call get_asset_root_and_manifest_from_s3 once for the matching file
+            mock_get.assert_called_once_with(
+                "prefix/20241225T120000_sessionaction-1-0/manifest_output", "test-bucket", None
+            )
+
+
+def test_get_tasks_manifests_keys_chunked_and_task_based_without_latest():
+    mock_s3_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_s3_client.get_paginator.return_value = mock_paginator
+    mock_paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": "step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output"},  # Chunked
+                {
+                    "Key": "step-0/task-0/2025-05-06T02:58:03.824934Z_sessionaction-0-1/0_output"
+                },  # Newer task-based
+                {
+                    "Key": "step-0/task-0/2024-05-06T02:58:03.824934Z_sessionaction-1-1/0_output"
+                },  # Older task-based
+            ]
+        }
+    ]
+
+    with patch("deadline.job_attachments.download.get_s3_client", return_value=mock_s3_client):
+        result = _get_tasks_manifests_keys_from_s3(
+            "prefix/", "bucket", None, select_latest_per_task=False
+        )
+
+        assert len(result) == 3
+        assert "step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output" in result
+        assert "step-0/task-0/2025-05-06T02:58:03.824934Z_sessionaction-0-1/0_output" in result
+        assert "step-0/task-0/2024-05-06T02:58:03.824934Z_sessionaction-1-1/0_output" in result
+
+
+def test_get_output_manifests_by_asset_root_with_session_action_id():
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    with patch("deadline.job_attachments.download._get_manifests_by_session_action_id") as mock_get:
+        mock_get.return_value = {"/test/root": [MagicMock()]}
+
+        result = get_output_manifests_by_asset_root(
+            s3_settings, "farm-1", "queue-1", "job-1", "step-1", "task-1", "session-1", None
+        )
+
+        assert "/test/root" in result
+        mock_get.assert_called_once_with(
+            s3_settings, "farm-1", "queue-1", "job-1", "step-1", "task-1", "session-1", None
+        )
+
+
+def test_get_output_manifests_by_asset_root_chronological_merge_chunked():
+    """Test chronological merging of manifests for chunked-based paths with different timestamps."""
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    # Create two manifests with different content for the same asset root
+    older_manifest_dict = {
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [
+            {
+                "hash": "a96ddfc33590cd7d2391f1972f66a72a",
+                "mtime": 1111111111111111,
+                "path": "file.txt",
+                "size": 10,
+            }
+        ],
+        "totalSize": 10,
+    }
+    newer_manifest_dict = {
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [
+            {
+                "hash": "b96ddfc33590cd7d2391f1972f66a72b",
+                "mtime": 2222222222222222,
+                "path": "file.txt",
+                "size": 20,
+            }
+        ],
+        "totalSize": 20,
+    }
+
+    older_manifest = decode_manifest(json.dumps(older_manifest_dict))
+    newer_manifest = decode_manifest(json.dumps(newer_manifest_dict))
+
+    # Mock the S3 calls
+    with patch(
+        "deadline.job_attachments.download._get_tasks_manifests_keys_from_s3"
+    ) as mock_keys, patch(
+        "deadline.job_attachments.download._get_asset_root_and_manifest_from_s3_with_last_modified"
+    ) as mock_get_manifest:
+        # Two chunked session actions under same step with different timestamps
+        mock_keys.return_value = [
+            "step-0/2024-05-06T02:58:03.824934Z_sessionaction-0-0/0_output",  # Older
+            "step-0/2025-05-06T02:58:03.824934Z_sessionaction-1-0/0_output",  # Newer
+        ]
+
+        # Return manifests with timestamps - older first, then newer
+        mock_get_manifest.side_effect = [
+            ("/test/root", datetime(2024, 5, 6, 2, 58, 3), older_manifest),
+            ("/test/root", datetime(2025, 5, 6, 2, 58, 3), newer_manifest),
+        ]
+
+        result = get_output_manifests_by_asset_root(
+            s3_settings, "farm-1", "queue-1", "job-1", "step-1"
+        )
+
+        # Should have one asset root with one merged manifest
+        assert len(result) == 1
+        assert "/test/root" in result
+        assert len(result["/test/root"]) == 1
+
+        # The merged manifest should contain the newer file (newer overwrites older)
+        merged_manifest = result["/test/root"][0]
+        assert len(merged_manifest.paths) == 1
+        assert merged_manifest.paths[0].hash == "b96ddfc33590cd7d2391f1972f66a72b"
+        assert merged_manifest.paths[0].size == 20
+
+
+def test_get_output_manifests_by_asset_root_multiple_asset_roots():
+    """Test chronological merging with multiple asset roots."""
+    s3_settings = JobAttachmentS3Settings(s3BucketName="test-bucket", rootPrefix="root")
+
+    # Create manifests for different asset roots
+    manifest_root1 = decode_manifest(
+        json.dumps(
+            {
+                "hashAlg": "xxh128",
+                "manifestVersion": "2023-03-03",
+                "paths": [
+                    {
+                        "hash": "a96ddfc33590cd7d2391f1972f66a72a",
+                        "mtime": 1111111111111111,
+                        "path": "file1.txt",
+                        "size": 10,
+                    }
+                ],
+                "totalSize": 10,
+            }
+        )
+    )
+    manifest_root2 = decode_manifest(
+        json.dumps(
+            {
+                "hashAlg": "xxh128",
+                "manifestVersion": "2023-03-03",
+                "paths": [
+                    {
+                        "hash": "b96ddfc33590cd7d2391f1972f66a72b",
+                        "mtime": 2222222222222222,
+                        "path": "file2.txt",
+                        "size": 20,
+                    }
+                ],
+                "totalSize": 20,
+            }
+        )
+    )
+
+    with patch(
+        "deadline.job_attachments.download._get_tasks_manifests_keys_from_s3"
+    ) as mock_keys, patch(
+        "deadline.job_attachments.download._get_asset_root_and_manifest_from_s3_with_last_modified"
+    ) as mock_get_manifest:
+        mock_keys.return_value = ["manifest1", "manifest2"]
+        mock_get_manifest.side_effect = [
+            ("/root1", datetime(2024, 5, 6), manifest_root1),
+            ("/root2", datetime(2024, 5, 7), manifest_root2),
+        ]
+
+        result = get_output_manifests_by_asset_root(s3_settings, "farm-1", "queue-1", "job-1")
+
+        assert len(result) == 2
+        assert "/root1" in result
+        assert "/root2" in result
+        assert len(result["/root1"]) == 1
+        assert len(result["/root2"]) == 1
+
+
+def test_list_s3_objects_with_error_handling_no_contents():
+    """Test _list_s3_objects_with_error_handling when S3 returns no Contents."""
+    mock_s3_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_s3_client.get_paginator.return_value = mock_paginator
+    mock_paginator.paginate.return_value = [{}]  # No Contents key
+
+    with patch("deadline.job_attachments.download.get_s3_client", return_value=mock_s3_client):
+        with pytest.raises(JobAttachmentsError, match="Unable to find asset manifest"):
+            _list_s3_objects_with_error_handling("bucket", "prefix/", None)
+
+
+def test_get_tasks_manifests_keys_chunked_only():
+    """Test _get_tasks_manifests_keys_from_s3 with only chunked manifests (no task-based)."""
+    mock_s3_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_s3_client.get_paginator.return_value = mock_paginator
+    mock_paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": "step-0/2025-05-06T02:58:03.824934Z_sessionaction-0-0/0_output"},
+                {"Key": "step-0/2025-05-06T03:58:03.824934Z_sessionaction-1-0/0_output"},
+            ]
+        }
+    ]
+
+    with patch("deadline.job_attachments.download.get_s3_client", return_value=mock_s3_client):
+        result = _get_tasks_manifests_keys_from_s3(
+            "prefix/", "bucket", None, select_latest_per_task=True
+        )
+
+        assert len(result) == 2
+        assert all("task-" not in key for key in result)
+
+
+def test_merge_asset_manifests_sorted_same_timestamp():
+    """Test _merge_asset_manifests_sorted_asc_by_last_modified with manifests having same timestamp."""
+    # Create two manifests with same timestamp but different content
+    manifest1 = decode_manifest(
+        json.dumps(
+            {
+                "hashAlg": "xxh128",
+                "manifestVersion": "2023-03-03",
+                "paths": [
+                    {
+                        "hash": "a96ddfc33590cd7d2391f1972f66a72a",
+                        "mtime": 1111111111111111,
+                        "path": "file.txt",
+                        "size": 10,
+                    }
+                ],
+                "totalSize": 10,
+            }
+        )
+    )
+    manifest2 = decode_manifest(
+        json.dumps(
+            {
+                "hashAlg": "xxh128",
+                "manifestVersion": "2023-03-03",
+                "paths": [
+                    {
+                        "hash": "b96ddfc33590cd7d2391f1972f66a72b",
+                        "mtime": 2222222222222222,
+                        "path": "file.txt",
+                        "size": 20,
+                    }
+                ],
+                "totalSize": 20,
+            }
+        )
+    )
+
+    same_timestamp = datetime(2024, 5, 6, 2, 58, 3)
+    manifests_with_timestamps = [
+        (same_timestamp, manifest1),
+        (same_timestamp, manifest2),
+    ]
+
+    result = _merge_asset_manifests_sorted_asc_by_last_modified(manifests_with_timestamps)
+
+    # Should merge successfully even with same timestamps
+    assert result is not None
+    assert len(result.paths) == 1
+    # The second manifest should overwrite the first (stable sort behavior)
+    assert result.paths[0].hash == "b96ddfc33590cd7d2391f1972f66a72b"
 
 
 def test_get_new_copy_file_path_file_collisions(tmp_path: Path) -> None:
