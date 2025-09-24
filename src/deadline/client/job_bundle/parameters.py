@@ -814,16 +814,26 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
     ]
 
     # Validate hidden parameters have values
+    invalid_params = []
     for param in parameters:
         if param.get("userInterface", {}).get("control") == "HIDDEN":
             parameter_value = param.get("value")
             if parameter_value is None or parameter_value == "":
                 parameter_value = param.get("default")
             if parameter_value is None or parameter_value == "":
-                raise DeadlineOperationError(
-                    f'Job bundle validation failed:\nHidden parameter "{param["name"]}" is missing a value. '
-                    f"Hidden parameters must have either a default value in the template or a value in parameter_values.yaml."
-                )
+                invalid_params.append(param["name"])
+
+    if invalid_params:
+        if len(invalid_params) == 1:
+            message = f'Job bundle validation failed:\nHidden parameter "{invalid_params[0]}" is missing a value.'
+        else:
+            param_list = ", ".join(f'"{name}"' for name in invalid_params)
+            message = (
+                f"Job bundle validation failed:\nHidden parameters {param_list} are missing values."
+            )
+
+        message += " Hidden parameters must have either a default value in the template or a value in parameter_values.yaml."
+        raise DeadlineOperationError(message)
 
     return parameters
 
