@@ -532,13 +532,6 @@ class S3AssetUploader:
         # Otherwise all hashes exist in S3
         return True
 
-    def _sample_cache_entries_with_limit(
-        self, cache_entries: List[S3CheckCacheEntry], limit: int = 30
-    ):
-        sampled_count: int = min(len(cache_entries), limit)
-        random.shuffle(cache_entries)
-        return cache_entries[:sampled_count]
-
     def verify_hash_cache_integrity(
         self,
         s3_check_cache_dir: Optional[str],
@@ -551,22 +544,22 @@ class S3AssetUploader:
         verifies if the cached assets exist in S3. Returns True if all sampled cached assets exist in S3, False
         otherwise.
         """
-
         # Find the list of s3 upload keys that have been cached
         s3_upload_keys: List[str] = [
             self._generate_s3_upload_key(file, manifest.hashAlg, s3_cas_prefix)
             for file in manifest.paths
         ]
-        with S3CheckCache(s3_check_cache_dir) as s3_cache:
-            cache_entries = [
-                s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}")
-                for upload_key in s3_upload_keys
-                if s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}") is not None
-            ]
 
-            # verify that a sample of the cached entries still exist in S3
-            sampled_cache_entries = self._sample_cache_entries_with_limit(cache_entries)
-            return self._check_hashes_exist_in_s3(sampled_cache_entries)
+        random.shuffle(s3_upload_keys)
+        sampled_cache_entries: List[S3CheckCacheEntry] = []
+        with S3CheckCache(s3_check_cache_dir) as s3_cache:
+            for upload_key in s3_upload_keys:
+                this_entry = s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}")
+                if this_entry is not None:
+                    sampled_cache_entries.append(this_entry)
+                    if len(sampled_cache_entries) >= 30:
+                        break
+        return self._check_hashes_exist_in_s3(sampled_cache_entries)
 
     def _separate_files_by_size(
         self,
@@ -617,13 +610,12 @@ class S3AssetUploader:
         local_path = source_root.joinpath(file.path)
         s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, s3_cas_prefix)
         is_uploaded = False
-        file_size = local_path.resolve().stat().st_size
 
         if s3_check_cache.get_entry(s3_key=f"{s3_bucket}/{s3_upload_key}"):
             logger.debug(
                 f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
             )
-            return (is_uploaded, file_size)
+            return (is_uploaded, file.size)
 
         if self.file_already_uploaded(s3_bucket, s3_upload_key):
             logger.debug(
@@ -645,7 +637,7 @@ class S3AssetUploader:
             )
         )
 
-        return (is_uploaded, file_size)
+        return (is_uploaded, file.size)
 
     def _snapshot_object_to_cas(
         self,
@@ -1292,15 +1284,17 @@ class S3AssetManager:
             return top_directory
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
-        total_bytes = 0
-        try:
-            for path in paths:
-                total_bytes += Path(path).resolve().stat().st_size
-        except FileNotFoundError:
-            logger.warning(
-                f"Skipping the input from total size calculation as it doesn't exist: {path}"
-            )
-        return total_bytes
+        def get_file_size(path_str: str) -> int:
+            try:
+                return Path(path_str).resolve().stat().st_size
+            except (FileNotFoundError, PermissionError, OSError):
+                logger.warning(f"Skipping file in size calculation: {path_str}")
+                return 0
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            sizes = list(executor.map(get_file_size, paths))
+
+        return sum(sizes)
 
     def _get_total_input_size_from_manifests(
         self, manifests: list[AssetRootManifest]
@@ -1309,14 +1303,9 @@ class S3AssetManager:
         total_bytes = 0
         for asset_root_manifest in manifests:
             if asset_root_manifest.asset_manifest:
-                input_paths = asset_root_manifest.asset_manifest.paths
-                input_paths_str = [
-                    str(Path(asset_root_manifest.root_path).joinpath(path.path))
-                    for path in input_paths
-                ]
-                total_files += len(input_paths)
-                total_bytes += self._get_total_size_of_files(input_paths_str)
-
+                total_files += len(asset_root_manifest.asset_manifest.paths)
+                for path in asset_root_manifest.asset_manifest.paths:
+                    total_bytes += path.size
         return (total_files, total_bytes)
 
     def _get_total_input_size_from_asset_group(
