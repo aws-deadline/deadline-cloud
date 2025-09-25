@@ -136,8 +136,8 @@ def _generate_message_for_asset_paths(
         warning_messages.append("\n")
         warning_messages.extend(unknown_path_warnings)
         warning_messages.append(
-            "\nTo enable submission without user input, add directory locations containing the unknown paths to either "
-            + "1. The list of known asset paths in the local Deadline Cloud configuration. "
+            "\nTo enable submission without user input, add directory locations containing the unknown paths to either \n"
+            + "1. The list of known asset paths in the local Deadline Cloud configuration. \n"
         )
         if storage_profile:
             warning_messages.append(
