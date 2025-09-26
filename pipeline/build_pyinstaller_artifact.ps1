@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 
 pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Failed to update pip" }
-pip install --upgrade hatch "click<8.3"
+pip install --upgrade hatch
 if ($LASTEXITCODE -ne 0) { throw "Failed to update hatch" }
 
 hatch run installer:build
