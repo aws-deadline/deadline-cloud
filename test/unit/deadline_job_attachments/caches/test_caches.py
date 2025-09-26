@@ -187,6 +187,76 @@ class TestHashCache:
                 )
                 assert hc.get_entry("/no/file", HashAlgorithm.XXH128) is None
 
+    def test_table_creation_idempotent(self, tmpdir):
+        """
+        Tests that creating the hash cache table multiple times doesn't cause errors
+        """
+        cache_dir = tmpdir.mkdir("cache")
+
+        # Create the cache and table first time
+        with HashCache(cache_dir) as hc1:
+            test_entry = HashCacheEntry(
+                file_path="/test/file",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash="abc123",
+                last_modified_time="1234.56",
+            )
+            hc1.put_entry(test_entry)
+            retrieved_entry = hc1.get_entry("/test/file", HashAlgorithm.XXH128)
+            assert retrieved_entry == test_entry
+
+        # Create the cache again with the same directory - should not fail
+        with HashCache(cache_dir) as hc2:
+            # Should be able to retrieve the previously stored entry
+            retrieved_entry = hc2.get_entry("/test/file", HashAlgorithm.XXH128)
+            assert retrieved_entry == test_entry
+
+            # Should be able to add new entries
+            new_entry = HashCacheEntry(
+                file_path="/test/file2",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash="def456",
+                last_modified_time="5678.91",
+            )
+            hc2.put_entry(new_entry)
+            retrieved_new_entry = hc2.get_entry("/test/file2", HashAlgorithm.XXH128)
+            assert retrieved_new_entry == new_entry
+
+    def test_table_already_exists_no_error(self, tmpdir):
+        """
+        Tests that no error is raised when trying to create a table that already exists
+        This specifically tests the 'IF NOT EXISTS' clause in the CREATE TABLE statement
+        """
+        import sqlite3
+
+        cache_dir = tmpdir.mkdir("cache")
+        db_path = os.path.join(cache_dir, "hash_cache.db")
+
+        # Create a HashCache instance to get the correct table name and schema
+        hc = HashCache(cache_dir)
+
+        with sqlite3.connect(db_path) as conn:
+            # Create the database and table first using the create query
+            conn.execute(hc.create_query)
+            # Running the same create query again to create existing table
+            # This is to simulate the case when the query runs concurrently trying to create the same table
+            conn.execute(hc.create_query)
+            conn.commit()
+
+        # Now verify normal operations work
+        with hc:
+            test_entry = HashCacheEntry(
+                file_path="/test/file",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash="abc123",
+                last_modified_time="1234.56",
+            )
+            hc.put_entry(test_entry)
+            retrieved_entry = hc.get_entry("/test/file", HashAlgorithm.XXH128)
+            assert retrieved_entry == test_entry
+            retrieved_entry = hc.get_entry("/test/file", HashAlgorithm.XXH128)
+            assert retrieved_entry == test_entry
+
 
 class TestS3CheckCache:
     """
@@ -312,3 +382,65 @@ class TestS3CheckCache:
             actual_entry = s3c.get_connection_entry("bucket/Data/somehash", connection)
 
             assert actual_entry is None
+
+    def test_table_creation_idempotent(self, tmpdir):
+        """
+        Tests that creating the S3 check cache table multiple times doesn't cause errors
+        """
+        cache_dir = tmpdir.mkdir("cache")
+
+        # Create the cache and table first time
+        with S3CheckCache(cache_dir) as s3c1:
+            test_entry = S3CheckCacheEntry(
+                s3_key="bucket/Data/test-hash",
+                last_seen_time=str(datetime.now().timestamp()),
+            )
+            s3c1.put_entry(test_entry)
+            retrieved_entry = s3c1.get_entry("bucket/Data/test-hash")
+            assert retrieved_entry == test_entry
+
+        # Create the cache again with the same directory - should not fail
+        with S3CheckCache(cache_dir) as s3c2:
+            # Should be able to retrieve the previously stored entry
+            retrieved_entry = s3c2.get_entry("bucket/Data/test-hash")
+            assert retrieved_entry == test_entry
+
+            # Should be able to add new entries
+            new_entry = S3CheckCacheEntry(
+                s3_key="bucket/Data/another-hash",
+                last_seen_time=str(datetime.now().timestamp()),
+            )
+            s3c2.put_entry(new_entry)
+            retrieved_new_entry = s3c2.get_entry("bucket/Data/another-hash")
+            assert retrieved_new_entry == new_entry
+
+    def test_table_already_exists_no_error(self, tmpdir):
+        """
+        Tests that no error is raised when trying to create a table that already exists
+        This specifically tests the 'IF NOT EXISTS' clause in the CREATE TABLE statement
+        """
+        import sqlite3
+
+        cache_dir = tmpdir.mkdir("cache")
+        db_path = os.path.join(cache_dir, "s3_check_cache.db")
+
+        # Create a S3CheckCache instance to get the correct table name and schema
+        s3c = S3CheckCache(cache_dir)
+
+        with sqlite3.connect(db_path) as conn:
+            # Create the database and table first using the create query
+            conn.execute(s3c.create_query)
+            # Running the same create query again to create existing table
+            # This is to simulate the case when the query runs concurrently trying to create the same table
+            conn.execute(s3c.create_query)
+            conn.commit()
+
+        # Now verify normal operations work
+        with s3c:
+            test_entry = S3CheckCacheEntry(
+                s3_key="bucket/Data/test-hash",
+                last_seen_time=str(datetime.now().timestamp()),
+            )
+            s3c.put_entry(test_entry)
+            retrieved_entry = s3c.get_entry("bucket/Data/test-hash")
+            assert retrieved_entry == test_entry
