@@ -12,9 +12,11 @@ from contextlib import contextmanager
 import errno
 import logging
 import os
+import stat
 import sys
 import time
 from datetime import datetime
+from functools import lru_cache
 from io import BufferedReader, BytesIO
 from math import trunc
 from pathlib import Path, PurePath
@@ -81,6 +83,44 @@ from ._utils import (
 )
 
 logger = logging.getLogger("deadline.job_attachments.upload")
+
+
+class _FileStatCache:
+    """Private cache for file stat results to avoid redundant filesystem calls"""
+
+    @lru_cache(maxsize=1024)
+    def _get_stat(self, path_str: str) -> Optional[os.stat_result]:
+        """Get cached stat result for a path string"""
+        try:
+            return Path(path_str).stat()
+        except (FileNotFoundError, PermissionError, OSError):
+            return None
+
+    def exists(self, path: Path) -> bool:
+        """Check if path exists, using cache when possible"""
+        stat_result = self._get_stat(str(path))
+        if stat_result is not None:
+            return True
+        # Fall back to direct exists() call if stat failed
+        return path.exists()
+
+    def is_dir(self, path: Path) -> bool:
+        """Check if path is directory, using cache when possible"""
+        stat_result = self._get_stat(str(path))
+        if stat_result is not None:
+            return stat.S_ISDIR(stat_result.st_mode)
+        # Fall back to direct is_dir() call if stat failed
+        return path.is_dir()
+
+    def get_size(self, path: Path) -> int:
+        """Get file size using cached stat"""
+        stat_result = self._get_stat(str(path))
+        if stat_result is not None:
+            return stat_result.st_size
+        # Log warning for missing files and return 0
+        logger.warning(f"Skipping file in size calculation: {path}")
+        return 0
+
 
 # The default multipart upload chunk size is 8 MB. We used this to determine the small file threshold,
 # which is the chunk size multiplied by the small file threshold multiplier.
@@ -1008,6 +1048,7 @@ class S3AssetManager:
         self.session = session
 
         self.manifest_version: ManifestVersion = asset_manifest_version
+        self._stat_cache = _FileStatCache()
 
     def _process_input_path(
         self,
@@ -1145,7 +1186,7 @@ class S3AssetManager:
         for _path in input_paths:
             # Need to use absolute to not resolve symlinks, but need normpath to get rid of relative paths, i.e. '..'
             abs_path = Path(os.path.normpath(Path(_path).absolute()))
-            if not abs_path.exists():
+            if not self._stat_cache.exists(abs_path):
                 if require_paths_exist:
                     missing_input_paths.add(abs_path)
                 else:
@@ -1154,7 +1195,7 @@ class S3AssetManager:
                     )
                     referenced_paths.add(_path)
                 continue
-            if abs_path.is_dir():
+            if self._stat_cache.is_dir(abs_path):
                 misconfigured_directories.add(abs_path)
                 continue
 
@@ -1292,11 +1333,7 @@ class S3AssetManager:
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
         def get_file_size(path_str: str) -> int:
-            try:
-                return Path(path_str).resolve().stat().st_size
-            except (FileNotFoundError, PermissionError, OSError):
-                logger.warning(f"Skipping file in size calculation: {path_str}")
-                return 0
+            return self._stat_cache.get_size(Path(path_str))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             sizes = list(executor.map(get_file_size, paths))
