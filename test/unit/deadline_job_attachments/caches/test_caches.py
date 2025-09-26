@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import os
+import threading
 from datetime import datetime
 from sqlite3 import OperationalError
 from unittest.mock import patch
@@ -68,6 +69,54 @@ class TestCacheDB:
         """Tests that a JobAttachmentsError is raised if init args are empty"""
         with pytest.raises(JobAttachmentsError):
             CacheDB(cache_name, table_name, create_query)
+
+    def test_get_local_connection_same_thread(self, tmpdir):
+        """Tests that get_local_connection returns the same connection for a single thread"""
+        cache_dir = tmpdir.mkdir("cache")
+
+        with CacheDB(
+            "test", "test_table", "CREATE TABLE test_table (id INTEGER)", cache_dir
+        ) as cdb:
+            # Get connection from main thread
+            conn1 = cdb.get_local_connection()
+            conn2 = cdb.get_local_connection()
+
+            # Should return same connection for same thread
+            assert conn1 is conn2
+
+    def test_get_local_connection_different_threads(self, tmpdir):
+        """Tests that get_local_connection creates separate connections for different threads"""
+        cache_dir = tmpdir.mkdir("cache")
+        connections = {}
+
+        # Create the cache and table first
+        with CacheDB(
+            "test", "test_table", "CREATE TABLE test_table (id INTEGER)", cache_dir
+        ) as cdb:
+
+            def get_connection(thread_id):
+                connections[thread_id] = cdb.get_local_connection()
+
+            # Create connections from different threads
+            thread1 = threading.Thread(target=get_connection, args=(1,))
+            thread2 = threading.Thread(target=get_connection, args=(2,))
+
+            thread1.start()
+            thread2.start()
+            thread1.join()
+            thread2.join()
+
+            # Connections should be different for different threads
+            assert connections[1] is not connections[2]
+
+    def test_get_local_connection_handles_sqlite_error(self, tmpdir):
+        """Tests that get_local_connection raises JobAttachmentsError on SQLite errors"""
+        with CacheDB("test", "test_table", "CREATE TABLE test_table (id INTEGER)", tmpdir) as cdb:
+            # Mock sqlite3.connect to raise OperationalError
+            with patch("sqlite3.connect", side_effect=OperationalError("test error")):
+                with pytest.raises(JobAttachmentsError) as exc_info:
+                    cdb.get_local_connection()
+                assert "Could not create connection to cache" in str(exc_info.value)
 
 
 class TestHashCache:
@@ -223,3 +272,43 @@ class TestS3CheckCache:
 
             # Test if the cache file was deleted
             assert not os.path.exists(file_name)
+
+    def test_get_connection_entry_returns_valid_entry(self, tmpdir):
+        """Tests that get_connection_entry returns a valid entry with provided connection"""
+        cache_dir = tmpdir.mkdir("cache")
+        expected_entry = S3CheckCacheEntry(
+            s3_key="bucket/Data/somehash",
+            last_seen_time=str(datetime.now().timestamp()),
+        )
+
+        with S3CheckCache(cache_dir) as s3c:
+            s3c.put_entry(expected_entry)
+            connection = s3c.get_local_connection()
+            actual_entry = s3c.get_connection_entry("bucket/Data/somehash", connection)
+
+            assert actual_entry == expected_entry
+
+    def test_get_connection_entry_returns_none_for_nonexistent_key(self, tmpdir):
+        """Tests that get_connection_entry returns None for non-existent key"""
+        cache_dir = tmpdir.mkdir("cache")
+
+        with S3CheckCache(cache_dir) as s3c:
+            connection = s3c.get_local_connection()
+            actual_entry = s3c.get_connection_entry("nonexistent/key", connection)
+
+            assert actual_entry is None
+
+    def test_get_connection_entry_returns_none_for_expired_entry(self, tmpdir):
+        """Tests that get_connection_entry returns None for expired entries"""
+        cache_dir = tmpdir.mkdir("cache")
+        expired_entry = S3CheckCacheEntry(
+            s3_key="bucket/Data/somehash",
+            last_seen_time="123.456",  # very old timestamp
+        )
+
+        with S3CheckCache(cache_dir) as s3c:
+            s3c.put_entry(expired_entry)
+            connection = s3c.get_local_connection()
+            actual_entry = s3c.get_connection_entry("bucket/Data/somehash", connection)
+
+            assert actual_entry is None
