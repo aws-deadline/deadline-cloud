@@ -63,7 +63,7 @@ class JobBundleSettingsWidget(QWidget):
 
         if initial_settings.browse_enabled:
             btnBox = QHBoxLayout()
-            self.load_bundle_button = QPushButton("Load a different job bundle")
+            self.load_bundle_button = QPushButton(self.tr("Load a different job bundle"))
             self.load_bundle_button.clicked.connect(self.on_load_bundle)
             btnBox.addWidget(self.load_bundle_button)
             btnBox.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))

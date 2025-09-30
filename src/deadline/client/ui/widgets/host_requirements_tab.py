@@ -204,7 +204,7 @@ class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
             "Run on worker hosts that meet the following requirements"
         )
         self.use_custom_button_tip = QHBoxLayout()
-        self.custom_button_tip_text = QLabel("All fields below are optional")
+        self.custom_button_tip_text = QLabel(self.tr("All fields below are optional"))
         custom_button_label_font = self.custom_button_tip_text.font()
         custom_button_label_font.setPointSize(10)
         custom_button_label_font.setItalic(True)
@@ -399,10 +399,10 @@ class CustomRequirementsWidget(QGroupBox):
         self.resize_list_to_fit()
 
         # Add a row with Add Amount and Add Attribute buttons
-        self.add_amount_button = QPushButton("Add amount")
+        self.add_amount_button = QPushButton(self.tr("Add amount"))
         self.add_amount_button.setFixedWidth(BUTTON_FIXED_WIDTH)
 
-        self.add_attr_button = QPushButton("Add attribute")
+        self.add_attr_button = QPushButton(self.tr("Add attribute"))
         self.add_attr_button.setFixedWidth(BUTTON_FIXED_WIDTH)
 
         self.buttons_row = QHBoxLayout()
@@ -536,7 +536,7 @@ class CustomCapabilityWidget(QGroupBox):
         self.title_label = QLabel(f"{capability_type} {item_number}")
         self.title_label.setStyleSheet("font-weight: bold")
 
-        self.delete_button = QPushButton("Delete")
+        self.delete_button = QPushButton(self.tr("Delete"))
         self.delete_button.clicked.connect(self._delete)
 
         self.title_row = QHBoxLayout()
@@ -563,7 +563,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value
-        self.name_label = QLabel("Amount name")
+        self.name_label = QLabel(self.tr("Amount name"))
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
@@ -572,9 +572,9 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.name_line_edit.setMaxLength(100 - len(AMOUNT_CAPABILITY_PREFIX))
 
         # Create layout with min/max spinbox
-        self.min_label = QLabel("Min")
+        self.min_label = QLabel(self.tr("Min"))
         self.min_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.max_label = QLabel("Max")
+        self.max_label = QLabel(self.tr("Max"))
         self.max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.min_spin_box = OptionalDoubleSpinBox(
             min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
@@ -697,9 +697,9 @@ class CustomAttributeWidget(CustomCapabilityWidget):
 
     def _build_ui(self):
         # Name / Value / All / Any
-        self.name_label = QLabel("Attribute name")
+        self.name_label = QLabel(self.tr("Attribute name"))
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
-        self.value_label = QLabel("Value(s)")
+        self.value_label = QLabel(self.tr("Value(s)"))
         self.all_of_button = QRadioButton("All")
         self.all_of_button.setChecked(True)
         self.any_of_button = QRadioButton("Any")
@@ -792,7 +792,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
             self.add_value_button.setParent(None)
 
         else:
-            self.add_value_button = QPushButton("Add")
+            self.add_value_button = QPushButton(self.tr("Add"))
             self.add_value_button.setStyleSheet("border-width: 0px")
             self.add_value_button.setToolTip(
                 "Add a new value to evaluate against for this attribute"
@@ -940,7 +940,7 @@ class CustomAttributeValueWidget(QWidget):
         self.line_edit.setMaxLength(100)
         self.line_edit.setValidator(QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_VALUE_REGEX))
 
-        self.remove_button = QPushButton("Remove")
+        self.remove_button = QPushButton(self.tr("Remove"))
         self.remove_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.remove_button.clicked.connect(self._remove)
 

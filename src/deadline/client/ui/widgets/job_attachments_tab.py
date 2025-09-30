@@ -355,13 +355,13 @@ class JobAttachmentsControlsWidget(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.add = QPushButton("Add...", parent=self)
+        self.add = QPushButton(self.tr("Add..."), parent=self)
         layout.addWidget(self.add)
 
-        self.remove_selected = QPushButton("Remove selected", parent=self)
+        self.remove_selected = QPushButton(self.tr("Remove selected"), parent=self)
         layout.addWidget(self.remove_selected)
 
-        self.status_message = QLabel("0 total")
+        self.status_message = QLabel(self.tr("0 total"))
         self.status_message.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         layout.addWidget(self.status_message)
 

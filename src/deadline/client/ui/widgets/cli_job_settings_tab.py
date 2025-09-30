@@ -68,12 +68,12 @@ class CliJobSettingsWidget(QWidget):
         layout.addWidget(self.array_parameter_name, 1, 1)
         self.use_array_parameter_chck.stateChanged.connect(self.use_array_parameter_changed)
 
-        self.array_parameter_values_label = QLabel("Array parameter values")
+        self.array_parameter_values_label = QLabel(self.tr("Array parameter values"))
         layout.addWidget(self.array_parameter_values_label, 2, 0)
         self.array_parameter_values = QLineEdit(self)
         layout.addWidget(self.array_parameter_values, 2, 1)
 
-        self.data_dir_label = QLabel("Data directory")
+        self.data_dir_label = QLabel(self.tr("Data directory"))
         self.data_dir_edit = DirectoryPickerWidget(
             initial_directory=os.path.expanduser(os.path.join("~", "CLIJobData")),
             directory_label="Data directory",
@@ -82,7 +82,7 @@ class CliJobSettingsWidget(QWidget):
         layout.addWidget(self.data_dir_label, 3, 0)
         layout.addWidget(self.data_dir_edit, 3, 1)
 
-        self.file_format_label = QLabel("Template file format")
+        self.file_format_label = QLabel(self.tr("Template file format"))
         self.file_format_box = QComboBox(parent=self)
         self.file_format_box.addItems(["YAML", "JSON"])
         layout.addWidget(self.file_format_label, 4, 0)

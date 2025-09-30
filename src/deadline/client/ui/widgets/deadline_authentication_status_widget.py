@@ -182,15 +182,15 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
 
         layout.addStretch()
 
-        self._switch_profile_button = QPushButton("Switch profile")
+        self._switch_profile_button = QPushButton(self.tr("Switch profile"))
         self._switch_profile_button.clicked.connect(self.switch_profile_clicked.emit)
         layout.addWidget(self._switch_profile_button)
 
-        self._login_button = QPushButton("Log in")
+        self._login_button = QPushButton(self.tr("Log in"))
         self._login_button.clicked.connect(self.login_clicked.emit)
         layout.addWidget(self._login_button)
 
-        self._more_info_button = QPushButton("More info")
+        self._more_info_button = QPushButton(self.tr("More info"))
         self._more_info_button.clicked.connect(self._show_more_info)
         layout.addWidget(self._more_info_button)
 

@@ -90,8 +90,8 @@ class DeadlineLoginDialog(QMessageBox):
         self.login_thread_succeeded.connect(self.handle_login_thread_succeeded)
         self.buttonClicked.connect(self.on_button_clicked)
 
-        self.setWindowTitle("Log in to AWS Deadline Cloud")
-        self.setText("Logging you in...")
+        self.setWindowTitle(self.tr("Log in to AWS Deadline Cloud"))
+        self.setText(self.tr("Logging you in..."))
         self.setStandardButtons(QMessageBox.Cancel)
 
         self._start_login()

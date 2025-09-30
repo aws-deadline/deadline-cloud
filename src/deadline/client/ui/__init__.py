@@ -144,6 +144,10 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
         app.setApplicationName("AWS Deadline Cloud")
         icon = QIcon(str(Path(__file__).parent.parent / "ui" / "resources" / "deadline_logo.svg"))
         app.setWindowIcon(icon)
+        
+        # Load translations
+        from .translation_loader import load_translations
+        load_translations(app)
 
         yield app
     except DeadlineOperationError as e:

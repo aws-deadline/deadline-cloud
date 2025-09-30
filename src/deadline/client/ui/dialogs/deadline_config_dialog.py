@@ -90,7 +90,7 @@ class DeadlineConfigDialog(QDialog):
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
-        self.setWindowTitle("AWS Deadline Cloud workstation configuration")
+        self.setWindowTitle(self.tr("AWS Deadline Cloud workstation configuration"))
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
 
@@ -296,7 +296,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.aws_profiles_box = QComboBox(parent=group)
-        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel("AWS profile")
+        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel(self.tr("AWS profile"))
         layout.addRow(aws_profile_label, self.aws_profiles_box)
         self.aws_profiles_box.currentTextChanged.connect(self.aws_profile_changed)
 
@@ -310,13 +310,13 @@ class DeadlineWorkstationConfigWidget(QWidget):
             collapse_user_dir=True,
         )
         job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel(
-            "Job history directory"
+            self.tr("Job history directory")
         )
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
         self.default_farm_box = DeadlineFarmListComboBox(parent=group)
-        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel("Default farm")
+        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel(self.tr("Default farm"))
         self.default_farm_box.box.currentIndexChanged.connect(self.default_farm_changed)
         self.default_farm_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_farm_box_label, self.default_farm_box)
@@ -325,14 +325,14 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.default_queue_box = DeadlineQueueListComboBox(parent=group)
-        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default queue")
+        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel(self.tr("Default queue"))
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
         self.default_queue_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_queue_box_label, self.default_queue_box)
 
         self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
         default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
-            "Default storage profile"
+            self.tr("Default storage profile")
         )
         self.default_storage_profile_box.box.currentIndexChanged.connect(
             self.default_storage_profile_name_changed
@@ -391,7 +391,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         )
 
         # Known asset paths section
-        known_paths_label = QLabel("Known asset paths")
+        known_paths_label = QLabel(self.tr("Known asset paths"))
         known_paths_label.setToolTip(
             "Paths that should not generate warnings when outside storage profile locations"
         )
@@ -404,11 +404,11 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         # Add buttons and status label
         button_layout = QHBoxLayout()
-        self.add_known_path_button = QPushButton("Add...")
+        self.add_known_path_button = QPushButton(self.tr("Add..."))
         self.add_known_path_button.clicked.connect(self._on_add_known_path)
-        self.edit_known_path_button = QPushButton("Edit...")
+        self.edit_known_path_button = QPushButton(self.tr("Edit..."))
         self.edit_known_path_button.clicked.connect(self._on_edit_known_path)
-        self.remove_known_path_button = QPushButton("Remove Selected")
+        self.remove_known_path_button = QPushButton(self.tr("Remove Selected"))
         self.remove_known_path_button.clicked.connect(self._on_remove_known_path)
         self.known_paths_status = QLabel()
         button_layout.addWidget(self.add_known_path_button)

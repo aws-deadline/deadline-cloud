@@ -263,22 +263,22 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.sub_name_edit.setMaxLength(128)
         self.layout.addRow("Name", self.sub_name_edit)
 
-        self.desc_label = QLabel("Description")
+        self.desc_label = QLabel(self.tr("Description"))
         self.desc_edit = QLineEdit()
         self.desc_edit.setMaxLength(2048)
         self.layout.addRow(self.desc_label, self.desc_edit)
 
-        self.priority_box_label = QLabel("Priority")
+        self.priority_box_label = QLabel(self.tr("Priority"))
         self.priority_box = QSpinBox(parent=self)
         self.priority_box.setRange(0, 100)
         self.layout.addRow(self.priority_box_label, self.priority_box)
 
-        self.initial_status_box_label = QLabel("Initial state")
+        self.initial_status_box_label = QLabel(self.tr("Initial state"))
         self.initial_status_box = QComboBox(parent=self)
         self.initial_status_box.addItems(["READY", "SUSPENDED"])
         self.layout.addRow(self.initial_status_box_label, self.initial_status_box)
 
-        self.max_failed_tasks_count_box_label = QLabel("Maximum failed tasks count")
+        self.max_failed_tasks_count_box_label = QLabel(self.tr("Maximum failed tasks count"))
         self.max_failed_tasks_count_box_label.setToolTip(
             "Maximum number of tasks that can fail before the job will be marked as failed."
         )
@@ -286,7 +286,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_failed_tasks_count_box.setRange(0, 2147483647)
         self.layout.addRow(self.max_failed_tasks_count_box_label, self.max_failed_tasks_count_box)
 
-        self.max_retries_per_task_box_label = QLabel("Maximum retries per task")
+        self.max_retries_per_task_box_label = QLabel(self.tr("Maximum retries per task"))
         self.max_retries_per_task_box_label.setToolTip(
             "Maximum number of times that a task will retry before it's marked as failed."
         )
@@ -294,7 +294,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_retries_per_task_box.setRange(0, 2147483647)
         self.layout.addRow(self.max_retries_per_task_box_label, self.max_retries_per_task_box)
 
-        self.max_worker_count_box_label = QLabel("Maximum worker count")
+        self.max_worker_count_box_label = QLabel(self.tr("Maximum worker count"))
         self.max_worker_count_box_label.setToolTip("Maximum worker count of job.")
         self.max_worker_count_box = QSpinBox()
         self.max_worker_count_box.setRange(1, 2147483647)
@@ -489,7 +489,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         Build the UI for the Deadline settings
         """
-        self.farm_box_label = QLabel("Farm")
+        self.farm_box_label = QLabel(self.tr("Farm"))
         self.farm_box = DeadlineFarmDisplay()
         self.layout.addRow(self.farm_box_label, self.farm_box)
 

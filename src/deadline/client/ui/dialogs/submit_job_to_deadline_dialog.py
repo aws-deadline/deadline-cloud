@@ -118,7 +118,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
-        self.setWindowTitle("Submit to AWS Deadline Cloud")
+        self.setWindowTitle(self.tr("Submit to AWS Deadline Cloud"))
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
@@ -214,13 +214,13 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
 
         self.button_box = QDialogButtonBox(Qt.Horizontal)
-        self.settings_button = QPushButton("Settings...")
+        self.settings_button = QPushButton(self.tr("Settings..."))
         self.settings_button.clicked.connect(self.on_settings_button_clicked)
         self.button_box.addButton(self.settings_button, QDialogButtonBox.ResetRole)
-        self.submit_button = QPushButton("Submit")
+        self.submit_button = QPushButton(self.tr("Submit"))
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
-        self.export_bundle_button = QPushButton("Export bundle")
+        self.export_bundle_button = QPushButton(self.tr("Export bundle"))
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
