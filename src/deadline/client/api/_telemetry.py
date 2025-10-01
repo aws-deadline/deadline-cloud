@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import atexit
-from functools import lru_cache
+from functools import lru_cache, wraps
 import json
 import logging
 import os
@@ -429,12 +429,8 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
     """
 
     def inner(function: F) -> F:
+        @wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            """
-            Wrapper to time a function for latency telemetry
-            :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
-            :param ** Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
-            """
             start_t = time.perf_counter_ns()
             ret_val = function(*args, **kwargs)
             end_t = time.perf_counter_ns()
@@ -449,7 +445,6 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
 
             return ret_val
 
-        wrapper.__doc__ = function.__doc__
         return cast(F, wrapper)
 
     return inner

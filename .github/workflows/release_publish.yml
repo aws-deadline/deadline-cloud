@@ -124,7 +124,7 @@ jobs:
           python-version: '3.9'
       - name: Install dependencies
         run: |
-          pip install --upgrade hatch "click<8.3"
+          pip install --upgrade hatch
       - name: Build
         run: hatch -v build
       # # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-pypi

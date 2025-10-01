@@ -1,0 +1,61 @@
+# Perform a manual PyPI release outside of the regular release process
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        default: ""
+        type: string
+
+jobs:
+  ValidateTag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate semantic versioning
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Tag '$TAG' does not follow semantic versioning format (X.Y.Z)"
+            exit 1
+          fi
+          echo "Tag validation successful"
+                
+  UnitTests:
+    name: Unit Tests
+    uses: ./.github/workflows/code_quality.yml
+    with:
+      tag: ${{ inputs.tag }}
+      
+  PublishToPyPI:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Validate semantic versioning
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+            echo "Error: Tag '$TAG' does not follow semantic versioning format (X.Y.Z)"
+            exit 1
+          fi
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install --upgrade hatch "click<8.3"
+      - name: Build
+        run: hatch -v build
+      # # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-pypi
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+

@@ -1,4 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+import os
 import platform
 import re
 import shutil
@@ -45,7 +46,18 @@ class InstallBuilderSelection:
             s3 = boto3.client("s3")
             dest = self.selection.dest_path / filename
             dest.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(self.selection.bucket, self.selection.key, str(dest))
+            expected_bucket_owner = os.getenv("IB_SOURCE_BUCKET_OWNER")
+            if not expected_bucket_owner:
+                raise ValueError("IB_SOURCE_BUCKET_OWNER environment variable is required")
+            if not (expected_bucket_owner.isdigit() and len(expected_bucket_owner) == 12):
+                raise ValueError("IB_SOURCE_BUCKET_OWNER must be a 12-digit AWS Account ID")
+
+            s3.download_file(
+                self.selection.bucket,
+                self.selection.key,
+                str(dest),
+                ExtraArgs={"ExpectedBucketOwner": expected_bucket_owner},
+            )
             unpack_dest = workdir / filename.split(".tar.gz")[0]
             shutil.unpack_archive(dest, unpack_dest)
             dest.unlink()
