@@ -1,3 +1,26 @@
+## 0.53.1 (2025-10-02)
+
+
+### Features
+* Add '-p' param support to 'deadline bundle gui-submit' ([`53c507e`](https://github.com/aws-deadline/deadline-cloud/commit/53c507ed817ab9ffde501121515a83677d61db22))
+* Add debug snapshot option to 'deadline bundle submit' ([`c4c96b9`](https://github.com/aws-deadline/deadline-cloud/commit/c4c96b9235fceb96224715a7fc81afa66e2484b5))
+* List all nonvalid hidden parameters in GUI validation error (#856) ([`4fa22df`](https://github.com/aws-deadline/deadline-cloud/commit/4fa22df43abc57d053a3f68fef97c8facae12cdc))
+
+### Bug Fixes
+* Concurrent job bundles submissions fail with sqlite3 table already exists error ([`b35aeb1`](https://github.com/aws-deadline/deadline-cloud/commit/b35aeb1eb3ae6955cd4f70f3c2c57f2b0d5bd900))
+* Job submission warning dialogs are too long ([`6042295`](https://github.com/aws-deadline/deadline-cloud/commit/6042295f758fe03be0b6c69bd242bdc35990de33))
+* Hidden parameters incorrectly require a default value in GUI ([`dd01866`](https://github.com/aws-deadline/deadline-cloud/commit/dd0186605715d39c68fd2e42cbf3b5f8c79dd92c), )
+* Re-queued jobs downloading the same output more than once with cli (#845) ([`a70f0b7`](https://github.com/aws-deadline/deadline-cloud/commit/a70f0b7adeba4434247f2de29cc2dc3453322f27))
+
+### Performance Improvements
+* Fixed performance bottleneck during bundle submission (#848) ([`4914e61`](https://github.com/aws-deadline/deadline-cloud/commit/4914e61f7ede87189bc0debdff36418b6b2796ee))
+* Improved job submission performance by multithreading syscalls to stat() and using manifest file sizes (#847) ([`737f781`](https://github.com/aws-deadline/deadline-cloud/commit/737f781712e187ddc2df9d549635333c186b539c))
+* Improved Job submission time with short initial wait time followed by increasing backoff. (#852) ([`bdefa51`](https://github.com/aws-deadline/deadline-cloud/commit/bdefa511d9abe7e741dce10ff56a26b30566cfaa))
+
+### Experimental
+* Add mcp to deadline client tools (#784) ([`af4064b`](https://github.com/aws-deadline/deadline-cloud/commit/af4064b1c0bb7455affa9987e6d031ac1e1f5afe))
+
+
 ## 0.53.0 (2025-09-15)
 
 ### BREAKING CHANGES
