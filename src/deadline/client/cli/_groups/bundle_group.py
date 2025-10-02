@@ -167,7 +167,7 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
 )
 @click.option(
     "--save-debug-snapshot",
-    help="Instead of submitting the job, generate a debug snapshot as a directory or a zip file if the extension is .zip."
+    help="EXPERIMENTAL - Instead of submitting the job, generate a debug snapshot as a directory or a zip file if the extension is .zip."
     " It includes the job attachments and parameters for creating the job."
     " You can later run the bash script in the snapshot to submit the job using AWS CLI commands.",
 )

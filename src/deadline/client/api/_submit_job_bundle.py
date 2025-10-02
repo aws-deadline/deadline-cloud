@@ -454,7 +454,7 @@ def create_job_from_job_bundle(
         submitter_name (str, optional): Name of the application submitting the bundle.
         known_asset_paths (list[str], optional): A list of paths that should not generate
                 warnings when outside storage profile locations. Defaults to an empty list.
-        debug_snapshot_dir (str, optional): A directory in which to save a debug snapshot of the data and commands
+        debug_snapshot_dir (str, optional): EXPERIMENTAL - A directory in which to save a debug snapshot of the data and commands
                 needed to exactly replicate the deadline:CreateJob service API call.
         print_function_callback (Callable str -> None, optional): Callback to print messages produced in this function.
                 By default calls print(), Can be replaced by click.echo or a logging function of choice.
