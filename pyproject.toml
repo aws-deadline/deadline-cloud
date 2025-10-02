@@ -56,6 +56,9 @@ gui = [
   # If the version changes, update the version in deadline/client/ui/__init__.py
   "PySide6-essentials >= 6.6,< 6.10",
 ]
+mcp = [
+  "mcp >= 1.13.0",
+]
 
 [project.scripts]
 deadline = "deadline.client.cli:main"
@@ -132,6 +135,7 @@ known-first-party = ["deadline"]
 # XML, HTML, and terminal reports.
 [tool.pytest.ini_options]
 xfail_strict = true
+
 addopts = [
   "--durations=5",
   "--cov=src/deadline",
@@ -147,6 +151,7 @@ markers = [
   "integ: tests that run against AWS resources",
   "docker: marks tests to be run only in a Docker environment",
   "cross_account: tests that run against other aws accounts",
+  "asyncio: mark test as async",
 ]
 # looponfailroots is deprecated, this removes the deprecation from the test output
 filterwarnings = ["ignore::DeprecationWarning"]

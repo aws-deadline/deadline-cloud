@@ -7,6 +7,7 @@ Tests for the CLI fleet commands.
 from unittest.mock import patch
 from copy import deepcopy
 import os
+from datetime import datetime
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -29,7 +30,7 @@ MOCK_FLEETS_LIST = [
         "platform": "EC2_SPOT",
         "workerRequirements": {"vCpus": {"min": 2, "max": 4}, "memInGiB": {"min": 8, "max": 16}},
         "autoScalerCapacities": {"min": 0, "max": 10},
-        "createdAt": "2022-11-22T06:37:36+00:00",
+        "createdAt": datetime.fromisoformat("2022-11-22T06:37:36+00:00"),
         "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin",
     },
     {
@@ -41,7 +42,7 @@ MOCK_FLEETS_LIST = [
         "platform": "EC2_SPOT",
         "workerRequirements": {"vCpus": {"min": 2, "max": 4}, "memInGiB": {"min": 8, "max": 16}},
         "autoScalerCapacities": {"min": 0, "max": 50},
-        "createdAt": "2022-11-22T06:37:36+00:00",
+        "createdAt": datetime.fromisoformat("2022-11-22T06:37:36+00:00"),
         "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin",
     },
 ]
@@ -120,7 +121,7 @@ workerRequirements:
 autoScalerCapacities:
   min: 0
   max: 10
-createdAt: '2022-11-22T06:37:36+00:00'
+createdAt: 2022-11-22 06:37:36+00:00
 createdBy: arn:aws:sts::123456789012:assumed-role/Admin
 
 """
@@ -180,7 +181,7 @@ workerRequirements:
 autoScalerCapacities:
   min: 0
   max: 10
-createdAt: '2022-11-22T06:37:36+00:00'
+createdAt: 2022-11-22 06:37:36+00:00
 createdBy: arn:aws:sts::123456789012:assumed-role/Admin
 queueFleetAssociationStatus: ACTIVE
 
@@ -201,7 +202,7 @@ workerRequirements:
 autoScalerCapacities:
   min: 0
   max: 50
-createdAt: '2022-11-22T06:37:36+00:00'
+createdAt: 2022-11-22 06:37:36+00:00
 createdBy: arn:aws:sts::123456789012:assumed-role/Admin
 queueFleetAssociationStatus: ACTIVE
 
@@ -304,7 +305,7 @@ workerRequirements:
 autoScalerCapacities:
   min: 0
   max: 10
-createdAt: '2022-11-22T06:37:36+00:00'
+createdAt: 2022-11-22 06:37:36+00:00
 createdBy: arn:aws:sts::123456789012:assumed-role/Admin
 
 """

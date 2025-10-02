@@ -1,0 +1,33 @@
+{
+ "farmId": "farm-0123456789abcdefabcdefabcdefabcd",
+ "queueId": "queue-0123456789abcdefabcdefabcdefabcd",
+ "template": "specificationVersion: jobtemplate-2023-09\nname: \"Job Bundle with data\"\ndescription: This bundle is for testing 'deadline bundle submit'.\nparameterDefinitions:\n- name: InputDir\n  type: PATH\n  default: input\n  dataFlow: IN\n  objectType: DIRECTORY\n- name: OutputDir\n  type: PATH\n  default: output\n  dataFlow: OUT\n  objectType: DIRECTORY\n- name: InputOutputDir\n  type: PATH\n  default: input_output\n  dataFlow: INOUT\n  objectType: DIRECTORY\nsteps:\n- name: Step\n  script:\n    actions:\n      onRun:\n        command: bash\n        args: [\"--help\"]\n  hostRequirements:\n    attributes:\n    - name: attr.worker.os.family\n      anyOf:\n      - linux\n",
+ "templateType": "YAML",
+ "priority": 50,
+ "attachments": {
+  "manifests": [
+   {
+    "rootPath": "ROOT_PATH_0",
+    "rootPathFormat": "ROOT_PATH_FORMAT_0",
+    "inputManifestPath": "farm-0123456789abcdefabcdefabcdefabcd/queue-0123456789abcdefabcdefabcdefabcd/Inputs/00000000000000000000000000000000/MANIFEST_NAME_0",
+    "inputManifestHash": "911480369624b171bf9609baa781f2f9",
+    "outputRelativeDirectories": [
+     "input_output",
+     "output"
+    ]
+   }
+  ],
+  "fileSystem": "COPIED"
+ },
+ "parameters": {
+  "InputDir": {
+   "path": "ROOT_PATH_0/input"
+  },
+  "OutputDir": {
+   "path": "ROOT_PATH_0/output"
+  },
+  "InputOutputDir": {
+   "path": "ROOT_PATH_0/input_output"
+  }
+ }
+}

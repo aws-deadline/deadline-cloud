@@ -803,8 +803,9 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "FLOAT",
         "STRING",
     ]
-    OPENJD_DEFAULT_VALUE: str = ""  # All hidden fields require a default value to be provided
-    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["default"]
+
+    OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
     OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = []
 
     def __init__(self, parent: QWidget, parameter: Dict[str, Any]):

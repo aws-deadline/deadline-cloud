@@ -1,4 +1,4 @@
-## 0.53.0 (2025-09-11)
+## 0.53.0 (2025-09-15)
 
 ### BREAKING CHANGES
 
@@ -13,6 +13,10 @@
 * Add `fileCount` property to the `summary` JSON message output by `deadline job download-output --output json` (#816) ([`b9ed949`](https://github.com/aws-deadline/deadline-cloud/commit/b9ed9498830b8d186c9485d6e7da36b29221093a))
 * Add `deadlinew` command and `--redirect-output` option to `deadline` ([`86fa0a6`](https://github.com/aws-deadline/deadline-cloud/commit/86fa0a6d699dec42539363e7d0bc08ae0801d6f5))
 * Add `--profile` option to `deadline queue sync-output` ([`b5478d6`](https://github.com/aws-deadline/deadline-cloud/commit/b5478d6a863d8a3dfd5a3e4f2a5df90e1adff4d0))
+
+### Bug Fixes
+
+* authentication status text not visible in light mode (#839) ([`d5f3a77`](https://github.com/aws-deadline/deadline-cloud/commit/d5f3a77be0757b5e14397a9a71192a17f9ec03c2))
 
 ## 0.52.1 (2025-08-26)
 

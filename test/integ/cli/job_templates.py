@@ -57,9 +57,11 @@ def submit_job_bundle(
     config_file.set_setting("defaults.farm_id", farm_id, config)
     config_file.set_setting("defaults.queue_id", queue_id, config)
 
-    return create_job_from_job_bundle(
+    job_id = create_job_from_job_bundle(
         job_bundle_dir=bundle_path, job_parameters=job_parameters, config=config
     )
+    assert job_id is not None
+    return job_id
 
 
 def submit_make_many_small_files_job(

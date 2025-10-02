@@ -19,6 +19,7 @@ from io import BufferedReader, BytesIO
 from math import trunc
 from pathlib import Path, PurePath
 from typing import Any, Callable, Generator, List, Optional, Tuple, Type, Union
+import shutil
 
 import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
@@ -65,6 +66,8 @@ from .models import (
     ManifestProperties,
     PathFormat,
     StorageProfile,
+    S3_DATA_FOLDER_NAME,
+    S3_MANIFEST_FOLDER_NAME,
 )
 from .progress_tracker import (
     ProgressStatus,
@@ -72,6 +75,7 @@ from .progress_tracker import (
     SummaryStatistics,
 )
 from ._utils import (
+    _get_long_path_compatible_path,
     _is_relative_to,
     _join_s3_paths,
 )
@@ -226,6 +230,68 @@ class S3AssetUploader:
             s3_cas_prefix=job_attachment_settings.full_cas_prefix(),
             progress_tracker=progress_tracker,
             s3_check_cache_dir=s3_check_cache_dir,
+        )
+
+        return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
+
+    def _snapshot_assets(
+        self,
+        snapshot_dir: Path,
+        manifest: BaseAssetManifest,
+        source_root: Path,
+        partial_manifest_prefix: Optional[str] = None,
+        file_system_location_name: Optional[str] = None,
+        progress_tracker: Optional[ProgressTracker] = None,
+        manifest_name_suffix: str = "input",
+        manifest_file_name: Optional[str] = None,
+        asset_root: Optional[Path] = None,
+    ) -> tuple[str, str]:
+        """
+        Snapshots assets based off of an asset manifest, snapshots the asset manifest. The result
+        is a directory structure in snapshot_dir that matches the job attachments prefix layout.
+
+        Args:
+            snapshot_dir: The directory in which to place the data and manifest snapshots.
+            manifest: The asset manifest to upload.
+            partial_manifest_prefix: The (partial) key prefix to use for uploading the manifest
+                 to S3, excluding the initial section "<root-prefix>/Manifest/".
+                e.g. "farm-1234/queue-1234/Inputs/<some-guid>"
+            source_root: The local root path of the assets.
+            progress_tracker: Optional progress tracker to track progress.
+            manifest_name_suffix: Suffix for given manifest naming.
+            manifest_metadata: File metadata for given manifest to be uploaded.
+            manifest_file_name: Optional file name for given manifest to be uploaded, otherwise use default name.
+            asset_root: The root in which asset actually in to facilitate path mapping.
+
+        Returns:
+            A tuple of (the partial key for the manifest in the snapshot, the hash of input manifest).
+        """
+
+        # Snapshot asset manifest
+        (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
+            manifest=manifest,
+            source_root=source_root,
+            file_system_location_name=file_system_location_name,
+            manifest_name_suffix=manifest_name_suffix,
+        )
+        manifest_name = manifest_file_name if manifest_file_name else manifest_name
+
+        if partial_manifest_prefix:
+            partial_manifest_key = _join_s3_paths(partial_manifest_prefix, manifest_name)
+        else:
+            partial_manifest_key = manifest_name
+
+        manifest_file_path = snapshot_dir / S3_MANIFEST_FOLDER_NAME / partial_manifest_key
+        os.makedirs(_get_long_path_compatible_path(manifest_file_path.parent), exist_ok=True)
+        with open(_get_long_path_compatible_path(manifest_file_path), "wb") as fh:
+            fh.write(manifest_bytes)
+
+        # Snapshot assets
+        self._snapshot_input_files(
+            snapshot_dir=snapshot_dir,
+            manifest=manifest,
+            source_root=asset_root if asset_root else source_root,
+            progress_tracker=progress_tracker,
         )
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
@@ -392,6 +458,44 @@ class S3AssetUploader:
                     "File upload cancelled.", progress_tracker.get_summary_statistics()
                 )
 
+    def _snapshot_input_files(
+        self,
+        snapshot_dir: Path,
+        manifest: BaseAssetManifest,
+        source_root: Path,
+        progress_tracker: Optional[ProgressTracker] = None,
+    ) -> None:
+        """
+        Snapshots all of the files listed in the given manifest to snapshot_dir.
+        """
+        os.makedirs(snapshot_dir / S3_DATA_FOLDER_NAME, exist_ok=True)
+
+        # Process all the paths with parallel copy calls.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_upload_workers) as executor:
+            futures = {
+                executor.submit(
+                    self._snapshot_object_to_cas,
+                    file,
+                    manifest.hashAlg,
+                    snapshot_dir,
+                    source_root,
+                    progress_tracker,
+                ): file
+                for file in manifest.paths
+            }
+            # surfaces any exceptions in the thread
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+
+        # to report progress 100% at the end, and
+        # to check if the job snapshot was canceled in the middle of processing the last batch of files.
+        if progress_tracker:
+            progress_tracker.report_progress()
+            if not progress_tracker.continue_reporting:
+                raise AssetSyncCancelledError(
+                    "File snapshot cancelled.", progress_tracker.get_summary_statistics()
+                )
+
     def reset_s3_check_cache(self, s3_check_cache_dir: Optional[str]) -> None:
         """
         Resets the S3 check cache by removing the cache altogether.
@@ -428,13 +532,6 @@ class S3AssetUploader:
         # Otherwise all hashes exist in S3
         return True
 
-    def _sample_cache_entries_with_limit(
-        self, cache_entries: List[S3CheckCacheEntry], limit: int = 30
-    ):
-        sampled_count: int = min(len(cache_entries), limit)
-        random.shuffle(cache_entries)
-        return cache_entries[:sampled_count]
-
     def verify_hash_cache_integrity(
         self,
         s3_check_cache_dir: Optional[str],
@@ -447,22 +544,25 @@ class S3AssetUploader:
         verifies if the cached assets exist in S3. Returns True if all sampled cached assets exist in S3, False
         otherwise.
         """
-
         # Find the list of s3 upload keys that have been cached
         s3_upload_keys: List[str] = [
             self._generate_s3_upload_key(file, manifest.hashAlg, s3_cas_prefix)
             for file in manifest.paths
         ]
-        with S3CheckCache(s3_check_cache_dir) as s3_cache:
-            cache_entries = [
-                s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}")
-                for upload_key in s3_upload_keys
-                if s3_cache.get_entry(s3_key=f"{s3_bucket}/{upload_key}") is not None
-            ]
 
-            # verify that a sample of the cached entries still exist in S3
-            sampled_cache_entries = self._sample_cache_entries_with_limit(cache_entries)
-            return self._check_hashes_exist_in_s3(sampled_cache_entries)
+        random.shuffle(s3_upload_keys)
+        sampled_cache_entries: List[S3CheckCacheEntry] = []
+        with S3CheckCache(s3_check_cache_dir) as s3_cache:
+            local_connection = s3_cache.get_local_connection()
+            for upload_key in s3_upload_keys:
+                this_entry = s3_cache.get_connection_entry(
+                    s3_key=f"{s3_bucket}/{upload_key}", connection=local_connection
+                )
+                if this_entry is not None:
+                    sampled_cache_entries.append(this_entry)
+                    if len(sampled_cache_entries) >= 30:
+                        break
+        return self._check_hashes_exist_in_s3(sampled_cache_entries)
 
     def _separate_files_by_size(
         self,
@@ -513,13 +613,14 @@ class S3AssetUploader:
         local_path = source_root.joinpath(file.path)
         s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, s3_cas_prefix)
         is_uploaded = False
-        file_size = local_path.resolve().stat().st_size
 
-        if s3_check_cache.get_entry(s3_key=f"{s3_bucket}/{s3_upload_key}"):
+        if s3_check_cache.get_connection_entry(
+            s3_key=f"{s3_bucket}/{s3_upload_key}", connection=s3_check_cache.get_local_connection()
+        ):
             logger.debug(
                 f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
             )
-            return (is_uploaded, file_size)
+            return (is_uploaded, file.size)
 
         if self.file_already_uploaded(s3_bucket, s3_upload_key):
             logger.debug(
@@ -541,7 +642,26 @@ class S3AssetUploader:
             )
         )
 
-        return (is_uploaded, file_size)
+        return (is_uploaded, file.size)
+
+    def _snapshot_object_to_cas(
+        self,
+        file: base_manifest.BaseManifestPath,
+        hash_algorithm: HashAlgorithm,
+        snapshot_dir: Path,
+        source_root: Path,
+        progress_tracker: Optional[ProgressTracker] = None,
+    ):
+        """
+        Snapshots an object to the snapshot directory content-addressable storage (CAS) prefix.
+        """
+        local_path = source_root.joinpath(file.path)
+        s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, S3_DATA_FOLDER_NAME)
+        file_size = local_path.resolve().stat().st_size
+
+        shutil.copy2(local_path, snapshot_dir / s3_upload_key)
+        if progress_tracker is not None:
+            progress_tracker.track_progress_callback(file_size)
 
     def upload_file_to_s3(
         self,
@@ -912,7 +1032,9 @@ class S3AssetManager:
         file_status: FileStatus = FileStatus.UNCHANGED
         actual_modified_time = str(datetime.fromtimestamp(path.stat().st_mtime))
 
-        entry: Optional[HashCacheEntry] = hash_cache.get_entry(full_path, hash_alg)
+        entry: Optional[HashCacheEntry] = hash_cache.get_connection_entry(
+            full_path, hash_alg, connection=hash_cache.get_local_connection()
+        )
         if entry is not None:
             # If the file was modified, we need to rehash it
             if actual_modified_time != entry.last_modified_time:
@@ -1169,15 +1291,17 @@ class S3AssetManager:
             return top_directory
 
     def _get_total_size_of_files(self, paths: list[str]) -> int:
-        total_bytes = 0
-        try:
-            for path in paths:
-                total_bytes += Path(path).resolve().stat().st_size
-        except FileNotFoundError:
-            logger.warning(
-                f"Skipping the input from total size calculation as it doesn't exist: {path}"
-            )
-        return total_bytes
+        def get_file_size(path_str: str) -> int:
+            try:
+                return Path(path_str).resolve().stat().st_size
+            except (FileNotFoundError, PermissionError, OSError):
+                logger.warning(f"Skipping file in size calculation: {path_str}")
+                return 0
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            sizes = list(executor.map(get_file_size, paths))
+
+        return sum(sizes)
 
     def _get_total_input_size_from_manifests(
         self, manifests: list[AssetRootManifest]
@@ -1186,14 +1310,9 @@ class S3AssetManager:
         total_bytes = 0
         for asset_root_manifest in manifests:
             if asset_root_manifest.asset_manifest:
-                input_paths = asset_root_manifest.asset_manifest.paths
-                input_paths_str = [
-                    str(Path(asset_root_manifest.root_path).joinpath(path.path))
-                    for path in input_paths
-                ]
-                total_files += len(input_paths)
-                total_bytes += self._get_total_size_of_files(input_paths_str)
-
+                total_files += len(asset_root_manifest.asset_manifest.paths)
+                for path in asset_root_manifest.asset_manifest.paths:
+                    total_bytes += path.size
         return (total_files, total_bytes)
 
     def _get_total_input_size_from_asset_group(
@@ -1419,6 +1538,81 @@ class S3AssetManager:
                     )
                 )
             )
+
+        progress_tracker.total_time = time.perf_counter() - start_time
+
+        return (
+            progress_tracker.get_summary_statistics(),
+            Attachments(manifests=manifest_properties_list),
+        )
+
+    def snapshot_assets(
+        self,
+        snapshot_dir: str,
+        manifests: list[AssetRootManifest],
+        on_snapshotting_assets: Optional[Callable[[Any], bool]] = None,
+    ) -> tuple[SummaryStatistics, Attachments]:
+        """
+        Copies all the files for provided manifests and manifests themselves into a snapshot directory
+        that matches the layout of a job attachments prefix in S3.
+
+        Args:
+            snapshot_dir: A directory in which to place the snapshot. Data and manifest files will go in Data
+                    and Manifest subdirectories, respectively.
+            manifests: A list of manifests that contain assets to be uploaded
+            on_snapshotting_assets: A callback to be called to periodically report progress to the caller.
+                    The callback must return True if the operation should continue as normal, or False to cancel.
+
+        Returns:
+            a tuple with (1) the summary statistics of the upload operation, and
+            (2) the S3 path to the asset manifest file.
+        """
+        # This is a programming error if the user did not construct the object with Farm and Queue IDs.
+        if not self.farm_id or not self.queue_id:
+            logger.error("snapshot_assets: Farm or Fleet ID is missing.")
+            raise JobAttachmentsError("snapshot_assets: Farm or Fleet ID is missing.")
+
+        # Sets up progress tracker to report upload progress back to the caller.
+        (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
+        progress_tracker = ProgressTracker(
+            status=ProgressStatus.SNAPSHOT_IN_PROGRESS,
+            total_files=input_files,
+            total_bytes=input_bytes,
+            on_progress_callback=on_snapshotting_assets,
+        )
+
+        start_time = time.perf_counter()
+
+        manifest_properties_list: list[ManifestProperties] = []
+
+        for asset_root_manifest in manifests:
+            output_rel_paths: list[str] = [
+                str(path.relative_to(asset_root_manifest.root_path))
+                for path in asset_root_manifest.outputs
+            ]
+
+            manifest_properties = ManifestProperties(
+                fileSystemLocationName=asset_root_manifest.file_system_location_name,
+                rootPath=asset_root_manifest.root_path,
+                rootPathFormat=PathFormat.get_host_path_format(),
+                outputRelativeDirectories=output_rel_paths,
+            )
+
+            if asset_root_manifest.asset_manifest:
+                (partial_manifest_key, asset_manifest_hash) = self.asset_uploader._snapshot_assets(
+                    snapshot_dir=Path(snapshot_dir),
+                    manifest=asset_root_manifest.asset_manifest,
+                    partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(  # type: ignore[union-attr]
+                        self.farm_id, self.queue_id
+                    ),
+                    source_root=Path(asset_root_manifest.root_path),
+                    file_system_location_name=asset_root_manifest.file_system_location_name,
+                    progress_tracker=progress_tracker,
+                )
+                manifest_properties.inputManifestPath = partial_manifest_key
+                manifest_properties.inputManifestHash = asset_manifest_hash
+
+            manifest_properties_list.append(manifest_properties)
 
         progress_tracker.total_time = time.perf_counter() - start_time
 

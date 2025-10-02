@@ -15,6 +15,7 @@ Notable features include:
 * A library of functions that implement AWS Deadline Cloud's Job Attachments functionality.
 * A library of functions for creating a job submission UI within any content creation tool that supports Python 3.8+ based plugins and
   the Qt GUI framework.
+* A Model Context Protocol (MCP) server for AI assistant integration, enabling natural language interaction with AWS Deadline Cloud resources.
 
 [cas]: https://en.wikipedia.org/wiki/Content-addressable_storage
 [deadline-cloud]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html
@@ -60,6 +61,11 @@ $ pip install deadline
 or if you want the optional gui dependencies:
 ```sh
 $ pip install "deadline[gui]"
+```
+
+if you want the optional mcp dependencies:
+```sh
+$ pip install "deadline[mcp]"
 ```
 
 ## Usage
@@ -115,8 +121,6 @@ Or with the configuration GUI:
 deadline config gui
 ```
 
-
-Shared storage is possible with customer-managed fleets (CMF) but not service-managed fleets (SMF). See [shared storage][shared-storage] for more information.
 
 ## Job Bundles
 
@@ -307,6 +311,12 @@ $ aws s3 ls --profile deadline-queue
 Available modes:
 - `USER`: Credentials with full queue-role permissions.
 - `READ`: Credentials with read-only permissions for queue logs
+
+## Model Context Protocol (MCP) Server
+
+The AWS Deadline Cloud client includes an MCP server that enables AI assistants to interact with AWS Deadline Cloud resources through natural language. The MCP server uses the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) for simplified tool registration while maintaining full protocol compliance.
+
+See [MCP Guide](https://github.com/aws-deadline/deadline-cloud/blob/release/docs/mcp_guide.md) for more information.
 
 
 ## Code of Conduct

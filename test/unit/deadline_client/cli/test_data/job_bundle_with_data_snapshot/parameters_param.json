@@ -1,0 +1,11 @@
+{
+ "InputDir": {
+  "path": "ROOT_PATH_0/input"
+ },
+ "OutputDir": {
+  "path": "ROOT_PATH_0/output"
+ },
+ "InputOutputDir": {
+  "path": "ROOT_PATH_0/input_output"
+ }
+}

@@ -20,3 +20,6 @@ from ._groups import (  # noqa: F401
     attachment_group,
     manifest_group,
 )
+
+# MCP server command
+from ._mcp_server import cli_mcp_server  # noqa: F401

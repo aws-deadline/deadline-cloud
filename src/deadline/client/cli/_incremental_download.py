@@ -441,7 +441,6 @@ def _categorize_jobs_in_checkpoint(
 
 def _retrieve_sessions_for_job(
     deadline_client: BaseClient,
-    checkpoint: IncrementalDownloadState,
     farm_id: str,
     queue_id: str,
     job_id: str,
@@ -456,7 +455,6 @@ def _retrieve_sessions_for_job(
 
     Args:
         deadline_client: A boto3 client for accessing Deadline.
-        checkpoint: The checkpoint for the incremental download.
         farm_id: The farm id for the operation.
         queue_id: The queue id for the operation.
         job_id: The job id to process.
@@ -464,10 +462,6 @@ def _retrieve_sessions_for_job(
         output_job_sessions: A dictionary {job_id: session_list} to populate for the provided job id.
     """
     sessions_paginator = deadline_client.get_paginator("list_sessions")
-    # Filter out older sessions by endedAt timestamp, using an eventual consistency window to accept a little extra
-    session_ended_threshold = session_ended_threshold - timedelta(
-        seconds=checkpoint.eventual_consistency_max_seconds
-    )
 
     session_list: list[dict[str, Any]] = []
     for sessions_page in sessions_paginator.paginate(
@@ -616,11 +610,17 @@ def _get_job_sessions(
             if session_ended_threshold is None:
                 session_ended_threshold = checkpoint.downloads_started_timestamp
 
+            # For all jobs that are not NEW (including re-queued jobs) - i.e. completed and updated jobs
+            # Use an eventual consistency window to accept a little extra
+            if job_id not in categorized_job_ids.added:
+                session_ended_threshold = session_ended_threshold - timedelta(
+                    seconds=checkpoint.eventual_consistency_max_seconds
+                )
+
             futures.append(
                 executor.submit(
                     _retrieve_sessions_for_job,
                     deadline,
-                    checkpoint,
                     farm_id,
                     queue["queueId"],
                     job_id,

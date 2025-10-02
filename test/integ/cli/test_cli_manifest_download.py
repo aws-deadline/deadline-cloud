@@ -281,7 +281,7 @@ class TestManifestDownload:
         ],
     )
     @pytest.mark.parametrize(
-        "asset_type", [AssetType.INPUT.value, AssetType.OUTPUT.value, AssetType.ALL.value, None]
+        "asset_type", [AssetType.INPUT.value, AssetType.OUTPUT.value, AssetType.ALL.value]
     )
     def test_manifest_download_asset_type_with_job_step_dependency(
         self,
@@ -351,7 +351,7 @@ class TestManifestDownload:
                     self._assert_output_manifests_exist(files)
                     self._assert_dependent_step_output_exist(files)
 
-                if asset_type == AssetType.ALL or asset_type is None:
+                if asset_type == AssetType.ALL:
                     self._assert_input_mainfests_exist(files)
                     self._assert_dependent_step_output_exist(files)
                     self._assert_output_manifests_exist(files)

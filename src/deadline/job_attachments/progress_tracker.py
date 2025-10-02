@@ -120,6 +120,9 @@ class ProgressStatus(Enum):
     DOWNLOAD_IN_PROGRESS = ("DOWNLOAD_IN_PROGRESS", "Downloaded")
     """Downloading files"""
 
+    SNAPSHOT_IN_PROGRESS = ("SNAPSHOT_IN_PROGRESS", "Snapshotted")
+    """Snapshotting files"""
+
     def __init__(self, title, verb_in_message):
         self.title = title
         self.verb_in_message = verb_in_message

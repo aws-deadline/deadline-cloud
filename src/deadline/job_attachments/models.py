@@ -18,7 +18,6 @@ from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
 )
-
 from deadline.job_attachments.exceptions import (
     MissingS3RootPrefixError,
     MalformedAttachmentSettingError,
@@ -402,6 +401,14 @@ class StorageProfile:
     osFamily: StorageProfileOperatingSystemFamily
     fileSystemLocations: List[FileSystemLocation] = field(default_factory=list)  # type: ignore
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "storageProfileId": self.storageProfileId,
+            "displayName": self.displayName,
+            "osFamily": self.osFamily.value,
+            "fileSystemLocations": [item.to_dict() for item in self.fileSystemLocations],
+        }
+
 
 @dataclass
 class FileSystemLocation:
@@ -410,6 +417,9 @@ class FileSystemLocation:
     name: str
     path: str
     type: FileSystemLocationType
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "path": self.path, "type": self.type.value}
 
 
 class FileSystemLocationType(str, Enum):
