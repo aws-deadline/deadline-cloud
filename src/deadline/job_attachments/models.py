@@ -6,6 +6,7 @@ Data classes for AWS objects.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
@@ -226,6 +227,34 @@ class ManifestProperties:
             inputManifestHash=data.get("inputManifestHash"),
             outputRelativeDirectories=data.get("outputRelativeDirectories"),
         )
+
+    def get_output_metadata(self) -> dict[str, dict[str, str]]:
+        """
+        Generate S3 metadata for output manifest uploads.
+
+        Creates metadata dictionary containing asset root path and optional file system location.
+        Handles non-ASCII characters in paths by JSON-encoding them with ASCII-safe format.
+
+        Returns:
+            dict[str, str]: S3 metadata dictionary with 'Metadata' key containing:
+                - 'asset-root': ASCII-compatible root path, or
+                - 'asset-root-json': JSON-encoded root path for non-ASCII paths
+                - 'file-system-location-name': Optional file system location name
+        """
+        metadata = {"Metadata": {"asset-root": json.dumps(self.rootPath, ensure_ascii=True)}}
+        # S3 metadata must be ASCII, so use either 'asset-root' or 'asset-root-json' depending
+        # on whether the value is ASCII.
+        try:
+            # Add the 'asset-root' metadata if the path is ASCII
+            self.rootPath.encode(encoding="ascii")
+            metadata["Metadata"]["asset-root"] = self.rootPath
+        except UnicodeEncodeError:
+            # Add the 'asset-root-json' metadata encoded to ASCII as a JSON string
+            metadata["Metadata"]["asset-root-json"] = json.dumps(self.rootPath, ensure_ascii=True)
+        if self.fileSystemLocationName:
+            metadata["Metadata"]["file-system-location-name"] = self.fileSystemLocationName
+
+        return metadata
 
 
 @dataclass

@@ -330,3 +330,43 @@ class TestManifestPropertiesModel:
         assert manifest_props.inputManifestPath is None
         assert manifest_props.inputManifestHash is None
         assert manifest_props.outputRelativeDirectories is None
+
+    def test_get_output_metadata_ascii_path(self):
+        """Test get_output_metadata with ASCII-only root path"""
+        manifest_props = ManifestProperties(
+            rootPath="/test/path",
+            rootPathFormat=PathFormat.POSIX,
+            fileSystemLocationName="test-location",
+        )
+
+        result = manifest_props.get_output_metadata()
+
+        expected = {
+            "Metadata": {"asset-root": "/test/path", "file-system-location-name": "test-location"}
+        }
+        assert result == expected
+
+    def test_get_output_metadata_non_ascii_path(self):
+        """Test get_output_metadata with non-ASCII root path"""
+        manifest_props = ManifestProperties(
+            rootPath="/test/café/测试", rootPathFormat=PathFormat.POSIX
+        )
+
+        result = manifest_props.get_output_metadata()
+
+        expected = {
+            "Metadata": {
+                "asset-root": '"/test/caf\\u00e9/\\u6d4b\\u8bd5"',
+                "asset-root-json": '"/test/caf\\u00e9/\\u6d4b\\u8bd5"',
+            }
+        }
+        assert result == expected
+
+    def test_get_output_metadata_no_file_system_location(self):
+        """Test get_output_metadata without file system location name"""
+        manifest_props = ManifestProperties(rootPath="/test/path", rootPathFormat=PathFormat.POSIX)
+
+        result = manifest_props.get_output_metadata()
+
+        expected = {"Metadata": {"asset-root": "/test/path"}}
+        assert result == expected
