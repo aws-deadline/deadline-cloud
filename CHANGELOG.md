@@ -3,7 +3,6 @@
 
 ### Features
 * Add '-p' param support to 'deadline bundle gui-submit' ([`53c507e`](https://github.com/aws-deadline/deadline-cloud/commit/53c507ed817ab9ffde501121515a83677d61db22))
-* Add debug snapshot option to 'deadline bundle submit' ([`c4c96b9`](https://github.com/aws-deadline/deadline-cloud/commit/c4c96b9235fceb96224715a7fc81afa66e2484b5))
 * List all nonvalid hidden parameters in GUI validation error (#856) ([`4fa22df`](https://github.com/aws-deadline/deadline-cloud/commit/4fa22df43abc57d053a3f68fef97c8facae12cdc))
 
 ### Bug Fixes
@@ -18,7 +17,11 @@
 * Improved Job submission time with short initial wait time followed by increasing backoff. (#852) ([`bdefa51`](https://github.com/aws-deadline/deadline-cloud/commit/bdefa511d9abe7e741dce10ff56a26b30566cfaa))
 
 ### Experimental
+
+These changes are experimental and are subject to change.
+
 * Add mcp to deadline client tools (#784) ([`af4064b`](https://github.com/aws-deadline/deadline-cloud/commit/af4064b1c0bb7455affa9987e6d031ac1e1f5afe))
+* Add debug snapshot option to 'deadline bundle submit' ([`c4c96b9`](https://github.com/aws-deadline/deadline-cloud/commit/c4c96b9235fceb96224715a7fc81afa66e2484b5))
 
 
 ## 0.53.0 (2025-09-15)
