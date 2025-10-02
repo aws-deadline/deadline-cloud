@@ -1,6 +1,5 @@
 ## 0.53.1 (2025-10-02)
 
-
 ### Features
 * Add '-p' param support to 'deadline bundle gui-submit' ([`53c507e`](https://github.com/aws-deadline/deadline-cloud/commit/53c507ed817ab9ffde501121515a83677d61db22))
 * List all nonvalid hidden parameters in GUI validation error (#856) ([`4fa22df`](https://github.com/aws-deadline/deadline-cloud/commit/4fa22df43abc57d053a3f68fef97c8facae12cdc))
