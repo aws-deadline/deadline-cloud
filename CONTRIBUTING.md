@@ -98,6 +98,7 @@ We ask that you use these commit types in your commit titles:
 * `refactor` - When the pull request is implementing only a refactor of existing code;
 * `ci` - When the pull request is implementing a change to the CI infrastructure of the packge;
 * `chore` - When the pull request is a generic maintenance task.
+* `perf` - When the pull request is a performance improvement.
 
 We also require that the type in your conventional commit title end in an exclaimation point (e.g. `feat!` or `fix!`)
 if the pull request should be considered to be a breaking change in some way. Please also include a "BREAKING CHANGE" footer
