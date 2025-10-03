@@ -209,7 +209,7 @@ allowed_tags = [
   "revert",
 ]
 minor_tags = []
-patch_tags = ["chore", "feat", "fix", "refactor"]
+patch_tags = ["chore", "feat", "fix", "refactor", "perf"]
 
 [tool.semantic_release.publish]
 upload_to_vcs_release = false

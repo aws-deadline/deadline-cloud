@@ -22,4 +22,11 @@
         {% endfor %}
     {% endif %}
 
+    {% if "performance improvements" in release["elements"] %}
+### Performance Improvements
+        {% for commit in release["elements"]["performance improvements"] %}
+* {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.commit.summary[commit.commit.summary.find(":")+1:].strip() }} ([`{{ commit.short_hash }}`]({{ commit.commit.hexsha | commit_hash_url }}))
+        {% endfor %}
+    {% endif %}
+
 {% endfor %}

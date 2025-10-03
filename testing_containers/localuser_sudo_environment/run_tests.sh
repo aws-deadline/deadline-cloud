@@ -11,5 +11,4 @@ cd code
 python -m venv .venv
 source .venv/bin/activate
 pip install hatch
-# Use the codebuild env so that PIP_INDEX_URL isn't set in the hatch config files.
-hatch run codebuild:test -m docker
+hatch run pytest --cov=src/deadline --cov-report=html:build/coverage --cov-report=xml:build/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=25 -m docker

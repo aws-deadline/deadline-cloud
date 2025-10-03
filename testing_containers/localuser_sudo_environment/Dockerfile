@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-FROM python:3.9-buster
+FROM python:3.13-bullseye
 
 # Set environment variables, and let our tests know that we are in an
 # environment that can run the sudo tests
