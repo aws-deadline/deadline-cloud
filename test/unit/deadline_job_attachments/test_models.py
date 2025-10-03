@@ -251,9 +251,10 @@ class TestManifestPropertiesModel:
 
     def test_from_dict_invalid_path_format(self):
         """Test ManifestProperties.from_dict raises ValueError for invalid path format"""
-        data = {"rootPath": "/test/path", "rootPathFormat": "invalid_format"}
+        invalid_root_path_format = "invalid_format"
+        data = {"rootPath": "/test/path", "rootPathFormat": invalid_root_path_format}
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=invalid_root_path_format):
             ManifestProperties.from_dict(data)
 
     def test_from_dict_with_empty_optional_lists(self):
@@ -284,12 +285,7 @@ class TestManifestPropertiesModel:
         recreated = ManifestProperties.from_dict(data)
 
         # Verify they are equal
-        assert recreated.rootPath == original.rootPath
-        assert recreated.rootPathFormat == original.rootPathFormat
-        assert recreated.fileSystemLocationName == original.fileSystemLocationName
-        assert recreated.inputManifestPath == original.inputManifestPath
-        assert recreated.inputManifestHash == original.inputManifestHash
-        assert recreated.outputRelativeDirectories == original.outputRelativeDirectories
+        assert recreated == original
 
     def test_from_dict_with_special_characters_in_paths(self):
         """Test ManifestProperties.from_dict with special characters in paths"""
@@ -331,28 +327,28 @@ class TestManifestPropertiesModel:
         assert manifest_props.inputManifestHash is None
         assert manifest_props.outputRelativeDirectories is None
 
-    def test_get_output_metadata_ascii_path(self):
-        """Test get_output_metadata with ASCII-only root path"""
+    def test_as_output_metadata_ascii_path(self):
+        """Test as_output_metadata with ASCII-only root path"""
         manifest_props = ManifestProperties(
             rootPath="/test/path",
             rootPathFormat=PathFormat.POSIX,
             fileSystemLocationName="test-location",
         )
 
-        result = manifest_props.get_output_metadata()
+        result = manifest_props.as_output_metadata()
 
         expected = {
             "Metadata": {"asset-root": "/test/path", "file-system-location-name": "test-location"}
         }
         assert result == expected
 
-    def test_get_output_metadata_non_ascii_path(self):
-        """Test get_output_metadata with non-ASCII root path"""
+    def test_as_output_metadata_non_ascii_path(self):
+        """Test as_output_metadata with non-ASCII root path"""
         manifest_props = ManifestProperties(
             rootPath="/test/café/测试", rootPathFormat=PathFormat.POSIX
         )
 
-        result = manifest_props.get_output_metadata()
+        result = manifest_props.as_output_metadata()
 
         expected = {
             "Metadata": {
@@ -362,11 +358,11 @@ class TestManifestPropertiesModel:
         }
         assert result == expected
 
-    def test_get_output_metadata_no_file_system_location(self):
-        """Test get_output_metadata without file system location name"""
+    def test_as_output_metadata_no_file_system_location(self):
+        """Test as_output_metadata without file system location name"""
         manifest_props = ManifestProperties(rootPath="/test/path", rootPathFormat=PathFormat.POSIX)
 
-        result = manifest_props.get_output_metadata()
+        result = manifest_props.as_output_metadata()
 
         expected = {"Metadata": {"asset-root": "/test/path"}}
         assert result == expected
