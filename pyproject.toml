@@ -155,7 +155,10 @@ markers = [
 ]
 # looponfailroots is deprecated, this removes the deprecation from the test output
 filterwarnings = ["ignore::DeprecationWarning"]
-
+# Print live logs during test run. This will only take effect if tests are not run
+# concurrently, since pytest-xdist does not support live logging.
+log_cli = true
+log_cli_level = "INFO"
 
 [tool.coverage.run]
 disable_warnings = ["module-not-measured"]

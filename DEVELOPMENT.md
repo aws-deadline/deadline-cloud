@@ -149,6 +149,7 @@ export AWS_DEFAULT_REGION=xx-yyyy-nn
 export FARM_ID=farm-00112233445566778899aabbccddeeff
 # Replace with the ID of your AWS Deadline Cloud Queue that is configured with a
 # Job Attachments bucket.
+# IMPORTANT: The queue must be associated with a fleet with workers that can run bash scripts (e.g. Linux SMF)
 export QUEUE_ID=queue-00112233445566778899aabbccddeeff
 
 export JOB_ATTACHMENTS_BUCKET=$(
