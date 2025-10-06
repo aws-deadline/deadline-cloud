@@ -195,6 +195,7 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
     incremental_download_iteration_number = 0
     start_time = time.time()
     job_completion_timeout = 600  # 10 minutes
+    test_name_suffix = "make_many_small_files"
 
     while not job_complete:
         incremental_download_iteration_number += 1
@@ -216,7 +217,7 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
             str(tmp_path),
             force_bootstrap=(incremental_download_iteration_number == 1),
             lookback_window=2,
-            test_name="many_small_files",
+            test_name=test_name_suffix,
         )
 
         job_complete = task_run_status in ["SUCCEEDED", "FAILED", "CANCELED"]
@@ -237,7 +238,7 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
     incremental_download_test.wait_for_all_files(
         tmp_path=tmp_path,
         expected_files={"count": total_files},
-        test_name="make_many_small_files",
+        test_name=test_name_suffix,
         file_pattern="**/*.txt",
         count_only=True,
     )
