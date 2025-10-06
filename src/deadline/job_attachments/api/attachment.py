@@ -57,39 +57,6 @@ def _attachment_download(
         path_mapping_rules=path_mapping_rules
     )
 
-    _attachment_download_with_root_manifests(
-        boto3_session,
-        file_name_manifest_dict,
-        s3_root_uri,
-        conflict_resolution,
-        path_mapping_rule_list,
-        logger,
-    )
-
-
-def _attachment_download_with_root_manifests(
-    boto3_session: boto3.Session,
-    file_name_manifest_dict: Dict[str, BaseAssetManifest],
-    s3_root_uri: str,
-    conflict_resolution: FileConflictResolution,
-    path_mapping_rule_list: Optional[List[PathMappingRule]] = None,
-    logger: ClickLogger = ClickLogger(False),
-):
-    """
-    Function to use for attachment download when the caller has manifests and path mapping rule list,
-    instead of reading these from input files.
-    We should make this the default API Interface eventually to make it flexible
-
-    :param boto3_session: boto3 session
-    :param file_name_manifest_dict: Dictionary mapping manifest file names to their
-                                   corresponding manifest objects.
-    :param s3_root_uri: root uri for s3
-    :param conflict_resolution: conflict resolution method for repeated files
-    :param path_mapping_rule_list: path mapping rule list to map paths
-    :param logger: logger
-    :return:
-    """
-
     merged_manifests_by_root: Dict[str, BaseAssetManifest] = dict()
     for file_name, manifest in file_name_manifest_dict.items():
         # File name is supposed to be prefixed by a hash of source path in path mapping, use that to determine destination

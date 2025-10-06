@@ -6,6 +6,7 @@ Data classes for AWS objects.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
@@ -214,6 +215,48 @@ class ManifestProperties:
         if self.outputRelativeDirectories:
             result["outputRelativeDirectories"] = self.outputRelativeDirectories
         return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ManifestProperties":
+        """Create ManifestProperties from a dictionary."""
+        return cls(
+            rootPath=data["rootPath"],
+            rootPathFormat=PathFormat(data["rootPathFormat"]),
+            fileSystemLocationName=data.get("fileSystemLocationName"),
+            inputManifestPath=data.get("inputManifestPath"),
+            inputManifestHash=data.get("inputManifestHash"),
+            outputRelativeDirectories=data.get("outputRelativeDirectories"),
+        )
+
+    def as_output_metadata(self) -> dict[str, dict[str, str]]:
+        """
+        Generate S3 metadata for output manifest uploads.
+
+        Creates metadata dictionary containing asset root path and optional file system location.
+        Handles non-ASCII characters in paths by JSON-encoding them with ASCII-safe format.
+
+        Returns:
+            dict[str, str]: S3 metadata dictionary with 'Metadata' key containing:
+                - 'asset-root': ASCII-compatible root path, or JSON-encoded root path for non-ASCII paths
+                - 'asset-root-json': JSON-encoded root path for non-ASCII paths
+                - 'file-system-location-name': Optional file system location name
+        """
+        metadata: dict[str, str] = {}
+        try:
+            # Set 'asset-root' metadata as the path if the path is ASCII
+            self.rootPath.encode(encoding="ascii")
+            metadata["asset-root"] = self.rootPath
+        except UnicodeEncodeError:
+            # S3 metadata must be ASCII
+            # Add both 'asset-root' and 'asset-root-json' metadata encoded to ASCII as a JSON string
+            # Populate both fileds for backward compatibility
+            json_root_path = json.dumps(self.rootPath, ensure_ascii=True)
+            metadata["asset-root-json"] = json_root_path
+            metadata["asset-root"] = json_root_path
+        if self.fileSystemLocationName:
+            metadata["file-system-location-name"] = self.fileSystemLocationName
+
+        return {"Metadata": metadata}
 
 
 @dataclass
