@@ -6,7 +6,6 @@ from pathlib import Path
 import tempfile
 from typing import List, Optional, Set
 from deadline.job_attachments.api.manifest import _manifest_snapshot
-from deadline.job_attachments.exceptions import ManifestCreationException
 from deadline.job_attachments.models import ManifestSnapshot
 from deadline.job_attachments._utils import _retry
 import pytest
@@ -33,9 +32,13 @@ class TestSnapshotAPI:
         root_dir = os.path.join(temp_dir, "foobar")
         os.makedirs(root_dir)
 
-        # When, Then.
-        with pytest.raises(ManifestCreationException):
-            _manifest_snapshot(root=root_dir, destination=temp_dir, name="test")
+        # When
+        manifest: Optional[ManifestSnapshot] = _manifest_snapshot(
+            root=root_dir, destination=temp_dir, name="test"
+        )
+
+        # Then
+        assert manifest is None
 
     def test_snapshot_folder(self, temp_dir):
         """

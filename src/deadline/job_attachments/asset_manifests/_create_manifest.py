@@ -6,7 +6,6 @@ from deadline.client.api._job_attachment import _hash_attachments
 from deadline.client.cli._common import _ProgressBarCallbackManager
 from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
-from deadline.job_attachments.exceptions import ManifestCreationException
 from deadline.job_attachments.upload import S3AssetManager
 
 
@@ -52,9 +51,5 @@ def _create_manifest_for_single_root(
         # This is a hard failure, we are snapshotting 1 directory.
         assert len(manifests) == 1
 
-        output_manifest = manifests[0].asset_manifest
-        if output_manifest is None:
-            raise ManifestCreationException()
-
         # Return the generated manifest.
-        return output_manifest
+        return manifests[0].asset_manifest
