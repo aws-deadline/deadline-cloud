@@ -6,7 +6,6 @@ import json
 
 from typing import Any, Optional, List, Dict, Callable
 from pathlib import Path
-from dataclasses import asdict
 
 from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
@@ -31,7 +30,7 @@ def _attachment_download(
     path_mapping_rules: Optional[str] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
     conflict_resolution: FileConflictResolution = FileConflictResolution.CREATE_COPY,
-):
+) -> DownloadSummaryStatistics:
     """
     BETA API - This API is still evolving.
 
@@ -80,14 +79,13 @@ def _attachment_download(
 
     # Given manifests and S3 bucket + root, downloads all files from a CAS in each manifest.
     s3_settings: JobAttachmentS3Settings = JobAttachmentS3Settings.from_s3_root_uri(s3_root_uri)
-    download_summary: DownloadSummaryStatistics = download_files_from_manifests(
+    return download_files_from_manifests(
         s3_bucket=s3_settings.s3BucketName,
         manifests_by_root=merged_manifests_by_root,
         cas_prefix=s3_settings.full_cas_prefix(),
         session=boto3_session,
         conflict_resolution=conflict_resolution,
     )
-    print_function_callback(json.dumps(asdict(download_summary.convert_to_summary_statistics())))
 
 
 def _attachment_upload(

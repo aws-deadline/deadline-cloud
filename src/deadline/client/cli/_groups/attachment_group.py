@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import click
 import boto3
-
+from dataclasses import asdict
 from typing import Optional
 
 from .click_logger import ClickLogger
@@ -26,6 +26,7 @@ from deadline.job_attachments.api.attachment import (
 from deadline.job_attachments._aws.deadline import get_queue
 from deadline.job_attachments.exceptions import MissingJobAttachmentSettingsError
 from deadline.job_attachments.models import FileConflictResolution, JobAttachmentS3Settings
+from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
 
 
 @main.group(name="attachment")
@@ -124,7 +125,7 @@ def attachment_download(
     ):
         conflict_resolution = FileConflictResolution[conflict_resolution_setting]
 
-    _attachment_download(
+    download_summary: DownloadSummaryStatistics = _attachment_download(
         manifests=manifests,
         s3_root_uri=s3_root_uri,
         boto3_session=boto3_session,
@@ -132,6 +133,9 @@ def attachment_download(
         print_function_callback=logger.echo,
         conflict_resolution=conflict_resolution,
     )
+
+    logger.echo(download_summary)
+    logger.json(asdict(download_summary.convert_to_summary_statistics()))
 
 
 @cli_attachment.command(
