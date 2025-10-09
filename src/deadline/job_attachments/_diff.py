@@ -4,7 +4,7 @@ import concurrent.futures
 import logging
 import os
 from pathlib import Path, PurePosixPath
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 from math import trunc
 from deadline.client.config import config_file
 from deadline.client.exceptions import NonValidInputError
@@ -121,7 +121,7 @@ def _fast_file_list_to_manifest_diff(
     root: str,
     current_files: List[str],
     diff_manifest: BaseAssetManifest,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
     return_root_relative_path: bool = True,
 ) -> List[Tuple[str, FileStatus]]:
     """

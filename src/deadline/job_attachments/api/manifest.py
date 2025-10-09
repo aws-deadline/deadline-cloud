@@ -91,7 +91,7 @@ def _manifest_snapshot(
     include_exclude_config: Optional[str] = None,
     diff: Optional[str] = None,
     force_rehash: bool = False,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> Optional[ManifestSnapshot]:
     # Get all files in the root.
     glob_config: GlobConfig
@@ -221,7 +221,7 @@ def _manifest_diff(
     exclude: Optional[List[str]] = None,
     include_exclude_config: Optional[str] = None,
     force_rehash=False,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> ManifestDiff:
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -231,7 +231,7 @@ def _manifest_diff(
     :param include: Include glob to look for files to add to the manifest.
     :param exclude: Exclude glob to exclude files from the manifest.
     :param include_exclude_config: Config JSON or file containeing input and exclude config.
-    :param print_function_callback: Click Logger instance to print to CLI as text or JSON.
+    :param print_function_callback: Callback function to handle print messages.
     :returns: ManifestDiff object containing all new changed, deleted files.
     """
 
@@ -297,7 +297,7 @@ def _manifest_upload(
     s3_cas_prefix: str,
     boto_session: boto3.Session,
     s3_key_prefix: Optional[str] = None,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ):
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -308,7 +308,7 @@ def _manifest_upload(
     boto_session: S3 Content Addressable Storage prefix.
     s3_key_prefix: [Optional] S3 prefix path to the Content Addressable Storge.
     boto_session: Boto3 session.
-    print_function_callback: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     """
     # S3 metadata
 
@@ -333,6 +333,7 @@ def _manifest_upload(
             bytes=BytesIO(manifest.read().encode("utf-8")),
             bucket=s3_bucket_name,
             key=manifest_path,
+            progress_handler=print_function_callback,
             extra_args=s3_metadata,
         )
 
@@ -345,7 +346,7 @@ def _manifest_download(
     boto3_session: boto3.Session,
     step_id: Optional[str] = None,
     asset_type: AssetType = AssetType.ALL,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> ManifestDownloadResponse:
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -357,7 +358,7 @@ def _manifest_download(
     boto_session: Boto3 session.
     step_id: Optional[str]: Optional, download manifest for a step
     asset_type: Which asset manifests should be downloaded for given job (& optionally step), options are Input, Output, All. Default behaviour is All.
-    print_function_callback: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
 
@@ -551,7 +552,7 @@ def _manifest_merge(
     manifest_files: List[str],
     destination: str,
     name: Optional[str],
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> Optional[ManifestMerge]:
     """
     BETA API - API to merge multiple manifests into one.
@@ -559,7 +560,7 @@ def _manifest_merge(
     manifest_files: List of manifest files to merge.
     destination: Destination directory for the merged manifest.
     name: Name of the merged manifest.
-    print_function_callback: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     return ManifestMerge object containing the merged manifest.
     """
 

@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 from deadline.client.api._job_attachment import _hash_attachments
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
@@ -10,7 +10,7 @@ from deadline.job_attachments.upload import S3AssetManager
 def _create_manifest_for_single_root(
     files: List[str],
     root: str,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> Optional[BaseAssetManifest]:
     """
     Shared logic to create a manifest file from a single root.

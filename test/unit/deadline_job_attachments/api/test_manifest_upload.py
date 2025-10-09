@@ -60,6 +60,7 @@ class TestManifestUpload:
             bytes=ANY,
             bucket=TEST_BUCKET_NAME,
             key=TEST_CAS_PREFIX + "/Manifests/test.manifest",
+            progress_handler=ANY,
             extra_args=ANY,
         )
 
@@ -92,5 +93,6 @@ class TestManifestUpload:
             bytes=ANY,
             bucket=TEST_BUCKET_NAME,
             key=TEST_CAS_PREFIX + "/Manifests/" + TEST_KEY_PREFIX + "/test.manifest",
+            progress_handler=ANY,
             extra_args=ANY,
         )

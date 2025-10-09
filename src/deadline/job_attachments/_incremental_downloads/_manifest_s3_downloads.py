@@ -306,7 +306,7 @@ def _download_all_manifests_with_absolute_paths(
     path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]],
     output_unmapped_paths: dict[str, list[str]],
     boto3_session_for_s3: boto3.Session,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> list[tuple[datetime, BaseAssetManifest]]:
     """
     Downloads all the manifest files that are in the session_actions of job_sessions, and uses the rootPath
@@ -604,7 +604,7 @@ def _download_manifest_paths(
     boto3_session_for_s3: boto3.Session,
     file_conflict_resolution: FileConflictResolution,
     on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]],
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """
     Downloads all files from the S3 bucket in the Job Attachment settings to the specified directory.

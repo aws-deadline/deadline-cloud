@@ -4,7 +4,7 @@ import os
 import boto3
 import json
 
-from typing import Optional, List, Dict, Callable
+from typing import Any, Optional, List, Dict, Callable
 from pathlib import Path
 from dataclasses import asdict
 
@@ -29,7 +29,7 @@ def _attachment_download(
     s3_root_uri: str,
     boto3_session: boto3.Session,
     path_mapping_rules: Optional[str] = None,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
     conflict_resolution: FileConflictResolution = FileConflictResolution.CREATE_COPY,
 ):
     """
@@ -98,7 +98,7 @@ def _attachment_upload(
     path_mapping_rules: Optional[str] = None,
     manifest_path_mapping: Optional[Dict[str, str]] = None,
     upload_manifest_path: Optional[str] = None,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> List[UploadManifestInfo]:
     """
     BETA API - This API is still evolving.
