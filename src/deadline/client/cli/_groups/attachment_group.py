@@ -129,7 +129,7 @@ def attachment_download(
         s3_root_uri=s3_root_uri,
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
-        logger=logger,
+        print_function_callback=logger.echo,
         conflict_resolution=conflict_resolution,
     )
 
@@ -214,5 +214,5 @@ def attachment_upload(
         boto3_session=boto3_session,
         path_mapping_rules=path_mapping_rules,
         upload_manifest_path=upload_manifest_path,
-        logger=logger,
+        print_function_callback=logger.echo,
     )

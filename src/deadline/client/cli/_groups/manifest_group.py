@@ -134,7 +134,7 @@ def manifest_snapshot(
         include_exclude_config=include_exclude_config,
         diff=diff,
         force_rehash=force_rehash,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
     if manifest_out:
         if (
@@ -223,7 +223,7 @@ def manifest_diff(
         exclude=exclude,
         include_exclude_config=include_exclude_config,
         force_rehash=force_rehash,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
 
     # Print results to console.
@@ -298,7 +298,7 @@ def manifest_download(
         step_id=step_id,
         asset_type=AssetType(asset_type),
         boto3_session=boto3_session,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
     logger.json(dataclasses.asdict(output))
 
@@ -385,6 +385,6 @@ def manifest_upload(
         s3_cas_prefix=cas_path,
         s3_key_prefix=s3_manifest_prefix,
         boto_session=session,
-        logger=logger,
+        print_function_callback=logger.echo,
     )
     logger.echo("Uploading successful!")

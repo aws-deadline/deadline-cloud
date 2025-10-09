@@ -4,9 +4,8 @@ import concurrent.futures
 import logging
 import os
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 from math import trunc
-from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.client.config import config_file
 from deadline.client.exceptions import NonValidInputError
 from deadline.job_attachments.asset_manifests.base_manifest import (
@@ -122,7 +121,7 @@ def _fast_file_list_to_manifest_diff(
     root: str,
     current_files: List[str],
     diff_manifest: BaseAssetManifest,
-    logger: ClickLogger,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
     return_root_relative_path: bool = True,
 ) -> List[Tuple[str, FileStatus]]:
     """
@@ -166,7 +165,9 @@ def _fast_file_list_to_manifest_diff(
         )
         if root_relative_path not in input_files_map:
             # This is a new file
-            logger.echo(f"Found difference at: {root_relative_path}, Status: FileStatus.NEW")
+            print_function_callback(
+                f"Found difference at: {root_relative_path}, Status: FileStatus.NEW"
+            )
             changed_paths.append((return_path, FileStatus.NEW))
         else:
             # This is a modified file, compare with manifest relative timestamp.
@@ -174,14 +175,14 @@ def _fast_file_list_to_manifest_diff(
             # Check file size first as it is easier to test. Usually modified files will also have size diff.
             if file_stat.st_size != input_file.size:
                 changed_paths.append((return_path, FileStatus.MODIFIED))
-                logger.echo(
+                print_function_callback(
                     f"Found size difference at: {root_relative_path}, Status: FileStatus.MODIFIED"
                 )
             # Check file mtime, allow 1 microsecond diff to prevent false positive
             # utime set from microsecond to nanosecond conversion could create 1 microsecond diff upon division
             elif abs(trunc(file_stat.st_mtime_ns / 1000) - input_file.mtime) > 1:
                 changed_paths.append((return_path, FileStatus.MODIFIED))
-                logger.echo(
+                print_function_callback(
                     f"Found time difference at: {root_relative_path}, Status: FileStatus.MODIFIED"
                 )
 

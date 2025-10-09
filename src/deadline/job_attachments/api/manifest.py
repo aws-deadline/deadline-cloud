@@ -4,12 +4,11 @@ import datetime
 from io import BytesIO
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
 
 from deadline.client.api._session import _get_queue_user_boto3_session, get_default_client_config
-from deadline.client.cli._groups.click_logger import ClickLogger
 from deadline.job_attachments._diff import _fast_file_list_to_manifest_diff, compare_manifest
 from deadline.job_attachments._glob import _process_glob_inputs, _glob_paths
 from deadline.job_attachments.api._utils import _read_manifests
@@ -92,7 +91,7 @@ def _manifest_snapshot(
     include_exclude_config: Optional[str] = None,
     diff: Optional[str] = None,
     force_rehash: bool = False,
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> Optional[ManifestSnapshot]:
     # Get all files in the root.
     glob_config: GlobConfig
@@ -113,7 +112,7 @@ def _manifest_snapshot(
     # Compute the output manifest immediately and hash.
     if not diff:
         output_manifest = _create_manifest_for_single_root(
-            files=current_files, root=root, logger=logger
+            files=current_files, root=root, print_function_callback=print_function_callback
         )
         if not output_manifest:
             return None
@@ -134,7 +133,7 @@ def _manifest_snapshot(
                 root=root,
                 current_files=current_files,
                 diff_manifest=source_manifest,
-                logger=logger,
+                print_function_callback=print_function_callback,
                 return_root_relative_path=False,
             )
             for diff_file in diff_list:
@@ -144,7 +143,7 @@ def _manifest_snapshot(
         else:
             # In "slow / thorough" mode, we check by hash, which is definitive.
             output_manifest = _create_manifest_for_single_root(
-                files=current_files, root=root, logger=logger
+                files=current_files, root=root, print_function_callback=print_function_callback
             )
             if not output_manifest:
                 return None
@@ -155,7 +154,9 @@ def _manifest_snapshot(
                 if diff_item[0] == FileStatus.MODIFIED or diff_item[0] == FileStatus.NEW:
                     full_diff_path = f"{root}/{diff_item[1].path}"
                     changed_paths.append(full_diff_path)
-                    logger.echo(f"Found difference at: {full_diff_path}, Status: {diff_item[0]}")
+                    print_function_callback(
+                        f"Found difference at: {full_diff_path}, Status: {diff_item[0]}"
+                    )
 
         # If there were no files diffed, return None, there was nothing to snapshot.
         if len(changed_paths) == 0:
@@ -163,7 +164,7 @@ def _manifest_snapshot(
 
         # Since the files are already hashed, we can easily re-use has_attachments to remake a diff manifest.
         output_manifest = _create_manifest_for_single_root(
-            files=changed_paths, root=root, logger=logger
+            files=changed_paths, root=root, print_function_callback=print_function_callback
         )
         if not output_manifest:
             return None
@@ -177,11 +178,11 @@ def _manifest_snapshot(
             name=name,
         )
         # Output results.
-        logger.echo(f"Manifest generated at {local_manifest_file}")
+        print_function_callback(f"Manifest generated at {local_manifest_file}")
         return ManifestSnapshot(root=root, manifest=local_manifest_file)
     else:
         # No manifest generated.
-        logger.echo("No manifest generated")
+        print_function_callback("No manifest generated")
         return None
 
 
@@ -220,7 +221,7 @@ def _manifest_diff(
     exclude: Optional[List[str]] = None,
     include_exclude_config: Optional[str] = None,
     force_rehash=False,
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> ManifestDiff:
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -230,7 +231,7 @@ def _manifest_diff(
     :param include: Include glob to look for files to add to the manifest.
     :param exclude: Exclude glob to exclude files from the manifest.
     :param include_exclude_config: Config JSON or file containeing input and exclude config.
-    :param logger: Click Logger instance to print to CLI as text or JSON.
+    :param print_function_callback: Callback function to handle print messages.
     :returns: ManifestDiff object containing all new changed, deleted files.
     """
 
@@ -279,7 +280,10 @@ def _manifest_diff(
     else:
         # File based comparisons.
         fast_diff: List[Tuple[str, FileStatus]] = _fast_file_list_to_manifest_diff(
-            root=root, current_files=input_files, diff_manifest=local_manifest_object, logger=logger
+            root=root,
+            current_files=input_files,
+            diff_manifest=local_manifest_object,
+            print_function_callback=print_function_callback,
         )
         for fast_diff_item in fast_diff:
             process_output(fast_diff_item[1], fast_diff_item[0], output)
@@ -293,7 +297,7 @@ def _manifest_upload(
     s3_cas_prefix: str,
     boto_session: boto3.Session,
     s3_key_prefix: Optional[str] = None,
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ):
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -304,7 +308,7 @@ def _manifest_upload(
     boto_session: S3 Content Addressable Storage prefix.
     s3_key_prefix: [Optional] S3 prefix path to the Content Addressable Storge.
     boto_session: Boto3 session.
-    logger: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     """
     # S3 metadata
 
@@ -329,7 +333,7 @@ def _manifest_upload(
             bytes=BytesIO(manifest.read().encode("utf-8")),
             bucket=s3_bucket_name,
             key=manifest_path,
-            progress_handler=logger.echo,
+            progress_handler=print_function_callback,
             extra_args=s3_metadata,
         )
 
@@ -342,7 +346,7 @@ def _manifest_download(
     boto3_session: boto3.Session,
     step_id: Optional[str] = None,
     asset_type: AssetType = AssetType.ALL,
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> ManifestDownloadResponse:
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -354,7 +358,7 @@ def _manifest_download(
     boto_session: Boto3 session.
     step_id: Optional[str]: Optional, download manifest for a step
     asset_type: Which asset manifests should be downloaded for given job (& optionally step), options are Input, Output, All. Default behaviour is All.
-    logger: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
 
@@ -407,7 +411,7 @@ def _manifest_download(
 
     # If input manifests need to be downloaded
     if download_input:
-        logger.echo(f"Downloading input manifests for job: {job_id}")
+        print_function_callback(f"Downloading input manifests for job: {job_id}")
 
         # Get input_manifest_paths from Deadline GetJob API
         attachments: dict = job.get("attachments", {})
@@ -424,14 +428,14 @@ def _manifest_download(
                 session=queue_role_session,
             )
             if asset_manifest is not None:
-                logger.echo(f"Found input manifest for root: {root_path}")
+                print_function_callback(f"Found input manifest for root: {root_path}")
                 add_manifest_by_root(
                     manifests_by_root=manifests_by_root, root=root_path, manifest=asset_manifest
                 )
 
         # Now handle step-step dependencies
         if step_id is not None:
-            logger.echo(f"Finding step-step dependency manifests for step: {step_id}")
+            print_function_callback(f"Finding step-step dependency manifests for step: {step_id}")
 
             # Get Step-Step dependencies with pagination
             next_token = ""
@@ -445,7 +449,9 @@ def _manifest_download(
                 )
 
                 for dependent_step in step_dep_response["dependencies"]:
-                    logger.echo(f"Found Step-Step dependency. {dependent_step['stepId']}")
+                    print_function_callback(
+                        f"Found Step-Step dependency. {dependent_step['stepId']}"
+                    )
 
                     # Get manifests for the step-step dependency
                     step_manifests_by_root: Dict[str, List[BaseAssetManifest]] = (
@@ -461,7 +467,9 @@ def _manifest_download(
                     # Merge all manifests by root.
                     for root in step_manifests_by_root.keys():
                         for manifest in step_manifests_by_root[root]:
-                            logger.echo(f"Found step-step output manifest for root: {root}")
+                            print_function_callback(
+                                f"Found step-step output manifest for root: {root}"
+                            )
                             add_manifest_by_root(
                                 manifests_by_root=manifests_by_root, root=root, manifest=manifest
                             )
@@ -472,7 +480,9 @@ def _manifest_download(
     if download_output:
         output_manifests_by_root: Dict[str, List[BaseAssetManifest]]
         if step_id is not None:
-            logger.echo(f"Downloading output manifests step: {step_id} of job: {job_id}")
+            print_function_callback(
+                f"Downloading output manifests step: {step_id} of job: {job_id}"
+            )
             # Only get the output manifests for selected step
             output_manifests_by_root = get_output_manifests_by_asset_root(
                 s3_settings=queue_s3_settings,
@@ -484,7 +494,7 @@ def _manifest_download(
             )
 
         else:
-            logger.echo(f"Downloading output manifests for job: {job_id}")
+            print_function_callback(f"Downloading output manifests for job: {job_id}")
             # Get output manifests for all steps of the job
             output_manifests_by_root = get_output_manifests_by_asset_root(
                 s3_settings=queue_s3_settings,
@@ -497,7 +507,7 @@ def _manifest_download(
         # Merge all output manifests by root.
         for root in output_manifests_by_root.keys():
             for manifest in output_manifests_by_root[root]:
-                logger.echo(f"Found output manifest for root: {root}")
+                print_function_callback(f"Found output manifest for root: {root}")
                 add_manifest_by_root(
                     manifests_by_root=manifests_by_root, root=root, manifest=manifest
                 )
@@ -528,7 +538,9 @@ def _manifest_download(
         successful_downloads.append(
             ManifestDownload(manifest_root=root, local_manifest_path=str(local_manifest_file_path))
         )
-        logger.echo(f"Downloaded merged manifest for root: {root} to: {local_manifest_file_path}")
+        print_function_callback(
+            f"Downloaded merged manifest for root: {root} to: {local_manifest_file_path}"
+        )
 
     # JSON output at the end.
     output = ManifestDownloadResponse(downloaded=successful_downloads)
@@ -540,7 +552,7 @@ def _manifest_merge(
     manifest_files: List[str],
     destination: str,
     name: Optional[str],
-    logger: ClickLogger = ClickLogger(False),
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> Optional[ManifestMerge]:
     """
     BETA API - API to merge multiple manifests into one.
@@ -548,7 +560,7 @@ def _manifest_merge(
     manifest_files: List of manifest files to merge.
     destination: Destination directory for the merged manifest.
     name: Name of the merged manifest.
-    logger: Click Logger instance to print to CLI as text or JSON.
+    print_function_callback: Callback function to handle print messages.
     return ManifestMerge object containing the merged manifest.
     """
 
@@ -564,6 +576,6 @@ def _manifest_merge(
     local_manifest_file = _write_manifest(
         root=root, manifest=merged_manifest, destination=destination, name=name
     )
-    logger.echo(f"Manifest generated at {local_manifest_file}")
+    print_function_callback(f"Manifest generated at {local_manifest_file}")
 
     return ManifestMerge(manifest_root=root, local_manifest_path=local_manifest_file)
