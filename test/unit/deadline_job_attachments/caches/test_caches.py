@@ -4,7 +4,7 @@ import os
 import threading
 from datetime import datetime
 from sqlite3 import OperationalError
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 import pytest
 
@@ -117,6 +117,100 @@ class TestCacheDB:
                 with pytest.raises(JobAttachmentsError) as exc_info:
                     cdb.get_local_connection()
                 assert "Could not create connection to cache" in str(exc_info.value)
+
+    def test_enter_retries_on_operational_error(self, tmpdir):
+        """Tests that __enter__ retries on OperationalError and succeeds on final attempt"""
+        from unittest.mock import MagicMock
+
+        # Create a mock connection that will be returned on successful connect
+        mock_connection = MagicMock()
+        mock_connection.execute.return_value = None
+
+        # Create side effect that fails twice then succeeds
+        connect_calls = 0
+
+        def connect_side_effect(*args, **kwargs):
+            nonlocal connect_calls
+            connect_calls += 1
+            if connect_calls <= 2:
+                raise OperationalError("database is locked")
+            return mock_connection
+
+        # Mock logger to capture retry messages
+        with patch("deadline.job_attachments.caches.cache_db.logger") as mock_logger:
+            with patch("sqlite3.connect", side_effect=connect_side_effect):
+                # This should succeed after 2 retries
+                with CacheDB(
+                    "test", "test_table", "CREATE TABLE test_table (id INTEGER)", tmpdir
+                ) as cdb:
+                    # Verify the connection was established
+                    assert cdb.db_connection == mock_connection
+                    # Verify we made the expected number of connection attempts
+                    assert connect_calls == CacheDB.RETRY_ATTEMPTS
+                    # Verify retry messages were logged
+                    expected_calls = [
+                        call("Error connecting to database, retrying."),
+                        call("Error connecting to database, retrying."),
+                    ]
+                    mock_logger.info.assert_has_calls(expected_calls)
+
+    def test_enter_fails_after_max_retries(self, tmpdir):
+        """Tests that __enter__ fails with JobAttachmentsError after max retries"""
+
+        # Mock sqlite3.connect to always raise OperationalError
+        with patch("sqlite3.connect", side_effect=OperationalError("database is locked")):
+            with patch("deadline.job_attachments.caches.cache_db.logger") as mock_logger:
+                with pytest.raises(JobAttachmentsError) as exc_info:
+                    with CacheDB(
+                        "test", "test_table", "CREATE TABLE test_table (id INTEGER)", tmpdir
+                    ):
+                        pass
+
+                # Verify the error message indicates retry exhaustion
+                assert (
+                    f"Could not access cache file after {CacheDB.RETRY_ATTEMPTS} retry attempts"
+                    in str(exc_info.value)
+                )
+                # Verify retry messages were logged for each failed attempt
+                assert mock_logger.info.call_count == CacheDB.RETRY_ATTEMPTS
+                expected_calls = [
+                    call("Error connecting to database, retrying.")
+                ] * CacheDB.RETRY_ATTEMPTS
+                mock_logger.info.assert_has_calls(expected_calls)
+
+    def test_get_local_connection_retries_on_operational_error(self, tmpdir):
+        """Tests that get_local_connection retries on OperationalError and succeeds"""
+        from unittest.mock import MagicMock
+
+        # Create a mock connection that will be returned on successful connect
+        mock_connection = MagicMock()
+
+        # Create side effect that fails twice then succeeds
+        connect_calls = 0
+
+        def connect_side_effect(*args, **kwargs):
+            nonlocal connect_calls
+            connect_calls += 1
+            if connect_calls <= 2:
+                raise OperationalError("database is locked")
+            return mock_connection
+
+        with CacheDB("test", "test_table", "CREATE TABLE test_table (id INTEGER)", tmpdir) as cdb:
+            with patch("deadline.job_attachments.caches.cache_db.logger") as mock_logger:
+                with patch("sqlite3.connect", side_effect=connect_side_effect):
+                    # This should succeed after 2 retries
+                    connection = cdb.get_local_connection()
+
+                    # Verify the connection was established
+                    assert connection == mock_connection
+                    # Verify we made the expected number of connection attempts
+                    assert connect_calls == CacheDB.RETRY_ATTEMPTS
+                    # Verify retry messages were logged
+                    expected_calls = [
+                        call("Error connecting to database, retrying."),
+                        call("Error connecting to database, retrying."),
+                    ]
+                    mock_logger.info.assert_has_calls(expected_calls)
 
 
 class TestHashCache:

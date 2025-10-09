@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Optional
 
 from ..exceptions import JobAttachmentsError
+from .._utils import _retry
 
 CONFIG_ROOT = ".deadline"
 COMPONENT_NAME = "job_attachments"
@@ -26,6 +27,9 @@ class CacheDB(ABC):
     This class is intended to always be used with a context manager to properly
     close the connection to the cache database.
     """
+
+    # Number of retry attempts for SQLite operational errors (e.g., database locks)
+    RETRY_ATTEMPTS = 3
 
     def __init__(
         self, cache_name: str, table_name: str, create_query: str, cache_dir: Optional[str] = None
@@ -63,23 +67,36 @@ class CacheDB(ABC):
         if self.enabled:
             import sqlite3
 
-            try:
-                self.db_connection: sqlite3.Connection = sqlite3.connect(
-                    self.cache_dir, check_same_thread=False
-                )
-            except sqlite3.OperationalError as oe:
-                raise JobAttachmentsError(
-                    f"Could not access cache file in {self.cache_dir}"
-                ) from oe
+            @_retry(
+                ExceptionToCheck=sqlite3.OperationalError,
+                tries=self.RETRY_ATTEMPTS,
+                delay=(0.5, 1.5),  # Jitter between 0.5 and 1.5 seconds
+                backoff=1.0,
+                logger=logger.warning,
+            )
+            def _connect_to_db():
+                try:
+                    connection = sqlite3.connect(self.cache_dir, check_same_thread=False)
+                    try:
+                        # Test the connection by trying to query the table
+                        connection.execute(f"SELECT * FROM {self.table_name}")
+                    except Exception:
+                        # DB file doesn't have our table, so we need to create it
+                        logger.info(
+                            f"No cache entries for the current library version were found. Creating a new cache for {self.cache_name}"
+                        )
+                        connection.execute(self.create_query)
+                    return connection
+                except sqlite3.OperationalError as oe:
+                    logger.info("Error connecting to database, retrying.")
+                    raise oe
 
             try:
-                self.db_connection.execute(f"SELECT * FROM {self.table_name}")
-            except Exception:
-                # DB file doesn't have our table, so we need to create it
-                logger.info(
-                    f"No cache entries for the current library version were found. Creating a new cache for {self.cache_name}"
-                )
-                self.db_connection.execute(self.create_query)
+                self.db_connection = _connect_to_db()
+            except sqlite3.OperationalError as oe:
+                raise JobAttachmentsError(
+                    f"Could not access cache file after {self.RETRY_ATTEMPTS} retry attempts: {self.cache_dir}"
+                ) from oe
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -104,12 +121,28 @@ class CacheDB(ABC):
         import sqlite3
 
         if not hasattr(self.local, "connection"):
+
+            @_retry(
+                ExceptionToCheck=sqlite3.OperationalError,
+                tries=self.RETRY_ATTEMPTS,
+                delay=(0.5, 1.5),  # Jitter between 0.5 and 1.5 seconds
+                backoff=1.0,
+                logger=logger.warning,
+            )
+            def _create_local_connection():
+                try:
+                    connection = sqlite3.connect(self.cache_dir, check_same_thread=False)
+                    return connection
+                except sqlite3.OperationalError as oe:
+                    logger.info("Error connecting to database, retrying.")
+                    raise oe
+
             try:
-                self.local.connection = sqlite3.connect(self.cache_dir, check_same_thread=False)
+                self.local.connection = _create_local_connection()
                 self.local_connections.add(self.local.connection)
             except sqlite3.OperationalError as oe:
                 raise JobAttachmentsError(
-                    f"Could not create connection to cache in {self.cache_dir}"
+                    f"Could not create connection to cache after {self.RETRY_ATTEMPTS} retry attempts: {self.cache_dir}"
                 ) from oe
 
         return self.local.connection
