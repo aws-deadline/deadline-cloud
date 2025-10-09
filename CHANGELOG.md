@@ -1,3 +1,11 @@
+## 0.53.2 (2025-10-09)
+
+### Performance Improvements
+* Job Bundle submission speed increased by reducing redundant stat calls (#860) ([`6e6e3ff`](https://github.com/aws-deadline/deadline-cloud/commit/6e6e3ff6094de4d74e45d67a52b50c09fa655ef4))
+
+### Experimental
+* Fixes a bug in the manifest snapshot feature that would cause a crash if ran on an empty directory (#879) ([`c14322b`](https://github.com/aws-deadline/deadline-cloud/commit/c14322bb6b46b32e3a2ec5ea876200181d8010cb))
+
 ## 0.53.1 (2025-10-02)
 
 ### Features
