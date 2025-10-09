@@ -169,7 +169,7 @@ class TestAttachmentDownload:
             json.dump([PATH_MAPPING], f)
 
         if conflict_resolution:
-            _attachment_download(
+            result = _attachment_download(
                 manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
                 s3_root_uri="s3://bucket/assetRoot",
                 boto3_session=session_mock,
@@ -177,12 +177,14 @@ class TestAttachmentDownload:
                 conflict_resolution=conflict_resolution,
             )
         else:
-            _attachment_download(
+            result = _attachment_download(
                 manifests=[os.path.join(temp_assets_dir, PATH_MAPPING_HASH)],
                 s3_root_uri="s3://bucket/assetRoot",
                 boto3_session=session_mock,
                 path_mapping_rules=mapping_file_path,
             )
+
+        assert isinstance(result, DownloadSummaryStatistics)
 
         mock_download_files_from_manifests.assert_called_once_with(
             s3_bucket="bucket",
@@ -209,11 +211,13 @@ class TestAttachmentDownload:
         ) as f:
             json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
 
-        _attachment_download(
+        result = _attachment_download(
             manifests=[os.path.join(temp_assets_dir, manifest_case_key)],
             s3_root_uri="s3://bucket/assetRoot",
             boto3_session=session_mock,
         )
+
+        assert isinstance(result, DownloadSummaryStatistics)
 
         mock_download_files_from_manifests.assert_called_once_with(
             s3_bucket="bucket",
@@ -243,11 +247,13 @@ class TestAttachmentDownload:
             ) as f:
                 json.dump(MOCK_MANIFEST_CASE[manifest_case_key], f)
 
-        _attachment_download(
+        result = _attachment_download(
             manifests=[os.path.join(temp_assets_dir, key) for key in MOCK_MANIFEST_CASE.keys()],
             s3_root_uri="s3://bucket/assetRoot",
             boto3_session=session_mock,
         )
+
+        assert isinstance(result, DownloadSummaryStatistics)
 
         mock_download_files_from_manifests.assert_called_once_with(
             s3_bucket="bucket",
