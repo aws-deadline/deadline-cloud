@@ -72,7 +72,7 @@ def _get_download_candidate_jobs(
     farm_id: str,
     queue_id: str,
     starting_timestamp: datetime,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> dict[str, dict[str, Any]]:
     """
     Uses deadline:SearchJobs queries to get a dict {job_id: job} of download candidates for the queue.
@@ -223,7 +223,7 @@ def _categorize_jobs_in_checkpoint(
     checkpoint: IncrementalDownloadState,
     download_candidate_jobs: dict[str, dict[str, Any]],
     new_completed_timestamp: datetime,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> CategorizedJobIds:
     """
     Categorizes the provided download candidate jobs by id into a CategorizedJobIds object,
@@ -539,7 +539,7 @@ def _get_job_sessions(
     categorized_job_ids: CategorizedJobIds,
     checkpoint: IncrementalDownloadState,
     download_candidate_jobs: dict[str, dict[str, Any]],
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> dict[str, list]:
     """
     This function gets all the job sessions and session actions from the completed, added, and updated jobs.
@@ -734,7 +734,7 @@ def _create_path_mapping_rule_appliers(
     storage_profiles: dict[str, dict[str, Any]],
     checkpoint: IncrementalDownloadState,
     download_candidate_jobs: dict[str, dict[str, Any]],
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> dict[str, Optional[_PathMappingRuleApplier]]:
     """
     Retrieves all the needed storage profiles and constructs path mapping rule applies for them.
@@ -833,7 +833,7 @@ def _add_missing_output_manifests_to_job_sessions(
 def _filter_session_actions_without_manifests_from_job_sessions(
     job_sessions: dict[str, list],
     download_candidate_jobs: dict[str, dict[str, Any]],
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
 ):
     """
     Modify job_sessions in place to filter out any session actions that lack any output manifests.
@@ -995,7 +995,7 @@ def _incremental_output_download(
     checkpoint: IncrementalDownloadState,
     file_conflict_resolution: FileConflictResolution,
     config: Optional[ConfigParser] = None,
-    print_function_callback: Callable[[str], None] = lambda msg: None,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
     *,
     dry_run: bool = False,
 ) -> IncrementalDownloadState:
