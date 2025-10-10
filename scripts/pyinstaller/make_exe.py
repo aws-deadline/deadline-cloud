@@ -14,10 +14,13 @@ $ python scripts/pyinstaller/make_exe.py
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
+from importlib.metadata import version
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).absolute().parents[2]
 PYINSTALLER_DIR = ROOT / "scripts" / "pyinstaller"
@@ -37,8 +40,13 @@ DEADLINE_DIST_PATH = PYINSTALLER_DIST_DIR / "deadline"
 DEFAULT_OUTPUT_ZIP = "deadline-client-exe.zip"
 
 
-def make_exe(exe_zipfile: Path, cleanup=True) -> None:
+def make_exe(exe_zipfile: Path, cleanup=True, version_file: Optional[Path] = None) -> None:
     clean_pyinstaller_build_dirs()
+
+    if version_file is not None:
+        pyinstaller_version = version("pyinstaller")
+        with open(version_file, "w", encoding="utf8") as f:
+            json.dump({"pyinstaller": pyinstaller_version}, f)
 
     # Create Deadline CLI dist
     pyinstaller(str(DEADLINE_CLI_SPEC_PATH))
@@ -106,11 +114,17 @@ def main() -> None:
         action="store_false",
         help=("Leave the build folder produced by pyinstaller. This can be useful for debugging."),
     )
+    parser.add_argument(
+        "--version-file",
+        type=Path,
+        required=False,
+        help="Path to a file to write package versions used to.",
+    )
     args = parser.parse_args()
 
     output = Path(args.output).absolute()
 
-    make_exe(output, cleanup=args.cleanup)
+    make_exe(output, cleanup=args.cleanup, version_file=args.version_file)
 
 
 if __name__ == "__main__":

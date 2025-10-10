@@ -41,10 +41,34 @@ pre-install-commands = ["pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
 build = "hatch build"
-make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip"
+make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip --version-file {root}/pyinstaller-version.json"
 prepare_artifacts = "python scripts/prepare_artifacts.py --archive-path {root}/installer/components/DeadlineClient.zip --output-path {root}/installer/components/DeadlineClient"
 build_installer = "python {root}/scripts/build_installer_cli.py --installer-source-path {root}/installer/DeadlineCloudClient.xml {args:}"
 build_installer_local = "hatch build && hatch run make_exe && hatch run prepare_artifacts && hatch run build_installer --local-dev"
+validate_exe = "python {root}/scripts/pyinstaller/validate.py --zip-path {root}/installer/components/DeadlineClient.zip {args:}"
+validate_exe_local = "python {root}/scripts/pyinstaller/validate.py {args:}"
+
+[envs.attributions]
+pre-install-commands = ["pip install -r requirements-attributions.txt"]
+
+[envs.attributions.scripts]
+generate = """
+python {root}/scripts/attributions/cli.py \
+-o {root}/THIRD_PARTY_LICENSES \
+--python current \
+--inventory-file {root}/software-inventory.md \
+--versions-file {root}/software-versions.json \
+{args:}
+"""
+generate_local = "python {root}/scripts/attributions/cli.py -o {root}/THIRD_PARTY_LICENSES --dev --python uv {args:}"
+merge_versions = """
+python {root}/scripts/attributions/merge_versions.py \
+--python-dependencies-file {root}/python-dependencies.json \
+--software-versions-file {root}/software-versions.json \
+--pyinstaller-version-file {root}/pyinstaller-version.json \
+--installer-name DeadlineCloudClient \
+--output-prefix {root}
+"""
 
 [envs.release]
 detached = true
