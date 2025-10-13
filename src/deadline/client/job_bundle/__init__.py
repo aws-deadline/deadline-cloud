@@ -48,10 +48,15 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
 
     # Index the files so they sort in order of submission
     number = 1
-    existing_dirs = sorted(glob.glob(os.path.join(month_dir, f"{date_tag}-*")))
+    existing_dirs = glob.glob(os.path.join(month_dir, f"{date_tag}-*"))
     if existing_dirs:
-        latest_dir = existing_dirs[-1]
-        number = int(os.path.basename(latest_dir)[len(date_tag) + 1 :].split("-", 1)[0]) + 1
+        for dir_path in existing_dirs:
+            try:
+                dir_number = int(os.path.basename(dir_path)[len(date_tag) + 1 :].split("-", 1)[0])
+                number = max(number, dir_number + 1)
+            except ValueError:
+                # Skip if this dir has no number
+                pass
 
     result = os.path.join(
         month_dir, f"{date_tag}-{number:02}-{submitter_name_cleaned}-{job_name_cleaned}"
