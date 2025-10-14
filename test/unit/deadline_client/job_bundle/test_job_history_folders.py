@@ -95,3 +95,19 @@ def test_create_job_bundle_dir_sanitization(
             tmpdir, expected_output_path
         )
         assert os.path.isdir(os.path.join(tmpdir, expected_output_path))
+
+
+def test_create_job_bundle_dir_many_jobs(fresh_deadline_config, tmp_path):
+    """Tests that it can create 150 jobs within the same dir"""
+    config.set_setting("settings.job_history_dir", str(tmp_path))
+
+    # When we call the function 150 times
+    created_dirs: set = set()
+    with freeze_time("2025-10-13T03:05"):
+        for _ in range(150):
+            dir_path = job_bundle.create_job_history_bundle_dir("cli_job", "Test CLI Job Name")
+            created_dirs.add(os.path.basename(dir_path))
+
+    # Then there should be 150 directories, and they should match what was returned
+    assert len(created_dirs) == 150
+    assert set(os.listdir(tmp_path / "2025-10")) == created_dirs
