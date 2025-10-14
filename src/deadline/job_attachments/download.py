@@ -172,20 +172,11 @@ def _get_output_manifest_prefix(
     job_id: str,
     step_id: Optional[str] = None,
     task_id: Optional[str] = None,
-    session_action_id: Optional[str] = None,
 ) -> str:
     """
     Get full prefix for output manifest with given farm id, queue id, job id, step id and task id
     """
     manifest_prefix: str
-    if session_action_id:
-        if not task_id or not step_id:
-            raise JobAttachmentsError(
-                "Session Action ID specified, but no Task ID or Step ID. Job, Step, and Task ID are required to retrieve task outputs."
-            )
-        manifest_prefix = s3_settings.full_output_prefix(
-            farm_id, queue_id, job_id, step_id, task_id, session_action_id
-        )
     if task_id:
         if not step_id:
             raise JobAttachmentsError(
@@ -203,19 +194,18 @@ def _get_output_manifest_prefix(
     return f"{manifest_prefix}/"
 
 
-def _get_tasks_manifests_keys_from_s3(
-    manifest_prefix: str,
+def _list_s3_objects_with_error_handling(
     s3_bucket: str,
+    manifest_prefix: str,
     session: Optional[boto3.Session] = None,
-    *,
-    select_latest_per_task=True,
-) -> List[str]:
+) -> List[dict]:
     """
-    Returns the keys of all output manifests from the given s3 prefix.
-    (Only the manifests that end with the prefix pattern task-*/*_output)
+    List S3 objects with standardized error handling for job attachments.
+    Returns a list of all S3 object contents under the given prefix.
     """
-    manifests_keys: List[str] = []
     s3_client = get_s3_client(session=session)
+    all_contents = []
+
     try:
         paginator = s3_client.get_paginator("list_objects_v2")
         page_iterator = paginator.paginate(
@@ -223,21 +213,15 @@ def _get_tasks_manifests_keys_from_s3(
             Prefix=manifest_prefix,
         )
 
-        # 1. Find all files that match the pattern: task-{any}/{any}/{any}output{any}
-        task_prefixes = defaultdict(list)
         for page in page_iterator:
             contents = page.get("Contents", None)
             if contents is None:
                 raise JobAttachmentsError(
                     f"Unable to find asset manifest in s3://{s3_bucket}/{manifest_prefix}"
                 )
-            for content in contents:
-                if re.search(r"task-.*/.*/.*output.*", content["Key"]):
-                    parts = content["Key"].split("/")
-                    for i, part in enumerate(parts):
-                        if "task-" in part:
-                            task_folder = "/".join(parts[: i + 1])
-                            task_prefixes[task_folder].append(content["Key"])
+            all_contents.extend(contents)
+
+        return all_contents
 
     except ClientError as exc:
         status_code = int(exc.response["ResponseMetadata"]["HTTPStatusCode"])
@@ -266,8 +250,52 @@ def _get_tasks_manifests_keys_from_s3(
     except Exception as e:
         raise AssetSyncError(e) from e
 
+
+def _get_tasks_manifests_keys_from_s3(
+    manifest_prefix: str,
+    s3_bucket: str,
+    session: Optional[boto3.Session] = None,
+    *,
+    select_latest_per_task=True,
+) -> List[str]:
+    """
+    Retrieves manifest keys from S3 by listing objects in a given S3 prefix, usually job or step folders.
+
+    Searches for manifest files matching the regex pattern that captures both:
+    - Chunked step manifests: .../job_id/step_id/timestamp_sessionaction_id/
+    - Task-based manifests: .../job_id/step_id/task_id/timestamp_sessionaction_id/
+
+    For chunked steps (no task ID), all manifests are included.
+    For task-based manifests, behavior depends on select_latest_per_task:
+    - If True: selects only the latest session action per task (by timestamp_sessionaction_id alphabetical order)
+    - If False: includes all manifests
+    """
+    manifests_keys = []
+
+    # Separate tracking for task-based vs chunked manifests
+    task_prefixes: dict[str, list] = defaultdict(list)
+
+    all_contents = _list_s3_objects_with_error_handling(s3_bucket, manifest_prefix, session)
+
+    step_pattern = re.compile(r"step-.*/.*/.*output.*")
+    for content in all_contents:
+        key = content["Key"]
+        if step_pattern.search(key):
+            if "task-" in key:
+                parts = key.split("/")
+                for i, part in enumerate(parts):
+                    if "task-" in part:
+                        task_folder = "/".join(parts[: i + 1])
+                        task_prefixes[task_folder].append(key)
+                        break
+            else:
+                manifests_keys.append(key)
+
+    # Handle task-based steps
     if select_latest_per_task:
-        # 2. Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
+        # TODO: Select all files in the last subfolder (alphabetically) under each "task-{any}" folder.
+        # This sorts by timestamp_sessionaction_id, but timestamp comes from WorkerAgent and shouldn't be relied on.
+        # Should use S3 LastModified instead.
         for task_folder, files in task_prefixes.items():
             last_subfolder = sorted(
                 set(f.split("/")[len(task_folder.split("/"))] for f in files), reverse=True
@@ -275,9 +303,8 @@ def _get_tasks_manifests_keys_from_s3(
             manifests_keys += [f for f in files if f.startswith(f"{task_folder}/{last_subfolder}/")]
     else:
         # Include all the keys, not just the latest per task
-        manifests_keys = [f for _, files in task_prefixes.items() for f in files]
+        manifests_keys += [f for _, files in task_prefixes.items() for f in files]
 
-    # Now `manifests_keys` is a list of the keys of files in the last folder (alphabetically) under each "task-" folder.
     return manifests_keys
 
 
@@ -738,12 +765,29 @@ def get_output_manifests_by_asset_root(
     session: Optional[boto3.Session] = None,
 ) -> dict[str, list[BaseAssetManifest]]:
     """
-    For a given job/step/task, gets a map from each root path to a corresponding list of
-    output manifests.
+    Gets output manifests grouped by asset root for job, step, or task outputs, handling both chunked and non-chunked steps.
+
+    When session_action_id is provided, retrieves outputs for that specific session action
+    by searching S3 paths containing the session action ID. Session action ID is typically
+    provided with task ID but is not required.
+
+    When session_action_id is not provided, retrieves all output manifests for the specified
+    scope (job, step, or task) and merges them chronologically by asset root. This is used
+    for downloading complete job/step/task outputs or syncing step dependencies by WorkerAgent.
     """
+    # Handle specific session action ID requests
+    if session_action_id:
+        if not step_id or not task_id:
+            raise JobAttachmentsError(
+                "Session Action ID specified, but missing Step ID or Task ID. Job, Step, and Task ID are required to retrieve session action outputs."
+            )
+        return _get_manifests_by_session_action_id(
+            s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id, session
+        )
+
     outputs: DefaultDict[str, list[BaseAssetManifest]] = DefaultDict(list)
     manifest_prefix: str = _get_output_manifest_prefix(
-        s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id
+        s3_settings, farm_id, queue_id, job_id, step_id, task_id
     )
     try:
         manifests_keys: list[str] = _get_tasks_manifests_keys_from_s3(
@@ -752,20 +796,39 @@ def get_output_manifests_by_asset_root(
     except JobAttachmentsError:
         return outputs
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
-        futures = [
-            executor.submit(
-                get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session
-            )
-            for key in manifests_keys
-        ]
-        for key, future in zip(manifests_keys, futures):
-            asset_root, asset_manifest = future.result()
-            if not asset_root:
-                raise MissingAssetRootError(
-                    f"Failed to get asset root from metadata of output manifest: {key}"
+    # Collect all manifests grouped by asset root
+    by_root: defaultdict[str, list[Tuple[datetime, BaseAssetManifest]]] = defaultdict(list)
+
+    if manifests_keys:
+        # Download manifests with timestamps for chronological merging
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=S3_DOWNLOAD_MAX_CONCURRENCY
+        ) as executor:
+            futures = []
+            for manifest_key in manifests_keys:
+                future = executor.submit(
+                    _get_asset_root_and_manifest_from_s3_with_last_modified,
+                    manifest_key,
+                    s3_settings.s3BucketName,
+                    session,
                 )
-            outputs[asset_root].append(asset_manifest)
+                futures.append(future)
+
+            for i, future in enumerate(futures):
+                asset_root, last_modified, manifest = future.result()
+                if not asset_root:
+                    raise MissingAssetRootError(
+                        f"Failed to get asset root from metadata of output manifest: {manifests_keys[i]}"
+                    )
+                by_root[asset_root].append((last_modified, manifest))
+
+    # Merge each asset root chronologically
+    # We must merge here while we have LastModified timestamps, since the returned manifests
+    # lose this metadata and downstream callers can't merge chronologically.
+    for asset_root, manifest_list in by_root.items():
+        merged_manifest = _merge_asset_manifests_sorted_asc_by_last_modified(manifest_list)
+        if merged_manifest:
+            outputs[asset_root].append(merged_manifest)
 
     return outputs
 
@@ -999,7 +1062,9 @@ def _merge_asset_manifests_sorted_asc_by_last_modified(
         return None
 
     # Sort manifests by timestamp (oldest first)
-    sorted_manifests_with_timestamps = sorted(manifests_with_last_modified_timestamps)
+    sorted_manifests_with_timestamps = sorted(
+        manifests_with_last_modified_timestamps, key=lambda x: x[0]
+    )
 
     # Extract just the manifests in the sorted order
     sorted_manifests = [manifest for _, manifest in sorted_manifests_with_timestamps]
@@ -1313,3 +1378,78 @@ class OutputDownloader:
         progress_tracker.total_time = time.perf_counter() - start_time
 
         return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
+
+
+def _get_manifests_by_session_action_id(
+    s3_settings: JobAttachmentS3Settings,
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    step_id: str,
+    task_id: str,
+    session_action_id: str,
+    session: Optional[boto3.Session],
+) -> dict[str, list[BaseAssetManifest]]:
+    """
+    Get manifests for a specific session action ID by searching S3 paths containing the session action ID.
+
+    When session action ID is known, we don't need to search for the "latest" session action based on
+    timestamp prefix (which comes from WorkerAgent and can't be trusted). However, we still can't
+    directly access the outputs because the S3 path contains an unknown timestamp prefix before the
+    session action ID (e.g., .../step_id/task_id/20241225T120000_sessionaction_id/).
+
+    For task-based paths, searches in the task folder first (...job_id/step_id/task_id/) for efficiency.
+    This approach is more correct than searching by timestamp prefix since latestSessionActionId is
+    typically obtained from GetTask API, guaranteeing the latest outputs.
+    For chunked steps, when no task-based manifests found, falls back to step folder (...job_id/step_id/).
+    """
+    outputs: dict[str, list[BaseAssetManifest]] = defaultdict(list)
+
+    def get_manifests_by_regex(manifest_prefix: str) -> List[str]:
+        """Get manifest keys matching the session action ID using regex search."""
+        all_contents = _list_s3_objects_with_error_handling(
+            s3_settings.s3BucketName, manifest_prefix, session
+        )
+        manifests_keys = []
+        regex_pattern = re.compile(rf".*{re.escape(session_action_id)}.*output.*")
+        for content in all_contents:
+            if regex_pattern.search(content["Key"]):
+                manifests_keys.append(content["Key"])
+        return manifests_keys
+
+    # Try task-specific prefix first for efficiency
+    task_prefix = _get_output_manifest_prefix(
+        s3_settings, farm_id, queue_id, job_id, step_id, task_id
+    )
+
+    manifests_keys: Optional[List[str]] = None
+    try:
+        manifests_keys = get_manifests_by_regex(task_prefix)
+    except JobAttachmentsError:
+        pass  # Unable to find manifests under task prefix.
+
+    # If no manifests found at task level, fall back to step level
+    if not manifests_keys:
+        step_prefix = _get_output_manifest_prefix(s3_settings, farm_id, queue_id, job_id, step_id)
+        try:
+            manifests_keys = get_manifests_by_regex(step_prefix)
+        except JobAttachmentsError:
+            return outputs
+
+    # Download all found manifests
+    with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
+        futures = [
+            executor.submit(
+                get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session
+            )
+            for key in manifests_keys
+        ]
+        for i, future in enumerate(futures):
+            asset_root, manifest = future.result()
+            if not asset_root:
+                raise MissingAssetRootError(
+                    f"Failed to get asset root from metadata of output manifest: {manifests_keys[i]}"
+                )
+            outputs[asset_root].append(manifest)
+
+    return outputs
