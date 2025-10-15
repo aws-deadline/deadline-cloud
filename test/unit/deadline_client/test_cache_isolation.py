@@ -31,6 +31,7 @@ def test_cache_isolation_unit(fresh_deadline_config):
 
     print(f"Config path: {fresh_deadline_config}")
     print(f"HOME environment: {os.environ.get('HOME')}")
+    print(f"USERPROFILE environment (windows): {os.environ.get('USERPROFILE')}")
     print(f"Platform: {sys.platform}")
 
     # Test HashCache default location
@@ -58,7 +59,6 @@ def test_cache_isolation_unit(fresh_deadline_config):
     # Test config_file.get_cache_directory()
     cache_dir = config_file.get_cache_directory()
     print(f"config_file.get_cache_directory(): {cache_dir}")
-    print(f"USERPROFILE environment: {os.environ.get('USERPROFILE')}")
 
     # Get the expected home directory
     expected_home = os.environ.get("HOME")
@@ -67,6 +67,12 @@ def test_cache_isolation_unit(fresh_deadline_config):
         expected_home = os.environ.get("USERPROFILE", expected_home)
 
     print(f"Expected home directory: {expected_home}")
+
+    # Verify that expected_home is set and is used in the cache directory
+    assert str(expected_home) in cache_dir
+    assert _is_temp_directory(cache_dir), (
+        f"config_file.get_cache_directory() not in temp dir: {cache_dir}"
+    )
 
     # Verify it has the expected subdirectory structure
     assert ".deadline" in cache_dir
