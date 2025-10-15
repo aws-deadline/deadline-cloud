@@ -22,9 +22,13 @@ def get_queue_parameter_definitions(
     *, farmId: str, queueId: str, config=None
 ) -> list[JobParameter]:
     """
-    This gets all the queue parameters definitions from the specified Queue. It does so
-    by getting all the full templates for queue environments, and then combining
+    This gets all the queue parameter definitions for the specified [Deadline Cloud queue].
+
+    It does so by getting all the full templates for [queue environments], and then combining
     them equivalently to the Deadline Cloud service logic.
+
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [queue environments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/create-queue-environment.html
     """
     deadline = get_boto3_client("deadline", config=config)
     response = _call_paginated_deadline_list_api(

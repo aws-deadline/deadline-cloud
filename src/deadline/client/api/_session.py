@@ -54,12 +54,12 @@ def get_boto3_session(
     force_refresh: bool = False, config: Optional[ConfigParser] = None
 ) -> boto3.Session:
     """
-    Gets a boto3 session for the configured AWS Deadline Cloud aws profile. This may
-    either use a named profile or the default credentials provider chain.
+    Gets a boto3 session for the AWS Deadline Cloud aws profile from the local
+    configuration `~/.deadline/config`. This may either use a named profile
+    or the default credentials provider chain.
 
-    This implementation caches the session object for use across the CLI code,
-    so that we can use the following code pattern without repeated calls to
-    an external credentials provider process, for example.
+    This implementation caches the session object for use across multiple calls
+    unless `force_refresh` is set to True.
 
     Args:
         force_refresh (bool, optional): If set to True, forces a cache refresh.
@@ -147,8 +147,6 @@ def get_session_client(session: boto3.Session, service_name: str):
 def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -> BaseClient:
     """
     Gets a client from the boto3 session returned by `get_boto3_session`.
-    If the client requested is `deadline`, it uses the AWS_ENDPOINT_URL_DEADLINE
-    deadline endpoint url.
 
     Args:
         service_name (str): The AWS service to get the client for, e.g. "deadline".
@@ -334,6 +332,7 @@ def precache_clients(
         Created (or current) s3 client for the given queue_role_session
 
     Example:
+        ```
         # Fire and forget initialization in a background thread
         import threading
         threading.Thread(
@@ -341,6 +340,7 @@ def precache_clients(
             daemon=True,
             name="S3ClientInit"
         ).start()
+        ```
     """
     if not deadline:
         deadline = get_boto3_client("deadline", config=config)

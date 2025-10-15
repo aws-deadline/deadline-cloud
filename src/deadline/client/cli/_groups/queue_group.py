@@ -24,7 +24,7 @@ from ....job_attachments.models import (
     FileConflictResolution,
 )
 from .click_logger import ClickLogger
-from .._main import main
+from .._main import deadline as main
 from .._incremental_download import _incremental_output_download
 from .._pid_file_lock import PidFileLock
 from ....job_attachments._incremental_downloads.incremental_download_state import (
@@ -38,7 +38,9 @@ DOWNLOAD_CHECKPOINT_FILE_NAME = "download_checkpoint.json"
 @_handle_error
 def cli_queue():
     """
-    Commands for queues.
+    Commands to work with [Deadline Cloud queues].
+
+    [Deadline Cloud queues]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
     """
 
 
@@ -48,7 +50,12 @@ def cli_queue():
 @_handle_error
 def queue_list(**args):
     """
-    Lists the available queues.
+    Lists the available [Deadline Cloud queues] in the farm. If the AWS profile is created
+    from a [Deadline Cloud monitor] login, it will list the queues you have permission to access,
+    otherwise it will list all queues.
+
+    [Deadline Cloud queues]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -88,7 +95,15 @@ def queue_list(**args):
 @_handle_error
 def queue_export_credentials(mode, output_format, **args):
     """
-    Export queue credentials in a format compatible with AWS SDK credentials_process.
+    Export queue credentials in a format compatible with [AWS SDK credentials_process].
+
+    These credentials assume the service role of a [Deadline Cloud queue] and give access to resources
+    needed for creating and running jobs like the [job attachments] S3 bucket and any other resources
+    authorized by the role.
+
+    [AWS SDK credentials_process]: https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
     """
     start_time = time.time()
     is_success = True
@@ -169,7 +184,13 @@ def queue_export_credentials(mode, output_format, **args):
 @_handle_error
 def queue_paramdefs(**args):
     """
-    Lists a Queue's Parameters Definitions.
+    Lists the parameter definitions for a [Deadline Cloud queue] in the farm.
+
+    The parameter definitions include all the parameters defined by the
+    [queue environments] configured for the queue.
+
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [queue environments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/create-queue-environment.html
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -194,9 +215,9 @@ def queue_paramdefs(**args):
 @_handle_error
 def queue_get(**args):
     """
-    Get the details of a queue.
+    Get the details of a [Deadline Cloud queue] in the farm.
 
-    If Queue ID is not provided, returns the configured default Queue.
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -283,7 +304,8 @@ def sync_output(
     **args,
 ):
     """
-    Downloads any new job attachments output for all jobs in a queue since the last run of the same command.
+    Downloads any new [job attachments] output for all jobs in a [Deadline Cloud queue] since the last run of the same command.
+    You can use this command to configure [automatic downloads] for your queue.
 
     When run for the first time or with the --force-bootstrap option, it starts downloading from --bootstrap-lookback-minutes
     in the past. When run each subsequent time, it loads  the previous checkpoint and continues
@@ -294,6 +316,10 @@ def sync_output(
     submitted from a machine with a different operating system or file system mount locations than the machine downloading outputs.
 
     If you only submit and download jobs from the same operating system and mount locations, you can use the --ignore-storage-profiles option.
+
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [automatic downloads]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/auto-downloads.html
     """
     api._session.session_context["cli-command-name"] = "deadline.queue.sync-output"
 

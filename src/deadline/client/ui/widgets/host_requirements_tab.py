@@ -4,6 +4,8 @@
 UI widgets for the host requirements tab.
 """
 
+from __future__ import annotations
+
 import re
 from logging import getLogger
 from pathlib import Path
@@ -103,7 +105,9 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, requirements: Optional[HostRequirements] = None, parent=None):
+    def __init__(
+        self, requirements: Optional[HostRequirements] = None, parent: Optional[QWidget] = None
+    ):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
@@ -189,7 +193,7 @@ class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("", parent)
         self.layout = QVBoxLayout(self)
         self._build_ui()
@@ -236,7 +240,7 @@ class OSRequirementsWidget(QGroupBox):
     OS_ROW_OPTIONS = ["linux", "macos", "windows"]
     CPU_ROW_OPTIONS = ["x86_64", "arm64"]
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("", parent=parent)
         self.layout = QVBoxLayout(self)
         self._build_ui()
@@ -289,7 +293,7 @@ class HardwareRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("Hardware requirements", parent)
         self.layout = QVBoxLayout(self)
         self._build_ui()
@@ -363,11 +367,11 @@ class CustomRequirementsWidget(QGroupBox):
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("Custom host requirements", parent)
         self.layout = QVBoxLayout(self)
-        self.attribute_index_numbers = set()
-        self.amount_index_numbers = set()
+        self.attribute_index_numbers: set[int] = set()
+        self.amount_index_numbers: set[int] = set()
         self._build_ui()
 
     def _build_ui(self):
@@ -557,7 +561,11 @@ class CustomAmountWidget(CustomCapabilityWidget):
     UI element to hold a single custom attribute.
     """
 
-    def __init__(self, list_item: QListWidgetItem, item_number: int, parent=None):
+    def __init__(
+        self, list_item: QListWidgetItem, item_number: int, parent: Optional[QWidget] = None
+    ):
+        if not parent or not isinstance(parent, CustomRequirementsWidget):
+            raise TypeError("CustomAmountWidget parent must be a CustomRequirementsWidget")
         super().__init__(AMOUNT, list_item, item_number, parent)
         self._build_ui()
 
@@ -967,7 +975,7 @@ class OSRequirementRowWidget(QWidget):
         parent: The parent Qt Widget
     """
 
-    def __init__(self, label: str, items: List[str], parent=None):
+    def __init__(self, label: str, items: List[str], parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
         # remove default spaces around BoxLayout
@@ -991,7 +999,7 @@ class HardwareRequirementsRowWidget(QWidget):
         parent: The parent Qt Widget
     """
 
-    def __init__(self, label: str, parent=None):
+    def __init__(self, label: str, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
         # remove default spaces around BoxLayout
@@ -1073,7 +1081,7 @@ class OptionalComboBox(QComboBox):
     A custom QComboBox that always have a grayed out placeholder option.
     """
 
-    def __init__(self, items: List[str], parent=None):
+    def __init__(self, items: List[str], parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.addItem(PLACEHOLDER_TEXT)
         self.setItemData(0, QBrush(Qt.gray), Qt.TextColorRole)
@@ -1088,7 +1096,7 @@ class OptionalMultiSelectComboBox(QComboBox):
     A custom QComboBox that always have a grayed out placeholder option and supports multiselect.
     """
 
-    def __init__(self, items: List[str], parent=None):
+    def __init__(self, items: List[str], parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
         self.model().itemChanged.connect(self.handleModelChanged)
         self.setPlaceholderText("-")
@@ -1130,7 +1138,9 @@ class OptionalSpinBox(QSpinBox):
     A custom QSpinBox that set min - 1 value as "-" to represent value not set.
     """
 
-    def __init__(self, min: int = MIN_INT_VALUE, max: int = MAX_INT_VALUE, parent=None) -> None:
+    def __init__(
+        self, min: int = MIN_INT_VALUE, max: int = MAX_INT_VALUE, parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.min = min
         self.max = max
@@ -1211,7 +1221,7 @@ class OptionalDoubleSpinBox(QDoubleSpinBox):
         min: int = MIN_INT_VALUE,
         max: int = MAX_INT_VALUE,
         decimal: int = DECIMAL_VALUE,
-        parent=None,
+        parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self.min = min

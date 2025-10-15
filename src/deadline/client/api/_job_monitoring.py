@@ -78,6 +78,7 @@ def wait_for_job_completion(
     timeout: int = 0,
     config: Optional[ConfigParser] = None,
     status_callback: Optional[Callable] = None,
+    job_callback: Optional[Callable] = None,
 ) -> JobCompletionResult:
     """
     Wait for a job to complete and return information about its status and any failed tasks.
@@ -97,6 +98,7 @@ def wait_for_job_completion(
         timeout: Maximum time in seconds to wait (0 for no timeout).
         config: Optional configuration object.
         status_callback: Optional callback function that receives the current status during polling.
+        job_callback: Optional callback function that receives the job resource during polling.
 
     Returns:
         A JobCompletionResult object containing the job's final status and any failed tasks.
@@ -127,10 +129,14 @@ def wait_for_job_completion(
             job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
             status = job.get("taskRunStatus", "")
 
-            # Call the status callback if provided with elapsed time and timeout info
-            if status_callback:
+            if status_callback or job_callback:
                 elapsed = (datetime.datetime.now() - start_time).total_seconds()
-                status_callback(status, elapsed, timeout)
+                # Call the status callback if provided with elapsed time and timeout info
+                if status_callback:
+                    status_callback(status, elapsed, timeout)
+                # Call the job callback if provided with elapsed time and timeout info
+                if job_callback:
+                    job_callback(job, elapsed, timeout)
 
         except ClientError as exc:
             raise DeadlineOperationError(f"Failed to get job status: {exc}") from exc

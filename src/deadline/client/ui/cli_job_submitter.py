@@ -12,6 +12,7 @@ from qtpy.QtCore import Qt  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMainWindow,
+    QWidget,
 )
 
 from ..job_bundle import deadline_yaml_dump
@@ -30,7 +31,7 @@ logger = getLogger(__name__)
 __submitter_dialog = None
 
 
-def show_cli_job_submitter(parent=None, f=Qt.WindowFlags()) -> None:
+def show_cli_job_submitter(parent: Optional[QWidget] = None, f=Qt.WindowFlags()) -> None:
     """
     Shows an example CLI Job Submitter.
 

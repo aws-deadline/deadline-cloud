@@ -1,11 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-This module encapsulate the configuration of AWS Deadline Cloud on a workstation.
+This module encapsulates the configuration of [AWS Deadline Cloud] on a workstation.
 
 By default, configuration is stored in `~/.deadline/config`. If a user sets
 the environment variable DEADLINE_CONFIG_FILE_PATH, it is used as the configuration
 file path instead.
+
+[AWS Deadline Cloud]: https://aws.amazon.com/deadline-cloud/
 """
 
 __all__ = [

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from logging import getLogger
-from typing import Any
+from typing import Any, Optional
 
 from qtpy.QtCore import Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
@@ -47,7 +47,7 @@ class JobBundleSettingsWidget(QWidget):
 
     parameter_changed = Signal(dict)
 
-    def __init__(self, initial_settings: JobBundleSettings, parent=None):
+    def __init__(self, initial_settings: JobBundleSettings, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
 
         self.parent = parent
@@ -126,7 +126,7 @@ class JobBundleSettingsWidget(QWidget):
             logger.warning(msg)
             return
 
-        if hasattr(self.parent, "refresh"):
+        if self.parent and hasattr(self.parent, "refresh"):
             self.parent.refresh(
                 job_settings=job_settings,
                 auto_detected_attachments=asset_references,

@@ -41,7 +41,7 @@ from deadline.job_attachments.models import (
 
 from ...exceptions import NonValidInputError
 from .._common import _apply_cli_options_to_config, _handle_error
-from .._main import main
+from .._main import deadline as main
 from .click_logger import ClickLogger
 
 
@@ -49,14 +49,13 @@ from .click_logger import ClickLogger
 @_handle_error
 def cli_manifest():
     """
-    Commands to work with AWS Deadline Cloud Job Attachments.
+    BETA - Commands to work with [Deadline Cloud job attachments].
+
+    [Deadline Cloud job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
     """
 
 
-@cli_manifest.command(
-    name="snapshot",
-    help="BETA - Generates a snapshot of files in a directory root as a Job Attachment Manifest.",
-)
+@cli_manifest.command(name="snapshot")
 @click.option("--root", required=True, help="The root directory to snapshot. ")
 @click.option(
     "-d",
@@ -113,7 +112,9 @@ def manifest_snapshot(
     **args,
 ):
     """
-    Creates manifest of files specified by root directory.
+    BETA - Generates a snapshot of files in a directory root as a [job attachments] Manifest.
+
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(root):
@@ -157,10 +158,7 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
             logger.json(dataclasses.asdict(manifest_out))
 
 
-@cli_manifest.command(
-    name="diff",
-    help="BETA - Compute the file difference of a root directory against an existing manifest for new, modified or deleted files.",
-)
+@cli_manifest.command(name="diff")
 @click.option("--root", help="The root directory to compare changes to.")
 @click.option(
     "--manifest",
@@ -206,7 +204,10 @@ def manifest_diff(
     **args,
 ):
     """
-    Check file differences between a directory and specified manifest.
+    BETA - Compute the file difference of a root directory against an existing
+    [job attachments] manifest for new, modified or deleted files.
+
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isfile(manifest):
@@ -240,10 +241,7 @@ def manifest_diff(
         pretty_print_cli(root=root, all_files=all_files, manifest_diff=differences)
 
 
-@cli_manifest.command(
-    name="download",
-    help="BETA - Download Job Attachment Manifests for a Job, or Step including dependencies.",
-)
+@cli_manifest.command(name="download")
 @click.argument("download_dir")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--job-id", required=True, help="The AWS Deadline Cloud Job to get. ")
@@ -275,7 +273,9 @@ def manifest_download(
     **args,
 ):
     """
-    Downloads input/output manifests of a submitted job as per provided asset_type
+    BETA - Download [job attachments] Manifests for a Job, or Step including dependencies.
+
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -303,10 +303,7 @@ def manifest_download(
     logger.json(dataclasses.asdict(output))
 
 
-@cli_manifest.command(
-    name="upload",
-    help="BETA - Uploads a job attachment manifest file to a Content Addressable Storage's Manifest store. If calling via --s3-cas-path, it is recommended to use with --profile for a specific AWS profile with CAS S3 bucket access. Check exit code for success or failure.",
-)
+@cli_manifest.command(name="upload")
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--s3-cas-uri", help="The URI to the Content Addressable Storage S3 bucket and root.")
@@ -328,6 +325,13 @@ def manifest_upload(
     json: bool,
     **args,
 ):
+    """
+    BETA - Uploads a [job attachments] manifest file to a Content Addressable Storage's Manifest store.
+    If calling via --s3-cas-path, it is recommended to use with --profile for a specific AWS profile
+    with CAS S3 bucket access. Check exit code for success or failure.
+
+    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    """
     # Input checking.
     if not manifest_file or not os.path.isfile(manifest_file):
         raise NonValidInputError(f"Specified manifest {manifest_file} does not exist. ")

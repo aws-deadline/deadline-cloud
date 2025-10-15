@@ -31,7 +31,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QSizePolicy,
 )
 
-from .. import CancelationFlag
+from .._utils import CancelationFlag
 from ... import api
 from ...config import set_setting
 from ....job_attachments.progress_tracker import ProgressReportMetadata

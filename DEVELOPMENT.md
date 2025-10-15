@@ -5,7 +5,8 @@ This documentation provides guidance on developer workflows for working with the
 Table of Contents:
 * [Development Environment Setup](#development-environment-setup)
 * [The Development Loop](#the-development-loop)
-* [Code Organization](#code-organization)
+* [Documentation](#documentation)
+   * [Code Organization](#code-organization)
 * [Testing](#testing)
    * [Writing tests](#writing-tests)
    * [Unit tests](#unit-tests)
@@ -70,9 +71,17 @@ Note: Hatch uses [environments](https://hatch.pypa.io/1.12/environment/) to isol
 for this package from your system or virtual environment Python. If your build/test run is not making sense, then
 sometimes pruning (`hatch env prune`) all of these environments for the package can fix the issue.
 
-## Code Organization
+## Documentation
 
-Please see [code organization](docs/code_organization.md).
+Work-in-progress documentation for the Deadline Cloud client library is in progress in the [docs](docs/index.html) directory.
+Documentation is written in Markdown using [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+You can run the command `hatch run docs:serve` to start a server for viewing the documentation on localhost. When the command
+starts, it prints the URL for viewing the docs locally, and will automatically update them when the `mkdocs.yml` configuration
+or various markdown files are modified. The `hatch run docs:build` will build the documentation to static html content.
+
+### Code Organization
+
+Please see [code organization](docs/code_reference/code_organization.md).
 
 ## Testing
 
@@ -337,6 +346,6 @@ class MyCustomWidget(QWidget):
 
 # Profiling in Deadline Cloud
 
-Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`. 
+Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`.
 
-This will profile the current `deadline` command and open the results in an interactive window. 
+This will profile the current `deadline` command and open the results in an interactive window.

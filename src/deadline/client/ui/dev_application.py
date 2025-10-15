@@ -6,10 +6,11 @@ import signal
 import sys
 from logging import getLogger
 from pathlib import Path
+from typing import Optional
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor, QIcon, QPalette
-from qtpy.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory
+from qtpy.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory, QWidget
 
 from .. import api
 from .cli_job_submitter import show_cli_job_submitter
@@ -20,7 +21,7 @@ logger = getLogger(__name__)
 
 
 class DevMainWindow(QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
 
         self.mainColor = QColor(64, 64, 64)

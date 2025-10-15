@@ -67,7 +67,7 @@ def test_log_level_updated(fresh_deadline_config, caplog, log_level):
         deadline.client.cli._main.logging, "basicConfig"
     ) as mock_basic_config:
         # WHEN
-        CliRunner().invoke(deadline.client.cli._main.main, ["config", "show"])
+        CliRunner().invoke(deadline.client.cli.main, ["config", "show"])
 
     # THEN
     assert (

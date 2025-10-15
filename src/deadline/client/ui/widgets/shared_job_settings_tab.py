@@ -26,7 +26,7 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from ... import api
 from ...config import get_setting
-from .. import CancelationFlag
+from .._utils import CancelationFlag
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...api import get_queue_parameter_definitions
 
@@ -63,7 +63,11 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
     _queue_parameters_update = Signal(int, list)
 
     def __init__(
-        self, *, initial_settings, initial_shared_parameter_values: dict[str, Any], parent=None
+        self,
+        *,
+        initial_settings: Any,
+        initial_shared_parameter_values: dict[str, Any],
+        parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
         layout = QVBoxLayout(self)
@@ -249,7 +253,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
       - `description: str`  The description of the Job to submit.
     """
 
-    def __init__(self, *, initial_settings, parent=None):
+    def __init__(self, *, initial_settings, parent: Optional[QWidget] = None):
         super().__init__("Job Properties", parent=parent)
 
         self._build_ui()
@@ -531,7 +535,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
     # provides (refresh_id, id, name, description)
     _item_update = Signal(int, str, str, str)
 
-    def __init__(self, *, resource_name, setting_name, parent=None):
+    def __init__(self, *, resource_name, setting_name, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
 
         self.__refresh_thread = None
@@ -620,7 +624,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
 
 
 class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent=None):
+    def __init__(self, *, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
 
     def get_item(self):
@@ -634,7 +638,7 @@ class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
 
 
 class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent=None):
+    def __init__(self, *, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
 
     def get_item(self):
@@ -653,7 +657,7 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
     MAC_OS = "Macos"
     LINUX_OS = "Linux"
 
-    def __init__(self, *, parent=None):
+    def __init__(self, *, parent: Optional[QWidget] = None):
         super().__init__(
             resource_name="Storage profile name",
             setting_name="settings.storage_profile_id",

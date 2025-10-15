@@ -10,14 +10,19 @@ import textwrap
 
 from ...config import config_file
 from .._common import _handle_error
-from .._main import main
+from .._main import deadline as main
 
 
 @main.group(name="config")
 @_handle_error
 def cli_config():
     """
-    Manage Deadline's workstation configuration.
+    Commands to show and update Deadline's workstation configuration.
+
+    Deadline's workstation configuration is organized in a shallow hierarchy.
+    Most of the settings are set to depend on the selected AWS profile, so that
+    you can store different configurations like farm and queue for different profiles
+    and switch between them by selecting the profile.
     """
 
 
@@ -71,7 +76,7 @@ def config_show(output):
 @_handle_error
 def config_gui(install_gui: bool):
     """
-    Open the workstation configuration settings GUI.
+    Open the workstation configuration settings GUI to view or edit setting values.
     """
     from ...ui import gui_context_for_cli
 
@@ -89,8 +94,9 @@ def config_set(setting_name, value):
     """
     Sets a workstation configuration setting.
 
-    For example `deadline config set defaults.farm_id <farm-id>`.
-    Run `deadline config --help` to show available settings.
+    \b
+    Example:
+        `deadline config set defaults.farm_id <farm-id>`
     """
     config_file.set_setting(setting_name, value)
 
@@ -100,10 +106,11 @@ def config_set(setting_name, value):
 @_handle_error
 def config_clear(setting_name):
     """
-    Sets a workstation configuration setting back to the default value.
+    Clears a workstation configuration setting to restore its default value.
 
-    For example `deadline config clear defaults.farm_id`.
-    Run `deadline config --help` to show available settings.
+    \b
+    Example:
+        `deadline config clear defaults.farm_id`
     """
     config_file.clear_setting(setting_name)
 
@@ -113,9 +120,13 @@ def config_clear(setting_name):
 @_handle_error
 def config_get(setting_name):
     """
-    Gets a workstation configuration setting.
+    Prints the value of a workstation configuration setting. You can use this command
+    to call the [AWS CLI][aws-cli] with settings from the Deadline workstation configuration.
 
-    For example `deadline config get defaults.farm_id`.
-    Run `deadline config --help` to show available settings.
+    [aws-cli]: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html
+
+    \b
+    Example:
+        `aws deadline get-queue --profile $(deadline config get defaults.aws_profile_name) --farm-id $(deadline config get defaults.farm_id) --queue-id $(deadline config get defaults.queue_id)`
     """
     click.echo(config_file.get_setting(setting_name))

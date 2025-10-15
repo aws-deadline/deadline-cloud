@@ -3,6 +3,7 @@
 __all__ = ["InputFilePickerWidget", "OutputFilePickerWidget", "DirectoryPickerWidget"]
 
 import os
+from typing import Optional
 
 from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -13,7 +14,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from .. import block_signals
+from .._utils import block_signals
 
 
 class _FileWidget(QWidget):
@@ -112,7 +113,7 @@ class InputFilePickerWidget(_FileWidget):
         filter: str,
         selected_filter: str,
         collapse_user_dir: bool = False,
-        parent=None,
+        parent: Optional[QWidget] = None,
     ):
         super().__init__(
             initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent
@@ -159,7 +160,7 @@ class OutputFilePickerWidget(_FileWidget):
         filter: str,
         selected_filter: str,
         collapse_user_dir: bool = False,
-        parent=None,
+        parent: Optional[QWidget] = None,
     ):
         super().__init__(
             initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent
@@ -203,7 +204,7 @@ class DirectoryPickerWidget(QWidget):
         initial_directory: str,
         directory_label: str,
         collapse_user_dir: bool = False,
-        parent=None,
+        parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self._build_ui()

@@ -6,8 +6,6 @@ This repository is split up into two main modules:
 
 The `src/client` organization is laid out below.
 
-For more information on job attachments, see [here](src/deadline/job_attachments/README.md).
-
 ### `src/client/api`
 
 This submodule contains utilities to call boto3 in a standardized way

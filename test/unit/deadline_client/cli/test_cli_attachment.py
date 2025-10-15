@@ -21,4 +21,4 @@ def test_cli_attachment_existence(fresh_deadline_config):
     runner = CliRunner()
     response = runner.invoke(main, ["attachment"])
 
-    assert "Usage: main attachment" in response.output
+    assert "Usage: deadline attachment" in response.output

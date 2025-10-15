@@ -7,16 +7,16 @@ The `deadline mcp-server` command.
 import sys
 import click
 
-from ._common import _handle_error
-from ._main import main
-from deadline.client.api._telemetry import get_deadline_cloud_library_telemetry_client
+from .._common import _handle_error
+from .._main import deadline as main
+from ...api._telemetry import get_deadline_cloud_library_telemetry_client
 
 
 @main.command(name="mcp-server")
 @_handle_error
 def cli_mcp_server():
     """
-    Start the AWS Deadline Cloud MCP (Model Context Protocol) server.
+    EXPERIMENTAL - Start the AWS Deadline Cloud MCP (Model Context Protocol) server.
 
     The MCP server provides LLM tools with access to AWS Deadline Cloud operations
     through the Model Context Protocol. This allows AI assistants to interact with
@@ -28,7 +28,7 @@ def cli_mcp_server():
     pip install 'deadline[mcp]'
     """
     try:
-        from ..._mcp.server import main as mcp_main
+        from ...._mcp.server import main as mcp_main
     except ImportError:
         click.echo(
             "Error: MCP dependencies not installed.\n"

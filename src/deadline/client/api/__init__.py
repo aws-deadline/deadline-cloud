@@ -1,5 +1,24 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+"""The deadline.client.api module contains functions to complement usage of the
+[boto3 deadline SDK](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/deadline.html).
+
+These functions mostly match the interface style of boto3 APIs, using dictionary objects
+and plain values instead of wrapping them in dataclasses. This approach helps keep a consistent
+style for code calling AWS APIs with boto3 and also using these helpers.
+
+The [create_job_from_job_bundle][deadline.client.api.create_job_from_job_bundle] function provides the
+full capabilities of job bundle submission, and is the basis for the CLI commands `deadline bundle submit`
+and `deadline bundle gui-submit`.
+
+You can call [get_boto3_client][deadline.client.api.get_boto3_client]("deadline") to get a boto3 deadline client
+based on the Deadline client configuration located in ~/.deadline/config that Deadline Cloud Monitor
+login and the Deadline CLI use. You can use this boto3 deadline client directly,
+and a few functions like [list_farms][deadline.client.api.list_farms] are provided here to adjust call arguments
+depending on whether the credentials are from a Deadline Cloud Monitor login or a different credentials
+provider.
+"""
+
 __all__ = [
     "login",
     "logout",
@@ -97,9 +116,12 @@ logger = getLogger(__name__)
 
 def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
     """
-    Returns True if AWS Deadline Cloud APIs are authorized in the session,
-    False otherwise. This only checks the deadline:ListFarms API by performing
-    one call with just one result.
+    Returns True if [AWS Deadline Cloud APIs] are authorized in the session,
+    False otherwise. This only checks the [deadline:ListFarms] API by performing
+    one call that requests one result.
+
+    [AWS Deadline Cloud APIs]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html
+    [deadline:ListFarms]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFarms.html
 
     Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
