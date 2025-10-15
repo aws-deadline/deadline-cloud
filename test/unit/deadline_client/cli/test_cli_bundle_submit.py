@@ -13,6 +13,7 @@ import boto3  # type: ignore[import]
 from click.testing import CliRunner
 import pytest
 
+import deadline.client.ui
 from deadline.client import config
 import deadline.client.api as api_module
 from deadline.client.cli import main
@@ -670,7 +671,7 @@ def test_cli_bundle_reject_upload_confirmation(
         assert result.exit_code == 1
 
 
-@patch("deadline.client.ui.gui_context_for_cli")
+@patch.object(deadline.client.ui, "gui_context_for_cli")
 def test_gui_submit_submitter_name(_mock_context):
     """
     Verify that the --submitter-name arg gets passed through correctly

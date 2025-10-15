@@ -1,0 +1,83 @@
+site_name: AWS Deadline Cloud - Client Library Documentation
+site_url: https://aws-deadline.github.io/deadline-cloud/
+repo_url: https://github.com/aws-deadline/deadline-cloud
+repo_name: aws-deadline/deadline-cloud
+edit_uri: edit/mainline/docs/
+
+theme:
+  name: material
+  palette:
+    primary: custom
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.expand
+    - content.code.copy
+extra_css:
+  - extra.css
+
+extra:
+  generator: false # Hide mkdocs-material call out
+
+copyright: Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - mkdocs-click
+  - footnotes
+
+nav:
+  - Home: index.md
+  - CLI Reference:
+    - cli_reference/index.md
+    - "attachment": cli_reference/deadline_attachment.md
+    - "auth": cli_reference/deadline_auth.md
+    - "bundle": cli_reference/deadline_bundle.md
+    - "config": cli_reference/deadline_config.md
+    - "farm": cli_reference/deadline_farm.md
+    - "fleet": cli_reference/deadline_fleet.md
+    - "handle-web-url": cli_reference/deadline_handle-web-url.md
+    - "job": cli_reference/deadline_job.md
+    - "manifest": cli_reference/deadline_manifest.md
+    - "mcp-server": cli_reference/deadline_mcp-server.md
+    - "queue": cli_reference/deadline_queue.md
+    - "worker": cli_reference/deadline_worker.md
+  - Library Reference:
+    - "deadline.client":
+      - "api": code_reference/client_api.md
+      - "cli": code_reference/client_cli.md
+      - "config": code_reference/client_config.md
+      - "exceptions": code_reference/client_exceptions.md
+      - "job_bundle": code_reference/client_job_bundle.md
+      - "ui": code_reference/client_ui.md
+    - "deadline.job_attachments":
+      - "api": code_reference/job_attachments_api.md
+      - "asset_manifests": code_reference/job_attachments_asset_manifests.md
+      - "asset_sync": code_reference/job_attachments_asset_sync.md
+      - "caches": code_reference/job_attachments_caches.md
+      - "download": code_reference/job_attachments_download.md
+      - "exceptions": code_reference/job_attachments_exceptions.md
+      - "models": code_reference/job_attachments_models.md
+      - "os_file_permission": code_reference/job_attachments_os_file_permission.md
+      - "progress_tracker": code_reference/job_attachments_progress_tracker.md
+      - "upload": code_reference/job_attachments_upload.md
+      - "vfs": code_reference/job_attachments_vfs.md
+  - Job Attachments Guide: job_attachments_guide.md
+  - MCP Guide: mcp_guide.md
+
+plugins:
+  - search
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            docstring_style: google
+            docstring_options:
+              ignore_init_summary: false
+            merge_init_into_class: false
+            show_root_toc_entry: false
+docs_dir: docs
+site_dir: site

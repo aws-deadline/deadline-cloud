@@ -11,14 +11,16 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
-from .._main import main
+from .._main import deadline as main
 
 
 @main.group(name="fleet")
 @_handle_error
 def cli_fleet():
     """
-    Commands to work with fleets.
+    Commands to work with [Deadline Cloud fleets].
+
+    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
     """
 
 
@@ -28,7 +30,12 @@ def cli_fleet():
 @_handle_error
 def fleet_list(**args):
     """
-    Lists the available fleets.
+    Lists the available [Deadline Cloud fleets] in the farm. If the AWS profile is created
+    from a [Deadline Cloud monitor] login, it will list the fleets you have permission to access,
+    otherwise it will list all fleets.
+
+    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -53,11 +60,16 @@ def fleet_list(**args):
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
 @click.option("--fleet-id", help="The fleet to use.")
-@click.option("--queue-id", help="If provided, gets all Fleets associated with the Queue.")
+@click.option(
+    "--queue-id", help="If no fleet is provided, gets the fleets associated with this queue."
+)
 @_handle_error
 def fleet_get(fleet_id, queue_id, **args):
     """
-    Get the details of a fleet.
+    Get the details of a [Deadline Cloud fleet] in the farm. If no fleet id is provided, it gets
+    the details of all the fleets associated with the queue.
+
+    [Deadline Cloud fleet]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
     """
     if fleet_id and queue_id:
         raise DeadlineOperationError(

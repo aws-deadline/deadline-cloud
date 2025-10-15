@@ -77,3 +77,11 @@ detached = true
 deps = "pip install -r requirements-release.txt"
 bump = "semantic-release -v --strict version --no-push --no-commit --no-tag --skip-build {args}"
 version = "semantic-release -v --strict version --print {args}"
+
+[envs.docs]
+pre-install-commands = ["pip install -r requirements-docs.txt"]
+
+[envs.docs.scripts]
+build = "mkdocs build --strict"
+serve = "mkdocs serve"
+deploy = "mkdocs gh-deploy {args}"

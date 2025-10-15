@@ -1,13 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+# Ignore typing since mcp library is not available for Python < 3.10
+# type: ignore
+
 """Unit tests for MCP server"""
 
+import sys
 from unittest.mock import MagicMock
 
 import pytest
 
-try:
-    from deadline.client import api
+from deadline.client import api
+
+if sys.version_info >= (3, 10):
     from deadline._mcp.registry import TOOL_REGISTRY, ToolDefinition
     from deadline._mcp.utils import (
         _create_wrapper,
@@ -15,13 +20,8 @@ try:
         _default_serializer,
         register_api_tools,
     )
-
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
-
-if not MCP_AVAILABLE:
-    pytest.skip("MCP dependencies not available", allow_module_level=True)
+else:
+    pytest.skip("MCP dependencies not available on Python before 3.10", allow_module_level=True)
 
 
 class TestToolRegistry:

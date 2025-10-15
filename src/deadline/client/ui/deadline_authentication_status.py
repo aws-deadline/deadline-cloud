@@ -28,7 +28,9 @@ from logging import getLogger
 from typing import Optional
 
 from qtpy.QtCore import QObject, QFileSystemWatcher, Signal
-
+from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
+    QWidget,
+)
 from .. import api
 from ..config import config_file
 
@@ -69,7 +71,7 @@ class DeadlineAuthenticationStatus(QObject):
             _deadline_authentication_status = DeadlineAuthenticationStatus()
         return _deadline_authentication_status
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super(DeadlineAuthenticationStatus, self).__init__(parent)
 
         self.__creds_source: Optional[api.AwsCredentialsSource] = None

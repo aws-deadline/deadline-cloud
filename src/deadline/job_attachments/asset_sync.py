@@ -303,7 +303,7 @@ class AssetSync:
             The download summary statistics.
 
         Raises:
-            JobAttachmentsS3ClientError if any issue is encountered while downloading.
+            JobAttachmentsS3ClientError: If any issue is encountered while downloading.
         """
         try:
             total_input_size: int = 0

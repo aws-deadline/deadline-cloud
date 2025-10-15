@@ -10,7 +10,7 @@ import enum
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Callable, Union, Dict
+from typing import Callable, Union, Dict, Optional
 
 from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QPushButton,
     QMessageBox,
     QGroupBox,
+    QWidget,
 )
 
 from ... import api
@@ -119,7 +120,7 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
     login_clicked = Signal()
     logout_clicked = Signal()
 
-    def __init__(self, parent=None, show_profile_switch=True) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, show_profile_switch=True) -> None:
         """
         Initialize the authentication status widget.
 

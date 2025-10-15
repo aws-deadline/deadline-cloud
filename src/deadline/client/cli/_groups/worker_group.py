@@ -11,7 +11,7 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
-from .._main import main
+from .._main import deadline as main
 
 
 @main.group(name="worker")

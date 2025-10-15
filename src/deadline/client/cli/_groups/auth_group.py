@@ -12,7 +12,7 @@ import json
 import logging
 
 from ... import api
-from .._main import main
+from .._main import deadline as main
 from ...api._session import _modified_logging_level, AwsCredentialsSource
 from ...config import config_file, get_setting
 from .._common import _apply_cli_options_to_config, _handle_error
@@ -36,7 +36,9 @@ def _cli_on_pending_authorization(**kwargs):
 @_handle_error
 def cli_auth():
     """
-    Commands to handle authentication.
+    Commands to handle authentication, such as logging in to [Deadline Cloud monitor].
+
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
     """
 
 
@@ -44,10 +46,11 @@ def cli_auth():
 @_handle_error
 def auth_login():
     """
-    Logs in to the Deadline-configured AWS profile.
+    Opens [Deadline Cloud monitor] to log in to your farm. Supports
+    profiles created by Deadline Cloud monitor.
 
-    This is for any profile type that Deadline knows how to login to
-    Currently only supports Deadline Cloud monitor
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+
     """
     click.echo(
         f"Logging into AWS Profile {config_file.get_setting('defaults.aws_profile_name')!r} for AWS Deadline Cloud"
@@ -64,7 +67,7 @@ def auth_login():
 @_handle_error
 def auth_logout():
     """
-    Logs out of the Deadline Cloud monitor configured AWS profile.
+    Logs out of the configured AWS profile, if it was created by Deadline Cloud monitor.
     """
     api.logout()
 
@@ -87,7 +90,13 @@ def auth_logout():
 )
 @_handle_error
 def auth_status(output, **args):
-    """Gets the authentication status for the given AWS profile"""
+    """Gets the status of the selected AWS profile, including its name, whether it was created by
+    [Deadline Cloud monitor], and whether
+    [Deadline Cloud APIs] are accessible.
+
+    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    [Deadline Cloud APIs]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html
+    """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
     profile_name = get_setting("defaults.aws_profile_name", config=config)

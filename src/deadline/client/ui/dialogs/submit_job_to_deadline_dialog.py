@@ -31,7 +31,7 @@ from .submit_job_progress_dialog import SubmitJobProgressDialog
 from ..dataclasses import HostRequirements
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
-from .. import block_signals
+from .._utils import block_signals
 from ...config import get_setting, set_setting, config_file
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
@@ -104,14 +104,14 @@ class SubmitJobToDeadlineDialog(QDialog):
         self,
         *,
         job_setup_widget_type: type[QWidget],
-        initial_job_settings,
+        initial_job_settings: Any,
         initial_shared_parameter_values: dict[str, Any],
         auto_detected_attachments: AssetReferences,
         attachments: AssetReferences,
         on_create_job_bundle_callback: OnCreateJobBundleCallback,
-        parent=None,
-        f=Qt.WindowFlags(),
-        show_host_requirements_tab=False,
+        parent: Optional[QWidget] = None,
+        f: Qt.WindowFlags = Qt.WindowFlags(),
+        show_host_requirements_tab: bool = False,
         host_requirements: Optional[HostRequirements] = None,
         submitter_name: Optional[str] = None,
         known_asset_paths: Optional[list[str]] = None,

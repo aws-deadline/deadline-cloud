@@ -47,7 +47,7 @@ import os
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file, get_setting_default, str2bool
-from .. import CancelationFlag, block_signals
+from .._utils import CancelationFlag, block_signals
 from ..widgets import DirectoryPickerWidget
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from .deadline_login_dialog import DeadlineLoginDialog
@@ -67,7 +67,9 @@ class DeadlineConfigDialog(QDialog):
     """
 
     @staticmethod
-    def configure_settings(parent=None, set_profile_focus=False) -> bool:
+    def configure_settings(
+        parent: Optional[QWidget] = None, set_profile_focus: bool = False
+    ) -> bool:
         """
         Static method that runs the Deadline Config Dialog.
 
@@ -85,7 +87,7 @@ class DeadlineConfigDialog(QDialog):
         deadline_config.exec_()
         return deadline_config.changes_were_applied
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
@@ -190,7 +192,7 @@ class DeadlineConfigDialog(QDialog):
 
 
 class DeadlineScrollArea(QScrollArea):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
     def sizeHint(self):
@@ -215,10 +217,10 @@ class DeadlineWorkstationConfigWidget(QWidget):
     # provides (operation_name, BaseException)
     _background_exception = Signal(str, BaseException)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
-        self.changes = {}
+        self.changes: dict = {}
         self.config: Optional[ConfigParser] = None
         self.changes_were_applied = False
 
@@ -848,7 +850,7 @@ class _DeadlineResourceListComboBox(QWidget):
     # provides (refresh_id, [(farm_id, farm_name), ...])
     _list_update = Signal(int, list)
 
-    def __init__(self, resource_name, setting_name, parent=None):
+    def __init__(self, resource_name, setting_name, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
         self.__refresh_thread = None
@@ -958,7 +960,7 @@ class _DeadlineResourceListComboBox(QWidget):
 
 
 class DeadlineFarmListComboBox(_DeadlineResourceListComboBox):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
 
     def list_resources(self, config: Optional[ConfigParser]):
@@ -970,7 +972,7 @@ class DeadlineFarmListComboBox(_DeadlineResourceListComboBox):
 
 
 class DeadlineQueueListComboBox(_DeadlineResourceListComboBox):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
 
     def list_resources(self, config: Optional[ConfigParser]):
@@ -990,7 +992,7 @@ class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
     MAC_OS = "macos"
     LINUX_OS = "linux"
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(
             resource_name="Storage profile",
             setting_name="settings.storage_profile_id",

@@ -5,6 +5,7 @@ UI widgets for the Scene Settings tab.
 """
 
 import os
+from typing import Optional
 
 from qtpy.QtCore import Qt  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
@@ -31,7 +32,7 @@ class CliJobSettingsWidget(QWidget):
         parent: The parent Qt Widget.
     """
 
-    def __init__(self, initial_settings: CliJobSettings, parent=None):
+    def __init__(self, initial_settings: CliJobSettings, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
 
         self._build_ui()

@@ -26,7 +26,7 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.submission import AssetReferences
-from .. import block_signals
+from .._utils import block_signals
 
 logger = getLogger(__name__)
 
@@ -333,7 +333,7 @@ class JobAttachmentsGeneralWidget(QWidget):
     A Widget that contains general settings for a specific submission.
     """
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent=parent)
 
         layout = QHBoxLayout(self)
@@ -349,7 +349,7 @@ class JobAttachmentsControlsWidget(QWidget):
     in a job attachments list.
     """
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent=parent)
 
         layout = QHBoxLayout(self)

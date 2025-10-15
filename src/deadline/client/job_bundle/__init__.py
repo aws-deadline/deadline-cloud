@@ -1,11 +1,21 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+"""
+This module provides functions to work with [job bundles] locally. For example, you can
+call [read_job_bundle_parameters][deadline.client.job_bundle.read_job_bundle_parameters]
+to get information like the names, types, and default values of a job bundle's parameters.
+
+Use the [api.create_job_from_job_bundle][deadline.client.api.create_job_from_job_bundle] function to submit a job
+bundle to a queue.
+
+[job bundles]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+"""
+
 __all__ = [
-    "adaptors",
-    "create_job_history_bundle_dir",
-    "read_job_bundle_parameters",
     "apply_job_parameters",
+    "create_job_history_bundle_dir",
     "deadline_yaml_dump",
+    "read_job_bundle_parameters",
 ]
 
 import datetime
@@ -24,7 +34,7 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
     job bundle for submission.
 
     The directory will look like
-      <job_history_dir>/YYYY-mm/YYYY-mm-ddTHH-##-<submitter_name>-<job_name>
+      `<job_history_dir>/YYYY-mm/YYYY-mm-ddTHH-##-<submitter_name>-<job_name>`
     """
     job_history_dir = str(get_setting("settings.job_history_dir"))
     job_history_dir = os.path.expanduser(job_history_dir)

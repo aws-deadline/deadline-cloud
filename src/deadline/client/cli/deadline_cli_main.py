@@ -5,15 +5,6 @@ Runs the Deadline CLI. Can be run as a python script file.
 Required by pyinstaller, do not delete.
 """
 
+from deadline.client.cli._main import deadline as main
 
-def main() -> None:
-    from deadline.client.cli._deadline_cli import main
-
-    main(
-        # Override the program name to always be "deadline"
-        prog_name="deadline",
-    )
-
-
-if __name__ == "__main__":
-    main()
+__all__ = ["main"]
