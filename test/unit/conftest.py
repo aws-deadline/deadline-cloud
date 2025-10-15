@@ -13,10 +13,13 @@ from deadline.client.config import config_file
 
 
 @pytest.fixture(scope="function")
-def fresh_deadline_config():
+def fresh_deadline_config(monkeypatch):
     """
-    Fixture to start with a blank AWS Deadline Cloud config file.
+    Fixture to start with a blank AWS Deadline Cloud config file and isolated cache directories.
 
+    This fixture also overrides the HOME environment variable to ensure cache isolation
+    between tests. Both HashCache and S3CheckCache will use temporary directories under
+    the isolated HOME directory.
     """
 
     # Clear the session cache. Importing the cache invalidator at runtime is necessary
@@ -33,6 +36,23 @@ def fresh_deadline_config():
         with open(temp_file_path, "w+t", encoding="utf8") as temp_file:
             temp_file.write("")
 
+        # Create a temporary HOME directory for cache isolation
+        temp_home_dir = tempfile.TemporaryDirectory()
+        temp_home_path = Path(temp_home_dir.name)
+
+        # Override HOME environment variable to isolate cache directories
+        # This affects both:
+        # - HashCache default: $HOME/.deadline/job_attachments/
+        # - S3CheckCache via config_file.get_cache_directory(): $HOME/.deadline/cache/
+        monkeypatch.setenv("HOME", str(temp_home_path))
+
+        # On Windows, os.path.expanduser("~") uses USERPROFILE instead of HOME
+        # So we need to override USERPROFILE as well for Windows compatibility
+        import sys
+
+        if sys.platform == "win32":
+            monkeypatch.setenv("USERPROFILE", str(temp_home_path))
+
         # Yield the temp file name with it patched in as the
         # AWS Deadline Cloud config file
         with patch.object(config_file, "CONFIG_FILE_PATH", str(temp_file_path)):
@@ -44,6 +64,7 @@ def fresh_deadline_config():
             yield str(temp_file_path)
     finally:
         temp_dir.cleanup()
+        temp_home_dir.cleanup()
 
 
 @pytest.fixture(scope="function", autouse=True)
