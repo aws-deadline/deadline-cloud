@@ -225,6 +225,8 @@ For the Python library interface:
 * Changing the location that a file or directory is created should be considered to be a breaking change. These locations have a tendancy to become
   de-facto parts of the public contract as users build automation that assumes these locations is unchanged.
 
+Note that we enforce our public contract through GitHub actions. See the [API Change Detection section](scripts/README.md#api-change-detection) in the scripts README for more information about generating and validating API changes.
+
 ### Library Dependencies
 
 Library dependencies are Python packages required to build and run the Deadline Cloud Python project. Dependencies are specified in the `dependencies` section of `pyproject.toml`.
