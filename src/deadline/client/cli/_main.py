@@ -5,6 +5,7 @@ The AWS Deadline Cloud CLI interface.
 """
 
 import logging
+import os
 import sys
 from logging import getLogger
 from typing import Optional
@@ -116,6 +117,10 @@ def deadline(
         else:
             open_mode = "w"
         sys.stdout = sys.stderr = open(redirect_output, open_mode, encoding="utf-8", buffering=1)
+    elif sys.stdout and os.name == "nt":
+        # Force the output encoding to be UTF-8 on Windows. Commands like `deadline job logs` print out logs that
+        # can include unicode, and this enables output without errors.
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore
     if log_level is None:
         log_level = _get_default_log_level()
 
