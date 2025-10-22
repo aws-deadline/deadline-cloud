@@ -10,6 +10,7 @@ import logging
 from configparser import ConfigParser
 from pathlib import Path
 import os
+import re
 import sys
 from typing import Callable, Optional, Union
 import datetime
@@ -82,6 +83,37 @@ def _format_timestamp(timestamp: datetime.datetime, use_local_time: bool = False
         else:
             utc_timestamp = timestamp
         return utc_timestamp.isoformat()
+
+
+def _parse_session_action_id(session_action_id: str) -> str:
+    """
+    Parse a session action ID and extract the session ID.
+
+    Session action ID format: sessionaction-{uuid}-{number}
+    Session ID format: session-{uuid}
+
+    Args:
+        session_action_id: The session action ID to parse
+
+    Returns:
+        The derived session ID
+
+    Raises:
+        DeadlineOperationError: If the session action ID format is invalid
+    """
+    pattern = r"^sessionaction-([0-9a-f]{32})-\d+$"
+    match = re.match(pattern, session_action_id)
+
+    if not match:
+        raise DeadlineOperationError(
+            f"Invalid session action ID format: '{session_action_id}'. "
+            f"Expected format: sessionaction-{{uuid}}-{{number}}"
+        )
+
+    uuid = match.group(1)
+    session_id = f"session-{uuid}"
+
+    return session_id
 
 
 # Set up the signal handler for handling Ctrl + C interruptions.
@@ -1120,6 +1152,10 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     "--session-id",
     help="The session ID to get logs for. If not provided and job-id is specified, will use the latest session based on endedAt time.",
 )
+@click.option(
+    "--session-action-id",
+    help="The session action ID to get logs for. The session ID will be derived from this.",
+)
 @click.option("--limit", default=100, help="Maximum number of log lines to return.")
 @click.option(
     "--start-time",
@@ -1140,7 +1176,9 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     help="Timezone for timestamps (utc or local). Default is utc.",
 )
 @_handle_error
-def job_logs(session_id, limit, start_time, end_time, next_token, output, timezone, **args):
+def job_logs(
+    session_id, session_action_id, limit, start_time, end_time, next_token, output, timezone, **args
+):
     """
     Prints a [Deadline Cloud session log] stored in [CloudWatch logs] for the job.
     Defaults to a recent/ongoing session if a session id is not provided.
@@ -1168,6 +1206,22 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, timezo
     job_id = config_file.get_setting("defaults.job_id", config=config)
 
     is_json_output = output.lower() == "json"
+
+    # Handle session action ID if provided
+    if session_action_id:
+        # Parse session action ID to derive session ID
+        derived_session_id = _parse_session_action_id(session_action_id)
+
+        # If both session_id and session_action_id are provided, validate consistency
+        if session_id:
+            if session_id != derived_session_id:
+                raise DeadlineOperationError(
+                    f"Session ID mismatch: --session-id '{session_id}' does not match "
+                    f"session ID '{derived_session_id}' derived from --session-action-id '{session_action_id}'"
+                )
+        else:
+            # If only session_action_id is provided, set session_id from parsed value
+            session_id = derived_session_id
 
     # Get job name if job_id is available
     deadline = api.get_boto3_client("deadline", config=config)
@@ -1231,10 +1285,91 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, timezo
             "Session ID is required. Provide it with --session-id or specify a --job-id with at least one session."
         )
 
+    if session_action_id:
+        log_entity = f"session action {session_action_id}"
+    else:
+        log_entity = f"session {session_id}"
+
     if not is_json_output:
         click.echo(
-            f"Retrieving logs for session {session_id} from log group /aws/deadline/{farm_id}/{queue_id}..."
+            f"Retrieving logs for {log_entity} from log group /aws/deadline/{farm_id}/{queue_id}..."
         )
+        # Display job information if available
+        click.echo(f"Job ID: {job_id}")
+        click.echo(f"Job Name: {job_name}")
+
+    # If session_action_id is provided, retrieve session action details to get timestamp range
+    if session_action_id:
+        try:
+            session_action = deadline.get_session_action(
+                farmId=farm_id,
+                queueId=queue_id,
+                jobId=job_id,
+                sessionActionId=session_action_id,
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
+                raise DeadlineOperationError(
+                    f"Session action '{session_action_id}' not found in job '{job_id}'"
+                ) from exc
+            else:
+                raise DeadlineOperationError(
+                    f"Failed to retrieve session action '{session_action_id}':\n{exc}"
+                ) from exc
+
+        # Extract timestamps from session action
+        action_start = session_action.get("startedAt")
+        action_end = session_action.get("endedAt")
+
+        # If session action hasn't started yet, raise an error
+        if not action_start:
+            raise DeadlineOperationError(
+                f"Session action '{session_action_id}' has not started yet. No logs are available."
+            )
+
+        if not is_json_output:
+            click.echo(f"Session action start: {action_start}")
+        if action_end:
+            if not is_json_output:
+                click.echo(f"Session action end: {action_end}")
+        else:
+            if not is_json_output:
+                click.echo("Session action is still running")
+            # If session action is still in progress, use current time as end time
+            action_end = datetime.datetime.now(datetime.timezone.utc)
+        if not is_json_output:
+            click.echo(f"Session action duration: {action_end - action_start}")
+
+        # Get the effective time range to process, which is the intersection of
+        # the session action time range and the user-provided time range
+        if start_time:
+            # Parse user's start_time
+            user_start = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            # Use the later of the two start times
+            effective_start = max(user_start, action_start)
+        else:
+            effective_start = action_start
+
+        if end_time:
+            # Parse user's end_time
+            user_end = datetime.datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+            # Use the earlier of the two end times
+            effective_end = min(user_end, action_end)
+        else:
+            effective_end = action_end
+
+        # Validate that effective_start <= effective_end
+        if effective_start > effective_end:
+            error_msg = (
+                f"The specified time range does not overlap with the session action's time range.\n"
+                f"Session action time range: {action_start.isoformat()} to {action_end.isoformat()}"
+            )
+            error_msg += f"\nSpecified time range: {start_time or 'N/A'} to {end_time or 'N/A'}"
+            raise DeadlineOperationError(error_msg)
+
+        # Use the combined timestamps for log retrieval
+        start_time = effective_start
+        end_time = effective_end
 
     try:
         result = api.get_session_logs(
@@ -1273,14 +1408,13 @@ def job_logs(session_id, limit, start_time, end_time, next_token, output, timezo
             }
             click.echo(json.dumps(response, indent=2))
         else:
+            # Separate the logs by a blank line to make the start of the log easy to find.
+            click.echo()
+
             # Display the logs in verbose format
             if not result.events:
                 click.echo("No logs found for the specified session.")
                 return
-
-            # Display job information if available
-            click.echo(f"Job ID: {job_id}")
-            click.echo(f"Job Name: {job_name}")
 
             for event in result.events:
                 timestamp = _format_timestamp(event.timestamp, use_local_time)
