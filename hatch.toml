@@ -85,3 +85,6 @@ pre-install-commands = ["pip install -r requirements-docs.txt"]
 build = "mkdocs build --strict"
 serve = "mkdocs serve"
 deploy = "mkdocs gh-deploy {args}"
+generate-api-snapshot = "python scripts/generate_api_snapshot.py {args}"
+validate-api-snapshot = "python scripts/validate_api_snapshot.py {args}"
+check-api-breaks = "griffe check -s src deadline {args}"
