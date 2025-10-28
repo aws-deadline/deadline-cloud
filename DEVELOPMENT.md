@@ -227,6 +227,87 @@ For the Python library interface:
 
 Note that we enforce our public contract through GitHub actions. See the [API Change Detection section](scripts/README.md#api-change-detection) in the scripts README for more information about generating and validating API changes.
 
+#### Private Modules
+
+New code should reside in private modules (example: `_my_module.py`), which removes the need to mark imports, classes, and functions as private with an underscore.
+
+```python
+# _my_module.py
+import os
+
+class PublicClass:
+    def publicmethod(self):
+        pass
+    # We still need to mark this as private, since the class will be public
+    def _privatemethod(self):
+        pass
+
+class PrivateClass:
+    def privatemethod(self):
+        pass
+```
+
+Public contracts in private modules are defined by imports in the corresponding `__init__.py` in the same directory as the private module.
+
+```python
+# __init__.py
+
+from _my_module import PublicClass
+```
+
+#### Public Modules
+
+A public module (for example `my_module.py`) in this package will be defined with the following style:
+
+```python
+# my_module.py
+
+# The os module is not part of this file's external interface
+import os as _os
+
+# PublicClass is part of this file's external interface.
+class PublicClass:
+    def publicmethod(self):
+        pass
+
+    def _privatemethod(self):
+        pass
+
+# _PrivateClass is not part of this file's external interface.
+class _PrivateClass:
+    def publicmethod(self):
+        pass
+
+    def _privatemethod(self):
+        pass
+```
+
+#### On `import os as _os`
+
+Every module/symbol that is imported into a Python module becomes a part of that module's interface.
+Thus, if we have a module called `foo.py` such as:
+
+```python
+# foo.py
+
+import os
+```
+
+Then, the `os` module becomes part of the public interface for `foo.py` and a consumer of that module
+is free to do:
+
+```python
+from foo import os
+```
+
+We don't want all (generally, we don't want any) of our imports to become part of the public API for
+the module, so we import modules/symbols into a public module with the following style:
+
+```python
+import os as _os
+from typing import Dict as _Dict
+```
+
 ### Library Dependencies
 
 Library dependencies are Python packages required to build and run the Deadline Cloud Python project. Dependencies are specified in the `dependencies` section of `pyproject.toml`.
