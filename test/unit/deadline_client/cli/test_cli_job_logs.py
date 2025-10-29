@@ -449,9 +449,13 @@ def test_cli_job_logs_with_job_id_single_session(fresh_deadline_config):
         mock_get_logs.return_value = api.SessionLogResult(
             events=[
                 api.LogEvent(
-                    timestamp=datetime.datetime(2023, 1, 27, 7, 24, 45),
+                    timestamp=datetime.datetime(
+                        2023, 1, 27, 7, 24, 45, tzinfo=datetime.timezone.utc
+                    ),
                     message="Test log message",
-                    ingestion_time=datetime.datetime(2023, 1, 27, 7, 24, 46),
+                    ingestion_time=datetime.datetime(
+                        2023, 1, 27, 7, 24, 46, tzinfo=datetime.timezone.utc
+                    ),
                     event_id="event-1",
                 ),
             ],
@@ -560,7 +564,9 @@ def test_cli_job_logs_with_pagination(fresh_deadline_config):
                 "sessions": [
                     {
                         "sessionId": "session-1",
-                        "endedAt": datetime.datetime(2023, 1, 27, 7, 0, 0),
+                        "endedAt": datetime.datetime(
+                            2023, 1, 27, 7, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                     }
                 ]
             },
@@ -568,7 +574,9 @@ def test_cli_job_logs_with_pagination(fresh_deadline_config):
                 "sessions": [
                     {
                         "sessionId": "session-2",
-                        "endedAt": datetime.datetime(2023, 1, 27, 8, 0, 0),
+                        "endedAt": datetime.datetime(
+                            2023, 1, 27, 8, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                     }
                 ]
             },
@@ -578,9 +586,11 @@ def test_cli_job_logs_with_pagination(fresh_deadline_config):
         mock_get_logs.return_value = api.SessionLogResult(
             events=[
                 api.LogEvent(
-                    timestamp=datetime.datetime(2023, 1, 27, 8, 0, 0),
+                    timestamp=datetime.datetime(2023, 1, 27, 8, 0, 0, tzinfo=datetime.timezone.utc),
                     message="Test log message",
-                    ingestion_time=datetime.datetime(2023, 1, 27, 8, 0, 1),
+                    ingestion_time=datetime.datetime(
+                        2023, 1, 27, 8, 0, 1, tzinfo=datetime.timezone.utc
+                    ),
                     event_id="event-1",
                 ),
             ],
@@ -648,30 +658,34 @@ def test_cli_job_logs_with_job_id_prioritizes_ongoing_sessions(fresh_deadline_co
                         "sessions": [
                             {
                                 "sessionId": "session-completed-recent",
-                                "startedAt": datetime.datetime(2023, 1, 27, 8, 0, 0),
+                                "startedAt": datetime.datetime(
+                                    2023, 1, 27, 8, 0, 0, tzinfo=datetime.timezone.utc
+                                ),
                                 "endedAt": datetime.datetime(
-                                    2023, 1, 27, 9, 0, 0
+                                    2023, 1, 27, 9, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Most recent completion
                             },
                             {
                                 "sessionId": "session-ongoing-older",
                                 "startedAt": datetime.datetime(
-                                    2023, 1, 27, 6, 0, 0
+                                    2023, 1, 27, 6, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Ongoing but older
                                 # No endedAt - this is ongoing
                             },
                             {
                                 "sessionId": "session-ongoing-newer",
                                 "startedAt": datetime.datetime(
-                                    2023, 1, 27, 7, 30, 0
+                                    2023, 1, 27, 7, 30, 0, tzinfo=datetime.timezone.utc
                                 ),  # Ongoing and newer
                                 # No endedAt - this is ongoing
                             },
                             {
                                 "sessionId": "session-completed-older",
-                                "startedAt": datetime.datetime(2023, 1, 27, 5, 0, 0),
+                                "startedAt": datetime.datetime(
+                                    2023, 1, 27, 5, 0, 0, tzinfo=datetime.timezone.utc
+                                ),
                                 "endedAt": datetime.datetime(
-                                    2023, 1, 27, 6, 0, 0
+                                    2023, 1, 27, 6, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Older completion
                             },
                         ]
@@ -682,9 +696,13 @@ def test_cli_job_logs_with_job_id_prioritizes_ongoing_sessions(fresh_deadline_co
                 mock_get_logs.return_value = api.SessionLogResult(
                     events=[
                         api.LogEvent(
-                            timestamp=datetime.datetime(2023, 1, 27, 7, 30, 0),
+                            timestamp=datetime.datetime(
+                                2023, 1, 27, 7, 30, 0, tzinfo=datetime.timezone.utc
+                            ),
                             message="Ongoing session log message",
-                            ingestion_time=datetime.datetime(2023, 1, 27, 7, 30, 1),
+                            ingestion_time=datetime.datetime(
+                                2023, 1, 27, 7, 30, 1, tzinfo=datetime.timezone.utc
+                            ),
                             event_id="event-1",
                         ),
                     ],
@@ -718,9 +736,11 @@ def test_cli_job_logs_with_job_id_prioritizes_ongoing_sessions(fresh_deadline_co
                 )
 
                 # Check output
-                assert "Using the latest session: session-ongoing-newer" in result.output
-                assert "Ongoing session log message" in result.output
-                assert result.exit_code == 0
+                assert "Using the latest session: session-ongoing-newer" in result.output, (
+                    result.output
+                )
+                assert "Ongoing session log message" in result.output, result.output
+                assert result.exit_code == 0, result.output
 
 
 def test_cli_job_logs_with_job_id_selects_most_recent_completed_when_no_ongoing(
@@ -748,16 +768,20 @@ def test_cli_job_logs_with_job_id_selects_most_recent_completed_when_no_ongoing(
                         "sessions": [
                             {
                                 "sessionId": "session-completed-older",
-                                "startedAt": datetime.datetime(2023, 1, 27, 6, 0, 0),
+                                "startedAt": datetime.datetime(
+                                    2023, 1, 27, 6, 0, 0, tzinfo=datetime.timezone.utc
+                                ),
                                 "endedAt": datetime.datetime(
-                                    2023, 1, 27, 7, 0, 0
+                                    2023, 1, 27, 7, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Older completion
                             },
                             {
                                 "sessionId": "session-completed-newer",
-                                "startedAt": datetime.datetime(2023, 1, 27, 8, 0, 0),
+                                "startedAt": datetime.datetime(
+                                    2023, 1, 27, 8, 0, 0, tzinfo=datetime.timezone.utc
+                                ),
                                 "endedAt": datetime.datetime(
-                                    2023, 1, 27, 9, 0, 0
+                                    2023, 1, 27, 9, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Most recent completion
                             },
                         ]
@@ -768,9 +792,13 @@ def test_cli_job_logs_with_job_id_selects_most_recent_completed_when_no_ongoing(
                 mock_get_logs.return_value = api.SessionLogResult(
                     events=[
                         api.LogEvent(
-                            timestamp=datetime.datetime(2023, 1, 27, 9, 0, 0),
+                            timestamp=datetime.datetime(
+                                2023, 1, 27, 9, 0, 0, tzinfo=datetime.timezone.utc
+                            ),
                             message="Most recent completed session log",
-                            ingestion_time=datetime.datetime(2023, 1, 27, 9, 0, 1),
+                            ingestion_time=datetime.datetime(
+                                2023, 1, 27, 9, 0, 1, tzinfo=datetime.timezone.utc
+                            ),
                             event_id="event-1",
                         ),
                     ],
@@ -804,9 +832,11 @@ def test_cli_job_logs_with_job_id_selects_most_recent_completed_when_no_ongoing(
                 )
 
                 # Check output
-                assert "Using the latest session: session-completed-newer" in result.output
-                assert "Most recent completed session log" in result.output
-                assert result.exit_code == 0
+                assert "Using the latest session: session-completed-newer" in result.output, (
+                    result.output
+                )
+                assert "Most recent completed session log" in result.output, result.output
+                assert result.exit_code == 0, result.output
 
 
 def test_cli_job_logs_with_job_id_selects_most_recent_among_multiple_ongoing(fresh_deadline_config):
@@ -833,21 +863,21 @@ def test_cli_job_logs_with_job_id_selects_most_recent_among_multiple_ongoing(fre
                             {
                                 "sessionId": "session-ongoing-oldest",
                                 "startedAt": datetime.datetime(
-                                    2023, 1, 27, 5, 0, 0
+                                    2023, 1, 27, 5, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Oldest ongoing
                                 # No endedAt - this is ongoing
                             },
                             {
                                 "sessionId": "session-ongoing-middle",
                                 "startedAt": datetime.datetime(
-                                    2023, 1, 27, 6, 0, 0
+                                    2023, 1, 27, 6, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Middle ongoing
                                 # No endedAt - this is ongoing
                             },
                             {
                                 "sessionId": "session-ongoing-newest",
                                 "startedAt": datetime.datetime(
-                                    2023, 1, 27, 7, 0, 0
+                                    2023, 1, 27, 7, 0, 0, tzinfo=datetime.timezone.utc
                                 ),  # Most recent ongoing
                                 # No endedAt - this is ongoing
                             },
@@ -862,9 +892,13 @@ def test_cli_job_logs_with_job_id_selects_most_recent_among_multiple_ongoing(fre
                 mock_get_logs.return_value = api.SessionLogResult(
                     events=[
                         api.LogEvent(
-                            timestamp=datetime.datetime(2023, 1, 27, 7, 0, 0),
+                            timestamp=datetime.datetime(
+                                2023, 1, 27, 7, 0, 0, tzinfo=datetime.timezone.utc
+                            ),
                             message="Most recent ongoing session log",
-                            ingestion_time=datetime.datetime(2023, 1, 27, 7, 0, 1),
+                            ingestion_time=datetime.datetime(
+                                2023, 1, 27, 7, 0, 1, tzinfo=datetime.timezone.utc
+                            ),
                             event_id="event-1",
                         ),
                     ],
@@ -2401,3 +2435,239 @@ def test_time_range_intersection_error_message_includes_both_ranges(
     assert "Specified time range:" in result.output
     assert user_start in result.output
     assert user_end in result.output
+
+
+# ===== Tests for --timestamp-format CLI Option =====
+
+
+def test_cli_job_logs_timestamp_format_utc(fresh_deadline_config):
+    """
+    Test that logs CLI works correctly with --timestamp-format utc.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["job", "logs", "--session-id", "test-session", "--timestamp-format", "utc"]
+        )
+
+        # Verify UTC timestamps are displayed
+        assert "[2023-01-01T12:00:00.123456+00:00] Log message 1" in result.output
+        assert "[2023-01-01T12:01:00.789012+00:00] Log message 2" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_logs_timestamp_format_local(fresh_deadline_config):
+    """
+    Test that logs CLI works correctly with --timestamp-format local.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["job", "logs", "--session-id", "test-session", "--timestamp-format", "local"]
+        )
+
+        # The exact local time will depend on the system timezone, but we can verify
+        # that the format is ISO 8601 and that the command succeeds
+        assert "Log message 1" in result.output
+        assert "Log message 2" in result.output
+        # Check that timestamps contain 'T' (ISO format) and timezone offset
+        assert "T" in result.output
+        assert "+" in result.output or "-" in result.output  # timezone offset
+        assert result.exit_code == 0
+
+
+def test_cli_job_logs_timestamp_format_relative(fresh_deadline_config):
+    """
+    Test that logs CLI works correctly with --timestamp-format relative.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    session_start_time = datetime.datetime(2023, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        # Mock get_session to return session details with start time
+        boto3_client_mock().get_session.return_value = {
+            "sessionId": "test-session",
+            "startedAt": session_start_time,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["job", "logs", "--session-id", "test-session", "--timestamp-format", "relative"]
+        )
+
+        # Verify relative timestamps are displayed
+        # First event is at 12:00:00.123456, session starts at 12:00:00, so relative is 0:00:00.123456
+        assert "[0:00:00.123456] Log message 1" in result.output
+        # Second event is at 12:01:00.789012, session starts at 12:00:00, so relative is 0:01:00.789012
+        assert "[0:01:00.789012] Log message 2" in result.output
+        # Verify reference time is displayed
+        assert "Logs relative to start time: 2023-01-01T12:00:00+00:00" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_logs_timestamp_format_default(fresh_deadline_config):
+    """
+    Test that logs CLI defaults to UTC format when no --timestamp-format is provided.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["job", "logs", "--session-id", "test-session"])
+
+        # Verify UTC timestamps are displayed (default behavior)
+        assert "[2023-01-01T12:00:00.123456+00:00] Log message 1" in result.output
+        assert "[2023-01-01T12:01:00.789012+00:00] Log message 2" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_logs_timestamp_format_invalid(fresh_deadline_config):
+    """
+    Test that logs CLI rejects invalid --timestamp-format values.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["job", "logs", "--session-id", "test-session", "--timestamp-format", "invalid"]
+    )
+
+    # Verify error message is displayed
+    assert "Invalid value for '--timestamp-format'" in result.output
+    assert result.exit_code != 0
+
+
+def test_cli_job_logs_timezone_and_timestamp_format_mutual_exclusivity(fresh_deadline_config):
+    """
+    Test that using both --timezone and --timestamp-format options raises an error.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "job",
+            "logs",
+            "--session-id",
+            "test-session",
+            "--timezone",
+            "utc",
+            "--timestamp-format",
+            "local",
+        ],
+    )
+
+    # Verify error message about mutual exclusivity
+    assert "Cannot use both --timezone and --timestamp-format options" in result.output
+    assert result.exit_code != 0
+
+
+def test_cli_job_logs_timezone_deprecation_warning_utc(fresh_deadline_config):
+    """
+    Test that using --timezone utc displays a deprecation warning.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["job", "logs", "--session-id", "test-session", "--timezone", "utc"]
+        )
+
+        # Verify deprecation warning is displayed
+        assert "Warning: --timezone is deprecated" in result.output
+        assert "Use --timestamp-format utc instead" in result.output
+        # Verify the command still works with UTC format
+        assert "[2023-01-01T12:00:00.123456+00:00] Log message 1" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_logs_timezone_deprecation_warning_local(fresh_deadline_config):
+    """
+    Test that using --timezone local displays a deprecation warning.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("defaults.job_id", MOCK_JOB_ID)
+
+    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+        mock_get_user.return_value = (None, None)
+        mock_get_logs.return_value = SAMPLE_LOG_RESULT
+
+        # Mock get_job to return job name
+        boto3_client_mock().get_job.return_value = {"name": "Test Job Name"}
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["job", "logs", "--session-id", "test-session", "--timezone", "local"]
+        )
+
+        # Verify deprecation warning is displayed
+        assert "Warning: --timezone is deprecated" in result.output
+        assert "Use --timestamp-format local instead" in result.output
+        # Verify the command still works with local format
+        assert "Log message 1" in result.output
+        assert "Log message 2" in result.output
+        assert result.exit_code == 0

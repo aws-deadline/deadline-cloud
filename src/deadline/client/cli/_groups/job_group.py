@@ -47,6 +47,7 @@ from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_er
 from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 from ...api._session import get_default_client_config
+from .._timestamp_formatter import TimestampFormat, TimestampFormatter
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -58,31 +59,6 @@ JSON_MSG_TYPE_PROGRESS = "progress"
 JSON_MSG_TYPE_SUMMARY = "summary"
 JSON_MSG_TYPE_ERROR = "error"
 JSON_MSG_TYPE_WARNING = "warning"
-
-
-def _format_timestamp(timestamp: datetime.datetime, use_local_time: bool = False) -> str:
-    """
-    Format a timestamp in ISO 8601 format with timezone information.
-
-    Args:
-        timestamp: The datetime object to format
-        use_local_time: If True, convert to local time; if False, keep as UTC
-
-    Returns:
-        Formatted timestamp string in ISO 8601 format with timezone
-    """
-    if use_local_time and timestamp.tzinfo is not None:
-        # Convert to local time
-        local_timestamp = timestamp.astimezone()
-        return local_timestamp.isoformat()
-    else:
-        # Keep as UTC - ensure it has timezone info
-        if timestamp.tzinfo is None:
-            # Assume naive datetime is UTC
-            utc_timestamp = timestamp.replace(tzinfo=datetime.timezone.utc)
-        else:
-            utc_timestamp = timestamp
-        return utc_timestamp.isoformat()
 
 
 def _parse_session_action_id(session_action_id: str) -> str:
@@ -1170,14 +1146,30 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     help="Output format (verbose or json).",
 )
 @click.option(
+    "--timestamp-format",
+    type=click.Choice(["utc", "local", "relative"], case_sensitive=False),
+    default="utc",
+    help="Timestamp format for log entries (utc, local, or relative). Default is utc.",
+)
+@click.option(
     "--timezone",
     type=click.Choice(["utc", "local"], case_sensitive=False),
-    default="utc",
-    help="Timezone for timestamps (utc or local). Default is utc.",
+    help="[DEPRECATED] Use --timestamp-format instead. Timezone for timestamps (utc or local).",
 )
+@click.pass_context
 @_handle_error
 def job_logs(
-    session_id, session_action_id, limit, start_time, end_time, next_token, output, timezone, **args
+    ctx,
+    session_id,
+    session_action_id,
+    limit,
+    start_time,
+    end_time,
+    next_token,
+    output,
+    timestamp_format,
+    timezone,
+    **args,
 ):
     """
     Prints a [Deadline Cloud session log] stored in [CloudWatch logs] for the job.
@@ -1207,6 +1199,32 @@ def job_logs(
 
     is_json_output = output.lower() == "json"
 
+    # Check if --timestamp-format was explicitly provided by the user
+    timestamp_format_provided = (
+        ctx.get_parameter_source("timestamp_format") != click.core.ParameterSource.DEFAULT
+    )
+
+    # Handle timestamp format options and deprecation
+    if timezone and timestamp_format_provided:
+        raise DeadlineOperationError(
+            "Cannot use both --timezone and --timestamp-format options. Use --timestamp-format instead."
+        )
+
+    # Handle deprecation of --timezone option
+    if timezone:
+        # Only show deprecation warning for non-JSON output to avoid interfering with JSON parsing
+        if not is_json_output:
+            warning_message = (
+                f"Warning: --timezone is deprecated and will be removed in a future version. "
+                f"Use --timestamp-format {timezone} instead."
+            )
+            click.echo(warning_message, err=True)
+        # Map deprecated timezone values to new format
+        timestamp_format = timezone
+
+    # Convert timestamp_format to enum
+    timestamp_format_enum = TimestampFormat(timestamp_format.lower())
+
     # Handle session action ID if provided
     if session_action_id:
         # Parse session action ID to derive session ID
@@ -1227,8 +1245,6 @@ def job_logs(
     deadline = api.get_boto3_client("deadline", config=config)
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
     job_name = job["name"]
-
-    use_local_time = timezone.lower() == "local"
 
     # If session_id is not provided but job_id is, try to find the session
     if not session_id and job_id:
@@ -1327,6 +1343,9 @@ def job_logs(
                 f"Session action '{session_action_id}' has not started yet. No logs are available."
             )
 
+        # Set reference time for relative format (session action start time)
+        reference_start_time = action_start
+
         if not is_json_output:
             click.echo(f"Session action start: {action_start}")
         if action_end:
@@ -1370,6 +1389,25 @@ def job_logs(
         # Use the combined timestamps for log retrieval
         start_time = effective_start
         end_time = effective_end
+    else:
+        # Get session start time for the timestamp formatter
+        try:
+            session_details = deadline.get_session(
+                farmId=farm_id, queueId=queue_id, jobId=job_id, sessionId=session_id
+            )
+            try:
+                reference_start_time = session_details["startedAt"]
+            except KeyError:
+                raise DeadlineOperationError(
+                    f"Session '{session_id}' has not started yet."
+                ) from None
+        except ClientError as exc:
+            raise DeadlineOperationError(
+                f"Failed to retrieve session details for session ID '{session_id}':\n{exc}"
+            ) from exc
+
+    # Create timestamp formatter now that we have all necessary information
+    timestamp_formatter = TimestampFormatter(timestamp_format_enum, reference_start_time)
 
     try:
         result = api.get_session_logs(
@@ -1390,10 +1428,10 @@ def job_logs(
                 "jobName": job_name,
                 "events": [
                     {
-                        "timestamp": _format_timestamp(event.timestamp, use_local_time),
+                        "timestamp": timestamp_formatter.format_timestamp(event.timestamp),
                         "message": event.message,
                         "ingestionTime": (
-                            _format_timestamp(event.ingestion_time, use_local_time)
+                            timestamp_formatter.format_timestamp(event.ingestion_time)
                             if event.ingestion_time
                             else None
                         ),
@@ -1408,6 +1446,14 @@ def job_logs(
             }
             click.echo(json.dumps(response, indent=2))
         else:
+            # Display reference time for relative format
+            if (
+                timestamp_format_enum == TimestampFormat.RELATIVE
+                and timestamp_formatter.reference_start_time
+            ):
+                reference_display = timestamp_formatter.reference_start_time.isoformat()
+                click.echo(f"Logs relative to start time: {reference_display}")
+
             # Separate the logs by a blank line to make the start of the log easy to find.
             click.echo()
 
@@ -1417,7 +1463,7 @@ def job_logs(
                 return
 
             for event in result.events:
-                timestamp = _format_timestamp(event.timestamp, use_local_time)
+                timestamp = timestamp_formatter.format_timestamp(event.timestamp)
                 click.echo(f"[{timestamp}] {event.message}")
 
             click.echo(f"\nRetrieved {result.count} log events.")
