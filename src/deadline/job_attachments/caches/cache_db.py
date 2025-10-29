@@ -6,6 +6,7 @@ Module for defining a local cache file.
 
 import logging
 import os
+import threading as _threading
 from abc import ABC
 from threading import Lock
 from typing import Optional
@@ -34,6 +35,8 @@ class CacheDB(ABC):
         self.cache_name: str = cache_name
         self.table_name: str = table_name
         self.create_query: str = create_query
+        self._local = _threading.local()
+        self._local_connections: set = set()
 
         try:
             # SQLite is included in Python installers, but might not exist if building python from source.
@@ -64,6 +67,7 @@ class CacheDB(ABC):
                 self.db_connection: sqlite3.Connection = sqlite3.connect(
                     self.cache_dir, check_same_thread=False
                 )
+                self.db_connection.execute("PRAGMA journal_mode=WAL")
             except sqlite3.OperationalError as oe:
                 raise JobAttachmentsError(
                     f"Could not access cache file in {self.cache_dir}"
@@ -81,8 +85,35 @@ class CacheDB(ABC):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """Called when exiting the context manager."""
+
         if self.enabled:
+            import sqlite3
+
             self.db_connection.close()
+            for conn in self._local_connections:
+                try:
+                    conn.close()
+                except sqlite3.Error as e:
+                    logger.warning(f"SQLite connection failed to close with error {e}")
+
+            self._local_connections.clear()
+
+    def get_local_connection(self):
+        """Create and/or returns a thread local connection to the SQLite database."""
+        if not self.enabled:
+            return None
+        import sqlite3
+
+        if not hasattr(self._local, "connection"):
+            try:
+                self._local.connection = sqlite3.connect(self.cache_dir, check_same_thread=False)
+                self._local_connections.add(self._local.connection)
+            except sqlite3.OperationalError as oe:
+                raise JobAttachmentsError(
+                    f"Could not create connection to cache in {self.cache_dir}"
+                ) from oe
+
+        return self._local.connection
 
     @classmethod
     def get_default_cache_db_file_dir(cls) -> Optional[str]:
@@ -99,12 +130,23 @@ class CacheDB(ABC):
         """
         Removes the underlying cache contents from the file system.
         """
+
         if self.enabled:
+            import sqlite3
+
             self.db_connection.close()
+            conn_list = list(self._local_connections)
+            for conn in conn_list:
+                try:
+                    conn.close()
+                    self._local_connections.remove(conn)
+                except sqlite3.Error as e:
+                    logger.warning(f"SQLite connection failed to close with error {e}")
 
         logger.debug(f"The cache {self.cache_dir} will be removed")
         try:
             os.remove(self.cache_dir)
         except Exception as e:
             logger.error(f"Error occurred while removing the cache file {self.cache_dir}: {e}")
+
             raise e

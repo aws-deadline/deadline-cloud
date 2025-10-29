@@ -59,6 +59,35 @@ class HashCache(CacheDB):
             cache_dir=cache_dir,
         )
 
+    def get_connection_entry(
+        self, file_path_key: str, hash_algorithm: HashAlgorithm, connection
+    ) -> Optional[HashCacheEntry]:
+        """
+        Returns an entry from the hash cache, if it exists.  This is the "lockless" (Doesn't take
+        the main db_lock protecting db_connection) version of get_entry which expects a connection
+        parameter for the connection which will be used to read from the DB - this can generally
+        be the thread local connection returned by get_local_connection()
+        """
+        if not self.enabled:
+            return None
+
+        entry_vals = connection.execute(
+            f"SELECT * FROM {self.table_name} WHERE file_path=? AND hash_algorithm=?",
+            [
+                file_path_key.encode(encoding="utf-8", errors="surrogatepass"),
+                hash_algorithm.value,
+            ],
+        ).fetchone()
+        if entry_vals:
+            return HashCacheEntry(
+                file_path=str(entry_vals[0], encoding="utf-8", errors="surrogatepass"),
+                hash_algorithm=HashAlgorithm(entry_vals[1]),
+                file_hash=entry_vals[2],
+                last_modified_time=str(entry_vals[3]),
+            )
+        else:
+            return None
+
     def get_entry(
         self, file_path_key: str, hash_algorithm: HashAlgorithm
     ) -> Optional[HashCacheEntry]:
@@ -69,22 +98,7 @@ class HashCache(CacheDB):
             return None
 
         with self.db_lock, self.db_connection:
-            entry_vals = self.db_connection.execute(
-                f"SELECT * FROM {self.table_name} WHERE file_path=? AND hash_algorithm=?",
-                [
-                    file_path_key.encode(encoding="utf-8", errors="surrogatepass"),
-                    hash_algorithm.value,
-                ],
-            ).fetchone()
-            if entry_vals:
-                return HashCacheEntry(
-                    file_path=str(entry_vals[0], encoding="utf-8", errors="surrogatepass"),
-                    hash_algorithm=HashAlgorithm(entry_vals[1]),
-                    file_hash=entry_vals[2],
-                    last_modified_time=str(entry_vals[3]),
-                )
-            else:
-                return None
+            return self.get_connection_entry(file_path_key, hash_algorithm, self.db_connection)
 
     def put_entry(self, entry: HashCacheEntry) -> None:
         """Inserts or replaces an entry into the hash cache database after acquiring the lock."""
