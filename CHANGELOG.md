@@ -1,3 +1,20 @@
+## 0.53.3 (2025-10-30)
+
+## DEPRECATIONS
+* `--timezone` is being deprecated in favor of `--timestamp-format` for the `job logs` command. `--timezone` will be removed in a future release. See (#898) for more details.
+
+### Features
+* **cli**: Add --timestamp-format relative option to 'job logs' command (#898) ([`36ba412`](https://github.com/aws-deadline/deadline-cloud/commit/36ba4125d359c9de59885a453c17c5ab4b46822e))
+* **cli**: Add --session-action-id option to 'deadline job logs' (#894) ([`c37635e`](https://github.com/aws-deadline/deadline-cloud/commit/c37635eb5b4412c035792075699ad37f41827f7f))
+* Chunked session action outputs can now be downloaded  (#858) ([`8d8daba`](https://github.com/aws-deadline/deadline-cloud/commit/8d8dabac426bea4c32a7bc888d02fb593340f753))
+
+### Bug Fixes
+* HashDB does not retry when failing to open. (#884) ([`08c1e89`](https://github.com/aws-deadline/deadline-cloud/commit/08c1e89cecc02c42df50316d1ec260369fabff70))
+* Job submission error when submitting same jobs with the same title over 100 times in a single day. (#888) ([`2c5b952`](https://github.com/aws-deadline/deadline-cloud/commit/2c5b9521d61b7fc21cc20c68ca9510ecb820ba52))
+
+### Performance Improvements
+* Improve concurrency during bundle submission by threading local s3 cache db connections and enabling WAL mode by default. (#896) ([`ba15300`](https://github.com/aws-deadline/deadline-cloud/commit/ba15300073f37c94b8f902f3c7fcdd470ca245b7))
+
 ## 0.53.2 (2025-10-17)
 
 ### Bug Fixes
