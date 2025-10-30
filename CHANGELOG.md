@@ -1,3 +1,9 @@
+## 0.53.2 (2025-10-17)
+
+### Bug Fixes
+* revert: HashCache DB changes causing job submission failures (#892) ([`f716769`](https://github.com/aws-deadline/deadline-cloud/commit/f71676940366dca635607048ddb70267381076))
+
+
 ## 0.53.1 (2025-10-10)
 
 ### Features
