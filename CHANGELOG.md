@@ -1,5 +1,6 @@
 ## 0.53.3 (2025-10-30)
 
+
 ## DEPRECATIONS
 * `--timezone` is being deprecated in favor of `--timestamp-format` for the `job logs` command. `--timezone` will be removed in a future release. See (#898) for more details.
 
