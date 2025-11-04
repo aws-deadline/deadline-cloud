@@ -8,3 +8,6 @@ Required by pyinstaller, do not delete.
 from deadline.client.cli._main import deadline as main
 
 __all__ = ["main"]
+
+if __name__ == "__main__":
+    main()
