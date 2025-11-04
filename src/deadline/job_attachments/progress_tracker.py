@@ -142,6 +142,7 @@ class ProgressReportMetadata:
     progress: float  # percentage with one decimal place
     transferRate: float  # bytes/second
     progressMessage: str  # pylint: disable=invalid-name
+    processedFiles: int  # number of files completed
 
 
 @dataclass
@@ -321,6 +322,7 @@ class ProgressTracker:
             progress=percentage,
             transferRate=transfer_rate,
             progressMessage=progress_message,
+            processedFiles=self.processed_files,
         )
 
     def get_summary_statistics(self) -> SummaryStatistics:
