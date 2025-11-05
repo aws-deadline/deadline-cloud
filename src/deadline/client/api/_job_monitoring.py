@@ -4,7 +4,6 @@
 Functions for monitoring job status and retrieving job information.
 """
 
-from __future__ import annotations
 import datetime
 import time
 from typing import List, Dict, Any, Optional, Callable

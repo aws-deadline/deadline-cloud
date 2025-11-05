@@ -61,6 +61,8 @@ With the AWS Deadline Cloud MCP Server, you can use natural language for various
 - "Submit the render job in /path/to/my-job-bundle"
 - "Submit a job with priority 80 to my render queue"
 - "Show me the status of job job-3a907bac684841f69fc344867ee166de"
+- "Get the logs for session session-abc123 to see why my task failed"
+- "Show me the CloudWatch logs for session session-xyz789"
 - "Download output from job job-3a907bac684841f69fc344867ee166de"
 - "Download output from step step-render in job job-3a907bac684841f69fc344867ee166de"
 ```
@@ -76,7 +78,7 @@ The MCP server provides access to all allowlisted/configured Deadline Cloud API 
 - `deadline_list_storage_profiles_for_queue()`: List storage profiles for a queue
 
 - `deadline_check_authentication_status()`: Check current authentication status
-
+- `deadline_get_session_logs()`: Get CloudWatch logs for a specific session
 - `deadline_submit_job()`: Submit an Open Job Description job bundle to AWS Deadline Cloud
 - `deadline_download_job_output()`: Download job output files from AWS Deadline Cloud
 
