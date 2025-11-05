@@ -59,6 +59,18 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         "func": api.check_authentication_status,
         "param_names": None,
     },
+    "get_session_logs": {
+        "func": api.get_session_logs,
+        "param_names": [
+            "farm_id",
+            "queue_id",
+            "session_id",
+            "limit",
+            "start_time",
+            "end_time",
+            "next_token",
+        ],
+    },
     "submit_job": {
         "func": job.submit_job,
         "param_names": None,

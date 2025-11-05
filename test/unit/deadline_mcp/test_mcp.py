@@ -39,7 +39,7 @@ class TestToolRegistry:
 
     def test_expected_functions(self):
         """Test that expected functions are in the registry."""
-        expected = ["list_farms", "submit_job", "download_job_output"]
+        expected = ["list_farms", "submit_job", "download_job_output", "get_session_logs"]
         for func_name in expected:
             assert func_name in TOOL_REGISTRY
 
