@@ -82,7 +82,22 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
     has_pyside6 = importlib.util.find_spec("PySide6")
     has_pyside2 = importlib.util.find_spec("PySide2")
     if not (has_pyside6 or has_pyside2):
-        if not automatically_install_dependencies:
+        if automatically_install_dependencies:
+            # Show GUI confirmation dialog
+            import tkinter as tk
+            from tkinter import messagebox
+
+            root = tk.Tk()
+            root.withdraw()
+            will_install_gui = messagebox.askokcancel(
+                "Install GUI Dependencies",
+                "Dependencies required to run the interface will be downloaded and installed. The process takes several seconds."
+            )
+            root.destroy()
+            if not will_install_gui:
+                click.echo("Unable to continue without GUI, exiting")
+                sys.exit(1)
+        else:
             message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
             will_install_gui = click.confirm(message, default=False)
             if not will_install_gui:
