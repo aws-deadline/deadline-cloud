@@ -79,4 +79,8 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         "func": job.download_job_output,
         "param_names": None,
     },
+    "get_job_logs": {
+        "func": job.get_job_logs,
+        "param_names": None,
+    },
 }

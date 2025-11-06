@@ -4,6 +4,7 @@
 Deadline Cloud Job tools.
 """
 
+import datetime
 import io
 import json
 import os
@@ -11,9 +12,10 @@ import time
 from contextlib import redirect_stdout
 from typing import Any, Dict, Optional
 
-from ...client.api import create_job_from_job_bundle
+from ...client.api import create_job_from_job_bundle, get_session_logs, get_boto3_client
 from ...client.cli._groups.job_group import _download_job_output
 from ...client.config import config_file
+from ...client.exceptions import DeadlineOperationError
 
 # TODO: Make submit_job tool async once progress reporting feature is supported in clients
 
@@ -195,4 +197,125 @@ def download_job_output(
         "task_id": task_id,
         "total_time_seconds": round(total_time, 1),
         "output": output_text.strip(),
+    }
+
+
+def _parse_time(time_str: Optional[str]) -> Optional[datetime.datetime]:
+    return datetime.datetime.fromisoformat(time_str.replace("Z", "+00:00")) if time_str else None
+
+
+def _get_session_sort_key(session: Dict[str, Any]) -> tuple:
+    is_completed = "endedAt" in session
+    default_time = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
+    if is_completed:
+        time_value = session.get("endedAt", default_time).timestamp()
+    else:
+        time_value = session.get("startedAt", default_time).timestamp()
+
+    # Sort: ongoing first (False < True), then by time descending (negative)
+    return (is_completed, -time_value)
+
+
+def _format_timestamp(timestamp: datetime.datetime, use_local_time: bool) -> str:
+    if use_local_time:
+        return timestamp.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def get_job_logs(
+    farm_id: Optional[str] = None,
+    queue_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    limit: Optional[int] = 100,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    next_token: Optional[str] = None,
+    timezone: Optional[str] = "utc",
+) -> Dict[str, Any]:
+    """
+    Get CloudWatch logs for a specific session.
+
+    If session_id is not provided, auto-selects the most recent session
+    (prioritizing ongoing sessions over completed ones).
+
+    Args:
+        farm_id: Farm ID (uses default if not provided)
+        queue_id: Queue ID (uses default if not provided)
+        job_id: Job ID to get logs for (required if session_id not provided)
+        session_id: Session ID to get logs for (optional, will auto-select if not provided)
+        limit: Maximum number of log lines to return (default: 100)
+        start_time: Start time for logs in ISO format (e.g., 2023-01-01T12:00:00Z)
+        end_time: End time for logs in ISO format (e.g., 2023-01-01T13:00:00Z)
+        next_token: Token for pagination of results
+        timezone: Timezone for timestamps - "utc" or "local" (default: "utc")
+
+    Returns:
+        Dictionary containing log events, metadata, and pagination info
+    """
+    # Read config and apply defaults for farm_id and queue_id only
+    config = config_file.read_config()
+    farm_id = farm_id or config.get("defaults", "farm_id", fallback=None)
+    queue_id = queue_id or config.get("defaults", "queue_id", fallback=None)
+
+    # Validate required parameters
+    if not farm_id or not queue_id:
+        raise ValueError("farm_id and queue_id are required")
+
+    if not job_id and not session_id:
+        raise ValueError("Either job_id or session_id must be provided")
+
+    deadline = get_boto3_client("deadline", config=config)
+
+    # Auto-select session if not provided (job_id is guaranteed to exist here)
+    if not session_id:
+        paginator = deadline.get_paginator("list_sessions")
+        sessions = [
+            s
+            for page in paginator.paginate(farmId=farm_id, queueId=queue_id, jobId=job_id)
+            for s in page.get("sessions", [])
+        ]
+
+        if not sessions:
+            raise DeadlineOperationError(f"No sessions found for job {job_id}")
+
+        # Select the most recent session (prefer ongoing over completed)
+        sessions.sort(key=_get_session_sort_key)
+        session_id = sessions[0]["sessionId"]
+
+    # Get logs
+    result = get_session_logs(
+        farm_id=farm_id,
+        queue_id=queue_id,
+        session_id=session_id,
+        limit=limit or 100,
+        start_time=_parse_time(start_time),
+        end_time=_parse_time(end_time),
+        next_token=next_token,
+        config=config,
+    )
+
+    # Format timestamps
+    use_local = (timezone or "utc").lower() == "local"
+
+    return {
+        "status": "success",
+        "jobId": job_id,
+        "sessionId": session_id,
+        "events": [
+            {
+                "timestamp": _format_timestamp(e.timestamp, use_local),
+                "message": e.message,
+                "ingestionTime": (
+                    _format_timestamp(e.ingestion_time, use_local) if e.ingestion_time else None
+                ),
+                "eventId": e.event_id,
+            }
+            for e in result.events
+        ],
+        "count": result.count,
+        "nextToken": result.next_token,
+        "logGroup": result.log_group,
+        "logStream": result.log_stream,
     }

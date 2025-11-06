@@ -43,6 +43,31 @@ class TestToolRegistry:
         for func_name in expected:
             assert func_name in TOOL_REGISTRY
 
+    def test_all_registered_tools_count(self):
+        """Test that we have the expected number of tools registered."""
+        # This test ensures we don't accidentally lose tools during refactoring
+        # and serves as a reminder to update tests when adding new tools
+        expected_tools = {
+            "list_farms",
+            "list_queues",
+            "list_jobs",
+            "list_fleets",
+            "list_storage_profiles_for_queue",
+            "check_authentication_status",
+            "submit_job",
+            "download_job_output",
+            "get_job_logs",
+            "get_session_logs",
+        }
+
+        actual_tools = set(TOOL_REGISTRY.keys())
+        assert actual_tools == expected_tools, (
+            f"Tool registry mismatch. Expected: {expected_tools}, "
+            f"Actual: {actual_tools}, "
+            f"Missing: {expected_tools - actual_tools}, "
+            f"Extra: {actual_tools - expected_tools}"
+        )
+
 
 class TestUtilityFunctions:
     """Test utility functions."""

@@ -3,6 +3,7 @@
 """Integration test for the Deadline Cloud MCP Server."""
 
 import json
+import os
 import pytest
 import boto3
 import asyncio
@@ -454,3 +455,47 @@ async def test_mcp_tool_error_handling():
         assert any(error_type in fleets_data["type"] for error_type in resource_error_types), (
             f"Expected one of {resource_error_types}, got: {fleets_data['type']}"
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.integ
+async def test_get_job_logs_tool(get_boto_session):
+    """Test the get_job_logs MCP tool functionality.
+    If FARM_ID, QUEUE_ID, JOB_ID are not set, the job logs test will be skipped.
+    """
+    with patch("deadline.client.api._session.get_boto3_session") as mock_session:
+        mock_session.return_value = get_boto_session
+
+        app = server.app
+
+        # Use environment variables as specified in DEVELOPMENT.md
+        farm_id = os.environ.get("FARM_ID")
+        queue_id = os.environ.get("QUEUE_ID")
+        job_id = os.environ.get("JOB_ID")
+        if not farm_id or not queue_id or not job_id:
+            pytest.skip(
+                "Skipping job logs test - FARM_ID and/or QUEUE_ID environment variables not set. "
+                "Set these variables as described in DEVELOPMENT.md"
+            )
+
+        test_params = {"farm_id": farm_id, "queue_id": queue_id, "job_id": job_id, "limit": 10}
+
+        logs_result = await app.call_tool("deadline_get_job_logs", test_params)
+
+        assert logs_result is not None, "get_job_logs should return a result"
+
+        if logs_result and hasattr(logs_result[0], "text"):  # type: ignore[index]
+            try:
+                logs_data = json.loads(logs_result[0].text)  # type: ignore[index]
+
+                if "error" in logs_data:
+                    # This might happen if the job doesn't exist anymore, session expired, etc.
+                    assert "type" in logs_data, "Error response should contain 'type' field"
+                else:
+                    assert isinstance(logs_data, dict), "Response should be a dictionary"
+                    print("✅ get_job_logs with job ID executed successfully")
+
+            except json.JSONDecodeError as e:
+                pytest.fail(
+                    f"get_job_logs with job ID returned non-JSON response: {logs_result[0].text[:200]}... (JSONDecodeError: {e})"  # type: ignore[index]
+                )

@@ -65,6 +65,9 @@ With the AWS Deadline Cloud MCP Server, you can use natural language for various
 - "Show me the CloudWatch logs for session session-xyz789"
 - "Download output from job job-3a907bac684841f69fc344867ee166de"
 - "Download output from step step-render in job job-3a907bac684841f69fc344867ee166de"
+- "Get logs for job job-3a907bac684841f69fc344867ee166de"
+- "Show me the latest logs from session session-12345 with limit 50"
+- "Get logs for my job from the last hour in local timezone"
 ```
 
 ## Available Tools
@@ -81,6 +84,7 @@ The MCP server provides access to all allowlisted/configured Deadline Cloud API 
 - `deadline_get_session_logs()`: Get CloudWatch logs for a specific session
 - `deadline_submit_job()`: Submit an Open Job Description job bundle to AWS Deadline Cloud
 - `deadline_download_job_output()`: Download job output files from AWS Deadline Cloud
+- `deadline_get_job_logs()`: Get CloudWatch logs for a specific session with intelligent session selection
 
 
 ## Developer Guide
