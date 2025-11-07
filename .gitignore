@@ -18,6 +18,9 @@ __pycache__/
 /site/
 installer/components
 
+# Compiled translations
+src/deadline/client/ui/_translation_keys.py
+
 # Misc extensions
 *.run
 *.exe

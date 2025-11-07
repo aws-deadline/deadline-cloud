@@ -6,6 +6,7 @@ from logging import getLogger
 from typing import Any, Optional, Dict
 
 from qtpy.QtCore import Qt  # pylint: disable=import-error
+from ._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QFileDialog,
@@ -93,18 +94,16 @@ def _validate_and_warn_about_parameters(
     if not unrecognized_names:
         return True
 
-    # Display warning dialog for unrecognized parameters
     unrecognized_list = "\n".join(f"  • {name}" for name in unrecognized_names)
-    message = (
-        f"The following parameters are not recognized by the job template or queue:\n\n"
-        f"{unrecognized_list}\n\n"
-        f"These parameters will be ignored during job submission.\n\n"
-        f"Do you want to continue?"
-    )
+    message = tr(
+        "The following parameters are not recognized by the job template or queue:\n\n{params}\n\n"
+        "These parameters will be ignored during job submission.\n\n"
+        "Do you want to continue?"
+    ).format(params=unrecognized_list)
 
     reply = QMessageBox.question(
         parent_widget,
-        "Unrecognized Parameters",
+        tr("Unrecognized Parameters"),
         message,
         QMessageBox.Yes | QMessageBox.No,
         QMessageBox.No,
@@ -148,7 +147,7 @@ def show_job_bundle_submitter(
 
     if not input_job_bundle_dir:
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            parent, "Choose job bundle directory", input_job_bundle_dir
+            parent, tr("Choose job bundle directory"), input_job_bundle_dir
         )
         if not input_job_bundle_dir:
             return None

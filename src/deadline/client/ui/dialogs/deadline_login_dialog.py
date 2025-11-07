@@ -18,6 +18,7 @@ from configparser import ConfigParser
 from typing import Optional
 
 from qtpy.QtCore import Signal
+from .._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMessageBox,
@@ -91,8 +92,8 @@ class DeadlineLoginDialog(QMessageBox):
         self.login_thread_succeeded.connect(self.handle_login_thread_succeeded)
         self.buttonClicked.connect(self.on_button_clicked)
 
-        self.setWindowTitle("Log in to AWS Deadline Cloud")
-        self.setText("Logging you in...")
+        self.setWindowTitle(tr("Log in to AWS Deadline Cloud"))
+        self.setText(tr("Logging you in..."))
         self.setStandardButtons(QMessageBox.Cancel)
 
         self._start_login()
@@ -111,7 +112,7 @@ class DeadlineLoginDialog(QMessageBox):
                     == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
                 ):
                     self.login_thread_message.emit(
-                        "Opening Deadline Cloud monitor. Please log in before returning here."
+                        tr("Opening Deadline Cloud monitor. Please log in before returning here.")
                     )
 
             def on_cancellation_check():
@@ -144,7 +145,11 @@ class DeadlineLoginDialog(QMessageBox):
         """
         self.setStandardButtons(QMessageBox.Close)
         self.setIcon(QMessageBox.Warning)
-        self.setText(f"Failed to log in to AWS Deadline Cloud:<br/><br/>{html.escape(str(e))}")
+        self.setText(
+            tr("Failed to log in to AWS Deadline Cloud:<br/><br/>{error}").format(
+                error=html.escape(str(e))
+            )
+        )
 
     def handle_login_thread_message(self, message: str) -> None:
         """
@@ -164,7 +169,11 @@ class DeadlineLoginDialog(QMessageBox):
         else:
             self.setStandardButtons(QMessageBox.Ok)
             self.setIcon(QMessageBox.Information)
-            self.setText(f"Successfully logged into: <br/><br/>{html.escape(success_message)}")
+            self.setText(
+                tr("Successfully logged into: <br/><br/>{profile}").format(
+                    profile=html.escape(success_message)
+                )
+            )
 
     def on_button_clicked(self, button):
         if self.standardButton(button) == QMessageBox.Cancel:

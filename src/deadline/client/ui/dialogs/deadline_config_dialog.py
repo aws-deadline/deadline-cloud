@@ -47,7 +47,7 @@ import os
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file, get_setting_default, str2bool
-from .._utils import CancelationFlag, block_signals
+from .._utils import CancelationFlag, block_signals, tr
 from ..widgets import DirectoryPickerWidget
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from .deadline_login_dialog import DeadlineLoginDialog
@@ -92,7 +92,7 @@ class DeadlineConfigDialog(QDialog):
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
-        self.setWindowTitle("AWS Deadline Cloud workstation configuration")
+        self.setWindowTitle(tr("AWS Deadline Cloud workstation configuration"))
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
 
@@ -140,6 +140,9 @@ class DeadlineConfigDialog(QDialog):
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply, Qt.Horizontal
         )
+        self.button_box.button(QDialogButtonBox.Ok).setText(tr("Ok"))
+        self.button_box.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        self.button_box.button(QDialogButtonBox.Apply).setText(tr("Apply"))
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.button_box.clicked.connect(self.on_button_box_clicked)
@@ -258,7 +261,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._refresh_callbacks: List[Callable] = []
 
         # Global settings
-        self.global_settings_group = QGroupBox(parent=self, title="Global settings")
+        self.global_settings_group = QGroupBox(parent=self, title=tr("Global settings"))
         self.global_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
         self.global_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_layout.addWidget(self.global_settings_group)
@@ -266,7 +269,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._build_global_settings_ui(self.global_settings_group, global_settings_layout)
 
         # AWS Profile-specific settings
-        self.profile_settings_group = QGroupBox(parent=self, title="Profile settings")
+        self.profile_settings_group = QGroupBox(parent=self, title=tr("Profile settings"))
         self.profile_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
         self.profile_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_layout.addWidget(self.profile_settings_group)
@@ -274,7 +277,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._build_profile_settings_ui(self.profile_settings_group, profile_settings_layout)
 
         # Farm-specific settings
-        self.farm_settings_group = QGroupBox(parent=self, title="Farm settings")
+        self.farm_settings_group = QGroupBox(parent=self, title=tr("Farm settings"))
         self.farm_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
         self.farm_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_layout.addWidget(self.farm_settings_group)
@@ -282,7 +285,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._build_farm_settings_ui(self.farm_settings_group, farm_settings_layout)
 
         # General settings
-        self.general_settings_group = QGroupBox(parent=self, title="General settings")
+        self.general_settings_group = QGroupBox(parent=self, title=tr("General settings"))
         self.general_settings_group.setStyleSheet(GROUP_BOX_STYLE_SHEET)
         self.general_settings_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.v_layout.addWidget(self.general_settings_group)
@@ -298,7 +301,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.aws_profiles_box = QComboBox(parent=group)
-        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel("AWS profile")
+        aws_profile_label = self.labels["defaults.aws_profile_name"] = QLabel(tr("AWS profile"))
         layout.addRow(aws_profile_label, self.aws_profiles_box)
         self.aws_profiles_box.currentTextChanged.connect(self.aws_profile_changed)
 
@@ -307,18 +310,18 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         self.job_history_dir_edit = DirectoryPickerWidget(
             initial_directory="",
-            directory_label="Job history directory",
+            directory_label=tr("Job history directory"),
             parent=group,
             collapse_user_dir=True,
         )
         job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel(
-            "Job history directory"
+            tr("Job history directory")
         )
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
         self.default_farm_box = DeadlineFarmListComboBox(parent=group)
-        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel("Default farm")
+        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel(tr("Default farm"))
         self.default_farm_box.box.currentIndexChanged.connect(self.default_farm_changed)
         self.default_farm_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_farm_box_label, self.default_farm_box)
@@ -327,14 +330,14 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.default_queue_box = DeadlineQueueListComboBox(parent=group)
-        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel("Default queue")
+        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel(tr("Default queue"))
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
         self.default_queue_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_queue_box_label, self.default_queue_box)
 
         self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
         default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
-            "Default storage profile"
+            tr("Default storage profile")
         )
         self.default_storage_profile_box.box.currentIndexChanged.connect(
             self.default_storage_profile_name_changed
@@ -359,7 +362,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group=group,
             layout=layout,
             setting_name="defaults.job_attachments_file_system",
-            label_text="Job attachments filesystem options",
+            label_text=tr("Job attachments filesystem options"),
             label_tooltip=job_attachments_file_system_tooltip,
             values_with_tooltips=values_with_tooltips,
         )
@@ -368,10 +371,10 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.auto_accept = self._init_checkbox_setting(
-            group, layout, "settings.auto_accept", "Auto accept prompt defaults"
+            group, layout, "settings.auto_accept", tr("Auto accept prompt defaults")
         )
         self.telemetry_opt_out = self._init_checkbox_setting(
-            group, layout, "telemetry.opt_out", "Telemetry opt out"
+            group, layout, "telemetry.opt_out", tr("Telemetry opt out")
         )
 
         self._conflict_resolution_options = [option.name for option in FileConflictResolution]
@@ -379,7 +382,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group,
             layout,
             "settings.conflict_resolution",
-            "Conflict resolution option",
+            tr("Conflict resolution option"),
             self._conflict_resolution_options,
         )
 
@@ -388,12 +391,12 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group,
             layout,
             "settings.log_level",
-            "Current logging level",
+            tr("Current logging level"),
             self._log_levels,
         )
 
         # Known asset paths section
-        known_paths_label = QLabel("Known asset paths")
+        known_paths_label = QLabel(tr("Known asset paths"))
         known_paths_label.setToolTip(
             "Paths that should not generate warnings when outside storage profile locations"
         )
@@ -406,11 +409,11 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         # Add buttons and status label
         button_layout = QHBoxLayout()
-        self.add_known_path_button = QPushButton("Add...")
+        self.add_known_path_button = QPushButton(tr("Add..."))
         self.add_known_path_button.clicked.connect(self._on_add_known_path)
-        self.edit_known_path_button = QPushButton("Edit...")
+        self.edit_known_path_button = QPushButton(tr("Edit..."))
         self.edit_known_path_button.clicked.connect(self._on_edit_known_path)
-        self.remove_known_path_button = QPushButton("Remove Selected")
+        self.remove_known_path_button = QPushButton(tr("Remove Selected"))
         self.remove_known_path_button.clicked.connect(self._on_remove_known_path)
         self.known_paths_status = QLabel()
         button_layout.addWidget(self.add_known_path_button)

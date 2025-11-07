@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QWidget,
 )
 from qtpy.QtCore import Signal
+from .._utils import tr
 from ..dataclasses.timeouts import TimeoutTableEntries
 
 # UI Constants
@@ -213,7 +214,7 @@ class TimeoutTableWidget(QGroupBox):
     """
 
     def __init__(self, *, timeouts: TimeoutTableEntries, parent: Optional[QWidget] = None):
-        super().__init__("Timeouts", parent=parent)
+        super().__init__(tr("Timeouts"), parent=parent)
         self.timeout_rows: Dict[str, TimeoutEntryWidget] = {}
         self._build_ui(timeouts)
         self.refresh_ui(timeouts)
@@ -282,7 +283,7 @@ class TimeoutTableWidget(QGroupBox):
             row.get_timeout_seconds() == 0 and row.checkbox.isChecked()
             for row in self.timeout_rows.values()
         )
-        self.error_label.setText("Error: Timeout cannot be set to zero." if any_zero else "")
+        self.error_label.setText(tr("Error: Timeout cannot be set to zero.") if any_zero else "")
         self.error_label.setVisible(any_zero)
 
     def _update_warning_states(self):

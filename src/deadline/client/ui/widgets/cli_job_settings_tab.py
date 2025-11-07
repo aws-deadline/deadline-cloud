@@ -8,6 +8,7 @@ import os
 from typing import Optional
 
 from qtpy.QtCore import Qt  # type: ignore
+from .._utils import tr
 from qtpy.QtWidgets import (  # type: ignore
     QCheckBox,
     QComboBox,
@@ -63,18 +64,18 @@ class CliJobSettingsWidget(QWidget):
 
         layout.addWidget(self.bash_script, 0, 0, 1, 2)
 
-        self.use_array_parameter_chck = QCheckBox("Use array parameter", self)
+        self.use_array_parameter_chck = QCheckBox(tr("Use array parameter"), self)
         self.array_parameter_name = QLineEdit(self)
         layout.addWidget(self.use_array_parameter_chck, 1, 0)
         layout.addWidget(self.array_parameter_name, 1, 1)
         self.use_array_parameter_chck.stateChanged.connect(self.use_array_parameter_changed)
 
-        self.array_parameter_values_label = QLabel("Array parameter values")
+        self.array_parameter_values_label = QLabel(tr("Array parameter values"))
         layout.addWidget(self.array_parameter_values_label, 2, 0)
         self.array_parameter_values = QLineEdit(self)
         layout.addWidget(self.array_parameter_values, 2, 1)
 
-        self.data_dir_label = QLabel("Data directory")
+        self.data_dir_label = QLabel(tr("Data directory"))
         self.data_dir_edit = DirectoryPickerWidget(
             initial_directory=os.path.expanduser(os.path.join("~", "CLIJobData")),
             directory_label="Data directory",
@@ -83,7 +84,7 @@ class CliJobSettingsWidget(QWidget):
         layout.addWidget(self.data_dir_label, 3, 0)
         layout.addWidget(self.data_dir_edit, 3, 1)
 
-        self.file_format_label = QLabel("Template file format")
+        self.file_format_label = QLabel(tr("Template file format"))
         self.file_format_box = QComboBox(parent=self)
         self.file_format_box.addItems(["YAML", "JSON"])
         layout.addWidget(self.file_format_label, 4, 0)

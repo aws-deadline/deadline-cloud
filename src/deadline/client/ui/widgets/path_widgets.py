@@ -14,7 +14,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from .._utils import block_signals
+from .._utils import block_signals, tr
 
 
 class _FileWidget(QWidget):
@@ -44,7 +44,7 @@ class _FileWidget(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.filename_edit)
-        self.choose_file_button = QPushButton("...")
+        self.choose_file_button = QPushButton(tr("..."))
         self.choose_file_button.setFixedSize(30, 22)
         layout.addWidget(self.choose_file_button)
         self.filename_edit.editingFinished.connect(self.on_filename_edited)

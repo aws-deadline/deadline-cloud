@@ -13,6 +13,7 @@ from logging import getLogger
 from typing import Callable, Union, Dict, Optional
 
 from qtpy.QtCore import Signal
+from .._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QHBoxLayout,
     QLabel,
@@ -183,15 +184,15 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
 
         layout.addStretch()
 
-        self._switch_profile_button = QPushButton("Switch profile")
+        self._switch_profile_button = QPushButton(tr("Switch profile"))
         self._switch_profile_button.clicked.connect(self.switch_profile_clicked.emit)
         layout.addWidget(self._switch_profile_button)
 
-        self._login_button = QPushButton("Log in")
+        self._login_button = QPushButton(tr("Log in"))
         self._login_button.clicked.connect(self.login_clicked.emit)
         layout.addWidget(self._login_button)
 
-        self._more_info_button = QPushButton("More info")
+        self._more_info_button = QPushButton(tr("More info"))
         self._more_info_button.clicked.connect(self._show_more_info)
         layout.addWidget(self._more_info_button)
 
@@ -241,24 +242,30 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
             ),
             AuthenticationState.AUTHENTICATED_NO_API: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=lambda: f"{self._get_profile_name()} doesn't have access permissions to submit a job.",
+                text=lambda: tr(
+                    "{profile} doesn't have access permissions to submit a job."
+                ).format(profile=self._get_profile_name()),
                 logout_visible=self._should_show_logout,
                 more_info_visible=True,
             ),
             AuthenticationState.NEEDS_LOGIN: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=f"{self._get_profile_name()}  -  You are logged out.",
+                text=tr("{profile}  -  You are logged out.").format(
+                    profile=self._get_profile_name()
+                ),
                 switch_profile_button_visible=True,
                 login_visible=True,
             ),
             AuthenticationState.CONFIGURATION_ERROR: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=lambda: f"A configuration error was received while accessing credentials for the profile '{self._get_profile_name()}'.",
+                text=lambda: tr(
+                    "A configuration error was received while accessing credentials for the profile '{profile}'."
+                ).format(profile=self._get_profile_name()),
                 more_info_visible=True,
             ),
             AuthenticationState.UNEXPECTED_ERROR: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text="There was an error with authentication",
+                text=tr("There was an error with authentication"),
                 more_info_visible=True,
             ),
         }
@@ -307,29 +314,14 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
         # Determine the current authentication state and provide appropriate help
         if current_state == AuthenticationState.AUTHENTICATED_NO_API:
             # Authenticated but no API availability - permissions issue or possibly configuration issue
-            title = "Unable to Call AWS Deadline Cloud API"
-            message = (
-                f"You are authenticated with the profile '{self._get_profile_name()}', "
-                "but this profile is unable to call AWS Deadline Cloud ListFarms and unable to submit jobs to AWS Deadline Cloud.\n\n"
-                "To resolve this issue:\n\n"
-                "• Check that there aren't any environment variables pointing to the wrong AWS region (e.g., AWS_DEFAULT_REGION)\n"
-                "• If you are not using a Deadline Cloud Monitor profile, check that the profile has permissions for these AWS Deadline Cloud APIs needed for submitting:\n"
-                "  • deadline:AssumeQueueRoleForUser\n"
-                "  • deadline:CreateJob\n"
-                "  • deadline:GetJob\n"
-                "  • deadline:GetQueue\n"
-                "  • deadline:GetQueueEnvironment\n"
-                "  • deadline:GetStorageProfileForQueue\n"
-                "  • deadline:GetStorageProfile\n"
-                "  • deadline:ListFarms\n"
-                "  • deadline:ListQueues\n"
-                "  • deadline:ListQueueEnvironments\n"
-                "  • deadline:ListStorageProfilesForQueue"
-            )
+            title = tr("Unable to Call AWS Deadline Cloud API")
+            message = tr(
+                "You are authenticated with the profile '{profile}', but this profile is unable to call AWS Deadline Cloud ListFarms and unable to submit jobs to AWS Deadline Cloud.\n\nTo resolve this issue:\n• Check that there aren't any environment variables pointing to the wrong AWS region (e.g., AWS_DEFAULT_REGION)\n• If you are not using a Deadline Cloud Monitor profile, check that the profile has permissions for these AWS Deadline Cloud APIs needed for submitting:\n  • deadline:AssumeQueueRoleForUser\n  • deadline:CreateJob\n  • deadline:GetJob\n  • deadline:GetQueue\n  • deadline:GetQueueEnvironment\n  • deadline:GetStorageProfileForQueue\n  • deadline:GetStorageProfile\n  • deadline:ListFarms\n  • deadline:ListQueues\n  • deadline:ListQueueEnvironments\n  • deadline:ListStorageProfilesForQueue"
+            ).format(profile=self._get_profile_name())
         elif self._status.auth_status == api.AwsAuthenticationStatus.CONFIGURATION_ERROR:
-            title = "Issue With Profile Configuration"
-            message = (
-                f"There is a configuration issue with the profile '{self._get_profile_name()}'.\n\n"
+            title = tr("Issue With Profile Configuration")
+            message = tr(
+                "There is a configuration issue with the profile '{profile}'.\n\n"
                 "To resolve this issue:\n"
                 "• Verify your AWS config and credentials files are correct\n"
                 "  • By default these files can be found in ~/.aws on Linux/MacOS or %USERPROFILE%/.aws on Windows\n"
@@ -338,16 +330,16 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 "• If you are not using a Deadline Cloud Monitor profile:\n"
                 "  • Verify that any credential process being used is able to retrieve the credentials or that they aren't expired\n"
                 "    • You can run the following command to check: aws sts get-caller-identity --profile <PROFILE_NAME>"
-            )
+            ).format(profile=self._get_profile_name())
         else:
-            title = "Unknown Issue With Configured Profile"
-            message = (
-                f"There was an unknown issue when trying to authenticate with the profile '{self._get_profile_name()}'.\n\n"
+            title = tr("Unknown Issue With Configured Profile")
+            message = tr(
+                "There was an unknown issue when trying to authenticate with the profile '{profile}'.\n\n"
                 "Check any available console logs for errors to try and diagnose the problem.\n"
                 "Logs are commonly found:\n"
                 "  • In the terminal that the dialog or software the submitter is running in was launched from"
                 "  • In the built-in console within the software that the submitter is running in"
-            )
+            ).format(profile=self._get_profile_name())
 
         # Show the message box
         msg_box = QMessageBox(self)

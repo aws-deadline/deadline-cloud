@@ -31,7 +31,7 @@ from .submit_job_progress_dialog import SubmitJobProgressDialog
 from ..dataclasses import HostRequirements
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
-from .._utils import block_signals
+from .._utils import block_signals, tr
 from ...config import get_setting, set_setting, config_file
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
@@ -118,7 +118,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
-        self.setWindowTitle("Submit to AWS Deadline Cloud")
+        self.setWindowTitle(tr("Submit to AWS Deadline Cloud"))
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
@@ -214,13 +214,13 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
 
         self.button_box = QDialogButtonBox(Qt.Horizontal)
-        self.settings_button = QPushButton("Settings...")
+        self.settings_button = QPushButton(tr("Settings..."))
         self.settings_button.clicked.connect(self.on_settings_button_clicked)
         self.button_box.addButton(self.settings_button, QDialogButtonBox.ResetRole)
-        self.submit_button = QPushButton("Submit")
+        self.submit_button = QPushButton(tr("Submit"))
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
-        self.export_bundle_button = QPushButton("Export bundle")
+        self.export_bundle_button = QPushButton(tr("Export bundle"))
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
@@ -242,22 +242,26 @@ class SubmitJobToDeadlineDialog(QDialog):
             issues = []
             if not api_available:
                 issues.append(
-                    "AWS Deadline Cloud API is not accessible. Check your authentication status."
+                    tr(
+                        "AWS Deadline Cloud API is not accessible. Check your authentication status."
+                    )
                 )
             if not farm_configured:
                 issues.append(
-                    "No farm is configured. Click Settings to select a farm for job submission."
+                    tr("No farm is configured. Click Settings to select a farm for job submission.")
                 )
             if not queue_configured:
                 issues.append(
-                    "No queue is configured. Click Settings to select a queue within your farm."
+                    tr("No queue is configured. Click Settings to select a queue within your farm.")
                 )
             if farm_configured and queue_configured and not queue_valid:
                 issues.append(
-                    "Queue parameters are not valid. Check Shared job settings tab for details."
+                    tr("Queue parameters are not valid. Check Shared job settings tab for details.")
                 )
 
-            self.submit_button.setToolTip("Cannot submit job:\n\n• " + "\n\n• ".join(issues))
+            self.submit_button.setToolTip(
+                tr("Cannot submit job:\n\n• {issues}").format(issues="\n\n• ".join(issues))
+            )
         else:
             self.submit_button.setToolTip("")
 
@@ -281,7 +285,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def _build_shared_job_settings_tab(self, initial_job_settings, initial_shared_parameter_values):
         self.shared_job_settings_tab = QScrollArea()
-        self.tabs.addTab(self.shared_job_settings_tab, "Shared job settings")
+        self.tabs.addTab(self.shared_job_settings_tab, tr("Shared job settings"))
         self.shared_job_settings = SharedJobSettingsWidget(
             initial_settings=initial_job_settings,
             initial_shared_parameter_values=initial_shared_parameter_values,
@@ -294,7 +298,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
     def _build_job_settings_tab(self, job_setup_widget_type, initial_job_settings):
         self.job_settings_tab = QScrollArea()
-        self.tabs.addTab(self.job_settings_tab, "Job-specific settings")
+        self.tabs.addTab(self.job_settings_tab, tr("Job-specific settings"))
         self.job_settings_tab.setWidgetResizable(True)
 
         self.job_settings = job_setup_widget_type(
@@ -308,7 +312,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self, auto_detected_attachments: AssetReferences, attachments: AssetReferences
     ):
         self.job_attachments_tab = QScrollArea()
-        self.tabs.addTab(self.job_attachments_tab, "Job attachments")
+        self.tabs.addTab(self.job_attachments_tab, tr("Job attachments"))
         self.job_attachments = JobAttachmentsWidget(
             auto_detected_attachments, attachments, parent=self
         )
@@ -318,7 +322,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     def _build_host_requirements_tab(self, host_requirements: Optional[HostRequirements]):
         self.host_requirements = HostRequirementsWidget()
         self.host_requirements_tab = QScrollArea()
-        self.tabs.addTab(self.host_requirements_tab, "Host requirements")
+        self.tabs.addTab(self.host_requirements_tab, tr("Host requirements"))
         self.host_requirements_tab.setWidget(self.host_requirements)
         self.host_requirements_tab.setWidgetResizable(True)
         if host_requirements:
@@ -433,19 +437,25 @@ class SubmitJobToDeadlineDialog(QDialog):
                 os.startfile(self.job_history_bundle_dir)
             QMessageBox.information(
                 self,
-                f"{self.submitter_name} job submission",
-                f"Saved the submission as a job bundle:\n{self.job_history_bundle_dir}",
+                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                tr("Saved the submission as a job bundle:\n{path}").format(
+                    path=self.job_history_bundle_dir
+                ),
             )
             # Close the submitter window to signal the submission is done
             self.close()
 
         except NonValidInputError as nvie:
-            QMessageBox.critical(self, "Non valid inputs detected", str(nvie))
+            QMessageBox.critical(self, tr("Non valid inputs detected"), str(nvie))
 
         except Exception as exc:
             logger.exception("Error saving bundle")
             message = str(exc)
-            QMessageBox.critical(self, f"{self.submitter_name} job submission", message)  # type: ignore[call-arg]
+            QMessageBox.critical(
+                self,
+                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                message,
+            )  # type: ignore[call-arg]
 
     def save_job_parameters_to_job_bundle(
         self, job_bundle_dir: str, job_parameters: list[JobParameter]
@@ -546,10 +556,14 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
-            QMessageBox.information(self, f"{self.submitter_name} job submission", str(uic))
+            QMessageBox.information(
+                self,
+                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                str(uic),
+            )
             job_progress_dialog.close()
         except NonValidInputError as nvie:
-            QMessageBox.critical(self, "Non valid inputs detected", str(nvie))
+            QMessageBox.critical(self, tr("Non valid inputs detected"), str(nvie))
             job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
@@ -558,5 +572,9 @@ class SubmitJobToDeadlineDialog(QDialog):
                 exception_type=str(type(exc)),
                 from_gui=True,
             )
-            QMessageBox.critical(self, f"{self.submitter_name} job submission", str(exc))  # type: ignore[call-arg]
+            QMessageBox.critical(
+                self,
+                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                str(exc),
+            )  # type: ignore[call-arg]
             job_progress_dialog.close()

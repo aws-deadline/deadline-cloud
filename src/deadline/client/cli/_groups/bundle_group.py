@@ -356,13 +356,16 @@ def bundle_gui_submit(
 
     """
     from ...ui import gui_context_for_cli
+    from ...ui._utils import tr
 
     with gui_context_for_cli(automatically_install_dependencies=install_gui) as app:
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
         if not job_bundle_dir and not browse:
             raise DeadlineOperationError(
-                "Specify a job bundle directory or run the bundle command with the --browse flag"
+                tr(
+                    "Specify a job bundle directory or run the bundle command with the --browse flag"
+                )
             )
         output = output.lower()
 

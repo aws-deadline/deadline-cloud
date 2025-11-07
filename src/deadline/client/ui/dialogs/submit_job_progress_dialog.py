@@ -31,7 +31,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QSizePolicy,
 )
 
-from .._utils import CancelationFlag
+from .._utils import CancelationFlag, tr
 from ... import api
 from ...config import set_setting
 from ....job_attachments.progress_tracker import ProgressReportMetadata
@@ -206,13 +206,15 @@ class SubmitJobProgressDialog(QDialog):
         self.setMinimumWidth(600)
         self.setMinimumHeight(700)
 
-        self.status_label = QLabel("Preparing files...")
+        self.status_label = QLabel(tr("Preparing files..."))
         self.status_label.setMargin(5)
         self.hashing_progress = JobAttachmentsProgressWidget(
-            initial_message="Preparing for hashing...", title="Hashing progress", parent=self
+            initial_message=tr("Preparing for hashing..."),
+            title=tr("Hashing progress"),
+            parent=self,
         )
         self.upload_progress = JobAttachmentsProgressWidget(
-            initial_message="Preparing for upload...", title="Upload progress", parent=self
+            initial_message=tr("Preparing for upload..."), title=tr("Upload progress"), parent=self
         )
         self.submission_log = QTextEdit()
         self.submission_log.setReadOnly(True)
@@ -226,7 +228,7 @@ class SubmitJobProgressDialog(QDialog):
         self.lyt.addWidget(self.submission_log)
         self.lyt.addWidget(self.button_box)
 
-        self.setWindowTitle("AWS Deadline Cloud submission")
+        self.setWindowTitle(tr("AWS Deadline Cloud submission"))
 
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.close)
@@ -286,7 +288,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         if job_id:
             self._submission_complete = True
-            self.status_label.setText("Submission complete")
+            self.status_label.setText(tr("Submission complete"))
             self.button_box.setStandardButtons(QDialogButtonBox.Ok)
             self.button_box.button(QDialogButtonBox.Ok).setDefault(True)
             self.button_box.button(QDialogButtonBox.Ok).clicked.connect(
@@ -294,9 +296,9 @@ class SubmitJobProgressDialog(QDialog):
             )
         else:
             if self.cancelation_flag or self._warning_dialog_canceled:
-                self.status_label.setText("Submission canceled")
+                self.status_label.setText(tr("Submission canceled"))
             else:
-                self.status_label.setText("Submission error")
+                self.status_label.setText(tr("Submission error"))
             self.button_box.setStandardButtons(QDialogButtonBox.Close)
             self.button_box.button(QDialogButtonBox.Close).setDefault(True)
 
@@ -321,7 +323,7 @@ class SubmitJobProgressDialog(QDialog):
         else:
             self.cancelation_flag.set_canceled()
             logger.info("Canceling submission...")
-            self.status_label.setText("Canceling submission...")
+            self.status_label.setText(tr("Canceling submission..."))
             if self.__submission_thread is not None:
                 while self.__submission_thread.is_alive():
                     QApplication.instance().processEvents()  # type: ignore[union-attr]
@@ -376,7 +378,7 @@ class _JobSumissionWarningDialog(QDialog):
                 False if the default response should be to Cancel.
         """
         super().__init__()
-        self.setWindowTitle("Job Submission Confirmation")
+        self.setWindowTitle(tr("Job Submission Confirmation"))
         self.message = message
         self.default_response = default_response
         self.buttons = None
@@ -391,7 +393,7 @@ class _JobSumissionWarningDialog(QDialog):
             .pixmap(32, 32)
         )
         top_layout.addWidget(icon_label)
-        title_label = QLabel("Job submission confirmation")
+        title_label = QLabel(tr("Job submission confirmation"))
         title_label.setStyleSheet("font-weight: bold;")
         top_layout.addWidget(title_label)
         top_layout.addStretch()
@@ -414,7 +416,7 @@ class _JobSumissionWarningDialog(QDialog):
 
         if default_response:
             # If the default response is to continue, add the "Do not ask again" button
-            dont_ask_button = QPushButton("Do not ask again", self)
+            dont_ask_button = QPushButton(tr("Do not ask again"), self)
             dont_ask_button.clicked.connect(lambda: set_setting("settings.auto_accept", "true"))
             dont_ask_button.clicked.connect(self.accept)
             self.buttons.addButton(dont_ask_button, QDialogButtonBox.ActionRole)

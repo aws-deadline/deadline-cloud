@@ -6,6 +6,7 @@ import shutil
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from typing import Any
+import json
 
 
 class HatchCustomBuildHook(BuildHookInterface):
@@ -24,8 +25,42 @@ class HatchCustomBuildHook(BuildHookInterface):
                 + f" Received:\n{self.config}"
             )
 
+    def _compile_translations(self):
+        """
+        Generates types for translation strings based on the English translation JSON file. The types
+        give feedback during development and validation during linting that all translated strings are
+        part of the translation files.
+        """
+        translations_dir = os.path.join(
+            self.root, "src", "deadline", "client", "ui", "translations", "locales"
+        )
+
+        # Load en_US as the source for type generation
+        en_file = os.path.join(translations_dir, "en_US.json")
+        with open(en_file) as f:
+            translations = json.load(f)
+
+        # Generate type hints file
+        keys = list(translations.keys())
+        # Escape for Python string literals: backslashes, quotes, newlines
+        escaped_keys = [
+            k.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") for k in keys
+        ]
+        type_file = os.path.join(
+            self.root, "src", "deadline", "client", "ui", "_translation_keys.py"
+        )
+
+        with open(type_file, "w", encoding="utf-8") as f:
+            f.write("# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.\n")
+            f.write("# Auto-generated from locales/en_US.json - DO NOT EDIT\n\n")
+            f.write("from typing import Literal\n\n")
+            f.write("TranslationKey = Literal[\n")
+            f.write(",\n".join(f'    "{k}"' for k in escaped_keys))
+            f.write("\n]\n")
+
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         self._validate_config()
+        self._compile_translations()
 
         for destination in self.config["copy_version_py"]["destinations"]:
             print(f"Copying _version.py to {destination}")
