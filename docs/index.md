@@ -233,13 +233,16 @@ $ deadline job logs --session-id session-12345 --start-time 2023-01-01T12:00:00Z
 $ deadline job logs --session-id session-12345 --output json
 
 # Get logs with timestamps in local timezone (default is UTC)
-$ deadline job logs --session-id session-12345 --timezone local
+$ deadline job logs --session-id session-12345 --timestamp-format local
 
 # Get logs with explicit UTC timestamps (default behavior)
-$ deadline job logs --session-id session-12345 --timezone utc
+$ deadline job logs --session-id session-12345 --timestamp-format utc
 
-# Combine timezone option with JSON output
-$ deadline job logs --session-id session-12345 --timezone local --output json
+# Get logs with relative timestamps
+$ deadline job logs --session-id session-12345 --timestamp-format relative
+
+# Combine timestamp format option with JSON output
+$ deadline job logs --session-id session-12345 --timestamp-format local --output json
 
 # Paginate through logs
 $ deadline job logs --session-id session-12345 --next-token next-token-value
@@ -249,9 +252,10 @@ $ deadline job logs --session-id session-12345 --next-token next-token-value
 - UTC format: `2025-07-03T10:49:33.821306+00:00`
 - Local format: `2025-07-03T03:49:33.821306-07:00` (example for PST)
 
-**Timezone Options**:
-- `--timezone utc` (default): Display timestamps in UTC with `+00:00` offset
-- `--timezone local`: Display timestamps converted to your local system timezone
+**Timestamp Format Options**:
+- `--timestamp-format utc` (default): Display timestamps in UTC with `+00:00` offset
+- `--timestamp-format local`: Display timestamps converted to your local system timezone
+- `--timestamp-format relative`: Display timestamps relative to the session or session action start time
 
 When using a Deadline Cloud monitor profile, the `job logs` command will use the Queue role credentials to read logs. Otherwise, the chosen profile credentials are used for all API invocations. This allows you to access logs with the appropriate permissions based on your authentication method.
 
