@@ -403,6 +403,7 @@ def assert_progress_tracker_values(
             skipped_bytes=0,
             transfer_rate=expected_total_bytes / summary_statistics.total_time,
             file_counts_by_root_directory=file_counts_by_root_directory,
+            downloaded_files=sorted([str(path) for path in expected_files_set]),
         )
     else:
         # If the manifest version does not support `size` and `total_size` properties,
@@ -420,6 +421,7 @@ def assert_progress_tracker_values(
             skipped_bytes=0,
             transfer_rate=0.0,
             file_counts_by_root_directory=file_counts_by_root_directory,
+            downloaded_files=sorted([str(path) for path in expected_files_set]),
         )
 
     actual_args, _ = mock_on_downloading_files.call_args
