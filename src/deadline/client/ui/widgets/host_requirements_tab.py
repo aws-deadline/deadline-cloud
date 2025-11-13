@@ -663,7 +663,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
             minimum = self.minimum
             maximum = self.maximum
 
-            if minimum and maximum:
+            if minimum is not None and maximum is not None:
                 requirement["min"] = minimum
                 requirement["max"] = maximum
 
@@ -671,9 +671,9 @@ class CustomAmountWidget(CustomCapabilityWidget):
                     raise NonValidInputError(
                         "Please make sure that the custom amounts in the custom host requirement options have valid min/max ranges!"
                     )
-            elif minimum:
+            elif minimum is not None:
                 requirement["min"] = minimum
-            elif maximum:
+            elif maximum is not None:
                 requirement["max"] = maximum
 
             parsed_name_match = re.match(AMOUNT_CAPABILITY_NAME_REGEX, self.name)

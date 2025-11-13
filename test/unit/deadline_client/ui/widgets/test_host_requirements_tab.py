@@ -232,3 +232,61 @@ def test_name_in_custom_attribute_widget_should_not_allow_reserved_first_identif
             == "Please make sure that the first identifier in your name is not a reserved identifier. "
             + str(RESERVED_FIRST_IDENTIFIERS)
         )
+
+
+def test_custom_amount_widget_includes_zero_minimum(qtbot):
+    widget = CustomAmountWidget(MagicMock(), 1)
+    qtbot.addWidget(widget)
+
+    widget.name_line_edit.setText("test.amount")
+    widget.min_spin_box.setValue(0)
+    widget.max_spin_box.setValue(10)
+
+    requirement = widget.get_requirement()
+
+    assert requirement["name"] == AMOUNT_CAPABILITY_PREFIX + "test.amount"
+    assert requirement["min"] == 0
+    assert requirement["max"] == 10
+
+
+def test_custom_amount_widget_includes_zero_maximum(qtbot):
+    widget = CustomAmountWidget(MagicMock(), 1)
+    qtbot.addWidget(widget)
+
+    widget.name_line_edit.setText("test.amount")
+    widget.min_spin_box.setValue(0)
+    widget.max_spin_box.setValue(0)
+
+    requirement = widget.get_requirement()
+
+    assert requirement["name"] == AMOUNT_CAPABILITY_PREFIX + "test.amount"
+    assert requirement["min"] == 0
+    assert requirement["max"] == 0
+
+
+def test_custom_amount_widget_includes_zero_only_minimum(qtbot):
+    widget = CustomAmountWidget(MagicMock(), 1)
+    qtbot.addWidget(widget)
+
+    widget.name_line_edit.setText("test.amount")
+    widget.min_spin_box.setValue(0)
+
+    requirement = widget.get_requirement()
+
+    assert requirement["name"] == AMOUNT_CAPABILITY_PREFIX + "test.amount"
+    assert requirement["min"] == 0
+    assert "max" not in requirement
+
+
+def test_custom_amount_widget_includes_zero_only_maximum(qtbot):
+    widget = CustomAmountWidget(MagicMock(), 1)
+    qtbot.addWidget(widget)
+
+    widget.name_line_edit.setText("test.amount")
+    widget.max_spin_box.setValue(0)
+
+    requirement = widget.get_requirement()
+
+    assert requirement["name"] == AMOUNT_CAPABILITY_PREFIX + "test.amount"
+    assert requirement["max"] == 0
+    assert "min" not in requirement
