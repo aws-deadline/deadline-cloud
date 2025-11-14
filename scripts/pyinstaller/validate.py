@@ -239,18 +239,14 @@ class Allowlist:
                     f"{dep}/*",
                     f"**/{dep}.pyd",
                     f"**/_{dep}.pyd",
-                    f"_internal/cli/_internal/{dep}-*.dist-info/**/*",
-                    f"_internal/cli/_internal/{dep}-*.dist-info/*",
-                    f"_internal/cli/_internal/{dep}/**/*",
-                    f"_internal/cli/_internal/{dep}/*",
+                    f"_internal/{dep}-*.dist-info/**/*",
+                    f"_internal/{dep}-*.dist-info/*",
+                    f"_internal/{dep}/**/*",
+                    f"_internal/{dep}/*",
                     f"_internal/lib-dynload/{dep}.cpython-3*-x86_64-linux-gnu.so",
-                    f"_internal/cli/_internal/lib-dynload/{dep}.cpython-3*-x86_64-linux-gnu.so",
                     f"_internal/lib-dynload/{dep}.cpython-3*-darwin.so",
-                    f"_internal/cli/_internal/lib-dynload/{dep}.cpython-3*-darwin.so",
                     f"_internal/lib-dynload/_{dep}.cpython-3*-x86_64-linux-gnu.so",
-                    f"_internal/cli/_internal/lib-dynload/_{dep}.cpython-3*-x86_64-linux-gnu.so",
                     f"_internal/lib-dynload/_{dep}.cpython-3*-darwin.so",
-                    f"_internal/cli/_internal/lib-dynload/_{dep}.cpython-3*-darwin.so",
                 ]
             )
 
