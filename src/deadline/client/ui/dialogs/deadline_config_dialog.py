@@ -395,6 +395,48 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self._log_levels,
         )
 
+        # Locale selector
+        self._locales = [
+            ("", "System Default"),
+            ("de_DE", "Deutsch (Deutschland)"),
+            ("en_US", "English (United States)"),
+            ("es_ES", "Español (España)"),
+            ("fr_FR", "Français (France)"),
+            ("id_ID", "Bahasa Indonesia (Indonesia)"),
+            ("it_IT", "Italiano (Italia)"),
+            ("ja_JP", "日本語 (日本)"),
+            ("ko_KR", "한국어 (대한민국)"),
+            ("pt_BR", "Português (Brasil)"),
+            ("tr_TR", "Türkçe (Türkiye)"),
+            ("zh_CN", "中文 (简体)"),
+            ("zh_TW", "中文 (繁體)"),
+        ]
+        self.locale_box = self._init_combobox_setting_with_display_names(
+            group,
+            layout,
+            "settings.locale",
+            tr("Language"),
+            self._locales,
+        )
+
+        # Add message label for language change notification
+        self.locale_change_message = QLabel()
+        self.locale_change_message.setStyleSheet("QLabel { font-style: italic; }")
+        self.locale_change_message.hide()
+        layout.addRow("", self.locale_change_message)
+
+        # Add refresh callback for locale message
+        def refresh_locale_message():
+            if "settings.locale" in self.changes:
+                self.locale_change_message.setText(
+                    tr("Language will change next time the submitter is opened")
+                )
+                self.locale_change_message.show()
+            else:
+                self.locale_change_message.hide()
+
+        self._refresh_callbacks.append(refresh_locale_message)
+
         # Known asset paths section
         known_paths_label = QLabel(tr("Known asset paths"))
         known_paths_label.setToolTip(
@@ -600,6 +642,51 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         combo_box.currentTextChanged.connect(combo_box_changed)
 
+        self._refresh_callbacks.append(refresh_combo_box)
+
+    def _init_combobox_setting_with_display_names(
+        self,
+        group: QWidget,
+        layout: QFormLayout,
+        setting_name: str,
+        label_text: str,
+        values_with_display_names: List[tuple],
+    ):
+        """
+        Creates a combobox setting with separate values and display names.
+
+        Args:
+            group (QWidget): The parent of the combobox
+            layout (QFormLayout): The layout to add a row to for the combobox
+            setting_name (str): The setting name as provided to the config
+            label_text (str): The displayed description
+            values_with_display_names (List[tuple]): List of (value, display_name) tuples
+        """
+        label = QLabel(label_text)
+        combo_box = QComboBox(parent=group)
+        layout.addRow(label, combo_box)
+
+        for value, display_name in values_with_display_names:
+            combo_box.addItem(display_name, value)
+
+        def refresh_combo_box():
+            with block_signals(combo_box):
+                value = config_file.get_setting(setting_name, config=self.config)
+                index = combo_box.findData(value)
+                if index >= 0:
+                    combo_box.setCurrentIndex(index)
+                else:
+                    default = get_setting_default(setting_name, config=self.config)
+                    index = combo_box.findData(default)
+                    if index >= 0:
+                        combo_box.setCurrentIndex(index)
+
+        def combo_box_changed(index):
+            new_value = combo_box.itemData(index)
+            self.changes[setting_name] = new_value
+            self.refresh()
+
+        combo_box.currentIndexChanged.connect(combo_box_changed)
         self._refresh_callbacks.append(refresh_combo_box)
 
     def handle_background_exception(self, title, e):

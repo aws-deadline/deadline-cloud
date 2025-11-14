@@ -25,6 +25,7 @@ CONFIG_SETTING_ROUND_TRIP = [
     ("defaults.aws_profile_name", "(default)", "AnotherProfileName"),
     ("defaults.farm_id", "", "farm-82934h23k4j23kjh"),
     ("defaults.job_attachments_file_system", "COPIED", "VIRTUAL"),
+    ("settings.locale", "", "ja_JP"),
 ]
 
 

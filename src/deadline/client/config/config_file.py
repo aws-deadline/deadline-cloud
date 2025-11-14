@@ -141,6 +141,10 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": "",  # OS-specific path separator delimited list
         "description": "A list of paths that should not generate warnings when outside storage profile locations, separated by the OS path list separator (semicolon on Windows, colon on Linux/macOS).",
     },
+    "settings.locale": {
+        "default": "",
+        "description": "The locale to use for the UI. If empty, uses the system locale.",
+    },
 }
 
 

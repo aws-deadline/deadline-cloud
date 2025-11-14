@@ -1,3 +1,4 @@
+# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 import copy
@@ -94,7 +95,7 @@ def _validate_and_warn_about_parameters(
     if not unrecognized_names:
         return True
 
-    unrecognized_list = "\n".join(f"  • {name}" for name in unrecognized_names)
+    unrecognized_list = "\n".join(f"  \u2022 {name}" for name in unrecognized_names)
     message = tr(
         "The following parameters are not recognized by the job template or queue:\n\n{params}\n\n"
         "These parameters will be ignored during job submission.\n\n"
