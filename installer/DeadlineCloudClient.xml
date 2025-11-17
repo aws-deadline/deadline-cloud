@@ -203,13 +203,9 @@
                                 <compareText logic="equals" text="${installscope}" value="system"/>
                             </conditionRuleList>
                             <actionList>
-                                <changePermissions permissions="0755" files="${installdir}/DeadlineClient/cli/deadline_cli"/>
-                                <changePermissions permissions="0755" files="${installdir}/DeadlineClient/_internal/cli/deadline_cli"/>
                                 <changePermissions permissions="0755" files="${installdir}/DeadlineClient/deadline"/>
                             </actionList>
                             <elseActionList>
-                                <changePermissions permissions="0750" files="${installdir}/DeadlineClient/cli/deadline_cli"/>
-                                <changePermissions permissions="0750" files="${installdir}/DeadlineClient/_internal/cli/deadline_cli"/>
                                 <changePermissions permissions="0750" files="${installdir}/DeadlineClient/deadline"/>
                             </elseActionList>
                         </if>

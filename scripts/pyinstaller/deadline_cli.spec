@@ -10,8 +10,8 @@ import deadline.client
 b_module_path = os.path.dirname(os.path.dirname(deadline.client.__file__))
 
 ROOT = Path(b_module_path).absolute().parents[1]
-EXE_NAME = 'deadline_cli'
-OUTPUT_DIR = 'deadline_cli'
+EXE_NAME = 'deadline'
+OUTPUT_DIR = 'deadline'
 BLOCK_CIPHER = None
 
 datas, binaries, hiddenimports = collect_all('deadline')
