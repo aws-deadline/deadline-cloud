@@ -743,14 +743,19 @@ def test_cli_job_download_output_stdout_with_json_format(
     ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
         api, "get_queue_user_boto3_session"
     ):
+        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=12,
             processed_files=3,
             processed_bytes=1024,
+            downloaded_files=[
+                f"{mock_root_path}/outputs/file1.txt",
+                f"{mock_root_path}/outputs/file2.txt",
+                f"{mock_root_path}/outputs/file3.txt",
+            ],
         )
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
