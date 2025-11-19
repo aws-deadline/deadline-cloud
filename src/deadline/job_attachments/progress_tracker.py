@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from threading import Lock
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from ._path_summarization import human_readable_file_size
 
@@ -76,6 +76,7 @@ class DownloadSummaryStatistics(SummaryStatistics):
     """
 
     file_counts_by_root_directory: Dict[str, int] = field(default_factory=dict)
+    downloaded_files: List[str] = field(default_factory=list)
 
     def aggregate(self, other: SummaryStatistics) -> SummaryStatistics:
         """
@@ -100,6 +101,7 @@ class DownloadSummaryStatistics(SummaryStatistics):
         """
         download_summary_statistics_dict = asdict(self)
         del download_summary_statistics_dict["file_counts_by_root_directory"]
+        del download_summary_statistics_dict["downloaded_files"]
         return SummaryStatistics(**download_summary_statistics_dict)
 
 
@@ -349,6 +351,10 @@ class ProgressTracker:
         summary_statistics_dict["file_counts_by_root_directory"] = {
             root: len(paths) for root, paths in downloaded_files_paths_by_root.items()
         }
+        all_files = []
+        for _, paths in downloaded_files_paths_by_root.items():
+            all_files.extend(paths)
+        summary_statistics_dict["downloaded_files"] = sorted(all_files)
         return DownloadSummaryStatistics(**summary_statistics_dict)
 
     def _log_progress_message(self) -> None:

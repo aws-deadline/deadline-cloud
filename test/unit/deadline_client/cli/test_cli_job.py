@@ -743,14 +743,19 @@ def test_cli_job_download_output_stdout_with_json_format(
     ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
         api, "get_queue_user_boto3_session"
     ):
+        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=12,
             processed_files=3,
             processed_bytes=1024,
+            downloaded_files=[
+                f"{mock_root_path}/outputs/file1.txt",
+                f"{mock_root_path}/outputs/file2.txt",
+                f"{mock_root_path}/outputs/file3.txt",
+            ],
         )
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
@@ -845,6 +850,17 @@ def test_cli_job_download_output_stdout_with_json_format(
         assert expected_json_presummary in parsed_lines
         assert expected_json_path in parsed_lines
         assert expected_json_pathconfirm in parsed_lines
+
+        # Verify the summary includes the files list
+        summary_messages = [msg for msg in parsed_lines if msg.get("messageType") == "summary"]
+        assert len(summary_messages) == 1
+        assert summary_messages[0]["fileCount"] == 3
+        assert summary_messages[0]["files"] == [
+            f"{mock_root_path}/outputs/file1.txt",
+            f"{mock_root_path}/outputs/file2.txt",
+            f"{mock_root_path}/outputs/file3.txt",
+        ]
+
         assert result.exit_code == 0
 
 
@@ -1624,6 +1640,11 @@ class TestJsonLineHelpers:
         summary.total_time = 2.5
         summary.transfer_rate = 409.6
         summary.file_counts_by_root_directory = {"/downloads": 3}
+        summary.downloaded_files = [
+            "/downloads/file1.txt",
+            "/downloads/file2.txt",
+            "/downloads/file3.txt",
+        ]
 
         result = _get_download_summary_message(summary, is_json_format=True)
         parsed = json.loads(result)
@@ -1631,6 +1652,11 @@ class TestJsonLineHelpers:
         assert parsed["messageType"] == "summary"
         assert parsed["value"] == "Downloaded 3 files"
         assert parsed["fileCount"] == 3
+        assert parsed["files"] == [
+            "/downloads/file1.txt",
+            "/downloads/file2.txt",
+            "/downloads/file3.txt",
+        ]
 
     def test_get_download_summary_message_json_zero_files(self):
         """Test _get_download_summary_message with zero files."""
@@ -1638,6 +1664,7 @@ class TestJsonLineHelpers:
 
         summary = DownloadSummaryStatistics()
         summary.processed_files = 0
+        summary.downloaded_files = []
 
         result = _get_download_summary_message(summary, is_json_format=True)
         parsed = json.loads(result)
@@ -1645,6 +1672,39 @@ class TestJsonLineHelpers:
         assert parsed["messageType"] == "summary"
         assert parsed["value"] == "Downloaded 0 files"
         assert parsed["fileCount"] == 0
+        assert parsed["files"] == []
+
+    def test_get_download_summary_message_json_with_files_list(self):
+        """Test _get_download_summary_message includes files list in JSON format."""
+        from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+        summary = DownloadSummaryStatistics()
+        summary.processed_files = 5
+        summary.processed_bytes = 2048
+        summary.total_time = 3.0
+        summary.transfer_rate = 682.67
+        summary.file_counts_by_root_directory = {"/downloads": 3, "/output": 2}
+        summary.downloaded_files = [
+            "/downloads/file1.txt",
+            "/downloads/file2.txt",
+            "/downloads/subdir/file3.txt",
+            "/output/result1.png",
+            "/output/result2.png",
+        ]
+
+        result = _get_download_summary_message(summary, is_json_format=True)
+        parsed = json.loads(result)
+
+        assert parsed["messageType"] == "summary"
+        assert parsed["value"] == "Downloaded 5 files"
+        assert parsed["fileCount"] == 5
+        assert parsed["files"] == [
+            "/downloads/file1.txt",
+            "/downloads/file2.txt",
+            "/downloads/subdir/file3.txt",
+            "/output/result1.png",
+            "/output/result2.png",
+        ]
 
     def test_get_download_summary_message_non_json_unchanged(self):
         """Test _get_download_summary_message non-JSON format is unchanged."""
