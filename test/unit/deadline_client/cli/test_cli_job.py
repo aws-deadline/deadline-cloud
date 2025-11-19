@@ -838,10 +838,23 @@ def test_cli_job_download_output_stdout_with_json_format(
             {"messageType": "pathconfirm", "value": [mock_root_path, str(tmp_path)]}
         )
 
-        assert (
-            f"{expected_json_title}\n{expected_json_presummary}\n{expected_json_path}\n {expected_json_pathconfirm}\n"
-            in result.output
-        )
+        assert expected_json_title in result.output
+        assert expected_json_presummary in result.output
+        assert expected_json_path in result.output
+        assert expected_json_pathconfirm in result.output
+
+        # Verify the summary includes the files list
+        output_lines = result.output.strip().split("\n")
+        summary_line = [line for line in output_lines if '"messageType": "summary"' in line]
+        assert len(summary_line) == 1
+        summary_data = json.loads(summary_line[0])
+        assert summary_data["fileCount"] == 3
+        assert summary_data["files"] == [
+            f"{mock_root_path}/outputs/file1.txt",
+            f"{mock_root_path}/outputs/file2.txt",
+            f"{mock_root_path}/outputs/file3.txt",
+        ]
+
         assert result.exit_code == 0
 
 
