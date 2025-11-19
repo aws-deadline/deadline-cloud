@@ -789,7 +789,10 @@ def _get_download_summary_message(
         return _get_json_line(
             JSON_MSG_TYPE_SUMMARY,
             f"Downloaded {download_summary.processed_files} files",
-            extra_properties={"fileCount": download_summary.processed_files},
+            extra_properties={
+                "fileCount": download_summary.processed_files,
+                "files": download_summary.downloaded_files,
+            },
         )
     else:
         paths_joined = "\n        ".join(
