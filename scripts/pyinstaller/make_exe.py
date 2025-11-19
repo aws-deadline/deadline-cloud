@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import zipfile
 from importlib.metadata import version
 from pathlib import Path
 from typing import Optional
@@ -55,8 +56,8 @@ def make_exe(exe_zipfile: Path, cleanup=True, version_file: Optional[Path] = Non
         for filename in filenames:
             (Path(dirpath) / filename).touch(exist_ok=True)
 
-    # Zip up the Deadline CLI to the final output path
-    shutil.make_archive(exe_zipfile.with_suffix(""), "zip", DEADLINE_CLI_DIST_PATH)
+    # Zip up the Deadline CLI to the final output path, preserving symlinks
+    zip_with_symlinks(DEADLINE_CLI_DIST_PATH, exe_zipfile.with_suffix(".zip"))
 
     if cleanup:
         clean_pyinstaller_build_dirs()
@@ -87,6 +88,37 @@ def clean_pyinstaller_build_dirs():
     ]:
         shutil.rmtree(location, ignore_errors=True)
         print(f"Deleted build directory: {str(location)}")
+
+
+def zip_with_symlinks(source_dir: Path, output_zip: Path) -> None:
+    """Create a zip archive that preserves symlinks."""
+    output_zip.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(source_dir):
+            # Add directories
+            for dir_name in dirs:
+                dir_path = os.path.join(root, dir_name)
+                if os.path.islink(dir_path):
+                    # Handle symlinked directories
+                    arcname = os.path.relpath(dir_path, source_dir)
+                    info = zipfile.ZipInfo(arcname + '/')
+                    info.create_system = 3  # Unix
+                    info.external_attr = 0o120777 << 16  # symlink file type
+                    zipf.writestr(info, os.readlink(dir_path))
+            
+            # Add files
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                arcname = os.path.relpath(file_path, source_dir)
+                
+                if os.path.islink(file_path):
+                    # Create a ZipInfo for the symlink
+                    info = zipfile.ZipInfo(arcname)
+                    info.create_system = 3  # Unix
+                    info.external_attr = 0o120777 << 16  # symlink file type
+                    zipf.writestr(info, os.readlink(file_path))
+                else:
+                    zipf.write(file_path, arcname)
 
 
 def main() -> None:
