@@ -813,43 +813,49 @@ def test_cli_job_download_output_stdout_with_json_format(
             session=ANY,
         )
 
-        expected_json_title = json.dumps({"messageType": "title", "value": "Mock Job"})
-        expected_json_presummary = json.dumps(
-            {
-                "messageType": "presummary",
-                "value": {
-                    mock_root_path: [
-                        "outputs/file1.txt",
-                        "outputs/file2.txt",
-                        "outputs/file3.txt",
-                    ],
-                    f"{mock_root_path}2": [
-                        "outputs/file1.txt",
-                        "outputs/file2.txt",
-                        "outputs/file3.txt",
-                    ],
-                },
-            }
-        )
-        expected_json_path = json.dumps(
-            {"messageType": "path", "value": [mock_root_path, f"{mock_root_path}2"]}
-        )
-        expected_json_pathconfirm = json.dumps(
-            {"messageType": "pathconfirm", "value": [mock_root_path, str(tmp_path)]}
-        )
+        expected_json_title = {"messageType": "title", "value": "Mock Job"}
+        expected_json_presummary = {
+            "messageType": "presummary",
+            "value": {
+                mock_root_path: [
+                    "outputs/file1.txt",
+                    "outputs/file2.txt",
+                    "outputs/file3.txt",
+                ],
+                f"{mock_root_path}2": [
+                    "outputs/file1.txt",
+                    "outputs/file2.txt",
+                    "outputs/file3.txt",
+                ],
+            },
+        }
+        expected_json_path = {
+            "messageType": "path",
+            "value": [mock_root_path, f"{mock_root_path}2"],
+        }
+        expected_json_pathconfirm = {
+            "messageType": "pathconfirm",
+            "value": [mock_root_path, str(tmp_path)],
+        }
 
-        assert expected_json_title in result.output
-        assert expected_json_presummary in result.output
-        assert expected_json_path in result.output
-        assert expected_json_pathconfirm in result.output
+        parsed_lines = []
+        for line in result.output.strip().split("\n"):
+            if line.strip():
+                try:
+                    parsed_lines.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # Command can output non-JSON lines e.g. telemetry errors. Ignore lines that aren't valid JSON
+                    pass
+        assert expected_json_title in parsed_lines
+        assert expected_json_presummary in parsed_lines
+        assert expected_json_path in parsed_lines
+        assert expected_json_pathconfirm in parsed_lines
 
         # Verify the summary includes the files list
-        output_lines = result.output.strip().split("\n")
-        summary_line = [line for line in output_lines if '"messageType": "summary"' in line]
-        assert len(summary_line) == 1
-        summary_data = json.loads(summary_line[0])
-        assert summary_data["fileCount"] == 3
-        assert summary_data["files"] == [
+        summary_messages = [msg for msg in parsed_lines if msg.get("messageType") == "summary"]
+        assert len(summary_messages) == 1
+        assert summary_messages[0]["fileCount"] == 3
+        assert summary_messages[0]["files"] == [
             f"{mock_root_path}/outputs/file1.txt",
             f"{mock_root_path}/outputs/file2.txt",
             f"{mock_root_path}/outputs/file3.txt",
