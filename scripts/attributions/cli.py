@@ -225,11 +225,11 @@ _EXPECTED_MISSING_LICENSE = {"pywin32"}
 
 def _get_desired_python_version() -> str:
     if platform.system() == "Darwin":
-        return "3.12"
+        return "3.13"
     elif platform.system() == "Windows":
-        return "3.12"
+        return "3.13"
     elif platform.system() == "Linux":
-        return "3.12"
+        return "3.13"
     raise RuntimeError("Platform not supported")
 
 
