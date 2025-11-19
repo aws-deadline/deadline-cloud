@@ -145,9 +145,10 @@ interfaces with the local filesystem or an AWS service API.
 
 #### Running Integration Tests
 
-Our integration tests run using using infrastructure that is in your AWS Account. The identifiers for
-these resources are communicated to the tests through environment variables that you must define before running
-the tests. Define the following environment variables:
+Our integration tests run using infrastructure that is in your AWS Account. A Farm, Queue and Fleet (that associated with 
+the Queue) will be required to run the integration tests. The identifiers for these resources are communicated to the 
+tests through environment variables that you must define before running the tests. Define the following environment 
+variables:
 
 ```bash
 # Replace with your AWS Account ID
