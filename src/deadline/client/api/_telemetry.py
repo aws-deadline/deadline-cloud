@@ -342,7 +342,7 @@ class TelemetryClient:
         try:
             return boto3_session.client("sts").get_caller_identity()["Account"]
         except (ClientError, NoCredentialsError) as e:
-            print(f"Could not add account ID to telemetry: {str(e)}")
+            print(f"Could not add account ID to telemetry: {str(e)}", file=sys.stderr)
             return None
 
     def update_common_details(self, details: Dict[str, Any]):

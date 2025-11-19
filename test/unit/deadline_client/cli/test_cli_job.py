@@ -159,7 +159,7 @@ def test_cli_job_list(fresh_deadline_config):
         result = runner.invoke(main, ["job", "list"])
 
         assert (
-            result.output
+            result.stdout
             == """Displaying 2 of 12 Jobs starting at 0
 
 - name: CLI Job
@@ -201,7 +201,7 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
         )
 
         assert (
-            result.output
+            result.stdout
             == """Displaying 2 of 12 Jobs starting at 0
 
 - name: CLI Job
@@ -300,8 +300,8 @@ def test_cli_job_list_client_error(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "list"])
 
-        assert "Failed to get Jobs" in result.output
-        assert "A botocore client error" in result.output
+        assert "Failed to get Jobs" in result.stdout
+        assert "A botocore client error" in result.stdout
         assert result.exit_code != 0
 
 
@@ -329,7 +329,7 @@ def test_cli_job_get(fresh_deadline_config):
         )
 
         assert (
-            result.output
+            result.stdout
             == """jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
 name: CLI Job
 taskRunStatus: RUNNING
@@ -452,9 +452,9 @@ You are about to download files which may come from multiple root directories. H
 [1] {str(tmp_path)}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: y
 """
-            in result.output
+            in result.stdout
         )
-        assert "Download Summary:" in result.output
+        assert "Download Summary:" in result.stdout
         assert result.exit_code == 0
 
 
@@ -552,9 +552,9 @@ You are about to download files which may come from multiple root directories. H
 [0] {str(tmp_path)}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
-            in result.output
+            in result.stdout
         )
-        assert "Download Summary:" in result.output
+        assert "Download Summary:" in result.stdout
         assert result.exit_code == 0
 
 
@@ -653,10 +653,10 @@ You are about to download files which may come from multiple root directories. H
 [0] {str(tmp_path)}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
-            in result.output
+            in result.stdout
         )
-        assert "Download Summary:" in result.output
-        assert result.exit_code == 0, result.output
+        assert "Download Summary:" in result.stdout
+        assert result.exit_code == 0, result.stdout
 
 
 def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path):
@@ -720,7 +720,7 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
             """Downloading output from Job 'Mock Job'
 There are no output files available for download at this moment. Please verify that the Job/Step/Task you are trying to download output from has completed successfully.
 """
-            in result.output
+            in result.stdout
         )
         assert result.exit_code == 0
 
@@ -791,7 +791,16 @@ def test_cli_job_download_output_stdout_with_json_format(
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "json"],
+            [
+                "--log-level",
+                "info",
+                "job",
+                "download-output",
+                "--job-id",
+                MOCK_JOB_ID,
+                "--output",
+                "json",
+            ],
             input=json.dumps(
                 {"messageType": "pathconfirm", "value": [mock_root_path, str(tmp_path)]}
             ),
@@ -833,9 +842,16 @@ def test_cli_job_download_output_stdout_with_json_format(
             {"messageType": "pathconfirm", "value": [mock_root_path, str(tmp_path)]}
         )
 
+        print("Expected:")
+        print(
+            f"{expected_json_title}\n{expected_json_presummary}\n{expected_json_path}\n{expected_json_pathconfirm}\n"
+        )
+        print("Actual:")
+        print(result.stdout)
+
         assert (
-            f"{expected_json_title}\n{expected_json_presummary}\n{expected_json_path}\n {expected_json_pathconfirm}\n"
-            in result.output
+            f"{expected_json_title}\n{expected_json_presummary}\n{expected_json_path}\n{expected_json_pathconfirm}\n"
+            in result.stdout
         )
         assert result.exit_code == 0
 
@@ -945,11 +961,11 @@ def test_cli_job_wait_succeeded(fresh_deadline_config):
             farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID
         )
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: SUCCEEDED" in result.output
-        assert "Elapsed time: 10.5 seconds" in result.output
-        assert "No failed tasks found." in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: SUCCEEDED" in result.stdout
+        assert "Elapsed time: 10.5 seconds" in result.stdout
+        assert "No failed tasks found." in result.stdout
         assert result.exit_code == 0
 
 
@@ -974,7 +990,7 @@ def test_cli_job_wait_timeout(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Timeout waiting for job" in result.output
+        assert "Timeout waiting for job" in result.stdout
         assert result.exit_code == 1
 
 
@@ -1009,11 +1025,11 @@ def test_cli_job_wait_failed(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: FAILED" in result.output
-        assert "Elapsed time: 15.2 seconds" in result.output
-        assert "Found 1 failed tasks:" in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: FAILED" in result.stdout
+        assert "Elapsed time: 15.2 seconds" in result.stdout
+        assert "Found 1 failed tasks:" in result.stdout
         assert result.exit_code == 2
 
 
@@ -1038,11 +1054,11 @@ def test_cli_job_wait_canceled(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: CANCELED" in result.output
-        assert "Elapsed time: 5.0 seconds" in result.output
-        assert "No failed tasks found." in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: CANCELED" in result.stdout
+        assert "Elapsed time: 5.0 seconds" in result.stdout
+        assert "No failed tasks found." in result.stdout
         assert result.exit_code == 3
 
 
@@ -1067,11 +1083,11 @@ def test_cli_job_wait_archived(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: ARCHIVED" in result.output
-        assert "Elapsed time: 8.3 seconds" in result.output
-        assert "No failed tasks found." in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: ARCHIVED" in result.stdout
+        assert "Elapsed time: 8.3 seconds" in result.stdout
+        assert "No failed tasks found." in result.stdout
         assert result.exit_code == 4
 
 
@@ -1096,11 +1112,11 @@ def test_cli_job_wait_not_compatible(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: NOT_COMPATIBLE" in result.output
-        assert "Elapsed time: 2.1 seconds" in result.output
-        assert "No failed tasks found." in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: NOT_COMPATIBLE" in result.stdout
+        assert "Elapsed time: 2.1 seconds" in result.stdout
+        assert "No failed tasks found." in result.stdout
         assert result.exit_code == 5
 
 
@@ -1135,10 +1151,10 @@ def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(fresh_dead
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job Name" in result.output
-        assert "Job completed with status: SUCCEEDED" in result.output
-        assert "Found 1 failed tasks:" in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job Name" in result.stdout
+        assert "Job completed with status: SUCCEEDED" in result.stdout
+        assert "Found 1 failed tasks:" in result.stdout
         assert result.exit_code == 2
 
 
@@ -1164,7 +1180,7 @@ def test_cli_job_wait_json_output_succeeded(fresh_deadline_config):
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
-        output_data = json.loads(result.output)
+        output_data = json.loads(result.stdout)
         assert output_data["jobId"] == MOCK_JOB_ID
         assert output_data["jobName"] == "Test Job Name"
         assert output_data["status"] == "SUCCEEDED"
@@ -1205,7 +1221,7 @@ def test_cli_job_wait_json_output_failed(fresh_deadline_config):
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
-        output_data = json.loads(result.output)
+        output_data = json.loads(result.stdout)
         assert output_data["jobId"] == MOCK_JOB_ID
         assert output_data["jobName"] == "Test Job Name"
         assert output_data["status"] == "FAILED"
@@ -1239,9 +1255,9 @@ def test_cli_job_wait_unknown_status_returns_exit_code_2(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job" in result.output
-        assert "Job completed with status: UNKNOWN_STATUS" in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job" in result.stdout
+        assert "Job completed with status: UNKNOWN_STATUS" in result.stdout
         assert result.exit_code == 2
 
 
@@ -1267,7 +1283,7 @@ def test_cli_job_wait_timeout_json_output(fresh_deadline_config):
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
-        output_data = json.loads(result.output)
+        output_data = json.loads(result.stdout)
         assert (
             output_data["error"] == "Timeout waiting for job job-123 to complete after 30.0 seconds"
         )
@@ -1296,9 +1312,9 @@ def test_cli_job_wait_error_handling(fresh_deadline_config):
         runner = CliRunner()
         result = runner.invoke(main, ["job", "wait"])
 
-        assert "Job ID: " + MOCK_JOB_ID in result.output
-        assert "Job Name: Test Job" in result.output
-        assert "Error waiting for job completion: Test error message" in result.output
+        assert "Job ID: " + MOCK_JOB_ID in result.stdout
+        assert "Job Name: Test Job" in result.stdout
+        assert "Error waiting for job completion: Test error message" in result.stdout
         assert result.exit_code == 2
 
 
@@ -1322,7 +1338,7 @@ def test_cli_job_wait_error_handling_json_output(fresh_deadline_config):
         result = runner.invoke(main, ["job", "wait", "--output", "json"])
 
         # Parse the JSON output
-        output_data = json.loads(result.output)
+        output_data = json.loads(result.stdout)
         assert output_data["error"] == "Test error message"
         assert output_data["jobId"] == MOCK_JOB_ID
         assert output_data["jobName"] == "Test Job"
@@ -1438,7 +1454,7 @@ def test_cli_job_trace_schedule(fresh_deadline_config):
         )
 
         assert (
-            result.output
+            result.stdout
             == """Getting the job...
 Getting all the sessions for the job...
 Getting all the session actions for the job...
@@ -1556,9 +1572,9 @@ You are about to download files which may come from multiple root directories. H
 [0] {tmp_path}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
-            in result.output
+            in result.stdout
         )
-        assert "Download Summary:" in result.output
+        assert "Download Summary:" in result.stdout
         assert result.exit_code == 0
         mock_expanduser.assert_any_call("~")
 
@@ -1714,7 +1730,7 @@ def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
             ],
         )
 
-        assert result.exit_code == 0, f"CLI failed with output: {result.output}"
+        assert result.exit_code == 0, f"CLI failed with output: {result.stdout}"
         MockOutputDownloader.assert_called_once_with(
             s3_settings=ANY,
             farm_id=MOCK_FARM_ID,
