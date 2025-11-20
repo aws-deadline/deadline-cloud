@@ -192,6 +192,7 @@ def _upload_attachments(
                 progress=100,
                 transferRate=0,
                 progressMessage="No files to upload",
+                processedFiles=0,
             )
         )
 
@@ -236,6 +237,7 @@ def _snapshot_attachments(
                 progress=100,
                 transferRate=0,
                 progressMessage="No files to upload",
+                processedFiles=0,
             )
         )
 
@@ -743,6 +745,7 @@ def create_job_from_job_bundle(
                     progress=0,
                     transferRate=0,
                     progressMessage="No files to hash",
+                    processedFiles=0,
                 )
             )
         if upload_progress_callback is not None:
@@ -752,6 +755,7 @@ def create_job_from_job_bundle(
                     progress=0,
                     transferRate=0,
                     progressMessage="No files to upload",
+                    processedFiles=0,
                 )
             )
 
