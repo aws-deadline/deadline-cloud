@@ -40,6 +40,21 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+def telemetry_safe(func: F) -> F:
+    """
+    Decorator that catches all exceptions in telemetry functions to prevent
+    telemetry issues from affecting the main application flow.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.debug(f"Telemetry function {func.__name__} failed: {str(e)}")
+            return None
+    return cast(F, wrapper)
+
+
 def get_deadline_endpoint_url(
     config: Optional[ConfigParser] = None,
 ) -> str:
@@ -110,6 +125,7 @@ class TelemetryClient:
         self.set_opt_out(config=config)
         self.initialize(config=config)
 
+    @telemetry_safe
     def set_opt_out(self, config: Optional[ConfigParser] = None) -> None:
         """
         Checks whether telemetry has been opted out by checking the DEADLINE_CLOUD_TELEMETRY_OPT_OUT
@@ -128,6 +144,7 @@ class TelemetryClient:
             + ("not enabled." if self.telemetry_opted_out else "enabled.")
         )
 
+    @telemetry_safe
     def initialize(self, config: Optional[ConfigParser] = None) -> None:
         """
         Starts up the telemetry background thread after getting settings from the boto3 client.
@@ -138,36 +155,33 @@ class TelemetryClient:
         if self.telemetry_opted_out:
             return
 
-        try:
-            self.endpoint: str = self._get_prefixed_endpoint(
-                f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
-                TelemetryClient.ENDPOINT_PREFIX,
-            )
+        self.endpoint: str = self._get_prefixed_endpoint(
+            f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
+            TelemetryClient.ENDPOINT_PREFIX,
+        )
 
-            # Some environments might not have SSL, so we'll use the vendored botocore SSL context
-            from botocore.httpsession import create_urllib3_context, get_cert_path
+        # Some environments might not have SSL, so we'll use the vendored botocore SSL context
+        from botocore.httpsession import create_urllib3_context, get_cert_path
 
-            self._urllib3_context = create_urllib3_context()
-            self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
+        self._urllib3_context = create_urllib3_context()
+        self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
-            user_id, _ = get_user_and_identity_store_id(config=config)
-            if user_id:
-                self._system_metadata["user_id"] = user_id
+        user_id, _ = get_user_and_identity_store_id(config=config)
+        if user_id:
+            self._system_metadata["user_id"] = user_id
 
-            monitor_id: Optional[str] = get_monitor_id(config=config)
-            if monitor_id:
-                self._system_metadata["monitor_id"] = monitor_id
+        monitor_id: Optional[str] = get_monitor_id(config=config)
+        if monitor_id:
+            self._system_metadata["monitor_id"] = monitor_id
 
-            self._initialized = True
-            self._start_threads()
-        except Exception:
-            # Silently swallow any exceptions
-            return
+        self._initialized = True
+        self._start_threads()
 
     @property
     def is_initialized(self) -> bool:
         return self._initialized
 
+    @telemetry_safe
     def _get_prefixed_endpoint(self, endpoint: str, prefix: str) -> str:
         """Insert the prefix right after 'https://'"""
         if endpoint.startswith("https://"):
@@ -175,6 +189,7 @@ class TelemetryClient:
             return prefixed_endpoint
         return endpoint
 
+    @telemetry_safe
     def _get_telemetry_identifier(self, config: Optional[ConfigParser] = None):
         identifier = config_file.get_setting("telemetry.identifier", config=config)
         try:
@@ -184,6 +199,7 @@ class TelemetryClient:
             config_file.set_setting("telemetry.identifier", identifier)
         return identifier
 
+    @telemetry_safe
     def _start_threads(self) -> None:
         """Set up background threads for shutdown checking and request sending"""
         self.event_queue: Queue[Optional[TelemetryEvent]] = Queue(
@@ -195,6 +211,7 @@ class TelemetryClient:
         )
         self.processing_thread.start()
 
+    @telemetry_safe
     def _get_system_metadata(self, config: Optional[ConfigParser]) -> Dict[str, Any]:
         """
         Builds up a dict of non-identifiable metadata about the system environment.
@@ -212,6 +229,7 @@ class TelemetryClient:
 
         return metadata
 
+    @telemetry_safe
     def _exit_cleanly(self):
         self.event_queue.put(None)
         self.processing_thread.join()
@@ -448,3 +466,4 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
         return cast(F, wrapper)
 
     return inner
+
