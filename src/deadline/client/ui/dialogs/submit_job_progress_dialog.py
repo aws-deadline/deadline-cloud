@@ -243,7 +243,7 @@ class SubmitJobProgressDialog(QDialog):
                 False if the default is to Cancel.
         """
         # Build the UI for user confirmation
-        dialog = _JobSumissionWarningDialog(message, default_response)
+        dialog = _JobSumissionWarningDialog(message, default_response, self)
 
         selection = dialog.exec()
 
@@ -366,7 +366,9 @@ class _JobSumissionWarningDialog(QDialog):
     Simple Dialog which functions similar to a QMessageBox, but with a scrollable text area.
     """
 
-    def __init__(self, message: str, default_response: bool = False):
+    def __init__(
+        self, message: str, default_response: bool = False, parent: Optional[QWidget] = None
+    ):
         """
         Simple Dialog which functions similar to a QMessageBox, but with a scrollable text area.
 
@@ -377,7 +379,7 @@ class _JobSumissionWarningDialog(QDialog):
                     - This also adds a "Do not ask again" button which will set settings.auto_accept to True.
                 False if the default response should be to Cancel.
         """
-        super().__init__()
+        super().__init__(parent=parent)
         self.setWindowTitle(tr("Job Submission Confirmation"))
         self.message = message
         self.default_response = default_response

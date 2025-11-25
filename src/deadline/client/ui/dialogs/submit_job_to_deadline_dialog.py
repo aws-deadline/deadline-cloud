@@ -508,6 +508,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self._submission_succeeded_signal_receiver
         )
         job_progress_dialog.progress_window_closed.connect(self._close_event_receiver)
+        job_progress_dialog.setModal(True)
         job_progress_dialog.show()
         QApplication.instance().processEvents()  # type: ignore[union-attr]
 
