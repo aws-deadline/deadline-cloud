@@ -36,7 +36,7 @@ def test_all_locales_have_same_keys():
     )
 
     # Load English as reference
-    with open(translations_dir / "en_US.json") as f:
+    with open(translations_dir / "en_US.json", encoding="utf-8") as f:
         en_keys = set(json.load(f).keys())
 
     # Check all other locale files
@@ -44,7 +44,7 @@ def test_all_locales_have_same_keys():
         if locale_file.name == "en_US.json":
             continue
 
-        with open(locale_file) as f:
+        with open(locale_file, encoding="utf-8") as f:
             locale_keys = set(json.load(f).keys())
 
         missing = en_keys - locale_keys

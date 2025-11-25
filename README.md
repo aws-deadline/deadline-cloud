@@ -1,5 +1,7 @@
 # AWS Deadline Cloud Client
 
+### [User guide](https://aws-deadline.github.io/) | [Service documentation](https://docs.aws.amazon.com/deadline-cloud/) | [Deadline Cloud on GitHub](https://github.com/aws-deadline/) 
+
 [![pypi](https://img.shields.io/pypi/v/deadline.svg?style=flat)](https://pypi.python.org/pypi/deadline)
 [![python](https://img.shields.io/pypi/pyversions/deadline.svg?style=flat)](https://pypi.python.org/pypi/deadline)
 [![license](https://img.shields.io/pypi/l/deadline.svg?style=flat)](https://github.com/aws-deadline/deadline/blob/mainline/LICENSE)

@@ -53,6 +53,7 @@ def _hash_attachments(
                 progress=100,
                 transferRate=0,
                 progressMessage="No files to hash",
+                processedFiles=0,
             )
         )
 

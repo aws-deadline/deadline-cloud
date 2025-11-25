@@ -1,3 +1,4 @@
+# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
@@ -316,20 +317,20 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
             # Authenticated but no API availability - permissions issue or possibly configuration issue
             title = tr("Unable to Call AWS Deadline Cloud API")
             message = tr(
-                "You are authenticated with the profile '{profile}', but this profile is unable to call AWS Deadline Cloud ListFarms and unable to submit jobs to AWS Deadline Cloud.\n\nTo resolve this issue:\n• Check that there aren't any environment variables pointing to the wrong AWS region (e.g., AWS_DEFAULT_REGION)\n• If you are not using a Deadline Cloud Monitor profile, check that the profile has permissions for these AWS Deadline Cloud APIs needed for submitting:\n  • deadline:AssumeQueueRoleForUser\n  • deadline:CreateJob\n  • deadline:GetJob\n  • deadline:GetQueue\n  • deadline:GetQueueEnvironment\n  • deadline:GetStorageProfileForQueue\n  • deadline:GetStorageProfile\n  • deadline:ListFarms\n  • deadline:ListQueues\n  • deadline:ListQueueEnvironments\n  • deadline:ListStorageProfilesForQueue"
+                "You are authenticated with the profile '{profile}', but this profile is unable to call AWS Deadline Cloud ListFarms and unable to submit jobs to AWS Deadline Cloud.\n\nTo resolve this issue:\n\u2022 Check that there aren't any environment variables pointing to the wrong AWS region (e.g., AWS_DEFAULT_REGION)\n\u2022 If you are not using a Deadline Cloud Monitor profile, check that the profile has permissions for these AWS Deadline Cloud APIs needed for submitting:\n  \u2022 deadline:AssumeQueueRoleForUser\n  \u2022 deadline:CreateJob\n  \u2022 deadline:GetJob\n  \u2022 deadline:GetQueue\n  \u2022 deadline:GetQueueEnvironment\n  \u2022 deadline:GetStorageProfileForQueue\n  \u2022 deadline:GetStorageProfile\n  \u2022 deadline:ListFarms\n  \u2022 deadline:ListQueues\n  \u2022 deadline:ListQueueEnvironments\n  \u2022 deadline:ListStorageProfilesForQueue"
             ).format(profile=self._get_profile_name())
         elif self._status.auth_status == api.AwsAuthenticationStatus.CONFIGURATION_ERROR:
             title = tr("Issue With Profile Configuration")
             message = tr(
                 "There is a configuration issue with the profile '{profile}'.\n\n"
                 "To resolve this issue:\n"
-                "• Verify your AWS config and credentials files are correct\n"
-                "  • By default these files can be found in ~/.aws on Linux/MacOS or %USERPROFILE%/.aws on Windows\n"
-                "• Verify that the correct AWS region is set\n"
-                "  • Check that no environment variables like AWS_DEFAULT_REGION are set to an incorrect region\n"
-                "• If you are not using a Deadline Cloud Monitor profile:\n"
-                "  • Verify that any credential process being used is able to retrieve the credentials or that they aren't expired\n"
-                "    • You can run the following command to check: aws sts get-caller-identity --profile <PROFILE_NAME>"
+                "\u2022 Verify your AWS config and credentials files are correct\n"
+                "  \u2022 By default these files can be found in ~/.aws on Linux/MacOS or %USERPROFILE%/.aws on Windows\n"
+                "\u2022 Verify that the correct AWS region is set\n"
+                "  \u2022 Check that no environment variables like AWS_DEFAULT_REGION are set to an incorrect region\n"
+                "\u2022 If you are not using a Deadline Cloud Monitor profile:\n"
+                "  \u2022 Verify that any credential process being used is able to retrieve the credentials or that they aren't expired\n"
+                "    \u2022 You can run the following command to check: aws sts get-caller-identity --profile <PROFILE_NAME>"
             ).format(profile=self._get_profile_name())
         else:
             title = tr("Unknown Issue With Configured Profile")
@@ -337,8 +338,8 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 "There was an unknown issue when trying to authenticate with the profile '{profile}'.\n\n"
                 "Check any available console logs for errors to try and diagnose the problem.\n"
                 "Logs are commonly found:\n"
-                "  • In the terminal that the dialog or software the submitter is running in was launched from"
-                "  • In the built-in console within the software that the submitter is running in"
+                "  \u2022 In the terminal that the dialog or software the submitter is running in was launched from"
+                "  \u2022 In the built-in console within the software that the submitter is running in"
             ).format(profile=self._get_profile_name())
 
         # Show the message box

@@ -7,6 +7,7 @@ import locale as locale_module
 from pathlib import Path
 
 from ..exceptions import DeadlineOperationError
+from ..config import config_file
 
 # Import TranslationKey type only during type checking to avoid runtime errors
 # if _translation_keys.py doesn't exist (it's generated during build)
@@ -19,8 +20,11 @@ else:
 @lru_cache(maxsize=1)
 def _get_translations() -> Dict[str, str]:
     """Load UI translations from locale-specific JSON."""
-    # Get system locale
-    current_locale, _ = locale_module.getdefaultlocale()
+
+    # Check config setting first, then fall back to system locale
+    current_locale = config_file.get_setting("settings.locale")
+    if not current_locale:
+        current_locale, _ = locale_module.getdefaultlocale()
     if not current_locale:
         current_locale = "en_US"
 
