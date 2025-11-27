@@ -4,6 +4,7 @@
 set -e
 
 hatch run attributions:generate
+unzip installer/components/DeadlineClient.zip -d installer/components/DeadlineClient
 hatch run installer:prepare_artifacts
 ls -al installer/components/DeadlineClient
 ls -al installer/components/DeadlineClient/_internal
