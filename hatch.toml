@@ -15,15 +15,6 @@ lint = ["style", "typing"]
 [[envs.all.matrix]]
 python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
 
-[envs.default.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
-
-[envs.codebuild.scripts]
-build = "hatch build"
-
-[envs.codebuild.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
-
 [envs.integ]
 pre-install-commands = [
   "pip install -r requirements-integ-testing.txt",
@@ -33,18 +24,14 @@ pre-install-commands = [
 [envs.integ.scripts]
 test = "pytest --xfail-tb --no-cov -vvv --numprocesses=1 {args:test/integ}"
 
-[envs.installer.env-vars]
-SKIP_BOOTSTRAP_TEST_RESOURCES = "True"
-
 [envs.installer]
 pre-install-commands = ["pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
-build = "hatch build"
 make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip --version-file {root}/pyinstaller-version.json"
 prepare_artifacts = "python scripts/prepare_artifacts.py --archive-path {root}/installer/components/DeadlineClient.zip --output-path {root}/installer/components/DeadlineClient"
 build_installer = "python {root}/scripts/build_installer_cli.py --installer-source-path {root}/installer/DeadlineCloudClient.xml {args:}"
-build_installer_local = "hatch build && hatch run make_exe && hatch run prepare_artifacts && hatch run build_installer --local-dev"
+build_installer_local = "hatch run make_exe && hatch run prepare_artifacts && hatch run build_installer --local-dev"
 validate_exe = "python {root}/scripts/pyinstaller/validate.py --zip-path {root}/installer/components/DeadlineClient.zip {args:}"
 validate_exe_local = "python {root}/scripts/pyinstaller/validate.py {args:}"
 

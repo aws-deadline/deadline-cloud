@@ -12,9 +12,9 @@ python -m pip install --upgrade twine
 if ($LASTEXITCODE -ne 0) { throw "Failed to update twine" }
 
 # Run hatch commands
-hatch -v run codebuild:lint
+hatch -v run lint
 if ($LASTEXITCODE -ne 0) { throw "Failed to run lint" }
-hatch run codebuild:test
+hatch run test
 if ($LASTEXITCODE -ne 0) { throw "Failed to run test" }
-hatch -v run codebuild:build
+hatch -v build
 if ($LASTEXITCODE -ne 0) { throw "Failed to run build" }

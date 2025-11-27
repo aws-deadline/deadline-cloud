@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to update pip" }
 pip install --upgrade hatch
 if ($LASTEXITCODE -ne 0) { throw "Failed to update hatch" }
 
-hatch run installer:build
+hatch build
 if ($LASTEXITCODE -ne 0) { throw "Failed to build project" }
 hatch run installer:make_exe
 if ($LASTEXITCODE -ne 0) { throw "Failed to build pyinstaller artifact" }
