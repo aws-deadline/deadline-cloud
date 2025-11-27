@@ -32,10 +32,10 @@ jobs:
     if: (github.repository == 'aws-deadline/deadline-cloud')
     name: Build Installer
     uses: aws-deadline/.github/.github/workflows/reusable_build_installers.yml@mainline
-    secrets: inherit
     permissions:
-      id-token: write
       contents: read
+      id-token: write
+    secrets: inherit
     with:
       environment: ${{inputs.environment}}
       ref_type: ${{inputs.ref_type}}

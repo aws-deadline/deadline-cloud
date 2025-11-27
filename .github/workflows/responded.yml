@@ -6,3 +6,6 @@ on:
 jobs:
     check-for-response:
         uses: aws-deadline/.github/.github/workflows/reusable_responded.yml@mainline
+        permissions:
+          issues: write
+          pull-requests: write
