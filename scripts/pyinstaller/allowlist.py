@@ -59,6 +59,7 @@ ALLOWLIST = {
         "_internal/python3*.dll",
         "_internal/pywin32_system32/pywintypes3*.dll",
         "_internal/Python.framework/Versions/3.*/Python",
+        "_internal/Python.framework/Versions/3.*/Resources/Info.plist",
         "_internal/libsqlite3.so.*",
         # openssl
         "_internal/libssl.so.*",
