@@ -35,6 +35,11 @@ build_installer_local = "hatch run make_exe && hatch run prepare_artifacts && ha
 validate_exe = "python {root}/scripts/pyinstaller/validate.py --zip-path {root}/installer/components/DeadlineClient.zip {args:}"
 validate_exe_local = "python {root}/scripts/pyinstaller/validate.py {args:}"
 
+[envs.installer.overrides]
+platform.windows.scripts = [
+  'prepare_artifacts=powershell -Command "Expand-Archive -Path {root}/installer/components/DeadlineClient.zip -DestinationPath {root}/installer/components/DeadlineClient"',
+]
+
 [envs.attributions]
 pre-install-commands = ["pip install -r requirements-attributions.txt"]
 
