@@ -213,7 +213,13 @@ class TelemetryClient:
         return metadata
 
     def _exit_cleanly(self):
-        self.event_queue.put(None)
+        try:
+            self.event_queue.put_nowait(None)
+        except Full:
+            # If the queue is full, it may mean the telemetry processing thread has already joined
+            # since it is daemon and the Python runtime will shut it down on exit.
+            # Ignore the error, since this is a best-effort cleanup.
+            pass
         self.processing_thread.join()
 
     def _send_request(self, req: request.Request) -> None:
