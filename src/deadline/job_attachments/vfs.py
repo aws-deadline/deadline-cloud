@@ -18,7 +18,7 @@ from .exceptions import (
 
 from .os_file_permission import PosixFileSystemPermissionSettings
 
-from deadline.client.api import get_deadline_cloud_library_telemetry_client
+from deadline.client.api import get_deadline_cloud_library_telemetry_client as _get_deadline_cloud_library_telemetry_client
 
 log = logging.getLogger(__name__)
 
@@ -501,7 +501,7 @@ class VFSProcessManager(object):
         log.info(f"Launched VFS as pid {self._vfs_proc.pid}")
 
         is_mounted = VFSProcessManager.wait_for_mount(self.get_mount_point(), session_dir)
-        get_deadline_cloud_library_telemetry_client().record_vfs_mounting(
+        _get_deadline_cloud_library_telemetry_client().record_vfs_mounting(
             successfully_mounted=is_mounted
         )
 
