@@ -19,7 +19,7 @@ from .exceptions import (
 from .os_file_permission import PosixFileSystemPermissionSettings
 
 from deadline.client.api import (
-    get_deadline_cloud_library_telemetry_client as _get_deadline_cloud_library_telemetry_client
+    get_deadline_cloud_library_telemetry_client as _get_deadline_cloud_library_telemetry_client,
 )
 
 log = logging.getLogger(__name__)
