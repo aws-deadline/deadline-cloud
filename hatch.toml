@@ -29,11 +29,16 @@ pre-install-commands = ["pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
 make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip --version-file {root}/pyinstaller-version.json"
-prepare_artifacts = "python scripts/prepare_artifacts.py --archive-path {root}/installer/components/DeadlineClient.zip --output-path {root}/installer/components/DeadlineClient"
+prepare_artifacts = "unzip {root}/installer/components/DeadlineClient.zip -d {root}/installer/components/DeadlineClient"
 build_installer = "python {root}/scripts/build_installer_cli.py --installer-source-path {root}/installer/DeadlineCloudClient.xml {args:}"
 build_installer_local = "hatch run make_exe && hatch run prepare_artifacts && hatch run build_installer --local-dev"
 validate_exe = "python {root}/scripts/pyinstaller/validate.py --zip-path {root}/installer/components/DeadlineClient.zip {args:}"
 validate_exe_local = "python {root}/scripts/pyinstaller/validate.py {args:}"
+
+[envs.installer.overrides]
+platform.windows.scripts = [
+  'prepare_artifacts=powershell -Command "Expand-Archive -Path {root}/installer/components/DeadlineClient.zip -DestinationPath {root}/installer/components/DeadlineClient"',
+]
 
 [envs.attributions]
 pre-install-commands = ["pip install -r requirements-attributions.txt"]

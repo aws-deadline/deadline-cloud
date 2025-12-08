@@ -25,7 +25,6 @@ ALLOWLIST = {
         "deadline",
         "deadline.exe",
         "_internal/THIRD_PARTY_LICENSES",
-        "_internal/Python.framework/Python",
         "_internal/Python",
         # Python
         "_internal/python3.dll",
@@ -59,8 +58,8 @@ ALLOWLIST = {
         "_internal/libpython3.*.dylib",
         "_internal/python3*.dll",
         "_internal/pywin32_system32/pywintypes3*.dll",
-        "_internal/Python.framework/Versions/3.*/Resources/Info.plist",
         "_internal/Python.framework/Versions/3.*/Python",
+        "_internal/Python.framework/Versions/3.*/Resources/Info.plist",
         "_internal/libsqlite3.so.*",
         # openssl
         "_internal/libssl.so.*",

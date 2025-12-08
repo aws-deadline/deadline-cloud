@@ -17,6 +17,8 @@ __pycache__/
 /dist/
 /site/
 installer/components
+scripts/pyinstaller/build
+scripts/pyinstaller/dist
 
 # Compiled translations
 src/deadline/client/ui/_translation_keys.py

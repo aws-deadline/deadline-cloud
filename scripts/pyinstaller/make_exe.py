@@ -18,6 +18,8 @@ import json
 import os
 import shutil
 import subprocess
+import time
+import zipfile
 from importlib.metadata import version
 from pathlib import Path
 from typing import Optional
@@ -55,8 +57,11 @@ def make_exe(exe_zipfile: Path, cleanup=True, version_file: Optional[Path] = Non
         for filename in filenames:
             (Path(dirpath) / filename).touch(exist_ok=True)
 
-    # Zip up the Deadline CLI to the final output path
-    shutil.make_archive(exe_zipfile.with_suffix(""), "zip", DEADLINE_CLI_DIST_PATH)
+    if os.name == "nt":
+        shutil.make_archive(exe_zipfile.with_suffix(""), "zip", DEADLINE_CLI_DIST_PATH)
+    else:
+        # preserve symlinks in archive on unix
+        zip_with_symlinks(DEADLINE_CLI_DIST_PATH, exe_zipfile.with_suffix(".zip"))
 
     if cleanup:
         clean_pyinstaller_build_dirs()
@@ -87,6 +92,27 @@ def clean_pyinstaller_build_dirs():
     ]:
         shutil.rmtree(location, ignore_errors=True)
         print(f"Deleted build directory: {str(location)}")
+
+
+def zip_with_symlinks(source_dir: Path, output_zip: Path) -> None:
+    """Create a zip archive that preserves symlinks for unix systems"""
+    output_zip.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(source_dir):
+            for name in dirs + files:
+                path = os.path.join(root, name)
+                arcname = os.path.relpath(path, source_dir)
+
+                if os.path.islink(path):
+                    info = zipfile.ZipInfo(arcname)
+                    stat_info = os.lstat(path)
+                    # The 2 higher order bytes are used by unix permissions, lower for MS-DOS
+                    info.external_attr = (stat_info.st_mode & 0xFFFF) << 16
+                    # year, month, day, hour, min, sec
+                    info.date_time = time.localtime(stat_info.st_mtime)[:6]
+                    zipf.writestr(info, os.readlink(path))
+                else:
+                    zipf.write(path, arcname)
 
 
 def main() -> None:
