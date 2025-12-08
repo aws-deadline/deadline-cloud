@@ -32,6 +32,7 @@ from ..job_bundle.parameters import (
     validate_job_parameter_value,
 )
 from .dataclasses import JobBundleSettings
+from ..dataclasses import SubmitterInfo
 from .dialogs.submit_job_to_deadline_dialog import (
     SubmitJobToDeadlineDialog,
     JobBundlePurpose,
@@ -119,7 +120,7 @@ def show_job_bundle_submitter(
     browse: bool = False,
     parent: Optional[QWidget] = None,
     f=Qt.WindowFlags(),
-    submitter_name: Optional[str] = None,
+    submitter_info: Optional[SubmitterInfo] = None,
     known_asset_paths: Optional[list[str]] = None,
     job_parameters: Optional[list[dict[str, Any]]] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
@@ -128,12 +129,23 @@ def show_job_bundle_submitter(
 
     Pass f=Qt.Tool if running it within an application context and want it
     to stay on top.
+
+    Args:
+        input_job_bundle_dir: Path to the job bundle directory
+        browse: Whether to show a file browser dialog
+        parent: Parent widget
+        f: Qt window flags
+        submitter_info: Optional submitter information to display in About dialog.
+        known_asset_paths: List of known asset paths
+
+    Returns:
+        The created SubmitJobToDeadlineDialog instance, or None if cancelled
     """
 
-    if not submitter_name:
-        submitter_name = "JobBundle"
+    if not submitter_info:
+        submitter_info = SubmitterInfo(submitter_name="JobBundle")
 
-    session_context["submitter-name"] = submitter_name
+    session_context["submitter-name"] = submitter_info.submitter_name
 
     if parent is None:
         # Get the main application window so we can parent ours to it
@@ -292,7 +304,7 @@ def show_job_bundle_submitter(
         on_create_job_bundle_callback=on_create_job_bundle_callback,
         parent=parent,
         f=f,
-        submitter_name=submitter_name,
+        submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
     )
 
