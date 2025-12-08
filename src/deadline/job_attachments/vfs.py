@@ -18,6 +18,10 @@ from .exceptions import (
 
 from .os_file_permission import PosixFileSystemPermissionSettings
 
+from deadline.client.api import (
+    get_deadline_cloud_library_telemetry_client as _get_deadline_cloud_library_telemetry_client,
+)
+
 log = logging.getLogger(__name__)
 
 DEADLINE_VFS_ENV_VAR = "DEADLINE_VFS_PATH"
@@ -497,7 +501,13 @@ class VFSProcessManager(object):
             log.exception(f"Exception during launch with command {start_command} exception {e}")
             raise e
         log.info(f"Launched VFS as pid {self._vfs_proc.pid}")
-        if not VFSProcessManager.wait_for_mount(self.get_mount_point(), session_dir):
+
+        is_mounted = VFSProcessManager.wait_for_mount(self.get_mount_point(), session_dir)
+        _get_deadline_cloud_library_telemetry_client().record_vfs_mounting(
+            successfully_mounted=is_mounted
+        )
+
+        if not is_mounted:
             log.error("Failed to mount, shutting down")
             raise VFSFailedToMountError
 

@@ -297,6 +297,11 @@ class TelemetryClient:
             # Silently swallow the error if the event queue is full (due to throttling of the service)
             pass
 
+    def record_vfs_mounting(self, successfully_mounted: bool):
+        details: Dict[str, Any] = {"successfully_mounted": successfully_mounted}
+        event_type = "com.amazon.rum.deadline.job_attachments.vfs_mount"
+        self.record_event(event_type=event_type, event_details=details, from_gui=False)
+
     def _record_summary_statistics(
         self, event_type: str, summary: SummaryStatistics, from_gui: bool
     ):
