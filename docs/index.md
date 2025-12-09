@@ -71,6 +71,27 @@ $ cat out.txt
 An example usage is to create a shortcut called "Deadline Settings" on your desktop that runs `C:\path\to\deadlinew.exe config gui`.
 Opening the shortcut will show the Deadline Settings dialog without a terminal window behind it.
 
+## Manual Installation Deadline[GUI] Instructions
+Prerequisites: Ensure the Deadline Client is installed on a machine with internet access.
+
+### Step 1: Download the packages
+
+Use the Python version bundled with the installer to download the Deadline GUI components using pip:
+```
+/Path/to/python -m pip download -d /your/download/directory deadline[gui]=={DEADLINE_CLIENT_VERSION}
+```
+### Step 2: Transfer the packages
+
+Copy the directory containing the downloaded packages to your offline machine.
+
+### Step 3: Install the packages
+
+Install the packages into the appropriate Submitter or Python environment where the Deadline Client is installed:
+```
+/Path/to/python -m pip install --no-index --upgrade --find-links /your/pypi/bundle/from/above --target /Your/Target/python/module/dir *.whl
+```
+
+
 ## Job-related Files
 For job-related files and data, AWS Deadline Cloud supports either transferring files to AWS using job attachments or reading files from network storage that is shared between both your local workstation and your farm.
 
