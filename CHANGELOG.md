@@ -1,3 +1,32 @@
+## 0.54.0 (2025-12-09)
+
+### BREAKING CHANGES
+
+* add translations for multiple languages (#916) ([`a2e8b82`](https://github.com/aws-deadline/deadline-cloud/commit/a2e8b8229921e166cfb215c273a96fbb7fe500c0))
+  * Submitter will now appear in another language if the system language is not English. 
+
+* small files in syncInputJobAttachment causes sync cancel (#908) ([`8f5f29b`](https://github.com/aws-deadline/deadline-cloud/commit/8f5f29bfc71eac1ccd595a2e26714c067957c587))
+  * The parameter `processedFiles` is added to `ProgressReportMetadata`.
+
+### Features
+* add telemetry event upon mounting vfs (#939) ([`890387c`](https://github.com/aws-deadline/deadline-cloud/commit/890387c0958447b78e915977e91c48e17fcfd38f))
+* report paths of downloaded files in json summary (#919) ([`e288776`](https://github.com/aws-deadline/deadline-cloud/commit/e288776ce1c378361852f6ab29f32f650d901f60))
+* add foundations for future non-english UI translations (#901) ([`70dd775`](https://github.com/aws-deadline/deadline-cloud/commit/70dd775b258eb237c9c4c82197fddd006a7887c7))
+
+### Bug Fixes
+* process hangs on exit with high volume of telemetry (#936) ([`938d9f2`](https://github.com/aws-deadline/deadline-cloud/commit/938d9f28767e120d059d85f126316714c0764711))
+* Job progress dialog moves behind submitter dialog. (#920) ([`94e6815`](https://github.com/aws-deadline/deadline-cloud/commit/94e6815fe0af3bb74b3a1fc79997441e1eab1918))
+* host requirement amounts with value of 0 not accepted (#917) ([`44fbe1f`](https://github.com/aws-deadline/deadline-cloud/commit/44fbe1fb7b3aa4101f43d96acff8af211d7da787))
+* HashDB does not retry when failing to open. ([`b332672`](https://github.com/aws-deadline/deadline-cloud/commit/b33267263af232d14b0f59422e26a2953f35bbde))
+
+### Performance Improvements
+* **installer**: reduce installation size by not duplicating files (#934) ([`3d41212`](https://github.com/aws-deadline/deadline-cloud/commit/3d412126afd5ed189d8eede20dafd37651228afa))
+
+### Experimental
+These changes are experimental and are subject to change.
+
+* add get_session_logs to mcp server (#909) ([`c9f83a4`](https://github.com/aws-deadline/deadline-cloud/commit/c9f83a4a4d6675c39048c609d2101903f6f7d290))
+
 ## 0.53.3 (2025-11-04)
 
 ## DEPRECATIONS
