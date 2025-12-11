@@ -225,6 +225,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.api_availability_changed.connect(
             self.refresh_deadline_settings
         )
+        self.deadline_authentication_status.deadline_config_changed.connect(
+            self.refresh_deadline_settings
+        )
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
