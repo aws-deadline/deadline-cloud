@@ -7,7 +7,8 @@ Tests for the CLI job bundle commands.
 import os
 import sys
 import json
-from unittest.mock import ANY, patch, Mock, call
+from typing import Generator
+from unittest.mock import ANY, patch, call, MagicMock
 
 import boto3  # type: ignore[import]
 from click.testing import CliRunner
@@ -33,6 +34,15 @@ from ..testing_utilities import (
     MOCK_CREATE_JOB_RESPONSE,
     MOCK_GET_JOB_RESPONSE,
 )
+
+
+@pytest.fixture
+def mock_job_bundle_submitter() -> Generator[MagicMock, None, None]:
+    mock_job_bundle_submitter = MagicMock()
+    with patch.dict(
+        sys.modules, {"deadline.client.ui.job_bundle_submitter": mock_job_bundle_submitter}
+    ):
+        yield mock_job_bundle_submitter
 
 
 def test_cli_bundle_submit_simple_json_template(
@@ -673,15 +683,10 @@ def test_cli_bundle_reject_upload_confirmation(
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_gui_submit_submitter_name(_mock_context):
+def test_gui_submit_submitter_name(_mock_context, mock_job_bundle_submitter):
     """
     Verify that the DEPRECATED --submitter-name arg gets passed through correctly
     """
-
-    # Unconventional mocking pattern because of how the function is imported in code
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
-    mock_job_bundle_submitter.show_job_bundle_submitter
 
     runner = CliRunner()
     runner.invoke(
@@ -759,12 +764,10 @@ def test_bundle_submit_without_target_task_run_status(
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_key_value_pairs(_mock_context):
+def test_bundle_gui_submit_submitter_info_key_value_pairs(_mock_context, mock_job_bundle_submitter):
     """
     Test that --submitter-info works with multiple key=value pairs.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -795,12 +798,10 @@ def test_bundle_gui_submit_submitter_info_key_value_pairs(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_inline_json(_mock_context):
+def test_bundle_gui_submit_submitter_info_inline_json(_mock_context, mock_job_bundle_submitter):
     """
     Test that --submitter-info works with inline JSON.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -830,12 +831,12 @@ def test_bundle_gui_submit_submitter_info_inline_json(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_missing_submitter_name(_mock_context):
+def test_bundle_gui_submit_submitter_info_missing_submitter_name(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info without submitter_name shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -854,12 +855,12 @@ def test_bundle_gui_submit_submitter_info_missing_submitter_name(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_unknown_field_key_value(_mock_context):
+def test_bundle_gui_submit_submitter_info_unknown_field_key_value(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with an unknown field in key=value format shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -880,12 +881,12 @@ def test_bundle_gui_submit_submitter_info_unknown_field_key_value(_mock_context)
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_unknown_field_json(_mock_context):
+def test_bundle_gui_submit_submitter_info_unknown_field_json(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with an unknown field in JSON format shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -904,12 +905,10 @@ def test_bundle_gui_submit_submitter_info_unknown_field_json(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_invalid_json(_mock_context):
+def test_bundle_gui_submit_submitter_info_invalid_json(_mock_context, mock_job_bundle_submitter):
     """
     Test that invalid JSON in --submitter-info shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -928,12 +927,12 @@ def test_bundle_gui_submit_submitter_info_invalid_json(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_invalid_key_value_format(_mock_context):
+def test_bundle_gui_submit_submitter_info_invalid_key_value_format(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that invalid key=value format (missing equals sign) shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -952,12 +951,12 @@ def test_bundle_gui_submit_submitter_info_invalid_key_value_format(_mock_context
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_multiple_json_allowed(_mock_context):
+def test_bundle_gui_submit_submitter_info_multiple_json_allowed(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that multiple JSON objects are allowed and merged.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -982,13 +981,13 @@ def test_bundle_gui_submit_submitter_info_multiple_json_allowed(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_name_overrides_submitter_info(_mock_context):
+def test_bundle_gui_submit_submitter_name_overrides_submitter_info(
+    _mock_context, mock_job_bundle_submitter
+):
     """
     Test that when both --submitter-name and --submitter-info are provided,
     --submitter-name takes precedence and a deprecation warning is shown.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1017,12 +1016,12 @@ def test_bundle_gui_submit_submitter_name_overrides_submitter_info(_mock_context
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_json_file(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_json_file(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info works with a JSON file path.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary JSON file
     json_file = tmp_path / "submitter.json"
@@ -1060,12 +1059,12 @@ def test_bundle_gui_submit_submitter_info_json_file(_mock_context, tmp_path):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_yaml_file(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_yaml_file(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info works with a YAML file path.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary YAML file
     yaml_file = tmp_path / "submitter.yaml"
@@ -1102,12 +1101,10 @@ additional_info:
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_file_not_found(_mock_context):
+def test_bundle_gui_submit_submitter_info_file_not_found(_mock_context, mock_job_bundle_submitter):
     """
     Test that --submitter-info with a non-existent file shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     runner = CliRunner()
     result = runner.invoke(
@@ -1126,12 +1123,12 @@ def test_bundle_gui_submit_submitter_info_file_not_found(_mock_context):
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_txt_file_as_yaml(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_txt_file_as_yaml(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with a .txt file is treated as YAML.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary file with .txt extension containing valid YAML
     txt_file = tmp_path / "submitter.txt"
@@ -1158,12 +1155,12 @@ def test_bundle_gui_submit_submitter_info_txt_file_as_yaml(_mock_context, tmp_pa
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_yml_extension(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_yml_extension(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info works with .yml extension.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary YAML file with .yml extension
     yml_file = tmp_path / "submitter.yml"
@@ -1196,12 +1193,12 @@ host_application_version: "19.5"
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_all_formats_combined(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_all_formats_combined(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test combining all three formats: file + JSON + key=value with precedence.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary JSON file
     json_file = tmp_path / "submitter.json"
@@ -1245,12 +1242,12 @@ def test_bundle_gui_submit_submitter_info_all_formats_combined(_mock_context, tm
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_invalid_json_file(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_invalid_json_file(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with an invalid JSON file shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary file with invalid JSON
     json_file = tmp_path / "invalid.json"
@@ -1273,12 +1270,12 @@ def test_bundle_gui_submit_submitter_info_invalid_json_file(_mock_context, tmp_p
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_invalid_yaml_file(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_invalid_yaml_file(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with an invalid YAML file shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary file with invalid YAML
     yaml_file = tmp_path / "invalid.yaml"
@@ -1301,12 +1298,12 @@ def test_bundle_gui_submit_submitter_info_invalid_yaml_file(_mock_context, tmp_p
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_file_unknown_field(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_file_unknown_field(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with unknown fields in a file shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary JSON file with unknown field
     json_file = tmp_path / "submitter.json"
@@ -1330,12 +1327,12 @@ def test_bundle_gui_submit_submitter_info_file_unknown_field(_mock_context, tmp_
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
-def test_bundle_gui_submit_submitter_info_file_missing_submitter_name(_mock_context, tmp_path):
+def test_bundle_gui_submit_submitter_info_file_missing_submitter_name(
+    _mock_context, tmp_path, mock_job_bundle_submitter
+):
     """
     Test that --submitter-info with a file missing submitter_name shows an error.
     """
-    mock_job_bundle_submitter = Mock()
-    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
 
     # Create a temporary JSON file without submitter_name
     json_file = tmp_path / "submitter.json"
