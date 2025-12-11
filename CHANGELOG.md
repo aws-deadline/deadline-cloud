@@ -1,17 +1,21 @@
-## 0.54.0 (2025-12-09)
+## 0.54.0 (2025-12-11)
+
+### DEPRECATIONS
+* The CLI `bundle gui-submit --submitter-name` option has been deprecated. `--submitter-info` should now be used to provide the name.
 
 ### BREAKING CHANGES
 
 * add translations for multiple languages (#916) ([`a2e8b82`](https://github.com/aws-deadline/deadline-cloud/commit/a2e8b8229921e166cfb215c273a96fbb7fe500c0))
   * Submitter will now appear in another language if the system language is not English. 
-
 * small files in syncInputJobAttachment causes sync cancel (#908) ([`8f5f29b`](https://github.com/aws-deadline/deadline-cloud/commit/8f5f29bfc71eac1ccd595a2e26714c067957c587))
   * The parameter `processedFiles` is added to `ProgressReportMetadata`.
+* `deadline.ui.show_job_bundle_submitter`: Input parameter renamed from `submitter_name` to `submitter_info` and now expects a `deadline.dataclasses.SubmitterInfo` object as input. (#940) ([`74a3b01`](https://github.com/aws-deadline/deadline-cloud/commit/74a3b01feeae875ec4b5ff056430a1311fb2ce45))
+* `deadline.ui.SubmitJobToDeadlineDialog`: The `SubmitJobToDeadlineDialog.submitter_name` property has been removed and the name can now be accessed via `SubmitJobToDeadlineDialog.submitter_info.submitter_name` (#940) ([`74a3b01`](https://github.com/aws-deadline/deadline-cloud/commit/74a3b01feeae875ec4b5ff056430a1311fb2ce45))
 
 ### Features
-* add telemetry event upon mounting vfs (#939) ([`890387c`](https://github.com/aws-deadline/deadline-cloud/commit/890387c0958447b78e915977e91c48e17fcfd38f))
 * report paths of downloaded files in json summary (#919) ([`e288776`](https://github.com/aws-deadline/deadline-cloud/commit/e288776ce1c378361852f6ab29f32f650d901f60))
 * add foundations for future non-english UI translations (#901) ([`70dd775`](https://github.com/aws-deadline/deadline-cloud/commit/70dd775b258eb237c9c4c82197fddd006a7887c7))
+* add an 'About' dialog to show version information (#940) ([`74a3b01`](https://github.com/aws-deadline/deadline-cloud/commit/74a3b01feeae875ec4b5ff056430a1311fb2ce45))
 
 ### Bug Fixes
 * process hangs on exit with high volume of telemetry (#936) ([`938d9f2`](https://github.com/aws-deadline/deadline-cloud/commit/938d9f28767e120d059d85f126316714c0764711))
