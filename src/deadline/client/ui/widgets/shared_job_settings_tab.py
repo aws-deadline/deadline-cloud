@@ -128,24 +128,25 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
     def refresh_queue_parameters(self, load_new_bundle: bool = False):
         """
-        If the default queue id or job bundle has changed, refresh the queue parameters.
+        If the default farm id, queue id, or job bundle has changed, refresh the queue parameters.
         """
         farm_id = get_setting("defaults.farm_id")
         queue_id = get_setting("defaults.queue_id")
         if not farm_id or not queue_id:
             self.queue_parameters_box.rebuild_ui(async_loading_state="")
             return  # If the user has not selected a farm or queue ID, don't try to load
+        farm_or_queue_changed = farm_id != self.farm_id or queue_id != self.queue_id
         if (
             self.queue_parameters_box.async_loading_state
-            or queue_id != self.queue_id
+            or farm_or_queue_changed
             or load_new_bundle
         ):
             self.queue_parameters_box.rebuild_ui(
                 async_loading_state="Reloading Queue Environments..."
             )
-            # Join the thread if the queue id or job bundle has changed and the thread is running
+            # Join the thread if the farm, queue id, or job bundle has changed and the thread is running
             if (
-                (queue_id != self.queue_id or load_new_bundle)
+                (farm_or_queue_changed or load_new_bundle)
                 and self.__refresh_queue_parameters_thread
                 and self.__refresh_queue_parameters_thread.is_alive()
             ):
@@ -490,7 +491,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         Build the UI for the Deadline settings
         """
-        # Import combo box classes from deadline_config_dialog
+        # Import here to avoid circular import
         from ..dialogs.deadline_config_dialog import (
             DeadlineFarmListComboBox,
             DeadlineQueueListComboBox,

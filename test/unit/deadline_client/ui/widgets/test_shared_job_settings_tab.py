@@ -272,3 +272,94 @@ def test_queue_change_refreshes_storage_profile_list(
 
             # Verify storage profile list was refreshed
             mock_refresh.assert_called_once()
+
+
+# Tests for SharedJobSettingsWidget.refresh_queue_parameters
+
+
+def test_refresh_queue_parameters_triggers_on_farm_change(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    widget = shared_job_settings_tab
+
+    # Set initial farm and queue IDs
+    widget.farm_id = "farm-initial"
+    widget.queue_id = "queue-initial"
+
+    with patch(
+        "deadline.client.ui.widgets.shared_job_settings_tab.get_setting"
+    ) as mock_get_setting:
+        # Simulate farm change (different farm_id, same queue_id)
+        mock_get_setting.side_effect = lambda key: {
+            "defaults.farm_id": "farm-new",
+            "defaults.queue_id": "queue-initial",
+        }.get(key)
+
+        with patch.object(widget.queue_parameters_box, "rebuild_ui") as mock_rebuild, patch.object(
+            widget, "_start_load_queue_parameters_thread"
+        ) as mock_start_thread:
+            widget.refresh_queue_parameters()
+
+            mock_rebuild.assert_called_once_with(
+                async_loading_state="Reloading Queue Environments..."
+            )
+            mock_start_thread.assert_called_once()
+
+
+def test_refresh_queue_parameters_triggers_on_queue_change(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    widget = shared_job_settings_tab
+
+    # Set initial farm and queue IDs
+    widget.farm_id = "farm-initial"
+    widget.queue_id = "queue-initial"
+
+    with patch(
+        "deadline.client.ui.widgets.shared_job_settings_tab.get_setting"
+    ) as mock_get_setting:
+        # Simulate queue change (same farm_id, different queue_id)
+        mock_get_setting.side_effect = lambda key: {
+            "defaults.farm_id": "farm-initial",
+            "defaults.queue_id": "queue-new",
+        }.get(key)
+
+        with patch.object(widget.queue_parameters_box, "rebuild_ui") as mock_rebuild, patch.object(
+            widget, "_start_load_queue_parameters_thread"
+        ) as mock_start_thread:
+            widget.refresh_queue_parameters()
+
+            mock_rebuild.assert_called_once_with(
+                async_loading_state="Reloading Queue Environments..."
+            )
+            mock_start_thread.assert_called_once()
+
+
+def test_refresh_queue_parameters_no_refresh_when_unchanged(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    widget = shared_job_settings_tab
+
+    # Set initial farm and queue IDs
+    widget.farm_id = "farm-same"
+    widget.queue_id = "queue-same"
+
+    # Clear the async loading state so it doesn't trigger refresh
+    widget.queue_parameters_box.async_loading_state = ""
+
+    with patch(
+        "deadline.client.ui.widgets.shared_job_settings_tab.get_setting"
+    ) as mock_get_setting:
+        # Same farm and queue IDs
+        mock_get_setting.side_effect = lambda key: {
+            "defaults.farm_id": "farm-same",
+            "defaults.queue_id": "queue-same",
+        }.get(key)
+
+        with patch.object(widget.queue_parameters_box, "rebuild_ui") as mock_rebuild, patch.object(
+            widget, "_start_load_queue_parameters_thread"
+        ) as mock_start_thread:
+            widget.refresh_queue_parameters()
+
+            mock_rebuild.assert_not_called()
+            mock_start_thread.assert_not_called()
