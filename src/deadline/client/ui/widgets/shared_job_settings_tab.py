@@ -6,7 +6,6 @@ A UI Widget containing the render setup tab
 
 from __future__ import annotations
 
-import sys
 import threading
 from typing import Any, Dict, Optional
 
@@ -15,7 +14,6 @@ from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QRadioButton,
@@ -24,8 +22,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QWidget,
 )
 
-from ... import api
-from ...config import get_setting
+from ...config import get_setting, set_setting, config_file
 from .._utils import CancelationFlag, tr
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...api import get_queue_parameter_definitions
@@ -493,13 +490,143 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         Build the UI for the Deadline settings
         """
+        # Import combo box classes from deadline_config_dialog
+        from ..dialogs.deadline_config_dialog import (
+            DeadlineFarmListComboBox,
+            DeadlineQueueListComboBox,
+            DeadlineStorageProfileNameListComboBox,
+        )
+
         self.farm_box_label = QLabel(tr("Farm"))
-        self.farm_box = DeadlineFarmDisplay()
+        self.farm_box = DeadlineFarmListComboBox(parent=self)
         self.layout.addRow(self.farm_box_label, self.farm_box)
 
         self.queue_box_label = QLabel(tr("Queue"))
-        self.queue_box = DeadlineQueueDisplay()
+        self.queue_box = DeadlineQueueListComboBox(parent=self)
         self.layout.addRow(self.queue_box_label, self.queue_box)
+
+        self.storage_profile_box_label = QLabel(tr("Default storage profile"))
+        self.storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=self)
+        self.layout.addRow(self.storage_profile_box_label, self.storage_profile_box)
+
+        # Hide storage profile by default - only show when queue has storage profiles
+        self._set_storage_profile_visible(False)
+
+        # Connect signals for farm, queue, and storage profile changes
+        self.farm_box.box.currentIndexChanged.connect(self._on_farm_changed)
+        self.queue_box.box.currentIndexChanged.connect(self._on_queue_changed)
+        self.storage_profile_box.box.currentIndexChanged.connect(self._on_storage_profile_changed)
+
+        # Connect to storage profile combo box model to detect when list changes
+        self.storage_profile_box.box.model().rowsInserted.connect(
+            self._update_storage_profile_visibility
+        )
+        self.storage_profile_box.box.model().rowsRemoved.connect(
+            self._update_storage_profile_visibility
+        )
+        self.storage_profile_box.box.model().modelReset.connect(
+            self._update_storage_profile_visibility
+        )
+
+        # Initialize with current config
+        config = config_file.read_config()
+        self.farm_box.set_config(config)
+        self.queue_box.set_config(config)
+        self.storage_profile_box.set_config(config)
+
+    def _set_storage_profile_visible(self, visible: bool):
+        """Show or hide the storage profile selector"""
+        self.storage_profile_box_label.setVisible(visible)
+        self.storage_profile_box.setVisible(visible)
+
+    def _update_storage_profile_visibility(self):
+        """Update storage profile visibility based on available profiles"""
+        # Check if there are actual storage profiles (not just placeholder items)
+        count = self.storage_profile_box.box.count()
+        # Hide if empty or only has "<none selected>" or "<refreshing>" placeholder
+        has_real_profiles = count > 0 and self.storage_profile_box.box.itemData(0) not in (
+            None,
+            "",
+        )
+        # Also check if it's just a refreshing placeholder
+        if count == 1 and self.storage_profile_box.box.itemText(0) in (
+            "<refreshing>",
+            "<none selected>",
+        ):
+            has_real_profiles = False
+        self._set_storage_profile_visible(has_real_profiles)
+
+    def _on_farm_changed(self, index: int):
+        """Handle farm selection change in Submit Dialog"""
+        if index < 0:
+            return
+
+        # Get the selected farm ID from the combo box
+        farm_id = self.farm_box.box.itemData(index)
+        if farm_id is None:
+            return
+
+        # Update config immediately (unlike Settings Dialog which defers to apply())
+        set_setting("defaults.farm_id", farm_id)
+
+        # Refresh queue list for the new farm (same as Settings Dialog)
+        self.queue_box.refresh_list()
+
+        # Notify parent to refresh (triggers submit button state update and queue parameters)
+        self._notify_parent_refresh()
+
+    def _on_queue_changed(self, index: int):
+        """Handle queue selection change in Submit Dialog"""
+        if index < 0:
+            return
+
+        # Get the selected queue ID from the combo box
+        queue_id = self.queue_box.box.itemData(index)
+        if queue_id is None:
+            return
+
+        # Update config immediately (unlike Settings Dialog which defers to apply())
+        set_setting("defaults.queue_id", queue_id)
+
+        # Refresh storage profile list for the new queue
+        self.storage_profile_box.refresh_list()
+
+        # Notify parent to refresh (triggers submit button state update and queue parameters)
+        self._notify_parent_refresh()
+
+    def _on_storage_profile_changed(self, index: int):
+        """Handle storage profile selection change in Submit Dialog"""
+        if index < 0:
+            return
+
+        # Get the selected storage profile ID from the combo box
+        storage_profile_id = self.storage_profile_box.box.itemData(index)
+
+        # Update config immediately
+        set_setting("settings.storage_profile_id", storage_profile_id if storage_profile_id else "")
+
+    def _notify_parent_refresh(self):
+        """Helper to notify parent widgets to refresh after config changes"""
+        # Find SharedJobSettingsWidget parent to refresh queue parameters
+        parent_widget = self.parent()
+        while parent_widget is not None:
+            if hasattr(parent_widget, "refresh_queue_parameters"):
+                parent_widget.refresh_queue_parameters()
+            if hasattr(parent_widget, "parent") and callable(parent_widget.parent):
+                parent_widget = parent_widget.parent()
+            else:
+                break
+
+        # Find SubmitJobToDeadlineDialog to refresh submit button state
+        parent_widget = self.parent()
+        while parent_widget is not None:
+            if hasattr(parent_widget, "refresh_deadline_settings"):
+                parent_widget.refresh_deadline_settings()
+                break
+            if hasattr(parent_widget, "parent") and callable(parent_widget.parent):
+                parent_widget = parent_widget.parent()
+            else:
+                break
 
     def refresh_setting_controls(self, deadline_authorized):
         """
@@ -511,190 +638,19 @@ class DeadlineCloudSettingsWidget(QGroupBox):
                     api.check_deadline_available, for example from
                     an AWS Deadline Cloud Status Widget.
         """
-        self.farm_box.refresh(deadline_authorized)
-        self.queue_box.refresh(deadline_authorized)
+        # Update config for combo boxes
+        config = config_file.read_config()
+        self.farm_box.set_config(config)
+        self.queue_box.set_config(config)
+        self.storage_profile_box.set_config(config)
 
+        # Refresh selected items to reflect current config
+        self.farm_box.refresh_selected_id()
+        self.queue_box.refresh_selected_id()
+        self.storage_profile_box.refresh_selected_id()
 
-class _DeadlineNamedResourceDisplay(QWidget):
-    """
-    A Label for displaying an AWS Deadline Cloud resource, that starts displaying
-    it as the Id, but does an async call to AWS Deadline Cloud to convert it
-    to the name.
-
-    Args:
-        resource_name (str): The resource name for the list, like "Farm",
-                "Queue", "Fleet".
-        setting_name (str): The setting name for the item.
-    """
-
-    # Emitted when the background refresh thread catches an exception,
-    # provides (operation_name, BaseException)
-    background_exception = Signal(str, BaseException)
-
-    # Emitted when an async refresh_item thread completes,
-    # provides (refresh_id, id, name, description)
-    _item_update = Signal(int, str, str, str)
-
-    def __init__(self, *, resource_name, setting_name, parent: Optional[QWidget] = None):
-        super().__init__(parent=parent)
-
-        self.__refresh_thread = None
-        self.__refresh_id = 0
-        self.canceled = CancelationFlag()
-        self.destroyed.connect(self.canceled.set_canceled)
-
-        self.resource_name = resource_name
-        self.setting_name = setting_name
-        self.item_id = get_setting(self.setting_name)
-        self.item_name = ""
-        self.item_description = ""
-
-        self._build_ui()
-
-        self.label.setText(self.item_display_name())
-
-    def _build_ui(self):
-        self.label = QLabel(parent=self)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.label)
-        self._item_update.connect(self.handle_item_update)
-        self.background_exception.connect(self.handle_background_exception)
-
-    def handle_background_exception(self, e):
-        self.label.setText(self.item_id)
-        self.label.setToolTip("")
-
-    def item_display_name(self):
-        """Returns the text to display the item name as"""
-        return self.item_name or self.item_id or "<not configured>"
-
-    def refresh(self, deadline_authorized):
-        """
-        Starts a background thread to refresh the item name.
-
-        Args:
-            deadline_authorized (bool): Should be the result of a call to
-                    api.check_deadline_available, for example from
-                    an AWS Deadline Cloud Status Widget.
-        """
-        resource_id = get_setting(self.setting_name)
-        if resource_id != self.item_id or not self.item_name:
-            self.item_id = resource_id
-            self.item_name = ""
-            self.item_description = ""
-            display_name = self.item_display_name()
-            # Only call the AWS Deadline Cloud API if we've confirmed access
-            if deadline_authorized:
-                display_name = "<refreshing> - " + display_name
-
-                self.__refresh_id += 1
-                self.__refresh_thread = threading.Thread(
-                    target=self._refresh_thread_function,
-                    name=f"AWS Deadline Cloud refresh {self.resource_name} item thread",
-                    args=(self.__refresh_id,),
-                )
-                self.__refresh_thread.start()
-
-            self.label.setText(display_name)
-            self.label.setToolTip(self.item_description)
-        else:
-            self.label.setText(self.item_display_name())
-
-    def handle_item_update(self, refresh_id, id, name, description):
-        # Apply the refresh if it's still for the latest call
-        if refresh_id == self.__refresh_id:
-            self.item_id = id
-            self.item_name = name
-            self.item_description = description
-            self.label.setText(self.item_display_name())
-            self.label.setToolTip(self.item_description)
-
-    def _refresh_thread_function(self, refresh_id: int):
-        """
-        This function gets started in a background thread to refresh the list.
-        """
-        try:
-            item = self.get_item()
-            if not self.canceled:
-                self._item_update.emit(refresh_id, *item)
-        except BaseException as e:
-            if not self.canceled:
-                self.background_exception.emit(f"Refresh {self.resource_name} item", e)
-
-
-class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
-
-    def get_item(self):
-        farm_id = get_setting(self.setting_name)
-        if farm_id:
-            deadline = api.get_boto3_client("deadline")
-            response = deadline.get_farm(farmId=farm_id)
-            return (response["farmId"], response["displayName"], response["description"])
-        else:
-            return ("", "", "")
-
-
-class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
-
-    def get_item(self):
-        farm_id = get_setting("defaults.farm_id")
-        queue_id = get_setting(self.setting_name)
-        if farm_id and queue_id:
-            deadline = api.get_boto3_client("deadline")
-            response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
-            return (response["queueId"], response["displayName"], response["description"])
-        else:
-            return ("", "", "")
-
-
-class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
-    WINDOWS_OS = "Windows"
-    MAC_OS = "Macos"
-    LINUX_OS = "Linux"
-
-    def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(
-            resource_name="Storage profile name",
-            setting_name="settings.storage_profile_id",
-            parent=parent,
-        )
-
-    def get_item(self):
-        farm_id = get_setting("defaults.farm_id")
-        queue_id = get_setting("defaults.queue_id")
-        storage_profile_id = get_setting(self.setting_name)
-
-        if farm_id and queue_id and storage_profile_id:
-            deadline = api.get_boto3_client("deadline")
-            response = deadline.list_storage_profiles_for_queue(farmId=farm_id, queueId=queue_id)
-            farm_storage_profiles = response.get("storageProfiles", {})
-
-            if farm_storage_profiles:
-                storage_profile = [
-                    (item["storageProfileId"], item["displayName"], item["osFamily"])
-                    for item in farm_storage_profiles
-                    if storage_profile_id == item["storageProfileId"]
-                ]
-                return storage_profile[0]
-
-        return ("", "", "")
-
-    def _get_default_storage_profile_name(self) -> str:
-        """
-        Get a string specifying what the OS is, following the format the Deadline storage profile API expects.
-        """
-        if sys.platform.startswith("linux"):
-            return self.LINUX_OS
-
-        if sys.platform.startswith("darwin"):
-            return self.MAC_OS
-
-        if sys.platform.startswith("win"):
-            return self.WINDOWS_OS
-
-        return ""
+        # Refresh lists if authorized
+        if deadline_authorized:
+            self.farm_box.refresh_list()
+            self.queue_box.refresh_list()
+            self.storage_profile_box.refresh_list()
