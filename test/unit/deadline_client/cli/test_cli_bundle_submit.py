@@ -19,6 +19,7 @@ import deadline.client.api as api_module
 from deadline.client.cli import main
 from deadline.job_attachments.models import JobAttachmentsFileSystem
 from deadline.job_attachments.upload import S3AssetManager
+from deadline.client.dataclasses import SubmitterInfo
 
 from ..api.test_job_bundle_submission import (
     MOCK_FARM_ID,
@@ -674,7 +675,7 @@ def test_cli_bundle_reject_upload_confirmation(
 @patch.object(deadline.client.ui, "gui_context_for_cli")
 def test_gui_submit_submitter_name(_mock_context):
     """
-    Verify that the --submitter-name arg gets passed through correctly
+    Verify that the DEPRECATED --submitter-name arg gets passed through correctly
     """
 
     # Unconventional mocking pattern because of how the function is imported in code
@@ -688,7 +689,7 @@ def test_gui_submit_submitter_name(_mock_context):
         ["bundle", "gui-submit", "--browse", "--submitter-name", "MyDCC"],
     )
     _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
-    assert kwargs["submitter_name"] == "MyDCC"
+    assert kwargs["submitter_info"] == SubmitterInfo(submitter_name="MyDCC")
 
 
 def test_bundle_submit_with_target_task_run_status(
@@ -755,3 +756,603 @@ def test_bundle_submit_without_target_task_run_status(
     deadline_mock.create_job.assert_called_once()
     _, kwargs = deadline_mock.create_job.call_args
     assert "targetTaskRunStatus" not in kwargs
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_key_value_pairs(_mock_context):
+    """
+    Test that --submitter-info works with multiple key=value pairs.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            "submitter_name=Maya",
+            "--submitter-info",
+            "host_application_name=Maya",
+            "--submitter-info",
+            "host_application_version=2024",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Maya"
+    assert submitter_info.host_application_name == "Maya"
+    assert submitter_info.host_application_version == "2024"
+    assert submitter_info.submitter_package_name is None
+    assert submitter_info.submitter_package_version is None
+    assert submitter_info.additional_info is None
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_inline_json(_mock_context):
+    """
+    Test that --submitter-info works with inline JSON.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            '{"submitter_name": "Blender", "host_application_name": "Blender", "host_application_version": "4.0", "additional_info": {"render_engine": "Cycles", "some_versions": ["1.0", "1.1", "1.2"]}}',
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Blender"
+    assert submitter_info.host_application_name == "Blender"
+    assert submitter_info.host_application_version == "4.0"
+    assert submitter_info.submitter_package_name is None
+    assert submitter_info.submitter_package_version is None
+    assert submitter_info.additional_info == {
+        "render_engine": "Cycles",
+        "some_versions": ["1.0", "1.1", "1.2"],
+    }
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_missing_submitter_name(_mock_context):
+    """
+    Test that --submitter-info without submitter_name shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            "host_application_name=Maya",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "submitter_name is required" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_unknown_field_key_value(_mock_context):
+    """
+    Test that --submitter-info with an unknown field in key=value format shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            "submitter_name=Maya",
+            "--submitter-info",
+            "unknown_field=value",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown field" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_unknown_field_json(_mock_context):
+    """
+    Test that --submitter-info with an unknown field in JSON format shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            '{"submitter_name": "Maya", "invalid_key": "value"}',
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown field" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_invalid_json(_mock_context):
+    """
+    Test that invalid JSON in --submitter-info shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            '{"submitter_name": "Test", invalid}',
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not formatted correctly" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_invalid_key_value_format(_mock_context):
+    """
+    Test that invalid key=value format (missing equals sign) shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            "invalid_format_no_equals",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not formatted correctly" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_multiple_json_allowed(_mock_context):
+    """
+    Test that multiple JSON objects are allowed and merged.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            '{"submitter_name": "Test1"}',
+            "--submitter-info",
+            '{"host_application_name": "Test2"}',
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Test1"
+    assert submitter_info.host_application_name == "Test2"
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_name_overrides_submitter_info(_mock_context):
+    """
+    Test that when both --submitter-name and --submitter-info are provided,
+    --submitter-name takes precedence and a deprecation warning is shown.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-name",
+            "DeprecatedName",
+            "--submitter-info",
+            "submitter_name=NewName",
+            "--submitter-info",
+            "host_application_name=Maya",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "DeprecationWarning: The option --submitter-name is deprecated" in result.output
+
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "DeprecatedName"
+    assert submitter_info.host_application_name == "Maya"
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_json_file(_mock_context, tmp_path):
+    """
+    Test that --submitter-info works with a JSON file path.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary JSON file
+    json_file = tmp_path / "submitter.json"
+    json_data = {
+        "submitter_name": "Maya",
+        "host_application_name": "Maya",
+        "host_application_version": "2024",
+        "additional_info": {"render_engine": "Arnold", "plugins": ["mtoa", "redshift"]},
+    }
+    json_file.write_text(json.dumps(json_data))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{json_file}",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Maya"
+    assert submitter_info.host_application_name == "Maya"
+    assert submitter_info.host_application_version == "2024"
+    assert submitter_info.additional_info == {
+        "render_engine": "Arnold",
+        "plugins": ["mtoa", "redshift"],
+    }
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_yaml_file(_mock_context, tmp_path):
+    """
+    Test that --submitter-info works with a YAML file path.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary YAML file
+    yaml_file = tmp_path / "submitter.yaml"
+    yaml_data = """
+submitter_name: Blender
+host_application_name: Blender
+host_application_version: "4.0"
+additional_info:
+  render_engine: Cycles
+  samples: 128
+"""
+    yaml_file.write_text(yaml_data)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{yaml_file}",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Blender"
+    assert submitter_info.host_application_name == "Blender"
+    assert submitter_info.host_application_version == "4.0"
+    assert submitter_info.additional_info == {"render_engine": "Cycles", "samples": 128}
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_file_not_found(_mock_context):
+    """
+    Test that --submitter-info with a non-existent file shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            "file:///nonexistent/file.json",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_txt_file_as_yaml(_mock_context, tmp_path):
+    """
+    Test that --submitter-info with a .txt file is treated as YAML.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary file with .txt extension containing valid YAML
+    txt_file = tmp_path / "submitter.txt"
+    txt_file.write_text("submitter_name: Test\nhost_application_name: Maya")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{txt_file}",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "Test"
+    assert submitter_info.host_application_name == "Maya"
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_yml_extension(_mock_context, tmp_path):
+    """
+    Test that --submitter-info works with .yml extension.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary YAML file with .yml extension
+    yml_file = tmp_path / "submitter.yml"
+    yml_data = """
+submitter_name: TestApp
+host_application_name: Houdini
+host_application_version: "19.5"
+"""
+    yml_file.write_text(yml_data)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{yml_file}",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    assert submitter_info.submitter_name == "TestApp"
+    assert submitter_info.host_application_name == "Houdini"
+    assert submitter_info.host_application_version == "19.5"
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_all_formats_combined(_mock_context, tmp_path):
+    """
+    Test combining all three formats: file + JSON + key=value with precedence.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary JSON file
+    json_file = tmp_path / "submitter.json"
+    json_data = {
+        "submitter_name": "FromFile",
+        "host_application_name": "FromFile",
+        "host_application_version": "1.0",
+        "additional_info": {"source": "file"},
+    }
+    json_file.write_text(json.dumps(json_data))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{json_file}",
+            "--submitter-info",
+            '{"host_application_name": "FromJSON", "submitter_package_name": "FromJSON"}',
+            "--submitter-info",
+            "host_application_version=FromKeyValue",
+            "--submitter-info",
+            "submitter_package_version=1.2.3",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    submitter_info = kwargs["submitter_info"]
+    assert submitter_info is not None
+    # Later values should override earlier ones
+    assert submitter_info.submitter_name == "FromFile"  # Only in file
+    assert submitter_info.host_application_name == "FromJSON"  # JSON overrides file
+    assert submitter_info.host_application_version == "FromKeyValue"  # Key=value overrides JSON
+    assert submitter_info.submitter_package_name == "FromJSON"  # Only in JSON
+    assert submitter_info.submitter_package_version == "1.2.3"  # Only in key=value
+    assert submitter_info.additional_info == {"source": "file"}  # Only in file
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_invalid_json_file(_mock_context, tmp_path):
+    """
+    Test that --submitter-info with an invalid JSON file shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary file with invalid JSON
+    json_file = tmp_path / "invalid.json"
+    json_file.write_text('{"submitter_name": "Test", invalid}')
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{json_file}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "is formatted incorrectly" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_invalid_yaml_file(_mock_context, tmp_path):
+    """
+    Test that --submitter-info with an invalid YAML file shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary file with invalid YAML
+    yaml_file = tmp_path / "invalid.yaml"
+    yaml_file.write_text('submitter_name: "Test"\n  invalid: yaml: structure')
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{yaml_file}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "is formatted incorrectly" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_file_unknown_field(_mock_context, tmp_path):
+    """
+    Test that --submitter-info with unknown fields in a file shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary JSON file with unknown field
+    json_file = tmp_path / "submitter.json"
+    json_data = {"submitter_name": "Test", "unknown_field": "value"}
+    json_file.write_text(json.dumps(json_data))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{json_file}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown field" in result.output
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_bundle_gui_submit_submitter_info_file_missing_submitter_name(_mock_context, tmp_path):
+    """
+    Test that --submitter-info with a file missing submitter_name shows an error.
+    """
+    mock_job_bundle_submitter = Mock()
+    sys.modules["deadline.client.ui.job_bundle_submitter"] = mock_job_bundle_submitter
+
+    # Create a temporary JSON file without submitter_name
+    json_file = tmp_path / "submitter.json"
+    json_data = {"host_application_name": "Maya"}
+    json_file.write_text(json.dumps(json_data))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "bundle",
+            "gui-submit",
+            "--browse",
+            "--submitter-info",
+            f"file://{json_file}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "submitter_name is required" in result.output
