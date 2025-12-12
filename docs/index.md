@@ -30,6 +30,7 @@ Notable features include:
 
 The AWS Deadline Cloud client can be installed by the standard python packaging mechanisms:
 ```sh
+
 $ pip install deadline
 ```
 
@@ -72,24 +73,40 @@ An example usage is to create a shortcut called "Deadline Settings" on your desk
 Opening the shortcut will show the Deadline Settings dialog without a terminal window behind it.
 
 ## Manual Installation Deadline[GUI] Instructions
+**Use Case:** This allows users to install Deadline GUI components on machines without internet access by downloading packages on a connected machine and transferring them.
+
 Prerequisites: Ensure the Deadline Client is installed on a machine with internet access.
 
 ### Step 1: Download the packages
 
-Use the Python version bundled with the installer to download the Deadline GUI components using pip:
+Use the Python version bundled with the installer to download the Deadline GUI components:
+```bash
+path/to/python -m pip download -d path/to/download/directory deadline[gui]=={DEADLINE_CLIENT_VERSION}
 ```
-/Path/to/python -m pip download -d /your/download/directory deadline[gui]=={DEADLINE_CLIENT_VERSION}
-```
-### Step 2: Transfer the packages
 
-Copy the directory containing the downloaded packages to your offline machine.
+### Step 2: Verify the download
 
-### Step 3: Install the packages
+Check that all packages were downloaded successfully:
+```bash
+ls path/to/download/directory
+# Should show multiple .whl and .tar.gz files
+```
 
-Install the packages into the appropriate Submitter or Python environment where the Deadline Client is installed:
+### Step 3: Transfer the packages
+
+Copy the entire download directory to your offline machine using USB drive, network share, or other transfer method.
+
+### Step 4: Install the packages
+
+Install the packages using the downloaded files:
+```bash
+path/to/python -m pip install --no-index --find-links path/to/download/directory --target path/to/target/python/modules deadline[gui]
 ```
-/Path/to/python -m pip install --no-index --upgrade --find-links /your/pypi/bundle/from/above --target /Your/Target/python/module/dir *.whl
-```
+
+**Arguments explained:**
+- `--no-index`: Don't use PyPI, only use local files
+- `--find-links`: Directory containing the downloaded packages
+- `--target`: Where to install the packages
 
 
 ## Job-related Files
