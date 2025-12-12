@@ -4,6 +4,8 @@
 Functionality common to all the CLI groups.
 """
 
+from __future__ import annotations
+
 __all__ = [
     "_PROMPT_WHEN_COMPLETE",
     "_prompt_at_completion",
@@ -11,6 +13,8 @@ __all__ = [
     "_apply_cli_options_to_config",
     "_cli_object_repr",
     "_ProgressBarCallbackManager",
+    "_parse_file_parameter",
+    "_parse_multi_format_parameters",
 ]
 
 import sys
@@ -18,8 +22,12 @@ from configparser import ConfigParser
 from typing import Any, Callable, Optional, Set
 import logging
 import traceback
+import json
+import re
+from pathlib import Path
 
 import click
+import yaml
 from contextlib import ExitStack
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
@@ -192,6 +200,109 @@ def _cli_object_repr(obj: Any) -> str:
     # strings to end with "\n".
     obj = _fix_multiline_strings(obj)
     return deadline_yaml_dump(obj)
+
+
+def _parse_file_parameter(file_path: Path) -> dict:
+    """
+    Parse a file parameter (with file:// prefix) into a dictionary.
+
+    Supports JSON and YAML files. Unknown extensions default to YAML.
+
+    Args:
+        file_param: File path string with 'file://' prefix
+
+    Returns:
+        Dictionary containing the parsed file contents
+
+    Raises:
+        click.BadParameter: If file doesn't exist, isn't readable, or contains invalid data
+    """
+    file_path = file_path.expanduser()
+
+    if not file_path.exists():
+        raise click.BadParameter(f"Provided file '{file_path}' does not exist.")
+    if not file_path.is_file():
+        raise click.BadParameter(f"Provided file '{file_path}' is not a file.")
+
+    try:
+        content = file_path.read_text()
+    except OSError as e:
+        raise click.BadParameter(f"Could not open file '{file_path}': {e}") from e
+
+    try:
+        if file_path.suffix.lower() == ".json":
+            data = json.loads(content)
+        else:  # Default to YAML for other extensions
+            data = yaml.safe_load(content)
+    except (yaml.YAMLError, json.JSONDecodeError) as e:
+        raise click.BadParameter(f"File '{file_path}' is formatted incorrectly: {e}") from e
+
+    if not isinstance(data, dict):
+        raise click.BadParameter(f"File '{file_path}' should contain a dictionary.")
+
+    return data
+
+
+def _parse_multi_format_parameters(params: list[str]) -> dict:
+    """
+    Parse a list of parameters that can be in multiple formats.
+
+    Supports three formats that can be mixed:
+    - Key=value pairs: "key=value"
+    - Inline JSON strings: '{"key": "value"}'
+    - File paths: "file://path/to/file.json" or "file://path/to/file.yaml"
+
+    Later values for the same key override earlier ones.
+
+    Args:
+        params: List of parameter strings in various formats
+
+    Returns:
+        Dictionary with all parsed key-value pairs merged
+
+    Raises:
+        click.BadParameter: If any argument is malformed or files can't be read
+    """
+    result_dict = {}
+
+    for param in params:
+        param = param.strip()
+
+        # Case 1: File path
+        prefix = "file://"
+        if param.startswith(prefix):
+            # retain support for Python 3.8 which does not support str.removeprefix.
+            file_path = Path(param[len(prefix) :])
+            data = _parse_file_parameter(file_path)
+            result_dict.update(data)
+
+        # Case 2: Inline JSON string
+        elif re.match(r"^{.*}$", param):
+            try:
+                data = json.loads(param)
+            except (json.JSONDecodeError, TypeError) as e:
+                raise click.BadParameter(
+                    f"Parameter ('{param}') not formatted correctly. It must be key=value pairs, "
+                    f"inline JSON, or a path to a JSON or YAML document prefixed with 'file://': {e}"
+                )
+            if not isinstance(data, dict):
+                raise click.BadParameter(
+                    f"Argument ('{param}') must contain a dictionary mapping keys to their values."
+                )
+            result_dict.update(data)
+
+        # Case 3: Key=value string
+        elif match := re.match(r"^([^=]+)=(.*)$", param):
+            key, val = match.groups()
+            result_dict[key] = val
+
+        else:
+            raise click.BadParameter(
+                f"Parameter ('{param}') not formatted correctly. It must be key=value pairs, "
+                "inline JSON, or a path to a JSON or YAML document prefixed with 'file://'."
+            )
+
+    return result_dict
 
 
 class _ProgressBarCallbackManager:
