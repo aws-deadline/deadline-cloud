@@ -235,6 +235,35 @@ def test_storage_profile_shown_when_profiles_available(
     assert widget.storage_profile_box_label.isVisible()
 
 
+def test_storage_profile_shown_when_none_selected_sorts_first(
+    deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
+):
+    """Test that storage profile is visible even when <none selected> sorts to first position.
+
+    This tests the _list_update signal path which is used during async refresh.
+    The _list_update signal handler populates the combo box with block_signals,
+    so model signals don't fire - we need to explicitly trigger visibility update.
+    """
+    widget = deadline_cloud_settings_widget
+
+    # Simulate the async refresh completing with sorted profiles where
+    # "<none selected>" sorts first because '<' comes before letters alphabetically
+    items_list = [
+        ("<none selected>", ""),
+        ("Profile A", "sp-profile-a"),
+        ("Profile B", "sp-profile-b"),
+    ]
+
+    # Emit the _list_update signal to simulate async refresh completing
+    # This is the code path that was broken - the combo box is populated
+    # inside block_signals so model signals don't fire
+    widget.storage_profile_box._list_update.emit(1, items_list)
+
+    # Storage profile should be visible because there are real profiles
+    assert widget.storage_profile_box.isVisible()
+    assert widget.storage_profile_box_label.isVisible()
+
+
 def test_storage_profile_selection_updates_config(
     deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
 ):
