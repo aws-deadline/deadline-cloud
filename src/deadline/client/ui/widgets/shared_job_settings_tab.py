@@ -528,6 +528,10 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self.storage_profile_box.box.model().modelReset.connect(
             self._update_storage_profile_visibility
         )
+        # Also connect to the _list_update signal to handle updates after async refresh
+        self.storage_profile_box._list_update.connect(
+            lambda *args: self._update_storage_profile_visibility()
+        )
 
         # Initialize with current config
         config = config_file.read_config()
@@ -543,18 +547,18 @@ class DeadlineCloudSettingsWidget(QGroupBox):
     def _update_storage_profile_visibility(self):
         """Update storage profile visibility based on available profiles"""
         # Check if there are actual storage profiles (not just placeholder items)
+        # Note: "<none selected>" sorts first alphabetically and has empty string as data,
+        # so we need to check if there are items with non-empty data
         count = self.storage_profile_box.box.count()
-        # Hide if empty or only has "<none selected>" or "<refreshing>" placeholder
-        has_real_profiles = count > 0 and self.storage_profile_box.box.itemData(0) not in (
-            None,
-            "",
-        )
-        # Also check if it's just a refreshing placeholder
-        if count == 1 and self.storage_profile_box.box.itemText(0) in (
-            "<refreshing>",
-            "<none selected>",
-        ):
-            has_real_profiles = False
+        has_real_profiles = False
+        for i in range(count):
+            item_data = self.storage_profile_box.box.itemData(i)
+            item_text = self.storage_profile_box.box.itemText(i)
+            # Skip placeholder items
+            if item_text in ("<refreshing>", "<none selected>") or item_data in (None, ""):
+                continue
+            has_real_profiles = True
+            break
         self._set_storage_profile_visible(has_real_profiles)
 
     def _on_farm_changed(self, index: int):
