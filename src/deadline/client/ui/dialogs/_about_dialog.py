@@ -102,7 +102,10 @@ class _AboutDialog(QDialog):
 
         combined_info = {**submitter_dict, **env_data}
 
-        yaml_str = yaml.dump(combined_info, indent=4, sort_keys=False)
+        # Replace underscores with spaces in keys for user-friendly display
+        friendly_info = {k.replace("_", " "): v for k, v in combined_info.items()}
+
+        yaml_str = yaml.dump(friendly_info, indent=4, sort_keys=False)
         return yaml_str
 
     def _format_for_copy(self) -> str:

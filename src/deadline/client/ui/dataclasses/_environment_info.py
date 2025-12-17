@@ -30,6 +30,7 @@ class _EnvironmentInfo:
 
     Attributes:
         deadline_dep_versions: Dictionary of deadline dependency package names to versions
+        release_date: Human-readable release date of the deadline package (e.g., "December 11, 2025")
         os_name: Name of the operating system
         os_version: Operating system version
         os_architecture: OS architecture (e.g., "x86_64", "arm64")
@@ -39,6 +40,9 @@ class _EnvironmentInfo:
 
     deadline_dep_versions: dict[str, str]
     """Dictionary of deadline dependency package names to versions"""
+
+    release_date: str
+    """Human-readable release date of the deadline package (e.g., "December 11, 2025")"""
 
     os_name: str
     """Name of the operating system"""
@@ -54,6 +58,37 @@ class _EnvironmentInfo:
 
     qt_version: str
     """Qt framework version"""
+
+    @staticmethod
+    def _extract_release_date(version_string: str) -> str:
+        """
+        Extract and format the release date from a version string.
+
+        The version string may contain a date component in the format dYYYYMMDD
+        (e.g., '0.53.3.post24+g9eb659973.d20251211').
+
+        Args:
+            version_string: Version string potentially containing a date component
+
+        Returns:
+            Human-readable date string (e.g., 'December 11, 2025') or 'Unknown'
+        """
+        from datetime import datetime
+
+        # Look for date component in format dYYYYMMDD
+        match = re.search(r"\.d(\d{8})(?:\.|$)", version_string)
+        if not match:
+            return "Unknown"
+
+        date_str = match.group(1)
+        try:
+            # Parse YYYYMMDD format
+            date_obj = datetime.strptime(date_str, "%Y%m%d")
+            # Format as human-readable date (e.g., "December 11, 2025")
+            return date_obj.strftime("%B %d, %Y")
+        except ValueError:
+            logger.debug(f"Failed to parse date from version string: {version_string}")
+            return "Unknown"
 
     @staticmethod
     def collect() -> "_EnvironmentInfo":
@@ -140,8 +175,14 @@ class _EnvironmentInfo:
             logger.warning(f"Failed to retrieve Qt version: {e}")
             qt_version = "Unknown"
 
+        # Extract release date from deadline version string
+        release_date = _EnvironmentInfo._extract_release_date(
+            deadline_dep_versions.get("deadline", "")
+        )
+
         return _EnvironmentInfo(
             deadline_dep_versions=deadline_dep_versions,
+            release_date=release_date,
             python_version=python_version,
             os_name=os_name,
             os_version=os_version,
