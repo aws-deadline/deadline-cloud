@@ -9,20 +9,13 @@ to be human-readable by replacing underscores with spaces.
 
 import pytest
 
+try:
+    from deadline.client.ui.dialogs._about_dialog import _AboutDialog
 
-def _make_keys_human_readable(data):
-    """
-    Recursively replace underscores with spaces in dictionary keys.
-
-    This is a copy of the function from _about_dialog.py for testing purposes,
-    to avoid Qt import dependencies.
-    """
-    if isinstance(data, dict):
-        return {k.replace("_", " "): _make_keys_human_readable(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [_make_keys_human_readable(item) for item in data]
-    else:
-        return data
+    _make_keys_human_readable = _AboutDialog._make_keys_human_readable
+except ImportError:
+    # The tests in this file should be skipped if Qt UI related modules cannot be loaded
+    pytest.importorskip("deadline.client.ui.dialogs._about_dialog")
 
 
 @pytest.mark.parametrize(

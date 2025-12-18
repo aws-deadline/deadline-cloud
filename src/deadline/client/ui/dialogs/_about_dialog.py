@@ -88,7 +88,8 @@ class _AboutDialog(QDialog):
 
         self.setLayout(layout)
 
-    def _make_keys_human_readable(self, data):
+    @staticmethod
+    def _make_keys_human_readable(data):
         """
         Recursively replace underscores with spaces in dictionary keys.
 
@@ -99,9 +100,12 @@ class _AboutDialog(QDialog):
             The data structure with all dictionary keys made human-readable
         """
         if isinstance(data, dict):
-            return {k.replace("_", " "): self._make_keys_human_readable(v) for k, v in data.items()}
+            return {
+                k.replace("_", " "): _AboutDialog._make_keys_human_readable(v)
+                for k, v in data.items()
+            }
         elif isinstance(data, list):
-            return [self._make_keys_human_readable(item) for item in data]
+            return [_AboutDialog._make_keys_human_readable(item) for item in data]
         else:
             return data
 
