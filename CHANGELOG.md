@@ -1,3 +1,11 @@
+## 0.55.0 (2025-12-29)
+
+
+### Features
+* Update hash cache to support byte ranges for file chunking support (#953) ([`35a1802`](https://github.com/aws-deadline/deadline-cloud/commit/35a18026fffa0c1496975b5420a20cec3edca9da))
+
+
+
 ## 0.54.0 (2025-12-11)
 
 ### DEPRECATIONS
