@@ -17,6 +17,7 @@ from deadline.job_attachments.caches import (
     HashCacheEntry,
     S3CheckCache,
     S3CheckCacheEntry,
+    WHOLE_FILE_RANGE_END,
 )
 
 
@@ -266,6 +267,297 @@ class TestHashCache:
                     )
                 )
                 assert hc.get_entry("/no/file", HashAlgorithm.XXH128) is None
+
+    def test_get_entry_with_byte_range(self, tmpdir):
+        """
+        Tests that a byte range entry is returned when it exists in the cache
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        expected_entry = HashCacheEntry(
+            file_path="large_file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="chunk_hash_1",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=268435456,  # 256MB
+        )
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            hc.put_entry(expected_entry)
+            actual_entry = hc.get_entry(
+                "large_file.bin", HashAlgorithm.XXH128, range_start=0, range_end=268435456
+            )
+
+            # THEN
+            assert actual_entry == expected_entry
+            assert actual_entry.range_start == 0
+            assert actual_entry.range_end == 268435456
+
+    def test_get_entry_multiple_byte_ranges_same_file(self, tmpdir):
+        """
+        Tests that multiple byte range entries for the same file are stored and retrieved correctly
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        chunk_size = 268435456  # 256MB
+        entries = [
+            HashCacheEntry(
+                file_path="large_file.bin",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash=f"chunk_hash_{i}",
+                last_modified_time="1234.5678",
+                range_start=i * chunk_size,
+                range_end=(i + 1) * chunk_size,
+            )
+            for i in range(4)  # 4 chunks
+        ]
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            for entry in entries:
+                hc.put_entry(entry)
+
+            # THEN - each chunk should be retrievable independently
+            for i, expected_entry in enumerate(entries):
+                actual_entry = hc.get_entry(
+                    "large_file.bin",
+                    HashAlgorithm.XXH128,
+                    range_start=i * chunk_size,
+                    range_end=(i + 1) * chunk_size,
+                )
+                assert actual_entry == expected_entry
+                assert actual_entry.file_hash == f"chunk_hash_{i}"
+
+    def test_get_entry_byte_range_not_found(self, tmpdir):
+        """
+        Tests that None is returned when a specific byte range doesn't exist
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="chunk_hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=1000,
+        )
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            hc.put_entry(entry)
+
+            # THEN - different range should return None
+            assert (
+                hc.get_entry("file.bin", HashAlgorithm.XXH128, range_start=0, range_end=2000)
+                is None
+            )
+            assert (
+                hc.get_entry("file.bin", HashAlgorithm.XXH128, range_start=1000, range_end=2000)
+                is None
+            )
+
+    def test_get_entry_whole_file_vs_byte_range_independent(self, tmpdir):
+        """
+        Tests that whole-file hashes and byte-range hashes are stored independently
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        whole_file_entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="whole_file_hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=WHOLE_FILE_RANGE_END,
+        )
+        chunk_entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="chunk_hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=1000,
+        )
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            hc.put_entry(whole_file_entry)
+            hc.put_entry(chunk_entry)
+
+            # THEN - both should be retrievable independently
+            actual_whole = hc.get_entry("file.bin", HashAlgorithm.XXH128)
+            actual_chunk = hc.get_entry(
+                "file.bin", HashAlgorithm.XXH128, range_start=0, range_end=1000
+            )
+
+            assert actual_whole == whole_file_entry
+            assert actual_whole.file_hash == "whole_file_hash"
+            assert actual_chunk == chunk_entry
+            assert actual_chunk.file_hash == "chunk_hash"
+
+    def test_get_connection_entry_with_byte_range(self, tmpdir):
+        """
+        Tests that get_connection_entry works with byte range parameters
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        expected_entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="chunk_hash",
+            last_modified_time="1234.5678",
+            range_start=1000,
+            range_end=2000,
+        )
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            hc.put_entry(expected_entry)
+            connection = hc.get_local_connection()
+            actual_entry = hc.get_connection_entry(
+                "file.bin", HashAlgorithm.XXH128, connection, range_start=1000, range_end=2000
+            )
+
+            # THEN
+            assert actual_entry == expected_entry
+
+    def test_hash_cache_entry_is_whole_file(self):
+        """
+        Tests the is_whole_file() helper method on HashCacheEntry
+        """
+        whole_file = HashCacheEntry(
+            file_path="file.txt",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+        )
+        assert whole_file.is_whole_file() is True
+
+        chunk = HashCacheEntry(
+            file_path="file.txt",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=1000,
+        )
+        assert chunk.is_whole_file() is False
+
+        # Edge case: range_start != 0 but range_end == -1 should not be whole file
+        weird_entry = HashCacheEntry(
+            file_path="file.txt",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+            range_start=100,
+            range_end=WHOLE_FILE_RANGE_END,
+        )
+        assert weird_entry.is_whole_file() is False
+
+    def test_put_entry_replaces_existing_byte_range(self, tmpdir):
+        """
+        Tests that put_entry replaces an existing entry with the same byte range
+        """
+        # GIVEN
+        cache_dir = tmpdir.mkdir("cache")
+        original_entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="original_hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=1000,
+        )
+        updated_entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="updated_hash",
+            last_modified_time="9999.9999",
+            range_start=0,
+            range_end=1000,
+        )
+
+        # WHEN
+        with HashCache(cache_dir) as hc:
+            hc.put_entry(original_entry)
+            hc.put_entry(updated_entry)
+            actual_entry = hc.get_entry(
+                "file.bin", HashAlgorithm.XXH128, range_start=0, range_end=1000
+            )
+
+            # THEN
+            assert actual_entry.file_hash == "updated_hash"
+            assert actual_entry.last_modified_time == "9999.9999"
+
+    def test_hash_cache_entry_to_dict_includes_range(self):
+        """
+        Tests that to_dict() includes range_start and range_end
+        """
+        entry = HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+            range_start=100,
+            range_end=200,
+        )
+        result = entry.to_dict()
+
+        assert result["file_path"] == "file.bin"
+        assert result["hash_algorithm"] == "xxh128"
+        assert result["file_hash"] == "hash"
+        assert result["last_modified_time"] == "1234.5678"
+        assert result["range_start"] == 100
+        assert result["range_end"] == 200
+
+    def test_hash_cache_entry_validates_byte_range(self):
+        """
+        Tests that HashCacheEntry raises ValueError when range_end <= range_start for byte-range entries
+        """
+        # Valid byte-range entry should work
+        HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=100,
+        )
+
+        # Whole-file entry (range_end=-1) should work regardless of range_start
+        HashCacheEntry(
+            file_path="file.bin",
+            hash_algorithm=HashAlgorithm.XXH128,
+            file_hash="hash",
+            last_modified_time="1234.5678",
+            range_start=0,
+            range_end=WHOLE_FILE_RANGE_END,
+        )
+
+        # Invalid: range_end == range_start
+        with pytest.raises(ValueError, match="range_end.*must be greater than.*range_start"):
+            HashCacheEntry(
+                file_path="file.bin",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash="hash",
+                last_modified_time="1234.5678",
+                range_start=100,
+                range_end=100,
+            )
+
+        # Invalid: range_end < range_start
+        with pytest.raises(ValueError, match="range_end.*must be greater than.*range_start"):
+            HashCacheEntry(
+                file_path="file.bin",
+                hash_algorithm=HashAlgorithm.XXH128,
+                file_hash="hash",
+                last_modified_time="1234.5678",
+                range_start=200,
+                range_end=100,
+            )
 
 
 class TestS3CheckCache:

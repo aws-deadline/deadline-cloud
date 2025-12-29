@@ -12,6 +12,7 @@ Table of Contents:
    * [Unit tests](#unit-tests)
    * [Integration tests](#integration-tests)
    * [Squish GUI Submitter tests](#squish-tests)
+* [Changelog Guidelines](#changelog-guidelines)
 * [Things to Know](#things-to-know)
    * [Public contracts](#public-contracts)
    * [Library Dependencies](#dependencies)
@@ -199,6 +200,17 @@ Squish GUI tests are located under the `test/squish` directory of this repositor
 #### Running Squish GUI Submitter Tests
 
 A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes.
+
+## Changelog Guidelines
+
+When a new version of `deadline` is being released, we must prepare an update to our change log (`CHANGELOG.md`). This is a semi-automated process. GitHub actions prepares a pull request with an automatically generated draft of the changelog entry. Maintainers are responsible for reviewing the draft, making any necessary changes, and reviewing the changes in the pull request. Please consult in [CHANGELOG_GUIDELINES.md](./CHANGELOG_GUIDELINES.md) for the changelog guidelines. These guidelines ensure consistency in how we communicate changes to users and provide standards for:
+
+* Structuring changelog sections and their ordering
+* Writing user-focused descriptions for different types of changes
+* Handling breaking changes with proper migration guidance
+* Communicating deprecations effectively
+* Managing fixes to unreleased changes
+* Documenting changes to experimental features
 
 ## Things to Know
 
