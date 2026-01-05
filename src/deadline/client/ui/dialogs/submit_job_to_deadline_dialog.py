@@ -30,6 +30,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 from .submit_job_progress_dialog import SubmitJobProgressDialog
 
 from ..dataclasses import HostRequirements
+from ...dataclasses import SubmitterInfo
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
@@ -44,6 +45,7 @@ from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
+from ._about_dialog import _AboutDialog
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +100,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         f: Qt Window Flags
         show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
             to False.
-        submitter_name: Override the default submitter_name value
+        submitter_info (SubmitterInfo): Information related to the submitter window and application it's running in
     """
 
     def __init__(
@@ -114,16 +116,29 @@ class SubmitJobToDeadlineDialog(QDialog):
         f: Qt.WindowFlags = Qt.WindowFlags(),
         show_host_requirements_tab: bool = False,
         host_requirements: Optional[HostRequirements] = None,
-        submitter_name: Optional[str] = None,
+        submitter_info: Optional[SubmitterInfo] = None,
         known_asset_paths: Optional[list[str]] = None,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
-        self.setWindowTitle(tr("Submit to AWS Deadline Cloud"))
+
+        # Set window title with submitter package info if available
+        window_title = tr("Submit to AWS Deadline Cloud")
+        if submitter_info:
+            # e.g. Deadline Cloud Blender Submitter x.y.z
+            formatted_name = f"Deadline Cloud {submitter_info.submitter_name} {tr('Submitter')}"
+            if submitter_info.submitter_package_version:
+                window_title = f"{formatted_name} {submitter_info.submitter_package_version}"
+            else:
+                window_title = f"{formatted_name}"
+        self.setWindowTitle(window_title)
+
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
-        self.submitter_name = submitter_name or self.job_settings_type().submitter_name
+        self.submitter_info = submitter_info or SubmitterInfo(
+            submitter_name=self.job_settings_type().submitter_name
+        )
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.job_id = None
         self.job_history_bundle_dir: Optional[str] = None
@@ -150,7 +165,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         set_setting("defaults.job_id", job_id)
 
     def _close_event_receiver(self):
-        if self.submitter_name != "JobBundle" and self.job_id:
+        if self.submitter_info.submitter_name != "JobBundle" and self.job_id:
             self.close()
 
     def sizeHint(self):
@@ -218,6 +233,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.settings_button = QPushButton(tr("Settings..."))
         self.settings_button.clicked.connect(self.on_settings_button_clicked)
         self.button_box.addButton(self.settings_button, QDialogButtonBox.ResetRole)
+        self.about_button = QPushButton(tr("About") + "...")
+        self.about_button.clicked.connect(self._on_about_button_clicked)
+        self.button_box.addButton(self.about_button, QDialogButtonBox.HelpRole)
         self.submit_button = QPushButton(tr("Submit"))
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
@@ -385,6 +403,19 @@ class SubmitJobToDeadlineDialog(QDialog):
         if DeadlineConfigDialog.configure_settings(parent=self):
             self.refresh_deadline_settings()
 
+    def _on_about_button_clicked(self):
+        """Show the About dialog with submitter information."""
+        try:
+            dialog = _AboutDialog(self.submitter_info, parent=self)
+            dialog.exec_()
+        except Exception as e:
+            logger.error(f"Failed to create AboutDialog: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to display About dialog: {str(e)}",
+            )
+
     def on_export_bundle(self):
         """
         Exports a Job Bundle, but does not submit the job.
@@ -401,7 +432,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Save the bundle
         try:
             self.job_history_bundle_dir = create_job_history_bundle_dir(
-                self.submitter_name, settings.name
+                self.submitter_info.submitter_name, settings.name
             )
 
             if self.show_host_requirements_tab:
@@ -440,7 +471,9 @@ class SubmitJobToDeadlineDialog(QDialog):
                 os.startfile(self.job_history_bundle_dir)
             QMessageBox.information(
                 self,
-                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                tr("{submitter} job submission").format(
+                    submitter=self.submitter_info.submitter_name
+                ),
                 tr("Saved the submission as a job bundle:\n{path}").format(
                     path=self.job_history_bundle_dir
                 ),
@@ -456,7 +489,9 @@ class SubmitJobToDeadlineDialog(QDialog):
             message = str(exc)
             QMessageBox.critical(
                 self,
-                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                tr("{submitter} job submission").format(
+                    submitter=self.submitter_info.submitter_name
+                ),
                 message,
             )  # type: ignore[call-arg]
 
@@ -515,7 +550,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Submit the job
         try:
             self.job_history_bundle_dir = create_job_history_bundle_dir(
-                self.submitter_name, settings.name
+                self.submitter_info.submitter_name, settings.name
             )
 
             if self.show_host_requirements_tab:
@@ -550,7 +585,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
             job_progress_dialog.start_job_submission(
                 job_bundle_dir=self.job_history_bundle_dir,
-                submitter_name=self.submitter_name,
+                submitter_name=self.submitter_info.submitter_name,
                 config=config_file.read_config(),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
                 job_parameters=job_parameters,
@@ -562,7 +597,9 @@ class SubmitJobToDeadlineDialog(QDialog):
             logger.info("Canceling submission.")
             QMessageBox.information(
                 self,
-                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                tr("{submitter} job submission").format(
+                    submitter=self.submitter_info.submitter_name
+                ),
                 str(uic),
             )
             job_progress_dialog.close()
@@ -578,7 +615,9 @@ class SubmitJobToDeadlineDialog(QDialog):
             )
             QMessageBox.critical(
                 self,
-                tr("{submitter} job submission").format(submitter=self.submitter_name),
+                tr("{submitter} job submission").format(
+                    submitter=self.submitter_info.submitter_name
+                ),
                 str(exc),
             )  # type: ignore[call-arg]
             job_progress_dialog.close()

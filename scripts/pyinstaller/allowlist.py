@@ -132,6 +132,8 @@ ALLOWLIST = {
                                 "_pydatetime",
                                 "_ios_support",
                                 "_colorize",
+                                "_sysconfigdata__linux_x86_64-linux-gnu",
+                                "_sysconfigdata__darwin_darwin",
                             ],
                         }
                     }
