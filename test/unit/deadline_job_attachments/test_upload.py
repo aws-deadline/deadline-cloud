@@ -2651,6 +2651,91 @@ class TestUpload:
             assert file_size == 5
             s3_cache.put_entry.assert_not_called()
 
+    @mock_aws
+    @pytest.mark.parametrize(
+        "manifest_version",
+        [
+            ManifestVersion.v2023_03_03,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "file_exists_in_s3, expected_upload",
+        [
+            pytest.param(True, False, id="file-exists-skip-upload"),
+            pytest.param(False, True, id="file-missing-do-upload"),
+        ],
+    )
+    def test_upload_object_to_cas_force_s3_check_bypasses_cache(
+        self,
+        tmpdir,
+        farm_id,
+        queue_id,
+        manifest_version,
+        default_job_attachment_s3_settings,
+        file_exists_in_s3,
+        expected_upload,
+    ):
+        """
+        Tests that when force_s3_check=True, the S3CheckCache is bypassed and S3 HEAD is always performed.
+        Verifies that upload happens only when file doesn't exist in S3.
+        """
+        # Given
+        asset_root = tmpdir.mkdir("test-root")
+        test_file = asset_root.join("test-file.txt")
+        test_file.write("stuff")
+        asset_manager = S3AssetManager(
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_attachment_settings=self.job_attachment_s3_settings,
+            asset_manifest_version=manifest_version,
+        )
+        s3_key = f"{default_job_attachment_s3_settings.s3BucketName}/prefix/test-hash.xxh128"
+        test_entry = S3CheckCacheEntry(s3_key, "123.45")
+        s3_cache = MagicMock()
+        # Cache has an entry, but it should be bypassed
+        s3_cache.get_connection_entry.return_value = test_entry
+
+        # When
+        with patch.object(
+            asset_manager.asset_uploader,
+            "_get_current_timestamp",
+            side_effect=["345.67"],
+        ), patch.object(
+            asset_manager.asset_uploader,
+            "file_already_uploaded",
+            return_value=file_exists_in_s3,
+        ) as mock_file_already_uploaded, patch.object(
+            asset_manager.asset_uploader,
+            "upload_file_to_s3",
+        ) as mock_upload_file_to_s3:
+            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+                file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
+                hash_algorithm=HashAlgorithm.XXH128,
+                s3_bucket=default_job_attachment_s3_settings.s3BucketName,
+                source_root=Path(asset_root),
+                s3_cas_prefix="prefix",
+                s3_check_cache=s3_cache,
+                force_s3_check=True,
+            )
+
+            # Then
+            assert is_uploaded == expected_upload
+            assert file_size == 5
+            # Cache lookup should NOT have been called (bypassed due to force_s3_check)
+            s3_cache.get_connection_entry.assert_not_called()
+            # S3 HEAD should always be called when force_s3_check=True
+            mock_file_already_uploaded.assert_called_once_with(
+                default_job_attachment_s3_settings.s3BucketName, "prefix/test-hash.xxh128"
+            )
+            # Upload should only happen if file doesn't exist in S3
+            if expected_upload:
+                mock_upload_file_to_s3.assert_called_once()
+            else:
+                mock_upload_file_to_s3.assert_not_called()
+            # Cache should always be updated after HEAD/upload
+            expected_new_entry = S3CheckCacheEntry(s3_key, "345.67")
+            s3_cache.put_entry.assert_called_once_with(expected_new_entry)
+
     def test_open_non_symlink_file_binary(self, tmp_path: Path):
         temp_file = tmp_path / "temp_file.txt"
         temp_file.write_text("this is test file")

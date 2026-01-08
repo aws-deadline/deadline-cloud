@@ -198,6 +198,7 @@ class S3AssetUploader:
         manifest_metadata: dict[str, dict[str, str]] = dict(),
         manifest_file_name: Optional[str] = None,
         asset_root: Optional[Path] = None,
+        force_s3_check: Optional[bool] = None,
     ) -> tuple[str, str]:
         """
         Uploads assets based off of an asset manifest, uploads the asset manifest.
@@ -214,10 +215,12 @@ class S3AssetUploader:
             manifest_metadata: File metadata for given manifest to be uploaded.
             manifest_file_name: Optional file name for given manifest to be uploaded, otherwise use default name.
             asset_root: The root in which asset actually in to facilitate path mapping.
+            force_s3_check: Controls S3 verification behavior:
+                - True: Skip the S3 check cache, always check whether uploads are already in S3.
+                - False/None: Use the S3 check cache, with periodic integrity sampling against S3 (default)
 
         Returns:
-            A tuple of (the partial key for the manifest on S3, the hash of input manifest).
-        """
+            A tuple of (the partial key for the manifest on S3, the hash of input manifest)."""
 
         # Upload asset manifest
         (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
@@ -253,8 +256,10 @@ class S3AssetUploader:
                 extra_args=manifest_metadata,
             )
 
-        # Verify S3 hash cache integrity, and reset cache if cached files are missing
-        if not self.verify_hash_cache_integrity(
+        # Verify S3 hash cache integrity, and reset cache if cached files are missing.
+        # Skip integrity check only when force_s3_check is True - we'll do S3 HEAD on every file anyway.
+        # When False or None, run the integrity check to catch stale cache entries.
+        if force_s3_check is not True and not self.verify_hash_cache_integrity(
             s3_check_cache_dir,
             manifest,
             job_attachment_settings.full_cas_prefix(),
@@ -270,6 +275,7 @@ class S3AssetUploader:
             s3_cas_prefix=job_attachment_settings.full_cas_prefix(),
             progress_tracker=progress_tracker,
             s3_check_cache_dir=s3_check_cache_dir,
+            force_s3_check=force_s3_check,
         )
 
         return (partial_manifest_key, hash_data(manifest_bytes, hash_alg))
@@ -434,6 +440,7 @@ class S3AssetUploader:
         s3_cas_prefix: str,
         progress_tracker: Optional[ProgressTracker] = None,
         s3_check_cache_dir: Optional[str] = None,
+        force_s3_check: Optional[bool] = None,
     ) -> None:
         """
         Uploads all of the files listed in the given manifest to S3 if they don't exist in the
@@ -466,6 +473,7 @@ class S3AssetUploader:
                         s3_cas_prefix,
                         s3_cache,
                         progress_tracker,
+                        force_s3_check,
                     ): file
                     for file in small_file_queue
                 }
@@ -485,6 +493,7 @@ class S3AssetUploader:
                     s3_cas_prefix,
                     s3_cache,
                     progress_tracker,
+                    force_s3_check,
                 )
                 if progress_tracker and not is_uploaded:
                     progress_tracker.increase_skipped(1, file_size)
@@ -644,23 +653,32 @@ class S3AssetUploader:
         s3_cas_prefix: str,
         s3_check_cache: S3CheckCache,
         progress_tracker: Optional[ProgressTracker] = None,
+        force_s3_check: Optional[bool] = None,
     ) -> Tuple[bool, int]:
         """
         Uploads an object to the S3 content-addressable storage (CAS) prefix. Optionally,
         does a head-object check and only uploads the file if it doesn't exist in S3 already.
         Returns a tuple (whether it has been uploaded, the file size).
+
+        Args:
+            force_s3_check: Controls S3 verification behavior:
+                - True: Skip the S3 check cache, always check whether uploads are already in S3.
+                - False/None: Use the S3 check cache, with periodic integrity sampling against S3 (default)
         """
         local_path = source_root.joinpath(file.path)
         s3_upload_key = self._generate_s3_upload_key(file, hash_algorithm, s3_cas_prefix)
         is_uploaded = False
 
-        if s3_check_cache.get_connection_entry(
-            s3_key=f"{s3_bucket}/{s3_upload_key}", connection=s3_check_cache.get_local_connection()
-        ):
-            logger.debug(
-                f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
-            )
-            return (is_uploaded, file.size)
+        # Check cache first unless force_s3_check is True (skip cache entirely)
+        if force_s3_check is not True:
+            if s3_check_cache.get_connection_entry(
+                s3_key=f"{s3_bucket}/{s3_upload_key}",
+                connection=s3_check_cache.get_local_connection(),
+            ):
+                logger.debug(
+                    f"skipping {local_path} because {s3_bucket}/{s3_upload_key} exists in the cache"
+                )
+                return (is_uploaded, file.size)
 
         if self.file_already_uploaded(s3_bucket, s3_upload_key):
             logger.debug(
@@ -1499,6 +1517,7 @@ class S3AssetManager:
         on_uploading_assets: Optional[Callable[[Any], bool]] = None,
         s3_check_cache_dir: Optional[str] = None,
         manifest_write_dir: Optional[str] = None,
+        force_s3_check: Optional[bool] = None,
     ) -> tuple[SummaryStatistics, Attachments]:
         """
         Uploads all the files for provided manifests and manifests themselves to S3.
@@ -1507,6 +1526,9 @@ class S3AssetManager:
             manifests: a list of manifests that contain assets to be uploaded
             on_uploading_assets: a callback to be called to periodically report progress to the caller.
                 The callback returns True if the operation should continue as normal, or False to cancel.
+            force_s3_check: Controls S3 verification behavior:
+                - True: Skip the S3 check cache, always check whether uploads are already in S3.
+                - False/None: Use the S3 check cache, with periodic integrity sampling against S3 (default)
 
         Returns:
             a tuple with (1) the summary statistics of the upload operation, and
@@ -1555,6 +1577,7 @@ class S3AssetManager:
                     progress_tracker=progress_tracker,
                     s3_check_cache_dir=s3_check_cache_dir,
                     manifest_write_dir=manifest_write_dir,
+                    force_s3_check=force_s3_check,
                 )
                 manifest_properties.inputManifestPath = partial_manifest_key
                 manifest_properties.inputManifestHash = asset_manifest_hash
