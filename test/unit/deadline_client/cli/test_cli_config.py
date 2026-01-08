@@ -35,7 +35,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 17
+    assert len(settings.keys()) == 18
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -103,6 +103,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.small_file_threshold_multiplier", "15")
     config.set_setting("settings.known_asset_paths", "/known/asset/path")
     config.set_setting("settings.locale", "ja_JP")
+    config.set_setting("settings.force_s3_check", "true")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])
@@ -114,6 +115,9 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert "~/alternate/job_history" in result.output
     assert result.output.count("False") == 1
     assert result.output.count("True") == 1
+    # "true" appears three times: once as the value for force_s3_check,
+    # once in the telemetry.opt_out description, and once in the force_s3_check description
+    assert result.output.count("true") == 3
     assert "farm-82934h23k4j23kjh" in result.output
     assert "queue-389348u234jhk34" in result.output
     assert "job-239u40234jkl234nkl23" in result.output
