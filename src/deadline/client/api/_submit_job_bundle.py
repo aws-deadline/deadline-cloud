@@ -159,6 +159,7 @@ def _upload_attachments(
     upload_progress_callback: Optional[Callable],
     config: Optional[ConfigParser] = None,
     from_gui: bool = False,
+    force_s3_check: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Starts the job attachments upload and handles the progress reporting callback.
@@ -175,6 +176,7 @@ def _upload_attachments(
         manifests=manifests,
         on_uploading_assets=upload_progress_callback,
         s3_check_cache_dir=config_file.get_cache_directory(),
+        force_s3_check=force_s3_check,
     )
     api.get_deadline_cloud_library_telemetry_client(config=config).record_upload_summary(
         upload_summary,
@@ -392,6 +394,7 @@ def create_job_from_job_bundle(
     hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
+    force_s3_check: Optional[bool] = None,
 ) -> Optional[str]:
     """
     Creates a [Deadline Cloud job] in the [queue] configured as default for the workstation
@@ -462,6 +465,9 @@ def create_job_from_job_bundle(
                 See hashing_progress_callback for more details.
         create_job_result_callback (Callable -> bool): Callbacks periodically called while waiting for the deadline.create_job
                 result. See hashing_progress_callback for more details.
+        force_s3_check (bool, optional): If True, skip S3CheckCache and always do S3 HEAD
+                to verify job attachment existence before uploading. Use when S3 bucket contents may be out of sync with local caches.
+                If None (default), reads from the `settings.force_s3_check` config setting.
 
     Returns:
         Returns the submitted job id. If `debug_snapshot_dir` is provided then no job is submitted and it returns None.
@@ -497,6 +503,10 @@ def create_job_from_job_bundle(
         job_attachments_file_system = get_setting(
             "defaults.job_attachments_file_system", config=config
         )
+
+    # Read force_s3_check from config if not explicitly set by caller
+    if force_s3_check is None:
+        force_s3_check = config_file.str2bool(get_setting("settings.force_s3_check", config=config))
 
     queue = deadline.get_queue(
         farmId=farm_id,
@@ -718,6 +728,7 @@ def create_job_from_job_bundle(
                     print_function_callback,
                     upload_progress_callback,
                     from_gui=from_gui,
+                    force_s3_check=force_s3_check,
                 )
             else:
                 attachment_settings = _snapshot_attachments(  # type: ignore

@@ -26,6 +26,7 @@ on:
         type: choice
         options:
         - mainline
+        - release
 
 jobs:
   BuildInstaller:

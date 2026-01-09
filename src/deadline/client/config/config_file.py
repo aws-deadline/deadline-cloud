@@ -145,6 +145,15 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "default": "",
         "description": "The locale to use for the UI. If empty, uses the system locale.",
     },
+    "settings.force_s3_check": {
+        "default": "false",
+        "description": (
+            "Controls S3 verification behavior for job attachments. "
+            "When 'true', always verify files exist in S3 via HEAD request before skipping upload "
+            "(most reliable but slower, skips cache integrity check since every file is verified). "
+            "When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default)."
+        ),
+    },
 }
 
 

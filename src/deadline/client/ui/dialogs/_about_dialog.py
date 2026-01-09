@@ -88,6 +88,27 @@ class _AboutDialog(QDialog):
 
         self.setLayout(layout)
 
+    @staticmethod
+    def _make_keys_human_readable(data):
+        """
+        Recursively replace underscores with spaces in dictionary keys.
+
+        Args:
+            data: The data structure to process (dict, list, or scalar value)
+
+        Returns:
+            The data structure with all dictionary keys made human-readable
+        """
+        if isinstance(data, dict):
+            return {
+                k.replace("_", " "): _AboutDialog._make_keys_human_readable(v)
+                for k, v in data.items()
+            }
+        elif isinstance(data, list):
+            return [_AboutDialog._make_keys_human_readable(item) for item in data]
+        else:
+            return data
+
     def _format_version_info(self) -> str:
         """
         Combine submitter and version information for display.
@@ -102,7 +123,10 @@ class _AboutDialog(QDialog):
 
         combined_info = {**submitter_dict, **env_data}
 
-        yaml_str = yaml.dump(combined_info, indent=4, sort_keys=False)
+        # Replace underscores with spaces in keys for user-friendly display (recursively)
+        friendly_info = self._make_keys_human_readable(combined_info)
+
+        yaml_str = yaml.dump(friendly_info, indent=4, sort_keys=False)
         return yaml_str
 
     def _format_for_copy(self) -> str:

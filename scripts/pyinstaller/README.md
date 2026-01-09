@@ -19,7 +19,7 @@ See [attributions](../attributions/README.txt)
 1. `uv venv .venv`
 1. `source .venv/bin/activate` (bash/zsh), or `source .venv/bin/activate.fish` (fish), or `.venv/Scripts/activate` (powershell)
 1. `uv pip install -e .`
-1. `uv pip install -r requirements-pyinstaller-6.txt`
+1. `uv pip install -r requirements-installer.txt`
 1. `python scripts/pyinstaller/make_exe.py`
 1. `deactivate`
 
@@ -40,7 +40,7 @@ if it is not desired. See `uv venv --help` for more information.
 
 1. `uv venv .venv-validation`
 1. `source .venv-validation/bin/activate` (bash/zsh), or `source .venv-validation/bin/activate.fish` (fish), or `.venv-validation/Scripts/activate` (powershell)
-1. `uv pip install -r requirements-pyinstaller-6.txt`
+1. `uv pip install -r requirements-installer.txt`
 1. `python scripts/pyinstaller/validate.py`
 1. `deactivate`
 
