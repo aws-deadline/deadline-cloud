@@ -10,15 +10,18 @@ import logging
 import yaml
 
 from dataclasses import asdict
+from typing import List, Dict
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QLabel,
     QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
 )
+from qtpy.QtCore import Qt  # pylint: disable=import-error
 
 from ...dataclasses import SubmitterInfo
 from ..dataclasses._environment_info import _EnvironmentInfo
@@ -27,13 +30,20 @@ from .._utils import tr
 logger = logging.getLogger(__name__)
 
 
-class _AboutDialog(QDialog):
+# Hard-coded documentation links
+_DOCUMENTATION_LINKS: List[Dict[str, str]] = [
+    {"name": "User Guide", "url": "https://aws-deadline.github.io"},
+]
+
+
+class _HelpDialog(QDialog):
     """
     Modal dialog that displays submitter and environment information about the deadline-cloud
     library and the environment it's running in.
 
     The dialog displays all of the following if available:
     - Submitter name
+    - Documentation link
     - Deadline Cloud library version
     - Submitter package name and version
     - Host application name and version
@@ -45,7 +55,7 @@ class _AboutDialog(QDialog):
 
     def __init__(self, submitter_info: SubmitterInfo, parent=None):
         """
-        Initialize the About dialog.
+        Initialize the Help dialog.
 
         Args:
             submitter_info: SubmitterInfo object containing submitter details
@@ -67,6 +77,18 @@ class _AboutDialog(QDialog):
     def _build_ui(self):
         """Build the dialog UI layout."""
         layout = QVBoxLayout()
+
+        # Add documentation links section (hard-coded)
+        for link_info in _DOCUMENTATION_LINKS:
+            name = link_info["name"]
+            url = link_info["url"]
+            doc_label = QLabel()
+            doc_label.setText(f"<a href='{url}'>{name}</a>")
+            doc_label.setToolTip(url)
+            doc_label.setOpenExternalLinks(True)
+            doc_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            doc_label.setWordWrap(True)
+            layout.addWidget(doc_label)
 
         self.version_text = QTextEdit()
         self.version_text.setReadOnly(True)
@@ -101,11 +123,11 @@ class _AboutDialog(QDialog):
         """
         if isinstance(data, dict):
             return {
-                k.replace("_", " "): _AboutDialog._make_keys_human_readable(v)
+                k.replace("_", " "): _HelpDialog._make_keys_human_readable(v)
                 for k, v in data.items()
             }
         elif isinstance(data, list):
-            return [_AboutDialog._make_keys_human_readable(item) for item in data]
+            return [_HelpDialog._make_keys_human_readable(item) for item in data]
         else:
             return data
 
@@ -119,6 +141,8 @@ class _AboutDialog(QDialog):
 
         env_data = asdict(self.environment_info)
         submitter_data = asdict(self.submitter_info)
+
+        # Filter out None values from submitter data
         submitter_dict = {k: v for k, v in submitter_data.items() if v is not None}
 
         combined_info = {**submitter_dict, **env_data}
@@ -136,10 +160,8 @@ class _AboutDialog(QDialog):
         Returns:
             Formatted string suitable for copying and pasting
         """
-        lines = [
-            "AWS Deadline Cloud Submitter Information",
-            "=========================================",
-        ]
+        header = "AWS Deadline Cloud Submitter Information"
+        lines = [header, "=" * len(header)]
         lines.append(self._format_version_info())
         return "\n".join(lines)
 

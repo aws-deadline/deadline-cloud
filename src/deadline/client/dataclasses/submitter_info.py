@@ -21,7 +21,7 @@ class SubmitterInfo:
     Container for submitter environment information.
 
     This dataclass holds metadata about the application submitting jobs to AWS Deadline Cloud.
-    It's used by the _AboutDialog GUI to display version information.
+    It's used by the _HelpDialog GUI to display version information.
 
     Attributes:
         submitter_name: Short name of the submitter (required, e.g., "Blender", "CLI")

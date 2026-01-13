@@ -24,7 +24,7 @@ class _EnvironmentInfo:
     """
     Container for auto-collected runtime environment information.
 
-    This is a private dataclass used internally by _AboutDialog to hold metadata
+    This is a private dataclass used internally by _HelpDialog to hold metadata
     about the runtime environment including the deadline library, dependencies,
     Python runtime, operating system, and Qt framework.
 
