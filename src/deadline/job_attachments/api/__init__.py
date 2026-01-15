@@ -6,6 +6,7 @@ __all__ = [
     "human_readable_file_size",
     "summarize_path_list",
     "PathSummary",
+    "hash_attachments",
 ]
 
 from ...common.path_utils import (
@@ -15,3 +16,5 @@ from ...common.path_utils import (
     summarize_path_list,
     PathSummary,
 )
+
+from ._hashing import hash_attachments

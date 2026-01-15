@@ -83,6 +83,7 @@ def _glob_files(
 
 
 def _manifest_snapshot(
+    *,
     root: str,
     destination: str,
     name: str,
@@ -92,6 +93,8 @@ def _manifest_snapshot(
     diff: Optional[str] = None,
     force_rehash: bool = False,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    hash_cache_dir: Optional[str] = None,
+    telemetry_callback: Optional[Callable] = None,
 ) -> Optional[ManifestSnapshot]:
     # Get all files in the root.
     glob_config: GlobConfig
@@ -112,7 +115,11 @@ def _manifest_snapshot(
     # Compute the output manifest immediately and hash.
     if not diff:
         output_manifest = _create_manifest_for_single_root(
-            files=current_files, root=root, print_function_callback=print_function_callback
+            files=current_files,
+            root=root,
+            print_function_callback=print_function_callback,
+            hash_cache_dir=hash_cache_dir,
+            telemetry_callback=telemetry_callback,
         )
         if not output_manifest:
             return None
@@ -143,7 +150,11 @@ def _manifest_snapshot(
         else:
             # In "slow / thorough" mode, we check by hash, which is definitive.
             output_manifest = _create_manifest_for_single_root(
-                files=current_files, root=root, print_function_callback=print_function_callback
+                files=current_files,
+                root=root,
+                print_function_callback=print_function_callback,
+                hash_cache_dir=hash_cache_dir,
+                telemetry_callback=telemetry_callback,
             )
             if not output_manifest:
                 return None
@@ -164,7 +175,11 @@ def _manifest_snapshot(
 
         # Since the files are already hashed, we can easily re-use has_attachments to remake a diff manifest.
         output_manifest = _create_manifest_for_single_root(
-            files=changed_paths, root=root, print_function_callback=print_function_callback
+            files=changed_paths,
+            root=root,
+            print_function_callback=print_function_callback,
+            hash_cache_dir=hash_cache_dir,
+            telemetry_callback=telemetry_callback,
         )
         if not output_manifest:
             return None

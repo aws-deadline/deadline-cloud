@@ -214,7 +214,7 @@ def patch_calls_for_create_job_from_job_bundle(
         "_generate_message_for_asset_paths",
         wraps=_submit_job_bundle._generate_message_for_asset_paths,
     ) as mock_generate_message_for_asset_paths, patch.object(
-        _submit_job_bundle, "_hash_attachments", wraps=_submit_job_bundle._hash_attachments
+        _submit_job_bundle, "hash_attachments", wraps=_submit_job_bundle.hash_attachments
     ) as mock_hash_attachments, patch(
         "deadline.job_attachments.upload.S3AssetUploader"
     ), patch.object(

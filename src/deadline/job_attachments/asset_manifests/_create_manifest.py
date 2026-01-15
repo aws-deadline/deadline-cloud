@@ -2,15 +2,19 @@
 
 from typing import Any, Callable, List, Optional
 
-from deadline.client.api._job_attachment import _hash_attachments
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.upload import S3AssetManager
 
+from ...job_attachments.api import hash_attachments
+
 
 def _create_manifest_for_single_root(
+    *,
     files: List[str],
     root: str,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    hash_cache_dir: Optional[str] = None,
+    telemetry_callback: Optional[Callable] = None,
 ) -> Optional[BaseAssetManifest]:
     """
     Shared logic to create a manifest file from a single root.
@@ -33,13 +37,15 @@ def _create_manifest_for_single_root(
     assert len(upload_group.asset_groups) == 1
 
     if upload_group.asset_groups:
-        _, manifests = _hash_attachments(
+        _, manifests = hash_attachments(
             asset_manager=asset_manager,
             asset_groups=upload_group.asset_groups,
             total_input_files=upload_group.total_input_files,
             total_input_bytes=upload_group.total_input_bytes,
             print_function_callback=print_function_callback,
             hashing_progress_callback=hash_callback_manager.callback,
+            hash_cache_dir=hash_cache_dir,
+            telemetry_callback=telemetry_callback,
         )
 
     if not manifests or len(manifests) == 0:

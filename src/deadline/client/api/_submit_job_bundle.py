@@ -55,10 +55,15 @@ from ...job_attachments.models import (
 from ...job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
 from ...job_attachments.upload import S3AssetManager
 from ._session import session_context
-from ._job_attachment import _hash_attachments  # type: ignore[import]
 from ...job_attachments._path_summarization import human_readable_file_size, summarize_path_list
+from ...job_attachments.api import hash_attachments
+from ...job_attachments.upload import SummaryStatistics
 
 logger = logging.getLogger(__name__)
+
+
+def hashing_telemetry_callback(hashing_summary: SummaryStatistics):
+    api.get_deadline_cloud_library_telemetry_client().record_hashing_summary(hashing_summary)
 
 
 def _summarize_asset_paths(
@@ -610,6 +615,8 @@ def create_job_from_job_bundle(
     # to users.
     known_asset_paths = _filter_redundant_known_paths(known_asset_paths)
 
+    telemetry_client = api.get_deadline_cloud_library_telemetry_client()
+
     # Hash and upload job attachments if there are any
     files_processed = False
     if asset_references and "jobAttachmentSettings" in queue:
@@ -712,13 +719,17 @@ def create_job_from_job_bundle(
                     print_function_callback("Job submission canceled (user input).")
                     raise UserInitiatedCancel()
 
-            _, asset_manifests = _hash_attachments(
+            hash_cache_dir = config_file.get_cache_directory()
+
+            hashing_summary, asset_manifests = hash_attachments(
                 asset_manager=asset_manager,
                 asset_groups=upload_group.asset_groups,
                 total_input_files=upload_group.total_input_files,
                 total_input_bytes=upload_group.total_input_bytes,
                 print_function_callback=print_function_callback,
                 hashing_progress_callback=hashing_progress_callback,
+                hash_cache_dir=hash_cache_dir,
+                telemetry_callback=hashing_telemetry_callback,
             )
 
             if not debug_snapshot_dir:
@@ -789,7 +800,7 @@ def create_job_from_job_bundle(
     if logging.DEBUG >= logger.getEffectiveLevel():
         logger.debug(json.dumps(create_job_args, indent=1))
 
-    api.get_deadline_cloud_library_telemetry_client().record_event(
+    telemetry_client.record_event(
         event_type="com.amazon.rum.deadline.submission",
         event_details={"submitter_name": submitter_name},
         from_gui=from_gui,
@@ -831,7 +842,7 @@ def create_job_from_job_bundle(
             create_job_result_callback,
         )
 
-        api.get_deadline_cloud_library_telemetry_client().record_event(
+        telemetry_client.record_event(
             event_type="com.amazon.rum.deadline.create_job",
             event_details={"is_success": success},
             from_gui=from_gui,

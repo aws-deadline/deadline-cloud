@@ -18,6 +18,7 @@ from typing import List, Optional
 import boto3
 import click
 
+from deadline.client.api._submit_job_bundle import hashing_telemetry_callback
 from deadline.client import api
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
@@ -126,6 +127,8 @@ def manifest_snapshot(
         destination = root
         logger.echo(f"Manifest creation path defaulted to {root} \n")
 
+    hash_cache_dir = config_file.get_cache_directory()
+
     manifest_out = _manifest_snapshot(
         root=root,
         destination=destination,
@@ -136,6 +139,8 @@ def manifest_snapshot(
         diff=diff,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
+        hash_cache_dir=hash_cache_dir,
+        telemetry_callback=hashing_telemetry_callback,
     )
     if manifest_out:
         if (
