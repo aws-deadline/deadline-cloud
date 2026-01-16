@@ -239,6 +239,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button = QPushButton(tr("Submit"))
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
+        if hasattr(initial_job_settings, "browse_enabled") and initial_job_settings.browse_enabled:
+            self.load_bundle_button = QPushButton(tr("Load a different job bundle"))
+            self.load_bundle_button.clicked.connect(self._on_load_bundle)
+            self.button_box.addButton(self.load_bundle_button, QDialogButtonBox.AcceptRole)
         self.export_bundle_button = QPushButton(tr("Export bundle"))
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
@@ -415,6 +419,11 @@ class SubmitJobToDeadlineDialog(QDialog):
                 "Error",
                 f"Failed to display About dialog: {str(e)}",
             )
+
+    def _on_load_bundle(self):
+        """Delegates to the job_settings widget's on_load_bundle method."""
+        if hasattr(self.job_settings, "on_load_bundle"):
+            self.job_settings.on_load_bundle()
 
     def on_export_bundle(self):
         """
