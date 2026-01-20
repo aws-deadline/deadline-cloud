@@ -4,6 +4,8 @@ import json
 import os
 import pytest
 
+pytest_plugins = ["deadline_test_fixtures.pytest_hooks"]
+
 
 @pytest.fixture()
 def external_bucket() -> str:
