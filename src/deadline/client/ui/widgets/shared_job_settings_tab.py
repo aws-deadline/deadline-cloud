@@ -506,7 +506,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self.queue_box = DeadlineQueueListComboBox(parent=self)
         self.layout.addRow(self.queue_box_label, self.queue_box)
 
-        self.storage_profile_box_label = QLabel(tr("Default storage profile"))
+        self.storage_profile_box_label = QLabel(tr("Storage profile"))
         self.storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=self)
         self.layout.addRow(self.storage_profile_box_label, self.storage_profile_box)
 
