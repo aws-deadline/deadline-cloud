@@ -1,3 +1,19 @@
+## 0.54.1 (2026-01-21)
+
+### Features
+
+* Update hash cache to support byte ranges for file chunking support (#953) ([`35a1802`](https://github.com/aws-deadline/deadline-cloud/commit/35a18026fffa0c1496975b5420a20cec3edca9da))
+  * Hash caches will regenerate on first submission after upgrade
+* Add help button and documentation link to job bundle GUI submitter (#961) ([`a3704fd`](https://github.com/aws-deadline/deadline-cloud/commit/a3704fd25834168197ca131e75ba826e6499c3f0))
+* Add option to bundle submit to always perform S3 head check (#957) ([`c53f3be`](https://github.com/aws-deadline/deadline-cloud/commit/c53f3be09e146fd7aa9f016ca5f455d692043d50))
+
+### Bug Fixes
+
+* Long path handling not applied when duplicate file names are downloaded (#964) ([`e2ed151`](https://github.com/aws-deadline/deadline-cloud/commit/e2ed15104d7cb57a8244d34bbcb75cb2e0916e42))
+* Load different job bundle button positioned oddly in GUI submitter (#945) ([`3f65662`](https://github.com/aws-deadline/deadline-cloud/commit/3f65662b070535c72557cfcb22bf0afe749152e5))
+* About dialog YAML key formatting not human-friendly for nested structures (#950) ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+
+
 ## 0.54.0 (2025-12-11)
 
 ### DEPRECATIONS
