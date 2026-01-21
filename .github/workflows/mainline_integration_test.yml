@@ -8,6 +8,9 @@ on:
       - mainline
   workflow_dispatch:
 
+concurrency:
+  group: deadline-cloud-mainline-integration-tests
+
 jobs:  
   MainlineLinuxIntegrationTest:
     name: Linux Integration Test
