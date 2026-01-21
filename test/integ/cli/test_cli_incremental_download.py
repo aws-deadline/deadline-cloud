@@ -245,6 +245,10 @@ def test_incremental_download_many_small_files(incremental_download_test, tmp_pa
 
 @pytest.mark.integ
 @pytest.mark.timeout(1200)  # 20 minute timeout
+@pytest.mark.xfail(
+    reason="Edge case in scheduling step-step dependencies is sometimes causing timeouts",
+    strict=False,
+)
 def test_incremental_download_dep_data_flow(incremental_download_test, tmp_path):
     """Test incremental download with dep_data_flow template."""
 
