@@ -20,6 +20,10 @@ __all__ = [
     "DeadlineCloudSettingsWidget",
     "SharedJobSettingsWidget",
     "SharedJobPropertiesWidget",
+    # Controller-based combo boxes
+    "DeadlineFarmListComboBoxController",
+    "DeadlineQueueListComboBoxController",
+    "DeadlineStorageProfileListComboBoxController",
 ]
 
 from .deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
@@ -41,4 +45,9 @@ from .shared_job_settings_tab import (
     DeadlineCloudSettingsWidget,
     SharedJobSettingsWidget,
     SharedJobPropertiesWidget,
+)
+from ._deadline_list_combo_boxes import (
+    DeadlineFarmListComboBoxController,
+    DeadlineQueueListComboBoxController,
+    DeadlineStorageProfileListComboBoxController,
 )

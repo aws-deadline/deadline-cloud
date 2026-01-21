@@ -10,8 +10,6 @@ Example code:
 
 __all__ = ["DeadlineConfigDialog"]
 
-import sys
-import threading
 from configparser import ConfigParser
 from logging import getLogger, root
 from typing import Callable, Dict, List, Optional
@@ -47,9 +45,14 @@ import os
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file, get_setting_default, str2bool
-from .._utils import CancelationFlag, block_signals, tr
+from .._utils import block_signals, tr
 from ..widgets import DirectoryPickerWidget
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
+from ..widgets import (
+    DeadlineFarmListComboBoxController,
+    DeadlineQueueListComboBoxController,
+    DeadlineStorageProfileListComboBoxController,
+)
 from .deadline_login_dialog import DeadlineLoginDialog
 
 logger = getLogger(__name__)
@@ -227,6 +230,11 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.config: Optional[ConfigParser] = None
         self.changes_were_applied = False
 
+        # Flags to track when we're waiting for cascading list refreshes
+        # These prevent the list_updated handlers from interfering with manual user selections
+        self._awaiting_farms_for_cascade = False
+        self._awaiting_queues_for_cascade = False
+
         self._build_ui()
         self._fill_aws_profiles_box()
         self.refresh()
@@ -320,7 +328,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
-        self.default_farm_box = DeadlineFarmListComboBox(parent=group)
+        self.default_farm_box = DeadlineFarmListComboBoxController(parent=group)
         default_farm_box_label = self.labels["defaults.farm_id"] = QLabel(tr("Default farm"))
         self.default_farm_box.box.currentIndexChanged.connect(self.default_farm_changed)
         self.default_farm_box.background_exception.connect(self.handle_background_exception)
@@ -329,13 +337,23 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def _build_farm_settings_ui(self, group, layout):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
-        self.default_queue_box = DeadlineQueueListComboBox(parent=group)
+        self.default_queue_box = DeadlineQueueListComboBoxController(parent=group)
         default_queue_box_label = self.labels["defaults.queue_id"] = QLabel(tr("Default queue"))
         self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
         self.default_queue_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_queue_box_label, self.default_queue_box)
 
-        self.default_storage_profile_box = DeadlineStorageProfileNameListComboBox(parent=group)
+        # Connect to controller signals to handle cascading updates when lists are populated
+        # (e.g., after profile or farm change)
+        from ..controllers import DeadlineUIController
+
+        self._controller = DeadlineUIController.getInstance()
+        self._controller.farms_updated.connect(self._on_farms_list_updated, Qt.QueuedConnection)
+        self._controller.queues_updated.connect(self._on_queues_list_updated, Qt.QueuedConnection)
+
+        self.default_storage_profile_box = DeadlineStorageProfileListComboBoxController(
+            parent=group
+        )
         default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
             tr("Default storage profile")
         )
@@ -717,7 +735,12 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.aws_profiles_box.addItems(list(self.aws_profile_names))
 
     def refresh_lists(self):
-        if api.check_deadline_api_available():
+        # Use the cached api_availability from DeadlineAuthenticationStatus
+        # instead of making a blocking API call on the main thread.
+        # The status is refreshed asynchronously and on_auth_status_update
+        # will call this method again when api_availability_changed is emitted.
+        auth_status = DeadlineAuthenticationStatus.getInstance()
+        if auth_status.api_availability:
             self.default_farm_box.refresh_list()
             self.default_queue_box.refresh_list()
             self.default_storage_profile_box.refresh_list()
@@ -818,10 +841,16 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def aws_profile_changed(self, value):
         self.changes["defaults.aws_profile_name"] = value
+        # Clear the farm_id and queue_id since they don't exist in the new profile
+        self.changes["defaults.farm_id"] = ""
+        self.changes["defaults.queue_id"] = ""
         self.default_farm_box.clear_list()
         self.default_queue_box.clear_list()
         self.default_storage_profile_box.clear_list()
         self.refresh()
+        # Trigger cascading refresh - farms will load, then queues, then storage profiles
+        self._awaiting_farms_for_cascade = True
+        self.default_farm_box.refresh_list()
 
     def job_history_dir_changed(self):
         job_history_dir = self.job_history_dir_edit.text()
@@ -833,21 +862,82 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.refresh()
 
     def default_farm_changed(self, index):
-        self.changes["defaults.farm_id"] = self.default_farm_box.box.itemData(index)
+        if index < 0:
+            return
+        farm_id = self.default_farm_box.box.itemData(index)
+        if farm_id is None:
+            return
+        self.changes["defaults.farm_id"] = farm_id
+        # Clear the queue_id since the old queue doesn't exist in the new farm
+        self.changes["defaults.queue_id"] = ""
+        # Clear storage profile lists - they depend on queue which we're about to refresh
+        self.default_storage_profile_box.clear_list()
         self.refresh()
+        # Trigger cascading refresh - queues will load, then storage profiles
+        self._awaiting_queues_for_cascade = True
         self.default_queue_box.refresh_list()
-        self.default_storage_profile_box.refresh_list()
 
     def default_queue_changed(self, index):
-        self.changes["defaults.queue_id"] = self.default_queue_box.box.itemData(index)
+        if index < 0:
+            return
+        queue_id = self.default_queue_box.box.currentData()
+        if queue_id is None:
+            return
+        self.changes["defaults.queue_id"] = queue_id
         self.refresh()
         self.default_storage_profile_box.refresh_list()
 
     def default_storage_profile_name_changed(self, index):
-        self.changes["settings.storage_profile_id"] = self.default_storage_profile_box.box.itemData(
-            index
-        )
+        if index < 0:
+            return
+        storage_profile_id = self.default_storage_profile_box.box.itemData(index)
+        if storage_profile_id is None:
+            return
+        self.changes["settings.storage_profile_id"] = storage_profile_id
         self.refresh()
+
+    def _on_farms_list_updated(self, farms_list):
+        """
+        Handle when the farm list is updated from the controller.
+
+        When farms are loaded as part of a cascade (e.g., after a profile change),
+        we need to continue the cascade by refreshing queues.
+        """
+        if not self._awaiting_farms_for_cascade:
+            return
+
+        self._awaiting_farms_for_cascade = False
+
+        # Get the currently selected farm from the combo box
+        current_farm_id = self.default_farm_box.box.currentData()
+        if current_farm_id:
+            # Update the changes dict with the selected farm
+            self.changes["defaults.farm_id"] = current_farm_id
+            self.refresh()
+            # Continue cascade - refresh queues with the valid farm_id
+            self._awaiting_queues_for_cascade = True
+            self.default_queue_box.refresh_list()
+
+    def _on_queues_list_updated(self, queues_list):
+        """
+        Handle when the queue list is updated from the controller.
+
+        When queues are loaded as part of a cascade (e.g., after a farm change),
+        we need to continue the cascade by refreshing storage profiles.
+        """
+        if not self._awaiting_queues_for_cascade:
+            return
+
+        self._awaiting_queues_for_cascade = False
+
+        # Get the currently selected queue from the combo box
+        current_queue_id = self.default_queue_box.box.currentData()
+        if current_queue_id:
+            # Update the changes dict with the selected queue
+            self.changes["defaults.queue_id"] = current_queue_id
+            self.refresh()
+            # Continue cascade - refresh storage profiles with the valid queue_id
+            self.default_storage_profile_box.refresh_list()
 
     def _on_add_known_path(self):
         """Handle adding a new known path"""
@@ -920,224 +1010,3 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
                     self.changes["settings.known_asset_paths"] = os.pathsep.join(current_paths)
                     self.refresh()
-
-
-class _DeadlineResourceListComboBox(QWidget):
-    """
-    A ComboBox for selecting an AWS Deadline Cloud Id, with a refresh button.
-
-    The caller should connect the `background_exception` signal, e.g.
-    to show a message box, and should call `set_config` whenever there is
-    a change to the AWS Deadline Cloud config object.
-
-    Args:
-        resource_name (str): The resource name for the list, like "Farm",
-                "Queue", "Fleet".
-    """
-
-    # Emitted when the background refresh thread catches an exception,
-    # provides (operation_name, BaseException)
-    background_exception = Signal(str, BaseException)
-
-    # Emitted when an async refresh_farms_list thread completes,
-    # provides (refresh_id, [(farm_id, farm_name), ...])
-    _list_update = Signal(int, list)
-
-    def __init__(self, resource_name, setting_name, parent: Optional[QWidget] = None):
-        super().__init__(parent)
-
-        self.__refresh_thread = None
-        self.__refresh_id = 0
-        self.canceled = CancelationFlag()
-        self.destroyed.connect(self.canceled.set_canceled)
-
-        self.resource_name = resource_name
-        self.setting_name = setting_name
-
-        self._build_ui()
-
-    def _build_ui(self):
-        self.box = QComboBox(parent=self)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.box, stretch=1)
-
-        self.refresh_button = QPushButton("")
-        layout.addWidget(self.refresh_button)
-        self.refresh_button.setIcon(QApplication.style().standardIcon(QStyle.SP_BrowserReload))
-        self.refresh_button.setFixedSize(QSize(22, 22))  # Make the button square
-        self.refresh_button.clicked.connect(self.refresh_list)
-        self._list_update.connect(self.handle_list_update)
-        self.background_exception.connect(self.handle_background_exception)
-
-    def handle_background_exception(self, e):
-        with block_signals(self.box):
-            self.box.clear()
-        self.refresh_selected_id()
-
-    def count(self) -> int:
-        """Returns the number of items in the combobox"""
-        return self.box.count()
-
-    def set_config(self, config: ConfigParser) -> None:
-        """Updates the AWS Deadline Cloud config object the control uses."""
-        self.config = config
-
-    def clear_list(self):
-        """
-        Fully clears the list. The caller needs to call either
-        `refresh_list` or `refresh_selected_id` at a later point
-        to finish it.
-        """
-        with block_signals(self.box):
-            self.box.clear()
-
-    def refresh_list(self):
-        """
-        Starts a background thread to refresh the resource list.
-        """
-        config = self.config
-        selected_id = config_file.get_setting(self.setting_name, config=config)
-        # Reset to a list of just the currently configured id during refresh
-        with block_signals(self.box):
-            self.box.clear()
-            self.box.addItem("<refreshing>", userData=selected_id)
-
-        self.__refresh_id += 1
-        self.__refresh_thread = threading.Thread(
-            target=self._refresh_thread_function,
-            name=f"AWS Deadline Cloud refresh {self.resource_name} thread",
-            args=(self.__refresh_id, config),
-        )
-        self.__refresh_thread.start()
-
-    def handle_list_update(self, refresh_id, items_list):
-        # Apply the refresh if it's still for the latest call
-        if refresh_id == self.__refresh_id:
-            with block_signals(self.box):
-                self.box.clear()
-                for name, id in items_list:
-                    self.box.addItem(name, userData=id)
-
-                self.refresh_selected_id()
-
-    def refresh_selected_id(self):
-        """Refreshes the selected id from the config object"""
-        selected_id = config_file.get_setting(self.setting_name, config=self.config)
-        # Restore the selected Id, inserting a new item if
-        # it doesn't exist in the list.
-        with block_signals(self.box):
-            index = self.box.findData(selected_id)
-            if index >= 0:
-                self.box.setCurrentIndex(index)
-            elif selected_id:
-                # User has a configured ID but it's not in the list. This happens when
-                # the user has permission to use a resource (e.g., queue) but lacks
-                # permission to list resources (e.g., ListFarms). Show the raw ID so
-                # they can still see their configured resource.
-                self.box.insertItem(0, selected_id, userData=selected_id)
-                self.box.setCurrentIndex(0)
-            else:
-                # No ID selected
-                index = self.box.findText("<none selected>")
-                if index >= 0:
-                    self.box.setCurrentIndex(index)
-                else:
-                    self.box.insertItem(0, "<none selected>", userData="")
-                    self.box.setCurrentIndex(0)
-
-    def _refresh_thread_function(self, refresh_id: int, config: Optional[ConfigParser] = None):
-        """
-        This function gets started in a background thread to refresh the list.
-        """
-        try:
-            resources = self.list_resources(config=config)
-            if not self.canceled:
-                self._list_update.emit(refresh_id, resources)
-        except BaseException as e:
-            if not self.canceled and refresh_id == self.__refresh_id:
-                self.background_exception.emit(f"Refresh {self.resource_name}s list", e)
-
-
-class DeadlineFarmListComboBox(_DeadlineResourceListComboBox):
-    def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
-
-    def list_resources(self, config: Optional[ConfigParser]):
-        response = api.list_farms(config=config)
-        return sorted(
-            [(item["displayName"], item["farmId"]) for item in response["farms"]],
-            key=lambda item: (item[0].casefold(), item[1]),
-        )
-
-
-class DeadlineQueueListComboBox(_DeadlineResourceListComboBox):
-    def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
-
-    def list_resources(self, config: Optional[ConfigParser]):
-        default_farm_id = config_file.get_setting("defaults.farm_id", config=config)
-        if default_farm_id:
-            response = api.list_queues(config=config, farmId=default_farm_id)
-            return sorted(
-                [(item["displayName"], item["queueId"]) for item in response["queues"]],
-                key=lambda item: (item[0].casefold(), item[1]),
-            )
-        else:
-            return []
-
-
-class DeadlineStorageProfileNameListComboBox(_DeadlineResourceListComboBox):
-    WINDOWS_OS = "windows"
-    MAC_OS = "macos"
-    LINUX_OS = "linux"
-
-    def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__(
-            resource_name="Storage profile",
-            setting_name="settings.storage_profile_id",
-            parent=parent,
-        )
-
-    def list_resources(self, config: Optional[ConfigParser]):
-        default_farm_id = config_file.get_setting("defaults.farm_id", config=config)
-        default_queue_id = config_file.get_setting("defaults.queue_id", config=config)
-        if default_farm_id and default_queue_id:
-            response = api.list_storage_profiles_for_queue(
-                config=config, farmId=default_farm_id, queueId=default_queue_id
-            )
-            storage_profiles = response.get("storageProfiles", [])
-            # add a "<none selected>" option since its possible to select nothing for this type
-            # of resource
-            storage_profiles.append(
-                {
-                    "storageProfileId": "",
-                    "displayName": "<none selected>",
-                    "osFamily": self._get_current_os(),
-                }
-            )
-            return sorted(
-                [
-                    (item["displayName"], item["storageProfileId"])
-                    for item in storage_profiles
-                    if self._get_current_os() == item["osFamily"].lower()
-                ],
-                key=lambda item: (item[0].casefold(), item[1]),
-            )
-        else:
-            return []
-
-    def _get_current_os(self) -> str:
-        """
-        Get a string specifying what the OS is, following the format the Deadline storage profile API expects.
-        """
-        if sys.platform.startswith("linux"):
-            return self.LINUX_OS
-
-        if sys.platform.startswith("darwin"):
-            return self.MAC_OS
-
-        if sys.platform.startswith("win"):
-            return self.WINDOWS_OS
-
-        return "Unknown"

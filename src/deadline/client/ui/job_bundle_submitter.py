@@ -150,13 +150,12 @@ def show_job_bundle_submitter(
     if parent is None:
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
-        main_windows = [
-            widget
-            for widget in app.topLevelWidgets()
-            if isinstance(widget, QMainWindow)  # type: ignore[union-attr]
-        ]
-        if main_windows:
-            parent = main_windows[0]
+        if app is not None:
+            main_windows = [
+                widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)
+            ]
+            if main_windows:
+                parent = main_windows[0]
 
     if not input_job_bundle_dir:
         input_job_bundle_dir = QFileDialog.getExistingDirectory(

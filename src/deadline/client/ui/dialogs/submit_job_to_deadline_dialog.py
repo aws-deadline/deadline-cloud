@@ -113,7 +113,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         attachments: AssetReferences,
         on_create_job_bundle_callback: OnCreateJobBundleCallback,
         parent: Optional[QWidget] = None,
-        f: Qt.WindowFlags = Qt.WindowFlags(),
+        f: Any = Qt.WindowFlags(),
         show_host_requirements_tab: bool = False,
         host_requirements: Optional[HostRequirements] = None,
         submitter_info: Optional[SubmitterInfo] = None,
