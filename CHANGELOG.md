@@ -1,3 +1,19 @@
+## 0.55.0 (2026-01-21)
+
+
+### Features
+* add help button and documentation link to the job bundle GUI submitter (#961) ([`a3704fd`](https://github.com/aws-deadline/deadline-cloud/commit/a3704fd25834168197ca131e75ba826e6499c3f0))
+* Update hash cache to support byte ranges for file chunking support (#953) ([`35a1802`](https://github.com/aws-deadline/deadline-cloud/commit/35a18026fffa0c1496975b5420a20cec3edca9da))
+
+### Bug Fixes
+* register fixture hook to cleanup job attachments (#962) ([`cbf4061`](https://github.com/aws-deadline/deadline-cloud/commit/cbf406110ca0d636b88d47215c43e65d5cb2949f))
+* move load different job bundle button to better location (#945) ([`3f65662`](https://github.com/aws-deadline/deadline-cloud/commit/3f65662b070535c72557cfcb22bf0afe749152e5))
+* Apply long path handling when a duplicate rename file is downloaded. (#964) ([`e2ed151`](https://github.com/aws-deadline/deadline-cloud/commit/e2ed15104d7cb57a8244d34bbcb75cb2e0916e42))
+* Add option to bundle submit to always perform S3 head check (#957) ([`c53f3be`](https://github.com/aws-deadline/deadline-cloud/commit/c53f3be09e146fd7aa9f016ca5f455d692043d50))
+* improve About dialog YAML key formatting to be human friendly (#950) ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+* improve About dialog YAML key formatting for nested structures ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+
+
 ## 0.54.0 (2025-12-11)
 
 ### DEPRECATIONS
