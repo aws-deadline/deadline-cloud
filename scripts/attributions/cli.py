@@ -68,7 +68,7 @@ _ATTRIBUTIONS_ALLOW_LIST = {
         "spdx": _BSD_3_CLAUSE,
     },
     "jmespath": {
-        "license_sha256": "66b313cce80ed0623fc7db3f24863a0c80fd83eb341a46b57864158ae74faa56",
+        "license_sha256": "6eefacfa4d71b82d08408c751470ac8d9854538da2142cb27be0287fb13d0ab9",
         "spdx": _MIT,
     },
     "packaging": {
