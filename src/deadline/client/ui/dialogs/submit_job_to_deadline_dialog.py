@@ -240,7 +240,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
         if hasattr(initial_job_settings, "browse_enabled") and initial_job_settings.browse_enabled:
-            self.load_bundle_button = QPushButton(tr("Load a different job bundle"))
+            self.load_bundle_button = QPushButton(tr("Load Bundle"))
             self.load_bundle_button.clicked.connect(self._on_load_bundle)
             self.button_box.addButton(self.load_bundle_button, QDialogButtonBox.AcceptRole)
         self.export_bundle_button = QPushButton(tr("Export bundle"))

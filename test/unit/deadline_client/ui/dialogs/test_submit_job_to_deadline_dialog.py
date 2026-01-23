@@ -42,7 +42,7 @@ def test_load_bundle_button_shown_when_browse_enabled(
     qtbot.addWidget(dialog)
 
     assert hasattr(dialog, "load_bundle_button")
-    assert dialog.load_bundle_button.text() == "Load a different job bundle"
+    assert dialog.load_bundle_button.text() == "Load Bundle"
 
 
 @patch("deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus")
