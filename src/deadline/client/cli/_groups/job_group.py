@@ -48,6 +48,7 @@ from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 from ...api._session import get_default_client_config
 from .._timestamp_formatter import TimestampFormat, TimestampFormatter
+from ._job_helpers import _resolve_job_search, _print_job_details
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -171,31 +172,42 @@ def job_list(page_size, item_offset, **args):
 
 
 @cli_job.command(name="get")
+@click.argument("search_term", required=False)
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
 @click.option("--queue-id", help="The queue to use.")
 @click.option("--job-id", help="The job to get.")
 @_handle_error
-def job_get(**args):
+def job_get(search_term: Optional[str], **args):
     """
-    Get the details of a [Deadline Cloud job] in the queue.
+    Get the details of a [Deadline Cloud job], or search for jobs with a search term.
+
+    SEARCH_TERM can be a job ID (job-xxx) or a search string to find matching jobs.
+    If exactly one job matches, shows full details. If multiple match, shows a summary list.
+    If no arguments provided, shows the default job from config.
 
     [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
     """
-    # Get a temporary config object with the standard options handled
-    config = _apply_cli_options_to_config(
-        required_options={"farm_id", "queue_id", "job_id"}, **args
-    )
+    # Check if search_term is actually a job ID
+    if search_term and re.match(r"^job-[0-9a-f]{32}$", search_term):
+        args["job_id"] = search_term
+        search_term = None
 
-    farm_id = config_file.get_setting("defaults.farm_id", config=config)
-    queue_id = config_file.get_setting("defaults.queue_id", config=config)
-    job_id = config_file.get_setting("defaults.job_id", config=config)
-
-    deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
-    response.pop("ResponseMetadata", None)
-
-    click.echo(_cli_object_repr(response))
+    if search_term:
+        # Search with term - don't require job_id
+        config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+        found_job_id = _resolve_job_search(config, search_term)
+        if found_job_id:
+            _print_job_details(config, found_job_id)
+    else:
+        # Get job by ID (from arg or config default)
+        config = _apply_cli_options_to_config(
+            required_options={"farm_id", "queue_id", "job_id"}, **args
+        )
+        job_id = config_file.get_setting("defaults.job_id", config=config)
+        if job_id is None:
+            raise DeadlineOperationError("Missing job ID. Provide a job ID or search term.")
+        _print_job_details(config, job_id)
 
 
 @cli_job.command(name="cancel")
