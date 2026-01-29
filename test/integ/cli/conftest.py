@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import tempfile
 from pathlib import Path
 import os
+from typing import Generator
 
 import pytest
 from deadline.job_attachments import upload
@@ -15,7 +16,7 @@ from .test_utils import JobAttachmentTest, UploadInputFilesOneAssetInCasOutputs,
 
 
 @pytest.fixture(scope="function", autouse=True)
-def fresh_deadline_config():
+def fresh_deadline_config() -> Generator[str, None, None]:
     """
     Fixture to start with a blank AWS Deadline Cloud config file.
 
