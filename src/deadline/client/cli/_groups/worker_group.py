@@ -10,7 +10,12 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from .._main import deadline as main
 
 
@@ -44,7 +49,12 @@ def worker_list(page_size, item_offset, fleet_id, **args):
             farmId=farm_id, fleetIds=[fleet_id], itemOffset=item_offset, pageSize=page_size
         )
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Workers from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, fleet_id=fleet_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Workers from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     total_results = response["totalResults"]
 
@@ -77,7 +87,15 @@ def worker_get(fleet_id, worker_id, **args):
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_worker(farmId=farm_id, fleetId=fleet_id, workerId=worker_id)
+    try:
+        response = deadline.get_worker(farmId=farm_id, fleetId=fleet_id, workerId=worker_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, fleet_id=fleet_id, worker_id=worker_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Worker from Deadline:\n{exc}{suggestion}"
+        ) from exc
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))

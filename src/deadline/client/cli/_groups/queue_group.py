@@ -19,7 +19,12 @@ from ... import api
 from ...api._session import get_session_client
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from ....job_attachments.models import (
     FileConflictResolution,
 )
@@ -65,7 +70,10 @@ def queue_list(**args):
     try:
         response = api.list_queues(farmId=farm_id, config=config)
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Queues from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(exc, farm_id=farm_id, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Queues from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     # Select which fields to print and in which order
     structured_queue_list = [
@@ -201,8 +209,11 @@ def queue_paramdefs(**args):
     try:
         response = api.get_queue_parameter_definitions(farmId=farm_id, queueId=queue_id)
     except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, queue_id=queue_id, config=config
+        )
         raise DeadlineOperationError(
-            f"Failed to get Queue Parameter Definitions from Deadline:\n{exc}"
+            f"Failed to get Queue Parameter Definitions from Deadline:\n{exc}{suggestion}"
         ) from exc
 
     click.echo(_cli_object_repr(response))
@@ -226,7 +237,15 @@ def queue_get(**args):
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+    try:
+        response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, queue_id=queue_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Queue from Deadline:\n{exc}{suggestion}"
+        ) from exc
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))

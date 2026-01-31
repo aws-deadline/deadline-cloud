@@ -10,7 +10,12 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from .._main import deadline as main
 
 
@@ -42,7 +47,10 @@ def farm_list(**args):
     try:
         response = api.list_farms(config=config)
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Farms from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(exc, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Farms from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     # Select which fields to print and in which order
     structured_farm_list = [
@@ -68,7 +76,13 @@ def farm_get(**args):
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_farm(farmId=farm_id)
+    try:
+        response = deadline.get_farm(farmId=farm_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(exc, farm_id=farm_id, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Farm from Deadline:\n{exc}{suggestion}"
+        ) from exc
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))

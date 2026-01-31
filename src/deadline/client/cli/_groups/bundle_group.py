@@ -35,6 +35,7 @@ from .._common import (
     _handle_error,
     _ProgressBarCallbackManager,
     _parse_multi_format_parameters,
+    _suggest_resources_on_client_error,
 )
 from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
@@ -335,8 +336,14 @@ def bundle_submit(
             click.echo("Canceled waiting for final status of CreateJob.")
             sys.exit(1)
     except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc,
+            farm_id=config_file.get_setting("defaults.farm_id", config=config),
+            queue_id=config_file.get_setting("defaults.queue_id", config=config),
+            config=config,
+        )
         raise DeadlineOperationError(
-            f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}"
+            f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}{suggestion}"
         ) from exc
     except MisconfiguredInputsError as exc:
         click.echo(str(exc))
