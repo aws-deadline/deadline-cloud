@@ -14,6 +14,7 @@ import tempfile
 import os
 import re
 from datetime import datetime
+from typing import Generator
 
 from unittest.mock import patch, MagicMock
 import pytest
@@ -69,7 +70,7 @@ def mock_telemetry():
 
 
 @pytest.fixture
-def deadline_mock():
+def deadline_mock() -> Generator[MagicMock, None, None]:
     """
     Uses the moto library to create a mock boto3 session for all tests to use.
     Mocks Deadline Cloud via the approach moto recommends for services that it
