@@ -320,7 +320,9 @@ def test_cli_worker_list_api_error(fresh_deadline_config, deadline_mock):
     assert result.exit_code != 0
 
     # Verify API was called with the incorrect parameter values
-    deadline_mock.search_workers.assert_called_once_with(
+    # Note: search_workers may be called multiple times - once for the original request
+    # and potentially again when trying to suggest available workers
+    deadline_mock.search_workers.assert_any_call(
         farmId=MOCK_FARM_ID, fleetIds=["incorrect-fleet-id"], itemOffset=0, pageSize=5
     )
 
@@ -640,9 +642,7 @@ def test_cli_worker_get_api_error_network_timeout(fresh_deadline_config, deadlin
         ],
     )
 
-    # Test network and service error scenarios
-    # The @_handle_error decorator shows the full exception traceback
-    assert "The AWS Deadline Cloud CLI encountered the following exception:" in result.output
+    assert "Failed to get Worker from Deadline" in result.output
     assert "RequestTimeout" in result.output
     assert "Request timed out" in result.output
     assert result.exit_code == 1
@@ -678,9 +678,7 @@ def test_cli_worker_get_api_error_throttling(fresh_deadline_config, deadline_moc
         ],
     )
 
-    # Test network and service error scenarios
-    # The @_handle_error decorator shows the full exception traceback
-    assert "The AWS Deadline Cloud CLI encountered the following exception:" in result.output
+    assert "Failed to get Worker from Deadline" in result.output
     assert "ThrottlingException" in result.output
     assert "Rate exceeded" in result.output
     assert result.exit_code == 1
@@ -721,9 +719,7 @@ def test_cli_worker_get_api_error_service_unavailable(fresh_deadline_config, dea
         ],
     )
 
-    # Test network and service error scenarios
-    # The @_handle_error decorator shows the full exception traceback
-    assert "The AWS Deadline Cloud CLI encountered the following exception:" in result.output
+    assert "Failed to get Worker from Deadline" in result.output
     assert "ServiceUnavailableException" in result.output
     assert "Service temporarily unavailable" in result.output
     assert result.exit_code == 1

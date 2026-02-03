@@ -43,7 +43,12 @@ from ....job_attachments._path_summarization import (
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 from ...api._session import get_default_client_config
@@ -140,7 +145,12 @@ def job_list(page_size, item_offset, **args):
             sortExpressions=[{"fieldSort": {"name": "CREATED_AT", "sortOrder": "DESCENDING"}}],
         )
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Jobs from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, queue_id=queue_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Jobs from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     total_results = response["totalResults"]
 
@@ -248,7 +258,15 @@ def job_cancel(mark_as: str, yes: bool, **args):
     deadline = api.get_boto3_client("deadline", config=config)
 
     # Print a summary of the job to cancel
-    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    try:
+        job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, queue_id=queue_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Job from Deadline:\n{exc}{suggestion}"
+        ) from exc
     # Remove the zero-count status counts
     job["taskRunStatusCounts"] = {
         name: count for name, count in job["taskRunStatusCounts"].items() if count != 0

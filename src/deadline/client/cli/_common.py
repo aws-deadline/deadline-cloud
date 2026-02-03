@@ -15,6 +15,7 @@ __all__ = [
     "_ProgressBarCallbackManager",
     "_parse_file_parameter",
     "_parse_multi_format_parameters",
+    "_suggest_resources_on_client_error",
 ]
 
 import sys
@@ -342,3 +343,7 @@ class _ProgressBarCallbackManager:
             self._exit_stack.close()
 
         return sigint_handler.continue_operation
+
+
+# Re-export from _suggest_resources for backward compatibility
+from ._suggest_resources import _suggest_resources_on_client_error  # noqa: E402,F401

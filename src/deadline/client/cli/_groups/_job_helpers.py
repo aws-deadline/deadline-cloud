@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _cli_object_repr
+from .._common import _cli_object_repr, _suggest_resources_on_client_error
 
 
 def _format_timestamp(dt: datetime) -> str:
@@ -144,6 +144,14 @@ def _print_job_details(config: Optional[ConfigParser], job_id: str) -> None:
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    try:
+        response = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc, farm_id=farm_id, queue_id=queue_id, config=config
+        )
+        raise DeadlineOperationError(
+            f"Failed to get Job from Deadline:\n{exc}{suggestion}"
+        ) from exc
     response.pop("ResponseMetadata", None)
     click.echo(_cli_object_repr(response))
