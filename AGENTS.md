@@ -34,7 +34,8 @@ src/deadline/
 
 Always use `hatch` for running builds, tests, formatting, and linting.
 If running just a few tests, always add `--numprocesses=1` to the `hatch run test`
-command so that it starts quicker.
+command so that it starts quicker. Always run 'hatch run lint' and 'hatch run fmt' before any code
+is submitted.
 
 ```bash
 # Development
