@@ -71,7 +71,6 @@ from .os_file_permission import (
 from ._utils import (
     _get_long_path_compatible_path,
     _is_relative_to,
-    _join_s3_paths,
 )
 from threading import Lock
 
@@ -322,7 +321,9 @@ def get_job_input_paths_by_asset_root(
 
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
-            key = _join_s3_paths(manifest_properties.inputManifestPath)
+            key = s3_settings.add_root_and_manifest_folder_prefix(
+                manifest_properties.inputManifestPath
+            )
             _, asset_manifest = get_asset_root_and_manifest_from_s3(
                 manifest_key=key,
                 s3_bucket=s3_settings.s3BucketName,
@@ -1208,6 +1209,122 @@ def mount_vfs_from_manifests(
             str(vfs_cache_dir),
         )
         vfs_manager.start(session_dir=session_dir)
+
+
+class _InputDownloader:
+    """
+    Handler for downloading all input files from the given job.
+    If no session is provided the default credentials path will be used.
+    """
+
+    def __init__(
+        self,
+        s3_settings: JobAttachmentS3Settings,
+        attachments: Attachments,
+        session: Optional[boto3.Session] = None,
+    ) -> None:
+        self.s3_settings = s3_settings
+        self.session = session
+        self.inputs_by_root = get_job_input_paths_by_asset_root(
+            s3_settings=s3_settings,
+            attachments=attachments,
+            session=session,
+        )
+
+    def get_input_paths_by_root(self) -> dict[str, list[str]]:
+        """Returns a dict of asset root paths to lists of input paths."""
+        input_paths_by_root: dict[str, list[str]] = {}
+        for root, path_group in self.inputs_by_root.items():
+            input_paths_by_root[root] = path_group.get_all_paths()
+        return input_paths_by_root
+
+    def set_root_path(self, original_root: str, new_root: str) -> None:
+        """Changes the root path for downloading input files."""
+        new_root = str(os.path.normpath(Path(new_root).absolute()))
+
+        if original_root not in self.inputs_by_root:
+            raise ValueError(f"The root path {original_root} was not found in input manifests.")
+
+        if new_root == original_root:
+            return
+
+        # If the new root already exists (user is merging two roots), handle filename
+        # collisions by prefixing conflicting files with the original root path
+        if new_root in self.inputs_by_root:
+            paths_in_new_root = self.inputs_by_root[new_root].get_all_paths()
+            for manifest_paths in self.inputs_by_root[original_root].files_by_hash_alg.values():
+                for manifest_path in manifest_paths:
+                    if manifest_path.path in paths_in_new_root:
+                        # Rename conflicting file: prefix with sanitized original root
+                        new_name_prefix = (
+                            original_root.replace("/", "_").replace("\\", "_").replace(":", "_")
+                        )
+                        manifest_path.path = str(
+                            Path(manifest_path.path).with_name(
+                                f"{new_name_prefix}_{manifest_path.path}"
+                            )
+                        )
+            # Merge the original root's files into the new root and remove original
+            self.inputs_by_root[new_root].combine_with_group(self.inputs_by_root[original_root])
+            del self.inputs_by_root[original_root]
+        else:
+            # Simple rename: just change the key in the dictionary
+            self.inputs_by_root = {
+                key if key != original_root else new_root: value
+                for key, value in self.inputs_by_root.items()
+            }
+
+    def download_job_input(
+        self,
+        file_conflict_resolution: Optional[
+            FileConflictResolution
+        ] = FileConflictResolution.CREATE_COPY,
+        on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    ) -> DownloadSummaryStatistics:
+        """
+        Downloads input files from S3 bucket to the asset root(s).
+        """
+        total_bytes: int = 0
+        total_files: int = 0
+        for path_group in self.inputs_by_root.values():
+            total_bytes += path_group.total_bytes
+            total_files += len(path_group.get_all_paths())
+
+        progress_tracker = ProgressTracker(
+            status=ProgressStatus.DOWNLOAD_IN_PROGRESS,
+            total_files=total_files,
+            total_bytes=total_bytes,
+            on_progress_callback=on_downloading_files,
+        )
+
+        start_time = time.perf_counter()
+        downloaded_files_paths_by_root: DefaultDict[str, list[str]] = DefaultDict(list)
+
+        try:
+            for root, path_group in self.inputs_by_root.items():
+                for hash_alg, path_list in path_group.files_by_hash_alg.items():
+                    _ensure_paths_within_directory(root, [file.path for file in path_list])
+
+                    downloaded_files_paths = download_files(
+                        files=path_list,
+                        hash_algorithm=hash_alg,
+                        local_download_dir=root,
+                        s3_settings=self.s3_settings,
+                        session=self.session,
+                        progress_tracker=progress_tracker,
+                        file_conflict_resolution=file_conflict_resolution,
+                    )
+                    downloaded_files_paths_by_root[root].extend(downloaded_files_paths)
+        except AssetSyncCancelledError:
+            downloaded_files = progress_tracker.processed_files
+            raise AssetSyncCancelledError(
+                "Download cancelled. "
+                f"(Downloaded {downloaded_files} file{'' if downloaded_files == 1 else 's'} before cancellation.)"
+            )
+
+        progress_tracker.total_time = time.perf_counter() - start_time
+
+        return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
 
 
 def _ensure_paths_within_directory(root_path: str, paths_relative_to_root: list[str]) -> None:

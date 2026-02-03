@@ -878,6 +878,236 @@ def test_get_summary_of_files_to_download_message_windows(
     )
 
 
+def test_cli_job_download_input_success(fresh_deadline_config, tmp_path: Path):
+    """
+    Tests that the download-input command successfully downloads input files.
+    Uses moto for S3 mocking via the deadline_mock fixture pattern.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "_InputDownloader"
+    ) as MockInputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=5,
+            processed_files=2,
+            processed_bytes=512,
+        )
+        MockInputDownloader.return_value.download_job_input = mock_download
+        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
+        mock_files_list = ["inputs/file1.txt", "inputs/file2.txt"]
+        MockInputDownloader.return_value.get_input_paths_by_root.side_effect = [
+            {mock_root_path: mock_files_list},
+            {mock_root_path: mock_files_list},
+            {mock_root_path: mock_files_list},
+        ]
+
+        mock_host_path_format = PathFormat.get_host_path_format()
+
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": mock_root_path,
+                        "rootPathFormat": mock_host_path_format,
+                        "inputManifestPath": f"{MOCK_FARM_ID}/{MOCK_QUEUE_ID}/Inputs/0000/manifest_input",
+                        "inputManifestHash": "abc123",
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-input", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+            input="y\n",
+        )
+
+        MockInputDownloader.assert_called_once_with(
+            s3_settings=JobAttachmentS3Settings(**MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]),  # type: ignore
+            attachments=ANY,
+            session=ANY,
+        )
+
+        assert "Downloading inputs for job: Mock Job" in result.output
+        assert "Download Summary:" in result.output
+        assert result.exit_code == 0
+
+
+def test_cli_job_download_input_no_inputs(fresh_deadline_config, tmp_path: Path):
+    """
+    Tests that download-input handles jobs with no input attachments gracefully.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "_InputDownloader"
+    ) as MockInputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(api, "get_queue_user_boto3_session"):
+        MockInputDownloader.return_value.get_input_paths_by_root.return_value = {}
+
+        mock_host_path_format = PathFormat.get_host_path_format()
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": "/root/path",
+                        "rootPathFormat": mock_host_path_format,
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-input", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert "no input files found" in result.output.lower()
+        assert result.exit_code == 0
+
+
+def test_cli_job_download_input_with_conflict_resolution(fresh_deadline_config, tmp_path: Path):
+    """
+    Tests that download-input respects the conflict resolution option.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "_InputDownloader"
+    ) as MockInputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=5,
+            processed_files=1,
+            processed_bytes=256,
+        )
+        MockInputDownloader.return_value.download_job_input = mock_download
+        mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
+        MockInputDownloader.return_value.get_input_paths_by_root.return_value = {
+            mock_root_path: ["inputs/file1.txt"]
+        }
+
+        mock_host_path_format = PathFormat.get_host_path_format()
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": mock_root_path,
+                        "rootPathFormat": mock_host_path_format,
+                        "inputManifestPath": f"{MOCK_FARM_ID}/{MOCK_QUEUE_ID}/Inputs/0000/manifest",
+                        "inputManifestHash": "abc123",
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "job",
+                "download-input",
+                "--job-id",
+                MOCK_JOB_ID,
+                "--conflict-resolution",
+                "OVERWRITE",
+                "--yes",
+            ],
+        )
+
+        mock_download.assert_called_once()
+        call_kwargs = mock_download.call_args[1]
+        assert call_kwargs["file_conflict_resolution"] == FileConflictResolution.OVERWRITE
+        assert result.exit_code == 0
+
+
+def test_cli_job_download_input_cross_os_path_prompt(fresh_deadline_config, tmp_path: Path):
+    """
+    Tests that download-input prompts for a new path when job was submitted from different OS.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "_InputDownloader"
+    ) as MockInputDownloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ):
+        mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=5,
+            processed_files=1,
+            processed_bytes=256,
+        )
+        MockInputDownloader.return_value.download_job_input = mock_download
+
+        # Use opposite OS path format to trigger cross-OS prompt
+        if sys.platform == "win32":
+            foreign_root = "/linux/path"
+            foreign_format = "posix"
+            local_root = str(tmp_path)
+        else:
+            foreign_root = "C:\\Windows\\path"
+            foreign_format = "windows"
+            local_root = str(tmp_path)
+
+        MockInputDownloader.return_value.get_input_paths_by_root.side_effect = [
+            {foreign_root: ["inputs/file1.txt"]},
+            {local_root: ["inputs/file1.txt"]},
+            {local_root: ["inputs/file1.txt"]},
+        ]
+
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": foreign_root,
+                        "rootPathFormat": foreign_format,
+                        "inputManifestPath": f"{MOCK_FARM_ID}/{MOCK_QUEUE_ID}/Inputs/0000/manifest",
+                        "inputManifestHash": "abc123",
+                    },
+                ],
+            },
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-input", "--job-id", MOCK_JOB_ID, "--yes"],
+            input=f"{local_root}\n",
+        )
+
+        # Should have prompted for new path and called set_root_path
+        MockInputDownloader.return_value.set_root_path.assert_called_once()
+        assert result.exit_code == 0
+
+
 def test_cli_job_wait_succeeded(fresh_deadline_config):
     """
     Test that job wait command returns exit code 0 when job succeeds.

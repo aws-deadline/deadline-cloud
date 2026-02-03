@@ -4,7 +4,7 @@
 
 Job attachments uses your configured S3 bucket as a [content-addressable storage](https://en.wikipedia.org/wiki/Content-addressable_storage), which creates a snapshot of the files used in your job submission in [asset manifests](#asset-manifests), only uploading files that aren't already in S3. This saves you time and bandwidth when iterating on jobs. When an [AWS Deadline Cloud worker agent][worker-agent] starts working on a job with job attachments, it recreates the file system snapshot in the worker agent session directory, and uploads any outputs back to your S3 bucket.
 
-You can then easily download your outputs with the [deadline job download-output] command, or using the [protocol handler](#protocol-handler) to download from a click of a button in the [AWS Deadline Cloud monitor][monitor].
+You can then easily download your outputs with the [deadline job download-output] command, or download the original input files with the [deadline job download-input] command. You can also use the [protocol handler](#protocol-handler) to download from a click of a button in the [AWS Deadline Cloud monitor][monitor].
 
 Job attachments also works as an auxiliary storage when used with [AWS Deadline Cloud storage profiles][shared-storage], allowing you to flexibly upload files to your Amazon S3 bucket that aren't on your configured shared storage.
 
@@ -18,6 +18,7 @@ See the [`examples`](https://github.com/aws-deadline/deadline-cloud/tree/mainlin
 [worker-agent]: https://github.com/aws-deadline/deadline-cloud-worker-agent/blob/release/docs/
 [developer-guide]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/what-job-attachments-uploads-to-amazon-s3.html
 [deadline job download-output]: cli_reference/deadline_job.md#download-output
+[deadline job download-input]: cli_reference/deadline_job.md#download-input
 
 ## Job Attachments Bucket Structure
 

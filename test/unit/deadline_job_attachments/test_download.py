@@ -37,6 +37,7 @@ from deadline.job_attachments.asset_manifests.v2023_03_03 import (
 from deadline.job_attachments.asset_manifests.versions import ManifestVersion
 from deadline.job_attachments.download import (
     OutputDownloader,
+    _InputDownloader,
     download_file,
     download_files_from_manifests,
     download_files_in_directory,
@@ -738,6 +739,51 @@ class TestFullDownload:
             19,
             manifest_version,
         )
+
+    def test_InputDownloader_download_job_input(
+        self, tmp_path: Path, manifest_version: ManifestVersion
+    ):
+        """Test that _InputDownloader can download input files."""
+        assert self.job.attachments is not None
+
+        input_downloader = _InputDownloader(
+            s3_settings=self.job_attachment_settings,
+            attachments=self.job.attachments,
+        )
+
+        # Get the original root path from the job's attachments
+        original_root = self.job.attachments.manifests[0].rootPath
+
+        # Verify get_input_paths_by_root returns expected structure
+        input_paths = input_downloader.get_input_paths_by_root()
+        assert original_root in input_paths
+        assert len(input_paths[original_root]) == 5  # 5 input files
+
+        # Test set_root_path to change download location
+        input_downloader.set_root_path(original_root, str(tmp_path))
+        input_paths = input_downloader.get_input_paths_by_root()
+        assert str(tmp_path) in input_paths
+
+        # Download the files
+        stats = input_downloader.download_job_input()
+        assert stats.processed_files == 5
+
+        # Verify files were downloaded
+        downloaded_files = list(tmp_path.glob("**/*"))
+        downloaded_files = [f for f in downloaded_files if f.is_file()]
+        assert len(downloaded_files) == 5
+
+    def test_InputDownloader_set_root_path_not_found(self):
+        """Test that set_root_path raises ValueError for unknown root."""
+        assert self.job.attachments is not None
+
+        input_downloader = _InputDownloader(
+            s3_settings=self.job_attachment_settings,
+            attachments=self.job.attachments,
+        )
+
+        with pytest.raises(ValueError, match="was not found"):
+            input_downloader.set_root_path("/nonexistent/path", "/new/path")
 
     EXPECTED_DOWNLOAD_FILE_PATHS_RELATIVE = [
         "inputs/input1.txt",
