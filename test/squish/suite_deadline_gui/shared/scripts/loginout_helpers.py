@@ -59,43 +59,33 @@ def set_aws_profile_name_and_verify_auth(profile_name: str):
     # select AWS profile
     squish.mouseClick(workstation_config_locators.profile_name_locator(profile_name))
     test.log("Selected AWS profile name.")
-    # verify user is authenticated - confirm statuses appear and text is correct
+
+    # verify user is authenticated using the new DeadlineAuthenticationStatusWidget
+    # The widget shows authentication status via:
+    # 1. The widget being visible
+    # 2. The login button being hidden (not visible when authenticated)
+    # 3. The profile name displayed on the profile button
     test.log("Verifying user is authenticated...")
+
+    # Wait for the authentication status widget to be visible
     test.compare(
-        squish.waitForObjectExists(loginout_locators.credential_source_hostprovided_label).visible,
+        squish.waitForObjectExists(loginout_locators.authentication_status_widget).visible,
         True,
-        "Expect `Credential source: HOST_PROVIDED` to be visible when selected aws profile.",
+        "Expect authentication status widget to be visible.",
     )
+
+    # When authenticated, the login button should be hidden (visible=False)
+    # Use the hidden locator to find the button even when not visible
+    login_button = squish.waitForObjectExists(loginout_locators.authentication_login_button_hidden)
     test.compare(
-        str(
-            squish.waitForObjectExists(loginout_locators.credential_source_hostprovided_label).text
-        ),
-        "<b style='color:green;'>HOST_PROVIDED</b>",
-        "Expect `Credential source: HOST_PROVIDED` text to be correct when selected aws profile.",
+        login_button.visible,
+        False,
+        "Expect login button to be hidden when authenticated.",
     )
-    test.compare(
-        squish.waitForObjectExists(
-            loginout_locators.authentication_status_authenticated_label
-        ).visible,
-        True,
-        "Expect `Authentication status: AUTHENTICATED` to be visible.",
-    )
-    test.compare(
-        str(
-            squish.waitForObjectExists(
-                loginout_locators.authentication_status_authenticated_label
-            ).text
-        ),
-        "<b style='color:green;'>AUTHENTICATED</b>",
-        "Expect `Authentication status: AUTHENTICATED` text to be correct.",
-    )
-    test.compare(
-        squish.waitForObjectExists(loginout_locators.deadlinecloud_api_authorized_label).visible,
-        True,
-        "Expect `AWS Deadline Cloud API: AUTHORIZED` to be visible.",
-    )
-    test.compare(
-        str(squish.waitForObjectExists(loginout_locators.deadlinecloud_api_authorized_label).text),
-        "<b style='color:green;'>AUTHORIZED</b>",
-        "Expect `AWS Deadline Cloud API: AUTHORIZED` text to be correct.",
+
+    # Verify the profile button shows the expected profile name
+    profile_button = squish.waitForObjectExists(loginout_locators.authentication_profile_button)
+    test.verify(
+        profile_name in str(profile_button.text),
+        f"Expect profile button to contain profile name '{profile_name}'.",
     )

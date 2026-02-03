@@ -3,53 +3,32 @@
 
 import workstation_config_locators
 
-# authentication status
-credential_source_auth_group = {
-    "title": "Credential source",
-    "type": "AuthenticationStatusGroup",
+# authentication status widget (replaces the old AuthenticationStatusGroup widgets)
+# The new DeadlineAuthenticationStatusWidget is a single widget that shows:
+# - A status icon (green checkmark when authenticated)
+# - The profile name
+# - Action buttons (login, switch profile, etc.)
+authentication_status_widget = {
+    "type": "DeadlineAuthenticationStatusWidget",
     "unnamed": 1,
     "visible": 1,
     "window": workstation_config_locators.deadline_config_dialog,
 }
-authentication_status_auth_group = {
-    "title": "Authentication status",
-    "type": "AuthenticationStatusGroup",
+
+# Login button - exists but hidden when user is authenticated
+# Note: visible is set to 0 to find the button even when hidden
+authentication_login_button_hidden = {
+    "container": authentication_status_widget,
+    "text": "Log in",
+    "type": "QPushButton",
     "unnamed": 1,
-    "visible": 1,
-    "window": workstation_config_locators.deadline_config_dialog,
+    "visible": 0,
 }
-deadlinecloud_api_auth_group = {
-    "title": "AWS Deadline Cloud API",
-    "type": "AuthenticationStatusGroup",
-    "unnamed": 1,
-    "visible": 1,
-    "window": workstation_config_locators.deadline_config_dialog,
-}
-credential_source_hostprovided_label = {
-    "container": credential_source_auth_group,
-    "text": "<b style='color:green;'>HOST_PROVIDED</b>",
-    "type": "QLabel",
-    "unnamed": 1,
-    "visible": 1,
-}
-credential_source_dcmlogin_label = {
-    "container": credential_source_auth_group,
-    "text": "<b style='color:green;'>DEADLINE_CLOUD_MONITOR_LOGIN</b>",
-    "type": "QLabel",
-    "unnamed": 1,
-    "visible": 1,
-}
-authentication_status_authenticated_label = {
-    "container": authentication_status_auth_group,
-    "text": "<b style='color:green;'>AUTHENTICATED</b>",
-    "type": "QLabel",
-    "unnamed": 1,
-    "visible": 1,
-}
-deadlinecloud_api_authorized_label = {
-    "container": deadlinecloud_api_auth_group,
-    "text": "<b style='color:green;'>AUTHORIZED</b>",
-    "type": "QLabel",
+
+# Profile button - shows the profile name and has dropdown menu
+authentication_profile_button = {
+    "container": authentication_status_widget,
+    "type": "QPushButton",
     "unnamed": 1,
     "visible": 1,
 }
