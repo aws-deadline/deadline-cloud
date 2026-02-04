@@ -379,6 +379,10 @@ def bundle_submit(
     help="Opens a folder browser to select a bundle.",
 )
 @click.option(
+    "--name",
+    help="The job name to use in place of the one in the job bundle.",
+)
+@click.option(
     "--install-gui",
     is_flag=True,
     help="Installs GUI dependencies if they are not installed already",
@@ -420,6 +424,7 @@ def bundle_gui_submit(
     parameter,
     job_bundle_dir,
     browse,
+    name,
     output,
     install_gui,
     known_asset_path,
@@ -470,6 +475,7 @@ def bundle_gui_submit(
             submitter_info=submitter_info,
             known_asset_paths=known_asset_path,
             job_parameters=parameter,
+            name=name,
         )
 
         if not submitter:

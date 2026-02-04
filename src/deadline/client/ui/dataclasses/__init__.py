@@ -19,7 +19,7 @@ __all__ = [
 
 import os
 from dataclasses import dataclass, field
-from typing import Literal, Dict, List, Union
+from typing import Literal, Dict, List, Optional as _Optional, Union
 
 from ...job_bundle.parameters import JobParameter
 
@@ -45,6 +45,10 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
 
     # Whether to allow ability to "Load a different job bundle"
     browse_enabled: bool = field(default=False)
+
+    # If the template name is parametrized (e.g., "{{Param.JobName}}"),
+    # this holds the parameter name (e.g., "JobName").
+    name_parameter: _Optional[str] = field(default=None)
 
 
 @dataclass

@@ -3,6 +3,7 @@
 from __future__ import annotations
 import copy
 import os
+import re as _re
 from logging import getLogger
 from typing import Any, Optional, Dict
 
@@ -42,6 +43,20 @@ from ..job_bundle.submission import AssetReferences
 from ..api._session import session_context
 
 logger = getLogger(__name__)
+
+# Pattern to match OpenJD parameter references like {{Param.JobName}}
+_PARAM_REFERENCE_PATTERN = _re.compile(r"\{\{Param\.(\w+)\}\}")
+
+
+def _extract_name_parameter(template_name: str) -> Optional[str]:
+    """
+    Extract the parameter name from a parametrized template name.
+
+    If the template name is exactly "{{Param.X}}", returns "X".
+    Otherwise returns None.
+    """
+    match = _PARAM_REFERENCE_PATTERN.fullmatch(template_name.strip())
+    return match.group(1) if match else None
 
 
 def _validate_job_parameters_against_definitions(
@@ -118,6 +133,7 @@ def show_job_bundle_submitter(
     *,
     input_job_bundle_dir: str = "",
     browse: bool = False,
+    name: Optional[str] = None,
     parent: Optional[QWidget] = None,
     f=Qt.WindowFlags(),
     submitter_info: Optional[SubmitterInfo] = None,
@@ -133,6 +149,7 @@ def show_job_bundle_submitter(
     Args:
         input_job_bundle_dir: Path to the job bundle directory
         browse: Whether to show a file browser dialog
+        name: Optional job name to use instead of the template default
         parent: Parent widget
         f: Qt window flags
         submitter_info: Optional submitter information to display in About dialog.
@@ -192,7 +209,14 @@ def show_job_bundle_submitter(
         template = parse_yaml_or_json_content(
             file_contents, file_type, settings.input_job_bundle_dir, "template"
         )
-        template["name"] = settings.name
+
+        # Handle parametrized names: keep original template name and pass name as parameter
+        if settings.name_parameter:
+            # Template name stays as "{{Param.X}}", name goes into parameter values
+            pass
+        else:
+            template["name"] = settings.name
+
         if settings.description:
             template["description"] = settings.description
         else:
@@ -217,6 +241,10 @@ def show_job_bundle_submitter(
         parameter_values.extend(
             {"name": param["name"], "value": param["value"]} for param in settings.parameters
         )
+
+        # Add name as parameter value when using parametrized name
+        if settings.name_parameter:
+            parameter_values.append({"name": settings.name_parameter, "value": settings.name})
 
         parameters = merge_queue_job_parameters(
             queue_parameters=queue_parameters,
@@ -256,15 +284,42 @@ def show_job_bundle_submitter(
     )
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
-    name = "Job bundle submission"
-    if template:
-        name = template.get("name", name)
+    # Check if the template name is parametrized (e.g., "{{Param.JobName}}")
+    original_template_name = template.get("name", "") if template else ""
+    name_param = _extract_name_parameter(original_template_name)
+
+    # Determine the initial name value
+    if name is not None:
+        # CLI --name option takes precedence
+        initial_name = name
+    elif name_param:
+        # For parametrized names, use the parameter's default value
+        initial_name = "Job bundle submission"  # Will be updated from parameter default below
+    else:
+        # Use template name or fallback
+        initial_name = original_template_name or "Job bundle submission"
 
     if not os.path.isdir(input_job_bundle_dir):
         raise DeadlineOperationError(f"Input Job Bundle Dir is not valid: {input_job_bundle_dir}")
-    initial_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
+    initial_settings = JobBundleSettings(
+        input_job_bundle_dir=input_job_bundle_dir, name=initial_name
+    )
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
+    initial_settings.name_parameter = name_param
+
+    # If name is parametrized, get default from parameter and hide it from parameters list
+    if name_param:
+        for param in initial_settings.parameters:
+            if param["name"] == name_param:
+                if name is None:
+                    # Use parameter's default as initial name
+                    initial_settings.name = param.get("default", param.get("value", ""))
+                break
+        # Remove the name parameter from the displayed parameters list
+        initial_settings.parameters = [
+            p for p in initial_settings.parameters if p["name"] != name_param
+        ]
 
     initial_shared_parameter_values = {}
 

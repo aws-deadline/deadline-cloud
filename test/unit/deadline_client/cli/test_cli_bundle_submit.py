@@ -697,6 +697,21 @@ def test_gui_submit_submitter_name(_mock_context, mock_job_bundle_submitter):
     assert kwargs["submitter_info"] == SubmitterInfo(submitter_name="MyDCC")
 
 
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_gui_submit_name_option(_mock_context, mock_job_bundle_submitter):
+    """
+    Verify that the --name arg gets passed through correctly to show_job_bundle_submitter
+    """
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        ["bundle", "gui-submit", "--browse", "--name", "My Custom Job Name"],
+    )
+    _args, kwargs = mock_job_bundle_submitter.show_job_bundle_submitter.call_args
+    assert kwargs["name"] == "My Custom Job Name"
+
+
 def test_bundle_submit_with_target_task_run_status(
     fresh_deadline_config, deadline_mock, temp_job_bundle_dir
 ):
