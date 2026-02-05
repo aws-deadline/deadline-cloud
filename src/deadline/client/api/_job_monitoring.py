@@ -201,7 +201,8 @@ def wait_for_job_completion(
 def get_session_logs(
     farm_id: str,
     queue_id: str,
-    session_id: str,
+    session_id: Optional[str] = None,
+    job_id: Optional[str] = None,
     limit: int = 100,
     start_time: Optional[datetime.datetime] = None,
     end_time: Optional[datetime.datetime] = None,
@@ -215,10 +216,17 @@ def get_session_logs(
     By default, it returns the most recent 100 log lines, but this can be
     adjusted using the limit parameter.
 
+    If session_id is not provided but job_id is, the function will automatically
+    select a session using the following priority:
+    1. Ongoing sessions (no endedAt time) are preferred
+    2. Among ongoing sessions, the most recently started one is selected
+    3. If no ongoing sessions, the most recently completed session is selected
+
     Args:
         farm_id: The ID of the farm containing the session.
         queue_id: The ID of the queue containing the session.
-        session_id: The ID of the session to get logs for.
+        session_id: The ID of the session to get logs for. Optional if job_id is provided.
+        job_id: The ID of the job. Used to auto-select a session if session_id is not provided.
         limit: Maximum number of log lines to return.
         start_time: Optional start time for logs as a datetime object.
         end_time: Optional end time for logs as a datetime object.
@@ -233,6 +241,40 @@ def get_session_logs(
     """
     # Get the Deadline client to use for getting queue credentials
     deadline = get_boto3_client("deadline", config=config)
+
+    # Auto-select session if not provided but job_id is
+    if not session_id:
+        if not job_id:
+            raise DeadlineOperationError("Either session_id or job_id must be provided")
+        try:
+            paginator = deadline.get_paginator("list_sessions")
+            sessions = []
+            for page in paginator.paginate(farmId=farm_id, queueId=queue_id, jobId=job_id):
+                sessions.extend(page.get("sessions", []))
+
+            if not sessions:
+                raise DeadlineOperationError(f"No sessions found for job {job_id}")
+
+            # Prioritize ongoing sessions, then most recent
+            ongoing = [s for s in sessions if "endedAt" not in s]
+            if ongoing:
+                session_id = max(
+                    ongoing,
+                    key=lambda s: s.get(
+                        "startedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                    ),
+                )["sessionId"]
+            else:
+                session_id = max(
+                    sessions,
+                    key=lambda s: s.get(
+                        "endedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                    ),
+                )["sessionId"]
+        except ClientError as exc:
+            raise DeadlineOperationError(f"Failed to list sessions: {exc}") from exc
+
+    assert session_id is not None  # Guaranteed by logic above
 
     # Check if we have user and identity store ID (from Deadline Cloud monitor)
     user_id, identity_store_id = get_user_and_identity_store_id(config=config)
