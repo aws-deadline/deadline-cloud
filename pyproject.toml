@@ -56,6 +56,9 @@ gui = [
   # If the version changes, update the version in deadline/client/ui/__init__.py
   "PySide6-essentials >= 6.6,< 6.11",
 ]
+tui = [
+  "rich >= 13.0",
+]
 mcp = [
   "mcp >= 1.13.0",
 ]

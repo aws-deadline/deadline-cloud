@@ -33,6 +33,7 @@ nav:
     - cli_reference/index.md
     - "attachment": cli_reference/deadline_attachment.md
     - "auth": cli_reference/deadline_auth.md
+    - "browse": cli_reference/deadline_browse.md
     - "bundle": cli_reference/deadline_bundle.md
     - "config": cli_reference/deadline_config.md
     - "farm": cli_reference/deadline_farm.md

@@ -1838,3 +1838,201 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
     if trace_file:
         with open(trace_file, "w", encoding="utf8") as f:
             json.dump(tracing_data, f, indent=1)
+
+
+def _tui_setup_attachment_browser(
+    config: Optional[ConfigParser],
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    deadline: Any,
+    step_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+) -> None:
+    """Set up and launch the attachment browser for a job or task."""
+    from ._job_tui._attachment_browser import AttachmentBrowserTUI
+
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job_name = job["name"]
+    job_status = job.get("taskRunStatus", "UNKNOWN")
+
+    queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+    if "jobAttachmentSettings" not in queue:
+        click.echo("Queue does not have job attachments configured")
+        return
+
+    boto3_session = api.get_boto3_session(config=config)
+    s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+    queue_role_session = api.get_queue_user_boto3_session(
+        deadline=deadline,
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
+
+    browser = AttachmentBrowserTUI(
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+        job_name=job_name,
+        job_status=job_status,
+        boto3_session=boto3_session,
+        queue_role_session=queue_role_session,
+        s3_settings=s3_settings,
+        step_id=step_id,
+        task_id=task_id,
+    )
+    browser.run()
+
+
+def _tui_task_loop(
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    job_name: str,
+    step_id: str,
+    step_name: str,
+    deadline: Any,
+    config: Optional[ConfigParser],
+) -> Optional[str]:
+    """Run the task list loop. Returns 'quit' or None (back to steps)."""
+    from ._job_tui._session_list import SessionListTUI
+    from ._job_tui._task_list import TaskListTUI
+
+    tui = TaskListTUI(
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+        job_name=job_name,
+        step_id=step_id,
+        step_name=step_name,
+        deadline_client=deadline,
+    )
+    while True:
+        result = tui.run()
+        if result is None:
+            return "quit"
+        action, task_id = result
+        if action == "back":
+            return None
+        elif action == "sessions":
+            task = deadline.get_task(
+                farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id, taskId=task_id
+            )
+            params = task.get("parameters", {})
+            label = (
+                ", ".join(f"{k}={next(iter(v.values()), '')}" for k, v in params.items())
+                or task_id[-8:]
+            )
+            session_tui = SessionListTUI(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                step_id=step_id,
+                task_id=task_id,
+                task_label=label,
+                deadline_client=deadline,
+            )
+            session_tui.run()
+        elif action == "attachments":
+            _tui_setup_attachment_browser(
+                config, farm_id, queue_id, job_id, deadline, step_id, task_id
+            )
+
+
+def _tui_step_loop(
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    deadline: Any,
+    config: Optional[ConfigParser],
+) -> Optional[str]:
+    """Run the step list loop. Returns 'quit' or None (back to jobs)."""
+    from ._job_tui._step_list import StepListTUI
+
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job_name = job["name"]
+    job_status = job.get("taskRunStatus", "UNKNOWN")
+
+    tui = StepListTUI(
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+        job_name=job_name,
+        job_status=job_status,
+        deadline_client=deadline,
+    )
+    while True:
+        result = tui.run()
+        if result is None:
+            return "quit"
+        action = result[0]
+        if action == "back":
+            return None
+        elif action == "select":
+            step_id = result[1]
+            step_name = result[2]
+            task_result = _tui_task_loop(
+                farm_id, queue_id, job_id, job_name, step_id, step_name, deadline, config
+            )
+            if task_result == "quit":
+                return "quit"
+
+
+def _tui_main_loop(
+    farm_id: str,
+    queue_id: str,
+    deadline: Any,
+    config: Optional[ConfigParser],
+) -> None:
+    """Run the main job list loop with navigation into steps/tasks."""
+    from ._job_tui._job_list import JobListTUI
+
+    tui = JobListTUI(farm_id=farm_id, queue_id=queue_id, deadline_client=deadline)
+    while True:
+        result = tui.run()
+        if result is None:
+            return
+        action, job_id = result
+        if action == "select":
+            step_result = _tui_step_loop(farm_id, queue_id, job_id, deadline, config)
+            if step_result == "quit":
+                return
+        elif action == "attachments":
+            _tui_setup_attachment_browser(config, farm_id, queue_id, job_id, deadline)
+
+
+@cli_job.command(name="tui")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@_handle_error
+def job_tui(**args):
+    """
+    Interactive TUI for browsing jobs, steps, tasks, sessions, and attachments.
+
+    Navigate with arrow keys: ↑/↓ to browse lists, →/← to drill in/out of the
+    job → step → task hierarchy. Press a for job attachments, j for task attachments,
+    l for sessions, c to copy IDs, n/p for pagination, q to quit.
+
+    Requires the [tui] extra: pip install 'deadline[tui]'
+    """
+    from .browse_group import _check_tui_installed
+
+    _check_tui_installed()
+    from ._job_tui._common import enter_alt_screen, leave_alt_screen
+
+    if not sys.stdin.isatty():
+        raise click.ClickException("This command requires an interactive terminal")
+
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    deadline = api.get_boto3_client("deadline", config=config)
+
+    enter_alt_screen()
+    try:
+        _tui_main_loop(farm_id, queue_id, deadline, config)
+    finally:
+        leave_alt_screen()

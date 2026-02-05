@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 __all__ = [
+    "browse_group",
     "bundle_group",
     "config_group",
     "auth_group",
@@ -16,6 +17,7 @@ __all__ = [
 ]
 
 from . import (
+    browse_group as browse_group,
     bundle_group as bundle_group,
     config_group as config_group,
     auth_group as auth_group,
