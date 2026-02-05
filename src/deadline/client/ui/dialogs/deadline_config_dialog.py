@@ -1030,8 +1030,15 @@ class _DeadlineResourceListComboBox(QWidget):
             index = self.box.findData(selected_id)
             if index >= 0:
                 self.box.setCurrentIndex(index)
+            elif selected_id:
+                # User has a configured ID but it's not in the list. This happens when
+                # the user has permission to use a resource (e.g., queue) but lacks
+                # permission to list resources (e.g., ListFarms). Show the raw ID so
+                # they can still see their configured resource.
+                self.box.insertItem(0, selected_id, userData=selected_id)
+                self.box.setCurrentIndex(0)
             else:
-                # Some cases allow to select "nothing" and insert an item to indicate such
+                # No ID selected
                 index = self.box.findText("<none selected>")
                 if index >= 0:
                     self.box.setCurrentIndex(index)
