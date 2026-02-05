@@ -9,6 +9,7 @@ import shutil
 import sys
 import time
 import json
+import warnings as _warnings
 from io import BytesIO
 from logging import Logger, LoggerAdapter, getLogger
 from math import trunc
@@ -394,6 +395,10 @@ class AssetSync:
             VIRTUAL: downloads a manifest file and mounts a Virtual File System at the
                        specified asset root corresponding to the manifest contents
 
+        .. deprecated::
+            attachment_sync_inputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
+
         Args:
             s3_settings: S3-specific Job Attachment settings.
             attachments: an object that holds all input assets for the job.
@@ -419,6 +424,12 @@ class AssetSync:
             VIRTUAL: same as COPIED, but the summary statistics will be empty since the
                        download hasn't started yet.
         """
+        _warnings.warn(
+            "attachment_sync_inputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         if not s3_settings:
             self.logger.info(
@@ -739,7 +750,6 @@ class AssetSync:
                 f"Total file size required for download ({input_size_readable}) is larger than available disk space ({disk_free_readable})"
             )
 
-    # This is on deprecation path, please use attachment_sync_inputs instead.
     def sync_inputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
@@ -784,7 +794,18 @@ class AssetSync:
                              path mapping.
             VIRTUAL: same as COPIED, but the summary statistics will be empty since the
                        download hasn't started yet.
+
+        .. deprecated::
+            sync_inputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
         """
+        _warnings.warn(
+            "sync_inputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         if not s3_settings:
             self.logger.info(
                 f"No Job Attachment settings configured for Queue {queue_id}, no inputs to sync."
@@ -936,7 +957,19 @@ class AssetSync:
         storage_profiles_path_mapping_rules: dict[str, str] = {},
         on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     ) -> SummaryStatistics:
-        """Uploads any output files specified in the manifest, if found."""
+        """
+        Uploads any output files specified in the manifest, if found.
+
+        .. deprecated::
+            sync_outputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
+        """
+        _warnings.warn(
+            "sync_outputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not s3_settings:
             self.logger.info(
                 f"No Job Attachment settings configured for Queue {queue_id}, no outputs to sync."
