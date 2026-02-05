@@ -79,4 +79,36 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         "func": job.download_job_output,
         "param_names": None,
     },
+    # Diagnostics - Primitive APIs
+    "get_job": {
+        "func": api.get_job,
+        "param_names": ["farm_id", "queue_id", "job_id"],
+    },
+    "get_session": {
+        "func": api.get_session,
+        "param_names": ["farm_id", "queue_id", "job_id", "session_id"],
+    },
+    "list_sessions": {
+        "func": api.list_sessions,
+        "param_names": ["farm_id", "queue_id", "job_id", "max_results"],
+    },
+    "list_steps": {
+        "func": api.list_steps,
+        "param_names": ["farm_id", "queue_id", "job_id", "max_results"],
+    },
+    "list_tasks": {
+        "func": api.list_tasks,
+        "param_names": ["farm_id", "queue_id", "job_id", "step_id", "max_results"],
+    },
+    "search_jobs": {
+        "func": api.search_jobs,
+        "param_names": [
+            "farm_id",
+            "queue_ids",
+            "task_run_status",
+            "name_contains",
+            "page_size",
+            "item_offset",
+        ],
+    },
 }
