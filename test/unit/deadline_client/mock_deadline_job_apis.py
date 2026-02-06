@@ -63,6 +63,25 @@ def _build_filter_function(filter) -> Callable[[dict], bool]:
                     return field_name in job and job[field_name] >= value
             else:
                 raise ValueError(f"fake SearchJobs filter has not implemented operator {operator}")
+        elif "stringListFilter" in filter:
+            filter = filter["stringListFilter"]
+
+            field_name = snake_to_camel(filter["name"].lower())
+            operator = filter["operator"]
+            values = filter["values"]
+
+            assert isinstance(values, list)
+
+            if operator == "ANY_EQUALS":
+
+                def _filter_function(job) -> bool:
+                    return field_name in job and job[field_name] in values
+            elif operator == "ALL_NOT_EQUALS":
+
+                def _filter_function(job) -> bool:
+                    return field_name in job and job[field_name] not in values
+            else:
+                raise ValueError(f"fake SearchJobs filter has not implemented operator {operator}")
         elif "dateTimeFilter" in filter:
             filter = filter["dateTimeFilter"]
 
