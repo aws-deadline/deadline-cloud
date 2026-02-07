@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from deadline.client.api._diagnostics import (
+from deadline.client.api._mcp import (
     get_job,
     get_session,
     list_sessions,
@@ -122,7 +122,7 @@ class TestGetJob:
 
     def test_get_job_basic(self):
         """Test basic get_job call."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -150,7 +150,7 @@ class TestGetSession:
 
     def test_get_session_basic(self):
         """Test basic get_session call."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.get_session.return_value = MOCK_GET_SESSION_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -179,7 +179,7 @@ class TestListSessions:
 
     def test_list_sessions_basic(self):
         """Test basic list_sessions call."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.list_sessions.return_value = MOCK_LIST_SESSIONS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -201,7 +201,7 @@ class TestListSessions:
 
     def test_list_sessions_with_pagination(self):
         """Test list_sessions with pagination."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
 
             # First page has nextToken, second page doesn't
@@ -226,16 +226,13 @@ class TestListSessions:
             assert result["sessions"][1]["sessionId"] == "session-002"
 
     def test_list_sessions_with_max_results(self):
-        """Test list_sessions respects max_results."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        """Test list_sessions passes max_results to API."""
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
-
-            # Return more sessions than max_results
             deadline_mock.list_sessions.return_value = {
                 "sessions": [
                     {"sessionId": "session-001"},
                     {"sessionId": "session-002"},
-                    {"sessionId": "session-003"},
                 ]
             }
             mock_get_client.return_value = deadline_mock
@@ -248,6 +245,9 @@ class TestListSessions:
             )
 
             assert len(result["sessions"]) == 2
+            # Verify maxResults was passed to the API
+            call_args = deadline_mock.list_sessions.call_args
+            assert call_args.kwargs["maxResults"] == 2
 
 
 class TestListSteps:
@@ -255,7 +255,7 @@ class TestListSteps:
 
     def test_list_steps_basic(self):
         """Test basic list_steps call."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.list_steps.return_value = MOCK_LIST_STEPS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -282,7 +282,7 @@ class TestListTasks:
 
     def test_list_tasks_basic(self):
         """Test basic list_tasks call."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.list_tasks.return_value = MOCK_LIST_TASKS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -311,7 +311,7 @@ class TestSearchJobs:
 
     def test_search_jobs_basic(self, fresh_deadline_config):
         """Test basic search_jobs call without filters."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -333,7 +333,7 @@ class TestSearchJobs:
 
     def test_search_jobs_with_status_filter(self, fresh_deadline_config):
         """Test search_jobs with task_run_status filter."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -356,7 +356,7 @@ class TestSearchJobs:
 
     def test_search_jobs_with_name_filter(self, fresh_deadline_config):
         """Test search_jobs with name_contains filter."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -378,7 +378,7 @@ class TestSearchJobs:
 
     def test_search_jobs_with_multiple_filters(self, fresh_deadline_config):
         """Test search_jobs with multiple filters."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -401,7 +401,7 @@ class TestSearchJobs:
 
     def test_search_jobs_pagination_params(self, fresh_deadline_config):
         """Test search_jobs with pagination parameters."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -419,7 +419,7 @@ class TestSearchJobs:
 
     def test_search_jobs_clamps_page_size(self, fresh_deadline_config):
         """Test search_jobs clamps page_size to valid range."""
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
@@ -452,7 +452,7 @@ class TestSearchJobs:
         config_file.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config_file.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        with patch("deadline.client.api._diagnostics.get_boto3_client") as mock_get_client:
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
             deadline_mock = MagicMock()
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock

@@ -117,7 +117,7 @@ from ._job_monitoring import (
     SessionLogResult,
     LogEvent,
 )
-from ._diagnostics import (
+from ._mcp import (
     get_job,
     get_session,
     list_sessions,

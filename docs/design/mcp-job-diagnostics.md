@@ -180,7 +180,7 @@ Session logs location:
 
 ```
 src/deadline/client/api/
-├── _diagnostics.py     # get_job, get_session, list_sessions, list_steps, list_tasks, search_jobs
+├── _mcp.py             # get_job, get_session, list_sessions, list_steps, list_tasks, search_jobs
 └── _job_monitoring.py  # get_session_logs
 ```
 

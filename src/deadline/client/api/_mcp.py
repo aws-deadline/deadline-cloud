@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def _call_paginated_deadline_list_api(
-    list_api, list_property_name: str, max_results: Optional[int] = None, **kwargs
+    list_api, list_property_name: str, **kwargs
 ) -> Dict[str, Any]:
     """
     Calls a deadline:List* API repeatedly to concatenate all pages.
@@ -23,20 +23,14 @@ def _call_paginated_deadline_list_api(
     Args:
         list_api: The List* API function to call, from the boto3 client.
         list_property_name: The name of the property in the response that contains the list.
-        max_results: Optional maximum number of results to return (None for all).
+        **kwargs: Additional arguments passed to the API (including maxResults if provided).
     """
     response = list_api(**kwargs)
     result = {list_property_name: response[list_property_name]}
 
     while "nextToken" in response:
-        if max_results is not None and len(result[list_property_name]) >= max_results:
-            result[list_property_name] = result[list_property_name][:max_results]
-            break
         response = list_api(nextToken=response["nextToken"], **kwargs)
         result[list_property_name].extend(response[list_property_name])
-
-    if max_results is not None:
-        result[list_property_name] = result[list_property_name][:max_results]
 
     return result
 
@@ -106,20 +100,24 @@ def list_sessions(
         farm_id: The ID of the farm containing the job.
         queue_id: The ID of the queue containing the job.
         job_id: The ID of the job to list sessions for.
-        max_results: Optional maximum number of sessions to return.
+        max_results: Optional maximum number of sessions to return per page (API default if not provided).
         config: Optional configuration object.
 
     Returns:
         {"sessions": [...]} with session summaries including sessionId, lifecycleStatus, workerId.
     """
     deadline: "DeadlineClient" = get_boto3_client("deadline", config=config)
+    kwargs: Dict[str, Any] = {
+        "farmId": farm_id,
+        "queueId": queue_id,
+        "jobId": job_id,
+    }
+    if max_results is not None:
+        kwargs["maxResults"] = max_results
     return _call_paginated_deadline_list_api(
         deadline.list_sessions,
         "sessions",
-        max_results=max_results,
-        farmId=farm_id,
-        queueId=queue_id,
-        jobId=job_id,
+        **kwargs,
     )
 
 
@@ -138,20 +136,24 @@ def list_steps(
         farm_id: The ID of the farm containing the job.
         queue_id: The ID of the queue containing the job.
         job_id: The ID of the job to list steps for.
-        max_results: Optional maximum number of steps to return.
+        max_results: Optional maximum number of steps to return per page (API default if not provided).
         config: Optional configuration object.
 
     Returns:
         {"steps": [...]} with step summaries including stepId, name, taskRunStatus, taskRunStatusCounts.
     """
     deadline: "DeadlineClient" = get_boto3_client("deadline", config=config)
+    kwargs: Dict[str, Any] = {
+        "farmId": farm_id,
+        "queueId": queue_id,
+        "jobId": job_id,
+    }
+    if max_results is not None:
+        kwargs["maxResults"] = max_results
     return _call_paginated_deadline_list_api(
         deadline.list_steps,
         "steps",
-        max_results=max_results,
-        farmId=farm_id,
-        queueId=queue_id,
-        jobId=job_id,
+        **kwargs,
     )
 
 
@@ -172,21 +174,25 @@ def list_tasks(
         queue_id: The ID of the queue containing the job.
         job_id: The ID of the job containing the step.
         step_id: The ID of the step to list tasks for.
-        max_results: Optional maximum number of tasks to return.
+        max_results: Optional maximum number of tasks to return per page (API default if not provided).
         config: Optional configuration object.
 
     Returns:
         {"tasks": [...]} with task summaries including taskId, runStatus, parameters.
     """
     deadline: "DeadlineClient" = get_boto3_client("deadline", config=config)
+    kwargs: Dict[str, Any] = {
+        "farmId": farm_id,
+        "queueId": queue_id,
+        "jobId": job_id,
+        "stepId": step_id,
+    }
+    if max_results is not None:
+        kwargs["maxResults"] = max_results
     return _call_paginated_deadline_list_api(
         deadline.list_tasks,
         "tasks",
-        max_results=max_results,
-        farmId=farm_id,
-        queueId=queue_id,
-        jobId=job_id,
-        stepId=step_id,
+        **kwargs,
     )
 
 
@@ -217,15 +223,13 @@ def search_jobs(
     """
     from ..config import config_file
 
-    if not farm_id:
-        farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    farm_id = farm_id or config_file.get_setting("defaults.farm_id", config=config)
     if not farm_id:
         raise ValueError("farm_id is required (not found in config defaults)")
 
-    if not queue_ids:
-        default_queue_id = config_file.get_setting("defaults.queue_id", config=config)
-        if default_queue_id:
-            queue_ids = [default_queue_id]
+    queue_ids = queue_ids or (
+        [q] if (q := config_file.get_setting("defaults.queue_id", config=config)) else None
+    )
     if not queue_ids:
         raise ValueError("queue_ids is required (not found in config defaults)")
 
