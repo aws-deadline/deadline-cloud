@@ -65,6 +65,7 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             "farm_id",
             "queue_id",
             "session_id",
+            "job_id",
             "limit",
             "start_time",
             "end_time",
