@@ -95,6 +95,7 @@ def _get_download_candidate_jobs(
     # Construct the full set of jobs that may have new available downloads.
     # - Any active job (job with taskRunStatus in READY, ASSIGNED,
     #   STARTING, SCHEDULED, or RUNNING), that has at least one SUCCEEDED task.
+    # Use stringListFilter with ANY_EQUALS to query all statuses in a single API call
     download_candidate_jobs = {
         job["jobId"]: job
         for job in _list_jobs_by_filter_expression(
@@ -104,42 +105,17 @@ def _get_download_candidate_jobs(
             filter_expression={
                 "filters": [
                     {
-                        "stringFilter": {
+                        "stringListFilter": {
                             "name": "TASK_RUN_STATUS",
-                            "operator": "EQUAL",
-                            "value": status_value,
+                            "operator": "ANY_EQUALS",
+                            "values": ["READY", "ASSIGNED", "STARTING", "SCHEDULED", "RUNNING"],
                         },
                     }
-                    # Maximum of 3 filters are permitted, so the 5 statuses are split
-                    for status_value in ["READY", "ASSIGNED", "STARTING"]
                 ],
                 "operator": "OR",
             },
         )
     }
-    download_candidate_jobs.update(
-        {
-            job["jobId"]: job
-            for job in _list_jobs_by_filter_expression(
-                boto3_session,
-                farm_id,
-                queue_id,
-                filter_expression={
-                    "filters": [
-                        {
-                            "stringFilter": {
-                                "name": "TASK_RUN_STATUS",
-                                "operator": "EQUAL",
-                                "value": status_value,
-                            },
-                        }
-                        for status_value in ["SCHEDULED", "RUNNING"]
-                    ],
-                    "operator": "OR",
-                },
-            )
-        }
-    )
     print(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
     download_candidate_jobs = {
         job_id: _datetimes_to_str(job)
