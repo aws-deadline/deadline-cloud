@@ -61,9 +61,10 @@ deadlinedialog_profilesettings_box = {
     "visible": 1,
     "window": deadline_config_dialog,
 }
-profilesettings_defaultfarm_dropdown = {
+profilesettings_jobhistdir_label = {
     "container": deadlinedialog_profilesettings_box,
-    "type": "QComboBox",
+    "text": "Job history directory",
+    "type": "QLabel",
     "unnamed": 1,
     "visible": 1,
 }
@@ -72,12 +73,6 @@ job_hist_dir_input = {
     "type": "QLineEdit",
     "unnamed": 1,
     "visible": 1,
-}
-# Deadline Cloud Squish Farm element
-deadlinecloudsquish_defaultfarm_index = {
-    "container": profilesettings_defaultfarm_dropdown,
-    "text": "Deadline Cloud Squish Farm",
-    "type": "QModelIndex",
 }
 
 # choose job history directory file browser
@@ -105,37 +100,11 @@ deadlinedialog_farmsettings_box = {
     "visible": 1,
     "window": deadline_config_dialog,
 }
-farmsettings_defaultqueue_dropdown = {
-    "container": deadlinedialog_farmsettings_box,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
-farmsettings_defaultstorageprofile_dropdown = {
-    "container": deadlinedialog_farmsettings_box,
-    "occurrence": 2,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
 farmsettings_jobattachmentsoptions_dropdown = {
     "container": deadlinedialog_farmsettings_box,
-    "occurrence": 3,
     "type": "QComboBox",
     "unnamed": 1,
     "visible": 1,
-}
-# Squish Automation Queue element
-squishautomationqueue_defaultqueue_index = {
-    "container": farmsettings_defaultqueue_dropdown,
-    "text": "Squish Automation Queue",
-    "type": "QModelIndex",
-}
-# Squish Storage Profile element
-squishstorageprofile_defaultstorageprofile_index = {
-    "container": farmsettings_defaultstorageprofile_dropdown,
-    "text": "Squish Storage Profile",
-    "type": "QModelIndex",
 }
 jobattachments_filesystemoptions_text_label = {
     "container": deadlinedialog_farmsettings_box,
@@ -223,29 +192,5 @@ def profile_name_locator(profile_name):
     return {
         "container": globalsettings_awsprofile_dropdown,
         "text": profile_name,
-        "type": "QModelIndex",
-    }
-
-
-def farm_name_locator(farm_name):
-    return {
-        "container": profilesettings_defaultfarm_dropdown,
-        "text": farm_name,
-        "type": "QModelIndex",
-    }
-
-
-def queue_name_locator(queue_name):
-    return {
-        "container": farmsettings_defaultqueue_dropdown,
-        "text": queue_name,
-        "type": "QModelIndex",
-    }
-
-
-def storage_profile_locator(storage_profile):
-    return {
-        "container": farmsettings_defaultstorageprofile_dropdown,
-        "text": storage_profile,
         "type": "QModelIndex",
     }

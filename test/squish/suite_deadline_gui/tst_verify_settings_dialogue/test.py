@@ -41,34 +41,6 @@ def main():
     jobhistory_dir_helpers.verify_job_hist_dir_text_input(config.custom_job_hist_dir)
     # verify custom job history folder is created/exists in user's system
     jobhistory_dir_helpers.verify_directory_exists(config.custom_job_hist_dir)
-    # set farm name
-    workstation_config_helpers.set_farm_name(config.farm_name)
-    # verify correct farm name is set
-    test.compare(
-        str(
-            squish.waitForObjectExists(
-                workstation_config_locators.profilesettings_defaultfarm_dropdown
-            ).currentText
-        ),
-        config.farm_name,
-        "Expect selected farm name to be set.",
-    )
-    # set queue name
-    workstation_config_helpers.set_queue_name(config.queue_name)
-    # verify correct queue name is set
-    test.compare(
-        str(
-            squish.waitForObjectExists(
-                workstation_config_locators.farmsettings_defaultqueue_dropdown
-            ).currentText
-        ),
-        config.queue_name,
-        "Expect selected queue name to be set.",
-    )
-    # set and verify storage profile based on OS platform being tested
-    workstation_config_helpers.set_and_verify_os_storage_profile(
-        config.storage_profile_linux, config.storage_profile_windows, config.storage_profile_macos
-    )
     # set job attachments filesystem options
     workstation_config_helpers.set_job_attachments_filesystem_options(config.job_attachments)
     # verify job attachments filesystem options is set to 'COPIED'

@@ -127,7 +127,7 @@ class SubmitJobProgressDialog(QDialog):
 
     # This signal is sent when the background thread succeeds.
     submission_thread_succeeded = Signal(str)
-    progress_window_closed = Signal(None)
+    progress_window_closed = Signal()
 
     job_id: Optional[str] = None
 

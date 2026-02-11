@@ -17,6 +17,8 @@ ruff == 0.14.*
 moto == 5.*
 jsondiff == 2.*
 pyinstrument == 5.*
+pytest-qt == 4.*
+PySide6-essentials >= 6.6, < 6.11
 # MCP (Model Context Protocol) library for MCP unit tests
 mcp >= 1.13.0; python_version >= '3.10'
 # OpenJD model library for job template parsing in mock backend

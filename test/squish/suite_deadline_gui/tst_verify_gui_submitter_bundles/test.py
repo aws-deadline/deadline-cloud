@@ -37,7 +37,7 @@ def main():
     # verify GUI Submitter dialogue opens
     test.compare(
         str(squish.waitForObjectExists(gui_submitter_locators.aws_submitter_dialogue).windowTitle),
-        "Submit to AWS Deadline Cloud",
+        "Deadline Cloud JobBundle Submitter",
         "Expect AWS Deadline Cloud Submitter window title to be present.",
     )
     test.compare(

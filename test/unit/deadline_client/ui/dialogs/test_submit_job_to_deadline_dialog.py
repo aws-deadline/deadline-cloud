@@ -14,12 +14,16 @@ except ImportError:
 
 @pytest.fixture
 def mock_job_settings_widget():
-    """Create a mock job settings widget type."""
-    widget = MagicMock()
-    widget.return_value = MagicMock()
-    widget.return_value.parameter_changed = MagicMock()
-    widget.return_value.parameter_changed.connect = MagicMock()
-    return widget
+    """Create a mock job settings widget type that returns a real QWidget."""
+    from qtpy.QtWidgets import QWidget
+
+    class MockJobSettingsWidget(QWidget):
+        def __init__(self, initial_settings=None, parent=None):
+            super().__init__(parent)
+            self.parameter_changed = MagicMock()
+            self.parameter_changed.connect = MagicMock()
+
+    return MockJobSettingsWidget
 
 
 @patch("deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus")

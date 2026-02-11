@@ -7,6 +7,10 @@ import os
 # get user's home directory
 home_dir = str(Path.home())
 
+# derive repo root from this file's location
+# config.py is at: <repo_root>/test/squish/suite_deadline_gui/shared/scripts/config.py
+_repo_root = str(Path(__file__).resolve().parents[5])
+
 # get python version for Deadline executable file path
 python_version = f"Python{sys.version_info.major}{sys.version_info.minor}"
 # Deadline executable file path on Windows
@@ -45,10 +49,8 @@ logging_level = "WARNING"
 
 # tst_verify_gui_submitter_bundles test suite:
 # Simple UI with Job Attachments (simple_ui_with_ja)
-simple_ui_with_ja = (
-    f"{home_dir}/deadline-cloud/test/squish/deadline_gui_test_samples/simple_ui_with_ja"
-)
+simple_ui_with_ja = f"{_repo_root}/test/squish/deadline_gui_test_samples/simple_ui_with_ja"
 simple_ui_with_ja_name = "Simple UI with Job Attachments"
 # Simple UI - No Job Attachments (simple_ui_no_ja)
-simple_ui_no_ja = f"{home_dir}/deadline-cloud/test/squish/deadline_gui_test_samples/simple_ui_no_ja"
+simple_ui_no_ja = f"{_repo_root}/test/squish/deadline_gui_test_samples/simple_ui_no_ja"
 simple_ui_no_ja_name = "Simple UI - No Job Attachments"

@@ -152,8 +152,8 @@ def show_job_bundle_submitter(
         app = QApplication.instance()
         main_windows = [
             widget
-            for widget in app.topLevelWidgets()
-            if isinstance(widget, QMainWindow)  # type: ignore[union-attr]
+            for widget in (app.topLevelWidgets() if app else [])
+            if isinstance(widget, QMainWindow)
         ]
         if main_windows:
             parent = main_windows[0]

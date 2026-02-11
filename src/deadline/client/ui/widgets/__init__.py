@@ -38,7 +38,7 @@ from .job_timeouts_widget import TimeoutEntryWidget, TimeoutTableWidget
 from .openjd_parameters_widget import OpenJDParametersWidget
 from .path_widgets import DirectoryPickerWidget, InputFilePickerWidget, OutputFilePickerWidget
 from .shared_job_settings_tab import (
-    DeadlineCloudSettingsWidget,
     SharedJobSettingsWidget,
     SharedJobPropertiesWidget,
+    DeadlineCloudSettingsWidget,
 )

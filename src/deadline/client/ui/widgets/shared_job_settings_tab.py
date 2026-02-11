@@ -7,7 +7,7 @@ A UI Widget containing the render setup tab
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from qtpy.QtCore import Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
@@ -26,6 +26,11 @@ from ...config import get_setting, set_setting, config_file
 from .._utils import CancelationFlag, tr
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...api import get_queue_parameter_definitions
+from .deadline_cloud_resource_combo_boxes import (
+    DeadlineFarmListComboBox,
+    DeadlineQueueListComboBox,
+    DeadlineStorageProfileNameListComboBox,
+)
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
@@ -471,33 +476,21 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
 class DeadlineCloudSettingsWidget(QGroupBox):
     """
-    UI component for the Deadline Cloud settings.
+    UI component for the Deadline Cloud settings (farm, queue, storage profile).
+    Used in the Submit Dialog's "Shared job settings" tab.
     """
 
     def __init__(self, *, parent: Optional[QWidget] = None):
         super().__init__(tr("Deadline Cloud settings"), parent=parent)
-        self.deadline_settings: Dict[str, Any] = {"counter": -1}
         self.layout = QFormLayout(self)
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
         self._build_ui()
 
-    def _set_enabled_with_label(self, prop_name: str, enabled: bool):
-        """Sets the enabled status of a control and its label"""
-        getattr(self, prop_name).setEnabled(enabled)
-        getattr(self, prop_name + "_label").setEnabled(enabled)
-
     def _build_ui(self):
         """
         Build the UI for the Deadline settings
         """
-        # Import here to avoid circular import
-        from ..dialogs.deadline_config_dialog import (
-            DeadlineFarmListComboBox,
-            DeadlineQueueListComboBox,
-            DeadlineStorageProfileNameListComboBox,
-        )
-
         self.farm_box_label = QLabel(tr("Farm"))
         self.farm_box = DeadlineFarmListComboBox(parent=self)
         self.layout.addRow(self.farm_box_label, self.farm_box)
@@ -546,38 +539,33 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
     def _update_storage_profile_visibility(self):
         """Update storage profile visibility based on available profiles"""
-        # Check if there are actual storage profiles (not just placeholder items)
-        # Note: "<none selected>" sorts first alphabetically and has empty string as data,
-        # so we need to check if there are items with non-empty data
-        count = self.storage_profile_box.box.count()
-        has_real_profiles = False
-        for i in range(count):
-            item_data = self.storage_profile_box.box.itemData(i)
-            item_text = self.storage_profile_box.box.itemText(i)
-            # Skip placeholder items
-            if item_text in ("<refreshing>", "<none selected>") or item_data in (None, ""):
-                continue
-            has_real_profiles = True
-            break
+        box = self.storage_profile_box.box
+        has_real_profiles = any(
+            box.itemData(i) not in (None, "")
+            and box.itemText(i) not in ("<refreshing>", "<none selected>")
+            for i in range(box.count())
+        )
         self._set_storage_profile_visible(has_real_profiles)
+
+    def _update_all_box_configs(self):
+        """Re-read config and update all combo boxes."""
+        config = config_file.read_config()
+        self.farm_box.set_config(config)
+        self.queue_box.set_config(config)
+        self.storage_profile_box.set_config(config)
 
     def _on_farm_changed(self, index: int):
         """Handle farm selection change in Submit Dialog"""
         if index < 0:
             return
 
-        # Get the selected farm ID from the combo box
         farm_id = self.farm_box.box.itemData(index)
         if farm_id is None:
             return
 
-        # Update config immediately (unlike Settings Dialog which defers to apply())
         set_setting("defaults.farm_id", farm_id)
-
-        # Refresh queue list for the new farm (same as Settings Dialog)
+        self._update_all_box_configs()
         self.queue_box.refresh_list()
-
-        # Notify parent to refresh (triggers submit button state update and queue parameters)
         self._notify_parent_refresh()
 
     def _on_queue_changed(self, index: int):
@@ -585,18 +573,13 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         if index < 0:
             return
 
-        # Get the selected queue ID from the combo box
         queue_id = self.queue_box.box.itemData(index)
         if queue_id is None:
             return
 
-        # Update config immediately (unlike Settings Dialog which defers to apply())
         set_setting("defaults.queue_id", queue_id)
-
-        # Refresh storage profile list for the new queue
+        self._update_all_box_configs()
         self.storage_profile_box.refresh_list()
-
-        # Notify parent to refresh (triggers submit button state update and queue parameters)
         self._notify_parent_refresh()
 
     def _on_storage_profile_changed(self, index: int):
@@ -610,28 +593,28 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         # Update config immediately
         set_setting("settings.storage_profile_id", storage_profile_id if storage_profile_id else "")
 
+    def _find_parent_with_attr(self, attr_name: str) -> Optional[QWidget]:
+        """Find first parent widget with the given attribute."""
+        parent: Optional[QWidget] = self.parent()  # type: ignore[assignment]
+        while parent is not None:
+            if hasattr(parent, attr_name):
+                return parent
+            parent = (
+                parent.parent() if hasattr(parent, "parent") and callable(parent.parent) else None
+            )  # type: ignore[assignment]
+        return None
+
     def _notify_parent_refresh(self):
         """Helper to notify parent widgets to refresh after config changes"""
-        # Find SharedJobSettingsWidget parent to refresh queue parameters
-        parent_widget = self.parent()
-        while parent_widget is not None:
-            if hasattr(parent_widget, "refresh_queue_parameters"):
-                parent_widget.refresh_queue_parameters()
-            if hasattr(parent_widget, "parent") and callable(parent_widget.parent):
-                parent_widget = parent_widget.parent()
-            else:
-                break
+        # Find and call refresh_queue_parameters on parent chain
+        parent = self._find_parent_with_attr("refresh_queue_parameters")
+        if parent:
+            parent.refresh_queue_parameters()
 
-        # Find SubmitJobToDeadlineDialog to refresh submit button state
-        parent_widget = self.parent()
-        while parent_widget is not None:
-            if hasattr(parent_widget, "refresh_deadline_settings"):
-                parent_widget.refresh_deadline_settings()
-                break
-            if hasattr(parent_widget, "parent") and callable(parent_widget.parent):
-                parent_widget = parent_widget.parent()
-            else:
-                break
+        # Find and call refresh_deadline_settings on parent chain
+        parent = self._find_parent_with_attr("refresh_deadline_settings")
+        if parent:
+            parent.refresh_deadline_settings()
 
     def refresh_setting_controls(self, deadline_authorized):
         """
@@ -643,11 +626,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
                     api.check_deadline_available, for example from
                     an AWS Deadline Cloud Status Widget.
         """
-        # Update config for combo boxes
-        config = config_file.read_config()
-        self.farm_box.set_config(config)
-        self.queue_box.set_config(config)
-        self.storage_profile_box.set_config(config)
+        self._update_all_box_configs()
 
         # Refresh selected items to reflect current config
         self.farm_box.refresh_selected_id()

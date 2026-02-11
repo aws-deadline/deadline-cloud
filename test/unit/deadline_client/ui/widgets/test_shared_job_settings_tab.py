@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import pytest
+from typing import Generator
 from unittest.mock import patch, MagicMock
 
 try:
@@ -89,16 +90,18 @@ def test_max_worker_count_should_be_integer_within_range(
 # Tests for DeadlineCloudSettingsWidget farm/queue combo boxes
 
 
+MOCK_CONFIG_PATH = "deadline.client.ui.widgets.shared_job_settings_tab.config_file.read_config"
+MOCK_SET_SETTING_PATH = "deadline.client.ui.widgets.shared_job_settings_tab.set_setting"
+
+
 @pytest.fixture(scope="function")
-def deadline_cloud_settings_widget(qtbot) -> DeadlineCloudSettingsWidget:
-    """Fixture for DeadlineCloudSettingsWidget with mocked combo boxes."""
-    with patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.config_file.read_config"
-    ) as mock_config:
+def deadline_cloud_settings_widget(qtbot) -> Generator[DeadlineCloudSettingsWidget, None, None]:
+    """Fixture for DeadlineCloudSettingsWidget with mocked config."""
+    with patch(MOCK_CONFIG_PATH) as mock_config:
         mock_config.return_value = MagicMock()
         widget = DeadlineCloudSettingsWidget()
         qtbot.addWidget(widget)
-        return widget
+        yield widget
 
 
 def test_farm_selection_updates_config(deadline_cloud_settings_widget: DeadlineCloudSettingsWidget):
@@ -106,16 +109,12 @@ def test_farm_selection_updates_config(deadline_cloud_settings_widget: DeadlineC
     widget = deadline_cloud_settings_widget
     test_farm_id = "farm-test123"
 
-    # Add a test item to the farm combo box
+    # Add two items so selecting the second one triggers currentIndexChanged
+    widget.farm_box.box.addItem("Default Farm", "farm-default")
     widget.farm_box.box.addItem("Test Farm", test_farm_id)
 
-    with patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.set_setting"
-    ) as mock_set_setting:
-        # Select the farm (triggers _on_farm_changed)
-        widget.farm_box.box.setCurrentIndex(widget.farm_box.box.count() - 1)
-
-        # Verify config was updated with the farm ID
+    with patch(MOCK_SET_SETTING_PATH) as mock_set_setting:
+        widget.farm_box.box.setCurrentIndex(1)
         mock_set_setting.assert_called_with("defaults.farm_id", test_farm_id)
 
 
@@ -126,16 +125,11 @@ def test_queue_selection_updates_config(
     widget = deadline_cloud_settings_widget
     test_queue_id = "queue-test456"
 
-    # Add a test item to the queue combo box
+    widget.queue_box.box.addItem("Default Queue", "queue-default")
     widget.queue_box.box.addItem("Test Queue", test_queue_id)
 
-    with patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.set_setting"
-    ) as mock_set_setting:
-        # Select the queue (triggers _on_queue_changed)
-        widget.queue_box.box.setCurrentIndex(widget.queue_box.box.count() - 1)
-
-        # Verify config was updated with the queue ID
+    with patch(MOCK_SET_SETTING_PATH) as mock_set_setting:
+        widget.queue_box.box.setCurrentIndex(1)
         mock_set_setting.assert_called_with("defaults.queue_id", test_queue_id)
 
 
@@ -144,18 +138,15 @@ def test_farm_change_refreshes_queue_list(
 ):
     """Test that changing farm triggers queue list refresh."""
     widget = deadline_cloud_settings_widget
-    test_farm_id = "farm-test789"
 
-    # Add a test item to the farm combo box
-    widget.farm_box.box.addItem("Test Farm", test_farm_id)
+    widget.farm_box.box.addItem("Default Farm", "farm-default")
+    widget.farm_box.box.addItem("Test Farm", "farm-test789")
 
-    with patch.object(widget.queue_box, "refresh_list") as mock_refresh:
-        with patch("deadline.client.ui.widgets.shared_job_settings_tab.set_setting"):
-            # Select the farm
-            widget.farm_box.box.setCurrentIndex(widget.farm_box.box.count() - 1)
-
-            # Verify queue list was refreshed
-            mock_refresh.assert_called_once()
+    with patch.object(widget.queue_box, "refresh_list") as mock_refresh, patch(
+        MOCK_SET_SETTING_PATH
+    ):
+        widget.farm_box.box.setCurrentIndex(1)
+        mock_refresh.assert_called_once()
 
 
 def test_refresh_setting_controls_updates_combo_boxes(
@@ -172,13 +163,9 @@ def test_refresh_setting_controls_updates_combo_boxes(
         widget.queue_box, "refresh_selected_id"
     ) as mock_queue_refresh, patch.object(
         widget.farm_box, "refresh_list"
-    ) as mock_farm_list, patch.object(widget.queue_box, "refresh_list") as mock_queue_list, patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.config_file.read_config"
-    ):
-        # Call refresh with authorized=True
+    ) as mock_farm_list, patch.object(widget.queue_box, "refresh_list") as mock_queue_list:
         widget.refresh_setting_controls(deadline_authorized=True)
 
-        # Verify all methods were called
         mock_farm_config.assert_called_once()
         mock_queue_config.assert_called_once()
         mock_farm_refresh.assert_called_once()
@@ -199,13 +186,9 @@ def test_refresh_setting_controls_skips_list_refresh_when_unauthorized(
         widget.queue_box, "refresh_selected_id"
     ), patch.object(widget.farm_box, "refresh_list") as mock_farm_list, patch.object(
         widget.queue_box, "refresh_list"
-    ) as mock_queue_list, patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.config_file.read_config"
-    ):
-        # Call refresh with authorized=False
+    ) as mock_queue_list:
         widget.refresh_setting_controls(deadline_authorized=False)
 
-        # Verify list refresh was NOT called
         mock_farm_list.assert_not_called()
         mock_queue_list.assert_not_called()
 
@@ -216,9 +199,8 @@ def test_storage_profile_hidden_by_default(
     """Test that storage profile selector is hidden by default."""
     widget = deadline_cloud_settings_widget
 
-    # Storage profile should be hidden initially
-    assert not widget.storage_profile_box.isVisible()
-    assert not widget.storage_profile_box_label.isVisible()
+    assert not widget.storage_profile_box.isVisibleTo(widget)
+    assert not widget.storage_profile_box_label.isVisibleTo(widget)
 
 
 def test_storage_profile_shown_when_profiles_available(
@@ -227,12 +209,12 @@ def test_storage_profile_shown_when_profiles_available(
     """Test that storage profile selector is shown when profiles are available."""
     widget = deadline_cloud_settings_widget
 
-    # Add a real storage profile item
+    widget.storage_profile_box.box.addItem("Placeholder", "")
     widget.storage_profile_box.box.addItem("Test Profile", "sp-test123")
 
-    # Storage profile should now be visible
-    assert widget.storage_profile_box.isVisible()
-    assert widget.storage_profile_box_label.isVisible()
+    # Use isVisibleTo(parent) since the widget isn't shown in a window during tests
+    assert widget.storage_profile_box.isVisibleTo(widget)
+    assert widget.storage_profile_box_label.isVisibleTo(widget)
 
 
 def test_storage_profile_shown_when_none_selected_sorts_first(
@@ -246,22 +228,17 @@ def test_storage_profile_shown_when_none_selected_sorts_first(
     """
     widget = deadline_cloud_settings_widget
 
-    # Simulate the async refresh completing with sorted profiles where
-    # "<none selected>" sorts first because '<' comes before letters alphabetically
     items_list = [
         ("<none selected>", ""),
         ("Profile A", "sp-profile-a"),
         ("Profile B", "sp-profile-b"),
     ]
 
-    # Emit the _list_update signal to simulate async refresh completing
-    # This is the code path that was broken - the combo box is populated
-    # inside block_signals so model signals don't fire
-    widget.storage_profile_box._list_update.emit(1, items_list)
+    # Emit with refresh_id=0 to match the widget's initial __refresh_id
+    widget.storage_profile_box._list_update.emit(0, items_list)
 
-    # Storage profile should be visible because there are real profiles
-    assert widget.storage_profile_box.isVisible()
-    assert widget.storage_profile_box_label.isVisible()
+    assert widget.storage_profile_box.isVisibleTo(widget)
+    assert widget.storage_profile_box_label.isVisibleTo(widget)
 
 
 def test_storage_profile_selection_updates_config(
@@ -271,16 +248,11 @@ def test_storage_profile_selection_updates_config(
     widget = deadline_cloud_settings_widget
     test_profile_id = "sp-test123"
 
-    # Add a test item to the storage profile combo box
+    widget.storage_profile_box.box.addItem("Default Profile", "sp-default")
     widget.storage_profile_box.box.addItem("Test Profile", test_profile_id)
 
-    with patch(
-        "deadline.client.ui.widgets.shared_job_settings_tab.set_setting"
-    ) as mock_set_setting:
-        # Select the storage profile (triggers _on_storage_profile_changed)
-        widget.storage_profile_box.box.setCurrentIndex(widget.storage_profile_box.box.count() - 1)
-
-        # Verify config was updated with the storage profile ID
+    with patch(MOCK_SET_SETTING_PATH) as mock_set_setting:
+        widget.storage_profile_box.box.setCurrentIndex(1)
         mock_set_setting.assert_called_with("settings.storage_profile_id", test_profile_id)
 
 
@@ -289,18 +261,15 @@ def test_queue_change_refreshes_storage_profile_list(
 ):
     """Test that changing queue triggers storage profile list refresh."""
     widget = deadline_cloud_settings_widget
-    test_queue_id = "queue-test789"
 
-    # Add a test item to the queue combo box
-    widget.queue_box.box.addItem("Test Queue", test_queue_id)
+    widget.queue_box.box.addItem("Default Queue", "queue-default")
+    widget.queue_box.box.addItem("Test Queue", "queue-test789")
 
-    with patch.object(widget.storage_profile_box, "refresh_list") as mock_refresh:
-        with patch("deadline.client.ui.widgets.shared_job_settings_tab.set_setting"):
-            # Select the queue
-            widget.queue_box.box.setCurrentIndex(widget.queue_box.box.count() - 1)
-
-            # Verify storage profile list was refreshed
-            mock_refresh.assert_called_once()
+    with patch.object(widget.storage_profile_box, "refresh_list") as mock_refresh, patch(
+        MOCK_SET_SETTING_PATH
+    ):
+        widget.queue_box.box.setCurrentIndex(1)
+        mock_refresh.assert_called_once()
 
 
 # Tests for SharedJobSettingsWidget.refresh_queue_parameters
@@ -392,3 +361,75 @@ def test_refresh_queue_parameters_no_refresh_when_unchanged(
 
             mock_rebuild.assert_not_called()
             mock_start_thread.assert_not_called()
+
+
+# Tests verifying refactored module locations and public API surface
+
+
+def test_combo_boxes_importable_from_new_module():
+    """Verify combo box classes are importable from their new dedicated module."""
+    from deadline.client.ui.widgets.deadline_cloud_resource_combo_boxes import (
+        DeadlineFarmListComboBox,
+        DeadlineQueueListComboBox,
+        DeadlineStorageProfileNameListComboBox,
+    )
+
+    assert DeadlineFarmListComboBox is not None
+    assert DeadlineQueueListComboBox is not None
+    assert DeadlineStorageProfileNameListComboBox is not None
+
+
+def test_deadline_cloud_settings_widget_importable_from_widgets_package():
+    """Verify DeadlineCloudSettingsWidget is importable from the public widgets package."""
+    from deadline.client.ui.widgets import DeadlineCloudSettingsWidget as WidgetFromPackage
+    from deadline.client.ui.widgets.shared_job_settings_tab import (
+        DeadlineCloudSettingsWidget as WidgetFromModule,
+    )
+
+    assert WidgetFromPackage is WidgetFromModule
+
+
+def test_farm_change_propagates_config_to_all_boxes(
+    deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
+):
+    """Test that changing farm propagates updated config to farm, queue, and storage profile boxes."""
+    widget = deadline_cloud_settings_widget
+
+    widget.farm_box.box.addItem("Default Farm", "farm-default")
+    widget.farm_box.box.addItem("Test Farm", "farm-test")
+
+    with patch(MOCK_SET_SETTING_PATH), patch.object(
+        widget.farm_box, "set_config"
+    ) as mock_farm_cfg, patch.object(
+        widget.queue_box, "set_config"
+    ) as mock_queue_cfg, patch.object(
+        widget.storage_profile_box, "set_config"
+    ) as mock_sp_cfg, patch.object(widget.queue_box, "refresh_list"):
+        widget.farm_box.box.setCurrentIndex(1)
+
+        mock_farm_cfg.assert_called_once()
+        mock_queue_cfg.assert_called_once()
+        mock_sp_cfg.assert_called_once()
+
+
+def test_queue_change_propagates_config_to_all_boxes(
+    deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
+):
+    """Test that changing queue propagates updated config to farm, queue, and storage profile boxes."""
+    widget = deadline_cloud_settings_widget
+
+    widget.queue_box.box.addItem("Default Queue", "queue-default")
+    widget.queue_box.box.addItem("Test Queue", "queue-test")
+
+    with patch(MOCK_SET_SETTING_PATH), patch.object(
+        widget.farm_box, "set_config"
+    ) as mock_farm_cfg, patch.object(
+        widget.queue_box, "set_config"
+    ) as mock_queue_cfg, patch.object(
+        widget.storage_profile_box, "set_config"
+    ) as mock_sp_cfg, patch.object(widget.storage_profile_box, "refresh_list"):
+        widget.queue_box.box.setCurrentIndex(1)
+
+        mock_farm_cfg.assert_called_once()
+        mock_queue_cfg.assert_called_once()
+        mock_sp_cfg.assert_called_once()

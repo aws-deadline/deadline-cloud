@@ -74,17 +74,17 @@ def load_different_job_bundle():
         str(
             squish.waitForObjectExists(gui_submitter_locators.load_different_job_bundle_button).text
         ),
-        "Load a different job bundle",
-        "Expect Load a different job bundle button to contain correct text.",
+        "Load Bundle",
+        "Expect Load Bundle button to contain correct text.",
     )
-    # verify load a different job bundle button is enabled
+    # verify load bundle button is enabled
     test.compare(
         squish.waitForObjectExists(gui_submitter_locators.load_different_job_bundle_button).enabled,
         True,
-        "Expect Load a different job bundle button to be enabled.",
+        "Expect Load Bundle button to be enabled.",
     )
-    # click on load a different job bundle button
-    test.log("Hitting `Load a different job bundle` button.")
+    # click on load bundle button
+    test.log("Hitting `Load Bundle` button.")
     squish.clickButton(
         squish.waitForObject(gui_submitter_locators.load_different_job_bundle_button)
     )

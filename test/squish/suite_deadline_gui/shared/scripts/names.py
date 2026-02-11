@@ -142,22 +142,11 @@ aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox = {
     "visible": 1,
     "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
 }
-profile_settings_QComboBox = {
-    "container": aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
 profile_settings_QLineEdit = {
     "container": aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox,
     "type": "QLineEdit",
     "unnamed": 1,
     "visible": 1,
-}
-deadline_Cloud_Squish_Farm_QModelIndex = {
-    "container": profile_settings_QComboBox,
-    "text": "Deadline Cloud Squish Farm",
-    "type": "QModelIndex",
 }
 profile_settings_QPushButton = {
     "container": aWS_Deadline_Cloud_workstation_configuration_Profile_settings_QGroupBox,
@@ -180,36 +169,6 @@ aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox = {
     "unnamed": 1,
     "visible": 1,
     "window": aWS_Deadline_Cloud_workstation_configuration_DeadlineConfigDialog,
-}
-farm_settings_QComboBox = {
-    "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
-farm_settings_QComboBox_2 = {
-    "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
-    "occurrence": 2,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
-farm_settings_QComboBox_3 = {
-    "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
-    "occurrence": 3,
-    "type": "QComboBox",
-    "unnamed": 1,
-    "visible": 1,
-}
-squish_Automation_Queue_QModelIndex = {
-    "container": farm_settings_QComboBox,
-    "text": "Squish Automation Queue",
-    "type": "QModelIndex",
-}
-squish_Storage_Profile_QModelIndex = {
-    "container": farm_settings_QComboBox_2,
-    "text": "Squish Storage Profile",
-    "type": "QModelIndex",
 }
 farm_settings_Job_attachments_filesystem_options_QLabel = {
     "container": aWS_Deadline_Cloud_workstation_configuration_Farm_settings_QGroupBox,
@@ -331,7 +290,7 @@ submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog = {
     "type": "SubmitJobToDeadlineDialog",
     "unnamed": 1,
     "visible": 1,
-    "windowTitle": "Submit to AWS Deadline Cloud",
+    "windowTitle": "Deadline Cloud JobBundle Submitter",
 }
 submit_to_AWS_Deadline_Cloud_Settings_QPushButton = {
     "text": "Settings...",
@@ -415,20 +374,6 @@ deadline_Cloud_settings_DeadlineCloudSettingsWidget = {
     "container": qt_tabwidget_stackedwidget_QScrollArea,
     "title": "Deadline Cloud settings",
     "type": "DeadlineCloudSettingsWidget",
-    "unnamed": 1,
-    "visible": 1,
-}
-deadline_Cloud_settings_Deadline_Cloud_Squish_Farm_QLabel = {
-    "container": deadline_Cloud_settings_DeadlineCloudSettingsWidget,
-    "text": "Deadline Cloud Squish Farm",
-    "type": "QLabel",
-    "unnamed": 1,
-    "visible": 1,
-}
-deadline_Cloud_settings_Squish_Automation_Queue_QLabel = {
-    "container": deadline_Cloud_settings_DeadlineCloudSettingsWidget,
-    "text": "Squish Automation Queue",
-    "type": "QLabel",
     "unnamed": 1,
     "visible": 1,
 }
@@ -566,11 +511,11 @@ o_JobBundleSettingsWidget = {
     "visible": 1,
 }
 load_a_different_job_bundle_QPushButton = {
-    "container": qt_tabwidget_stackedwidget_QScrollArea,
-    "text": "Load a different job bundle",
+    "text": "Load Bundle",
     "type": "QPushButton",
     "unnamed": 1,
     "visible": 1,
+    "window": submit_to_AWS_Deadline_Cloud_SubmitJobToDeadlineDialog,
 }
 lookInCombo_QComboBox = {
     "container": qt_tabwidget_stackedwidget_QScrollArea,
