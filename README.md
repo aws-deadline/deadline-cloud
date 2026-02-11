@@ -331,6 +331,7 @@ Example prompts:
 - "Submit the render job in /path/to/my-job-bundle"
 - "Submit a job with priority 80 to my render queue"
 - "Show me the status of job job-3a907bac684841f69fc344867ee166de"
+- "Troubleshoot job job-3a907bac684841f69fc344867ee166de - why did it fail?"
 - "Download output from job job-3a907bac684841f69fc344867ee166de"
 - "Download output from step step-render in job job-3a907bac684841f69fc344867ee166de"
 ```

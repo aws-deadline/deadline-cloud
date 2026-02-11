@@ -53,6 +53,8 @@ __all__ = [
     "get_session_logs",
     "SessionLogResult",
     "LogEvent",
+    "get_worker_logs",
+    "WorkerLogResult",
     # Diagnostics APIs
     "get_job",
     "get_session",
@@ -116,6 +118,8 @@ from ._job_monitoring import (
     get_session_logs,
     SessionLogResult,
     LogEvent,
+    get_worker_logs,
+    WorkerLogResult,
 )
 from ._mcp import (
     get_job,

@@ -10,11 +10,13 @@ from typing import List, Dict, Any, Optional, Callable
 from configparser import ConfigParser
 from dataclasses import dataclass
 
+import boto3
 from botocore.exceptions import ClientError
 
 from deadline.client.exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from deadline.client.api._session import (
     get_boto3_client,
+    get_boto3_session,
     get_queue_user_boto3_session,
     get_user_and_identity_store_id,
 )
@@ -66,6 +68,21 @@ class SessionLogResult:
     next_token: Optional[str]
     log_group: str
     log_stream: str
+    count: int
+
+
+@dataclass
+class WorkerLogResult:
+    """
+    Result of retrieving logs for a worker.
+    """
+
+    events: List[LogEvent]
+    next_token: Optional[str]
+    log_group: str
+    log_stream: str
+    worker_id: str
+    fleet_id: str
     count: int
 
 
@@ -365,3 +382,131 @@ def get_session_logs(
         )
     except Exception as e:
         raise DeadlineOperationError(f"Failed to retrieve logs: {e}")
+
+
+def get_worker_logs(
+    farm_id: str,
+    fleet_id: str,
+    worker_id: str,
+    limit: int = 100,
+    start_time: Optional[datetime.datetime] = None,
+    end_time: Optional[datetime.datetime] = None,
+    next_token: Optional[str] = None,
+    config: Optional[ConfigParser] = None,
+) -> WorkerLogResult:
+    """
+    Get CloudWatch logs for a specific worker. MUST be called alongside get_session_logs when
+    troubleshooting failed or interrupted tasks.
+
+    Worker logs reveal infrastructure-level issues invisible in session logs:
+    spot interruptions, instance terminations, agent crashes, OOM kills, and
+    environment setup failures. When a task shows SIGTERM (exit code -15) or
+    unexplained cancellation, worker logs contain the root cause.
+
+    Use the workerId and fleetId from deadline_get_session to call this tool.
+
+    Args:
+        farm_id: The ID of the farm containing the worker.
+        fleet_id: The ID of the fleet containing the worker (from get_session response).
+        worker_id: The ID of the worker to get logs for (from get_session response).
+        limit: Maximum number of log lines to return (default 100).
+        start_time: Optional start time for logs as a datetime object.
+        end_time: Optional end time for logs as a datetime object.
+        next_token: Optional token for pagination of results.
+        config: Optional configuration object.
+
+    Returns:
+        A WorkerLogResult object containing the log events and metadata.
+
+    Raises:
+        DeadlineOperationError: If there's an error retrieving the logs.
+    """
+    # Worker logs use a different log group pattern than session logs
+    log_group_name = f"/aws/deadline/{farm_id}/{fleet_id}"
+
+    # Check if we have user and identity store ID (from Deadline Cloud monitor)
+    user_id, identity_store_id = get_user_and_identity_store_id(config=config)
+
+    # Create logs client - use fleet role credentials when using monitor login
+    if user_id and identity_store_id:
+        try:
+            deadline = get_boto3_client("deadline", config=config)
+            response = deadline.assume_fleet_role_for_read(farmId=farm_id, fleetId=fleet_id)
+            credentials = response["credentials"]
+            fleet_session = boto3.Session(
+                aws_access_key_id=credentials["accessKeyId"],
+                aws_secret_access_key=credentials["secretAccessKey"],
+                aws_session_token=credentials["sessionToken"],
+            )
+            logs_client = fleet_session.client(
+                "logs", region_name=get_boto3_session(config=config).region_name
+            )
+        except Exception as e:
+            raise DeadlineOperationError(f"Failed to get fleet credentials: {e}")
+    else:
+        logs_client = get_boto3_client("logs", config=config)
+
+    # Prepare parameters for GetLogEvents
+    params = {
+        "logGroupName": log_group_name,
+        "logStreamName": worker_id,
+        "limit": limit,
+        "startFromHead": False,
+    }
+
+    if next_token:
+        params["nextToken"] = next_token
+
+    if start_time:
+        try:
+            params["startTime"] = int(start_time.timestamp() * 1000)
+        except (ValueError, AttributeError) as e:
+            raise DeadlineOperationError(f"Invalid start time: {e}")
+
+    if end_time:
+        try:
+            params["endTime"] = int(end_time.timestamp() * 1000)
+        except (ValueError, AttributeError) as e:
+            raise DeadlineOperationError(f"Invalid end time: {e}")
+
+    try:
+        response = logs_client.get_log_events(**params)
+
+        events = [
+            LogEvent(
+                timestamp=datetime.datetime.fromtimestamp(
+                    event["timestamp"] / 1000, tz=datetime.timezone.utc
+                ),
+                message=event["message"].rstrip(),
+                ingestion_time=(
+                    datetime.datetime.fromtimestamp(event["ingestionTime"] / 1000)
+                    if "ingestionTime" in event
+                    else None
+                ),
+                event_id=event.get("eventId"),
+            )
+            for event in response.get("events", [])
+        ]
+
+        return WorkerLogResult(
+            events=events,
+            next_token=response.get("nextForwardToken"),
+            log_group=log_group_name,
+            log_stream=worker_id,
+            worker_id=worker_id,
+            fleet_id=fleet_id,
+            count=len(events),
+        )
+
+    except logs_client.exceptions.ResourceNotFoundException:
+        return WorkerLogResult(
+            events=[],
+            next_token=None,
+            log_group=log_group_name,
+            log_stream=worker_id,
+            worker_id=worker_id,
+            fleet_id=fleet_id,
+            count=0,
+        )
+    except Exception as e:
+        raise DeadlineOperationError(f"Failed to retrieve worker logs: {e}")

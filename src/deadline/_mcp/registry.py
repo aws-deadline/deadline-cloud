@@ -5,7 +5,7 @@
 from typing import Any, Callable, List, Optional, TypedDict, Dict
 
 from ..client import api
-from .tools import job
+from .tools import job, logs
 
 
 class ToolDefinition(TypedDict):
@@ -78,6 +78,10 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     },
     "download_job_output": {
         "func": job.download_job_output,
+        "param_names": None,
+    },
+    "get_session_and_worker_logs": {
+        "func": logs.get_session_and_worker_logs,
         "param_names": None,
     },
     # Diagnostics - Primitive APIs
