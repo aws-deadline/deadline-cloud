@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QGroupBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QRadioButton,
     QSpinBox,
     QVBoxLayout,
@@ -532,6 +533,15 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self.farm_box.set_config(config)
         self.queue_box.set_config(config)
         self.storage_profile_box.set_config(config)
+
+        # Connect background exception signals to show errors to the user
+        self.farm_box.background_exception.connect(self._handle_background_exception)
+        self.queue_box.background_exception.connect(self._handle_background_exception)
+        self.storage_profile_box.background_exception.connect(self._handle_background_exception)
+
+    def _handle_background_exception(self, title, e):
+        """Show a warning dialog when a background refresh thread encounters an error."""
+        QMessageBox.warning(self, title, f"Encountered an error:\n{e}")  # type: ignore[call-arg]
 
     def _set_storage_profile_visible(self, visible: bool):
         """Show or hide the storage profile selector"""
