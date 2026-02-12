@@ -47,9 +47,9 @@ class _DeadlineResourceListComboBox(QWidget):
     # provides (operation_name, BaseException)
     background_exception = Signal(str, BaseException)
 
-    # Emitted when an async refresh_farms_list thread completes,
-    # provides (refresh_id, [(farm_id, farm_name), ...])
-    _list_update = Signal(int, list)
+    # Emitted when an async refresh list thread completes,
+    # provides (refresh_id, [(resource_id, resource_name), ...])
+    list_update = Signal(int, list)
 
     def __init__(self, resource_name, setting_name, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -75,7 +75,7 @@ class _DeadlineResourceListComboBox(QWidget):
         self.refresh_button.setIcon(QApplication.style().standardIcon(QStyle.SP_BrowserReload))
         self.refresh_button.setFixedSize(QSize(22, 22))  # Make the button square
         self.refresh_button.clicked.connect(self.refresh_list)
-        self._list_update.connect(self.handle_list_update)
+        self.list_update.connect(self.handle_list_update)
         self.background_exception.connect(self.handle_background_exception)
 
     def handle_background_exception(self, e):
@@ -162,7 +162,7 @@ class _DeadlineResourceListComboBox(QWidget):
         try:
             resources = self.list_resources(config=config)
             if not self.canceled:
-                self._list_update.emit(refresh_id, resources)
+                self.list_update.emit(refresh_id, resources)
         except BaseException as e:
             if not self.canceled and refresh_id == self.__refresh_id:
                 self.background_exception.emit(f"Refresh {self.resource_name}s list", e)

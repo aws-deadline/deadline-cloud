@@ -521,8 +521,9 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         self.storage_profile_box.box.model().modelReset.connect(
             self._update_storage_profile_visibility
         )
-        # Also connect to the _list_update signal to handle updates after async refresh
-        self.storage_profile_box._list_update.connect(
+        # Also connect to the list_update signal to handle updates after async refresh
+        # Args (refresh_id, items_list) not needed - just trigger visibility update
+        self.storage_profile_box.list_update.connect(
             lambda *args: self._update_storage_profile_visibility()
         )
 

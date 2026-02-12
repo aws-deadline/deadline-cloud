@@ -241,8 +241,8 @@ def test_storage_profile_shown_when_none_selected_sorts_first(
 ):
     """Test that storage profile is visible even when <none selected> sorts to first position.
 
-    This tests the _list_update signal path which is used during async refresh.
-    The _list_update signal handler populates the combo box with block_signals,
+    This tests the list_update signal path which is used during async refresh.
+    The list_update signal handler populates the combo box with block_signals,
     so model signals don't fire - we need to explicitly trigger visibility update.
     """
     widget = deadline_cloud_settings_widget
@@ -254,7 +254,7 @@ def test_storage_profile_shown_when_none_selected_sorts_first(
     ]
 
     # Emit with refresh_id=0 to match the widget's initial __refresh_id
-    widget.storage_profile_box._list_update.emit(0, items_list)
+    widget.storage_profile_box.list_update.emit(0, items_list)
 
     assert widget.storage_profile_box.isVisibleTo(widget)
     assert widget.storage_profile_box_label.isVisibleTo(widget)
