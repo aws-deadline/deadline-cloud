@@ -566,6 +566,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         set_setting("defaults.farm_id", farm_id)
         self._update_all_box_configs()
         self.queue_box.refresh_list()
+        self.storage_profile_box.refresh_list()
         self._notify_parent_refresh()
 
     def _on_queue_changed(self, index: int):

@@ -109,7 +109,7 @@ class _DeadlineResourceListComboBox(QWidget):
         # Reset to a list of just the currently configured id during refresh
         with block_signals(self.box):
             self.box.clear()
-            self.box.addItem("<refreshing>", userData=selected_id)
+            self.box.addItem("<refreshing>", selected_id)
 
         self.__refresh_id += 1
         self.__refresh_thread = threading.Thread(
@@ -125,7 +125,7 @@ class _DeadlineResourceListComboBox(QWidget):
             with block_signals(self.box):
                 self.box.clear()
                 for name, id in items_list:
-                    self.box.addItem(name, userData=id)
+                    self.box.addItem(name, id)
 
                 self.refresh_selected_id()
 
@@ -142,7 +142,8 @@ class _DeadlineResourceListComboBox(QWidget):
                 # User has a configured ID but it's not in the list (e.g., lacks
                 # permission to list resources). Show the raw ID so they can see
                 # what's configured.
-                self.box.insertItem(0, selected_id, userData=selected_id)
+                self.box.insertItem(0, str(selected_id))
+                self.box.setItemData(0, selected_id)
                 self.box.setCurrentIndex(0)
             else:
                 # No ID configured - show "<none selected>"
@@ -150,8 +151,8 @@ class _DeadlineResourceListComboBox(QWidget):
                 if index >= 0:
                     self.box.setCurrentIndex(index)
                 else:
-                    self.box.insertItem(0, "<none selected>", userData="")
-                    self.box.setCurrentIndex(0)
+                    self.box.insertItem(0, "<none selected>")
+                    self.box.setItemData(0, "")
                     self.box.setCurrentIndex(0)
 
     def _refresh_thread_function(self, refresh_id: int, config: Optional[ConfigParser] = None):

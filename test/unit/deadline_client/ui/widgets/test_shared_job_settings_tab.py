@@ -92,13 +92,19 @@ def test_max_worker_count_should_be_integer_within_range(
 
 MOCK_CONFIG_PATH = "deadline.client.ui.widgets.shared_job_settings_tab.config_file.read_config"
 MOCK_SET_SETTING_PATH = "deadline.client.ui.widgets.shared_job_settings_tab.set_setting"
+MOCK_COMBO_BOX_GET_SETTING_PATH = (
+    "deadline.client.ui.widgets.deadline_cloud_resource_combo_boxes.config_file.get_setting"
+)
 
 
 @pytest.fixture(scope="function")
 def deadline_cloud_settings_widget(qtbot) -> Generator[DeadlineCloudSettingsWidget, None, None]:
     """Fixture for DeadlineCloudSettingsWidget with mocked config."""
-    with patch(MOCK_CONFIG_PATH) as mock_config:
+    with patch(MOCK_CONFIG_PATH) as mock_config, patch(
+        MOCK_COMBO_BOX_GET_SETTING_PATH
+    ) as mock_get_setting:
         mock_config.return_value = MagicMock()
+        mock_get_setting.return_value = ""  # Return empty string for all get_setting calls
         widget = DeadlineCloudSettingsWidget()
         qtbot.addWidget(widget)
         yield widget
@@ -136,42 +142,52 @@ def test_queue_selection_updates_config(
 def test_farm_change_refreshes_queue_list(
     deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
 ):
-    """Test that changing farm triggers queue list refresh."""
+    """Test that changing farm triggers queue and storage profile list refresh."""
     widget = deadline_cloud_settings_widget
 
     widget.farm_box.box.addItem("Default Farm", "farm-default")
     widget.farm_box.box.addItem("Test Farm", "farm-test789")
 
-    with patch.object(widget.queue_box, "refresh_list") as mock_refresh, patch(
-        MOCK_SET_SETTING_PATH
-    ):
+    with patch.object(widget.queue_box, "refresh_list") as mock_queue_refresh, patch.object(
+        widget.storage_profile_box, "refresh_list"
+    ) as mock_sp_refresh, patch(MOCK_SET_SETTING_PATH):
         widget.farm_box.box.setCurrentIndex(1)
-        mock_refresh.assert_called_once()
+        mock_queue_refresh.assert_called_once()
+        mock_sp_refresh.assert_called_once()
 
 
 def test_refresh_setting_controls_updates_combo_boxes(
     deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
 ):
-    """Test that refresh_setting_controls updates both combo boxes."""
+    """Test that refresh_setting_controls updates all combo boxes."""
     widget = deadline_cloud_settings_widget
 
     with patch.object(widget.farm_box, "set_config") as mock_farm_config, patch.object(
         widget.queue_box, "set_config"
     ) as mock_queue_config, patch.object(
+        widget.storage_profile_box, "set_config"
+    ) as mock_sp_config, patch.object(
         widget.farm_box, "refresh_selected_id"
     ) as mock_farm_refresh, patch.object(
         widget.queue_box, "refresh_selected_id"
     ) as mock_queue_refresh, patch.object(
+        widget.storage_profile_box, "refresh_selected_id"
+    ) as mock_sp_refresh, patch.object(
         widget.farm_box, "refresh_list"
-    ) as mock_farm_list, patch.object(widget.queue_box, "refresh_list") as mock_queue_list:
+    ) as mock_farm_list, patch.object(
+        widget.queue_box, "refresh_list"
+    ) as mock_queue_list, patch.object(widget.storage_profile_box, "refresh_list") as mock_sp_list:
         widget.refresh_setting_controls(deadline_authorized=True)
 
         mock_farm_config.assert_called_once()
         mock_queue_config.assert_called_once()
+        mock_sp_config.assert_called_once()
         mock_farm_refresh.assert_called_once()
         mock_queue_refresh.assert_called_once()
+        mock_sp_refresh.assert_called_once()
         mock_farm_list.assert_called_once()
         mock_queue_list.assert_called_once()
+        mock_sp_list.assert_called_once()
 
 
 def test_refresh_setting_controls_skips_list_refresh_when_unauthorized(
@@ -182,15 +198,18 @@ def test_refresh_setting_controls_skips_list_refresh_when_unauthorized(
 
     with patch.object(widget.farm_box, "set_config"), patch.object(
         widget.queue_box, "set_config"
-    ), patch.object(widget.farm_box, "refresh_selected_id"), patch.object(
-        widget.queue_box, "refresh_selected_id"
+    ), patch.object(widget.storage_profile_box, "set_config"), patch.object(
+        widget.farm_box, "refresh_selected_id"
+    ), patch.object(widget.queue_box, "refresh_selected_id"), patch.object(
+        widget.storage_profile_box, "refresh_selected_id"
     ), patch.object(widget.farm_box, "refresh_list") as mock_farm_list, patch.object(
         widget.queue_box, "refresh_list"
-    ) as mock_queue_list:
+    ) as mock_queue_list, patch.object(widget.storage_profile_box, "refresh_list") as mock_sp_list:
         widget.refresh_setting_controls(deadline_authorized=False)
 
         mock_farm_list.assert_not_called()
         mock_queue_list.assert_not_called()
+        mock_sp_list.assert_not_called()
 
 
 def test_storage_profile_hidden_by_default(
@@ -404,7 +423,9 @@ def test_farm_change_propagates_config_to_all_boxes(
         widget.queue_box, "set_config"
     ) as mock_queue_cfg, patch.object(
         widget.storage_profile_box, "set_config"
-    ) as mock_sp_cfg, patch.object(widget.queue_box, "refresh_list"):
+    ) as mock_sp_cfg, patch.object(widget.queue_box, "refresh_list"), patch.object(
+        widget.storage_profile_box, "refresh_list"
+    ):
         widget.farm_box.box.setCurrentIndex(1)
 
         mock_farm_cfg.assert_called_once()
