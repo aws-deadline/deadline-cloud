@@ -129,9 +129,6 @@ class DeadlineConfigDialog(QDialog):
         )
         self.layout.addWidget(self.auth_status_box)
         self.deadline_authentication_status.deadline_config_changed.connect(self.config_box.refresh)
-        self.deadline_authentication_status.api_availability_changed.connect(
-            self.on_auth_status_update
-        )
 
         # We only use a Close button, not OK/Cancel, because we live update the settings.
         self.button_box = QDialogButtonBox(
@@ -178,11 +175,6 @@ class DeadlineConfigDialog(QDialog):
         self.button_box.button(QDialogButtonBox.Apply).setEnabled(bool(self.config_box.changes))
         # Update the auth status with the refreshed config
         self.deadline_authentication_status.set_config(self.config_box.config)
-
-    def on_auth_status_update(self):
-        # Farm, queue, and storage profile lists are now managed by
-        # DeadlineCloudSettingsWidget in the Submit Dialog, not here.
-        pass
 
 
 class DeadlineScrollArea(QScrollArea):

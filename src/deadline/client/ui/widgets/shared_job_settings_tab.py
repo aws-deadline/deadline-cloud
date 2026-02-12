@@ -23,7 +23,7 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...config import get_setting, set_setting, config_file
-from .._utils import CancelationFlag, tr
+from .._utils import CancelationFlag, block_signals, tr
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...api import get_queue_parameter_definitions
 from .deadline_cloud_resource_combo_boxes import (
@@ -630,12 +630,16 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         """
         self._update_all_box_configs()
 
-        # Refresh selected items to reflect current config
-        self.farm_box.refresh_selected_id()
-        self.queue_box.refresh_selected_id()
-        self.storage_profile_box.refresh_selected_id()
+        # Use block_signals to prevent currentIndexChanged from firing during
+        # programmatic updates, which would spuriously write to config.
+        with block_signals(self.farm_box.box), block_signals(self.queue_box.box), block_signals(
+            self.storage_profile_box.box
+        ):
+            self.farm_box.refresh_selected_id()
+            self.queue_box.refresh_selected_id()
+            self.storage_profile_box.refresh_selected_id()
 
-        # Refresh lists if authorized
+        # Refresh lists if authorized (refresh_list already uses block_signals internally)
         if deadline_authorized:
             self.farm_box.refresh_list()
             self.queue_box.refresh_list()
