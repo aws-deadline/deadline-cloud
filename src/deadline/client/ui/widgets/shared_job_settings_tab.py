@@ -566,8 +566,9 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
         set_setting("defaults.farm_id", farm_id)
         self._update_all_box_configs()
-        self.queue_box.refresh_list()
-        self.storage_profile_box.refresh_list()
+        # Don't call refresh_list() here — _notify_parent_refresh triggers
+        # refresh_deadline_settings which calls refresh_setting_controls,
+        # and that already refreshes all lists when authorized.
         self._notify_parent_refresh()
 
     def _on_queue_changed(self, index: int):
@@ -581,7 +582,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
         set_setting("defaults.queue_id", queue_id)
         self._update_all_box_configs()
-        self.storage_profile_box.refresh_list()
+        # Don't call refresh_list() here — same reason as _on_farm_changed.
         self._notify_parent_refresh()
 
     def _on_storage_profile_changed(self, index: int):
@@ -601,9 +602,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         while parent is not None:
             if hasattr(parent, attr_name):
                 return parent
-            parent = (
-                parent.parent() if hasattr(parent, "parent") and callable(parent.parent) else None
-            )  # type: ignore[assignment]
+            parent = parent.parent()  # type: ignore[assignment]
         return None
 
     def _notify_parent_refresh(self):

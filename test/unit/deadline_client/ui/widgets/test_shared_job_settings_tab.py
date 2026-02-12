@@ -139,21 +139,20 @@ def test_queue_selection_updates_config(
         mock_set_setting.assert_called_with("defaults.queue_id", test_queue_id)
 
 
-def test_farm_change_refreshes_queue_list(
+def test_farm_change_triggers_parent_refresh(
     deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
 ):
-    """Test that changing farm triggers queue and storage profile list refresh."""
+    """Test that changing farm triggers _notify_parent_refresh (which cascades to refresh lists)."""
     widget = deadline_cloud_settings_widget
 
     widget.farm_box.box.addItem("Default Farm", "farm-default")
     widget.farm_box.box.addItem("Test Farm", "farm-test789")
 
-    with patch.object(widget.queue_box, "refresh_list") as mock_queue_refresh, patch.object(
-        widget.storage_profile_box, "refresh_list"
-    ) as mock_sp_refresh, patch(MOCK_SET_SETTING_PATH):
+    with patch.object(widget, "_notify_parent_refresh") as mock_notify, patch(
+        MOCK_SET_SETTING_PATH
+    ):
         widget.farm_box.box.setCurrentIndex(1)
-        mock_queue_refresh.assert_called_once()
-        mock_sp_refresh.assert_called_once()
+        mock_notify.assert_called_once()
 
 
 def test_refresh_setting_controls_updates_combo_boxes(
@@ -275,20 +274,20 @@ def test_storage_profile_selection_updates_config(
         mock_set_setting.assert_called_with("settings.storage_profile_id", test_profile_id)
 
 
-def test_queue_change_refreshes_storage_profile_list(
+def test_queue_change_triggers_parent_refresh(
     deadline_cloud_settings_widget: DeadlineCloudSettingsWidget,
 ):
-    """Test that changing queue triggers storage profile list refresh."""
+    """Test that changing queue triggers _notify_parent_refresh (which cascades to refresh lists)."""
     widget = deadline_cloud_settings_widget
 
     widget.queue_box.box.addItem("Default Queue", "queue-default")
     widget.queue_box.box.addItem("Test Queue", "queue-test789")
 
-    with patch.object(widget.storage_profile_box, "refresh_list") as mock_refresh, patch(
+    with patch.object(widget, "_notify_parent_refresh") as mock_notify, patch(
         MOCK_SET_SETTING_PATH
     ):
         widget.queue_box.box.setCurrentIndex(1)
-        mock_refresh.assert_called_once()
+        mock_notify.assert_called_once()
 
 
 # Tests for SharedJobSettingsWidget.refresh_queue_parameters
@@ -421,11 +420,7 @@ def test_farm_change_propagates_config_to_all_boxes(
         widget.farm_box, "set_config"
     ) as mock_farm_cfg, patch.object(
         widget.queue_box, "set_config"
-    ) as mock_queue_cfg, patch.object(
-        widget.storage_profile_box, "set_config"
-    ) as mock_sp_cfg, patch.object(widget.queue_box, "refresh_list"), patch.object(
-        widget.storage_profile_box, "refresh_list"
-    ):
+    ) as mock_queue_cfg, patch.object(widget.storage_profile_box, "set_config") as mock_sp_cfg:
         widget.farm_box.box.setCurrentIndex(1)
 
         mock_farm_cfg.assert_called_once()
@@ -446,9 +441,7 @@ def test_queue_change_propagates_config_to_all_boxes(
         widget.farm_box, "set_config"
     ) as mock_farm_cfg, patch.object(
         widget.queue_box, "set_config"
-    ) as mock_queue_cfg, patch.object(
-        widget.storage_profile_box, "set_config"
-    ) as mock_sp_cfg, patch.object(widget.storage_profile_box, "refresh_list"):
+    ) as mock_queue_cfg, patch.object(widget.storage_profile_box, "set_config") as mock_sp_cfg:
         widget.queue_box.box.setCurrentIndex(1)
 
         mock_farm_cfg.assert_called_once()
