@@ -180,8 +180,10 @@ class DeadlineLoginDialog(QMessageBox):
             # Tell the login thread to cancel, then wait for it.
             self.canceled = True
             if self.__login_thread:
+                app = QApplication.instance()
                 while self.__login_thread.is_alive():
-                    QApplication.instance().processEvents()  # type: ignore[union-attr]
+                    if app:
+                        app.processEvents()
 
     def exec_(self) -> bool:
         """

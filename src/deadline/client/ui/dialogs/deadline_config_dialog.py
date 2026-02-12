@@ -147,9 +147,6 @@ class DeadlineConfigDialog(QDialog):
         self.auth_status_box.login_clicked.connect(self.on_login)
         self.layout.addWidget(self.button_box)
 
-        # Refresh the lists so queue/farm show the description instead of the ID
-        self.config_box.refresh_lists()
-
     @property
     def changes_were_applied(self) -> bool:
         return self.config_box.changes_were_applied
@@ -183,12 +180,9 @@ class DeadlineConfigDialog(QDialog):
         self.deadline_authentication_status.set_config(self.config_box.config)
 
     def on_auth_status_update(self):
-        # If the AWS Deadline Cloud API is authorized successfully for the AWS profile
-        # in the config dialog, refresh the farm/queue lists
-        if self.deadline_authentication_status.api_availability and config_file.get_setting(
-            "defaults.aws_profile_name", self.deadline_authentication_status.config
-        ) == config_file.get_setting("defaults.aws_profile_name", self.config_box.config):
-            self.config_box.refresh_lists()
+        # Farm, queue, and storage profile lists are now managed by
+        # DeadlineCloudSettingsWidget in the Submit Dialog, not here.
+        pass
 
 
 class DeadlineScrollArea(QScrollArea):
@@ -682,11 +676,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.aws_profile_names = aws_profile_names
         with block_signals(self.aws_profiles_box):
             self.aws_profiles_box.addItems(list(self.aws_profile_names))
-
-    def refresh_lists(self):
-        # Farm, queue, and storage profile lists are now managed by
-        # DeadlineCloudSettingsWidget in the Submit Dialog, not here.
-        pass
 
     def refresh(self):
         """

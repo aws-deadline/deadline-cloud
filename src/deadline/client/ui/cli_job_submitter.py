@@ -45,7 +45,11 @@ def show_cli_job_submitter(parent: Optional[QWidget] = None, f=Qt.WindowFlags())
     if parent is None:
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
-        parent = [widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)][0]  # type: ignore[union-attr]
+        if app:
+            main_windows = [
+                widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)
+            ]
+            parent = main_windows[0] if main_windows else None
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,

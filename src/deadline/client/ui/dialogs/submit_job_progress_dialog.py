@@ -325,8 +325,10 @@ class SubmitJobProgressDialog(QDialog):
             logger.info("Canceling submission...")
             self.status_label.setText(tr("Canceling submission..."))
             if self.__submission_thread is not None:
+                app = QApplication.instance()
                 while self.__submission_thread.is_alive():
-                    QApplication.instance().processEvents()  # type: ignore[union-attr]
+                    if app:
+                        app.processEvents()
             super().closeEvent(event)
 
     def exec_(self) -> Optional[str]:  # type: ignore[override]

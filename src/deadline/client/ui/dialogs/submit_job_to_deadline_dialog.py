@@ -557,7 +557,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         job_progress_dialog.progress_window_closed.connect(self._close_event_receiver)
         job_progress_dialog.setModal(True)
         job_progress_dialog.show()
-        QApplication.instance().processEvents()  # type: ignore[union-attr]
+        app = QApplication.instance()
+        if app:
+            app.processEvents()
 
         # Submit the job
         try:
