@@ -140,16 +140,15 @@ def leave_alt_screen() -> None:
     sys.stdout.flush()
 
 
-def clear_screen(full: bool = False) -> None:
+def clear_screen(full: bool = True) -> None:
     """Move cursor to home position, optionally erasing the screen.
 
     Args:
-        full: When True, erase the entire screen after homing the cursor.
-              Use this when transitioning between different screens
-              (e.g. job list → step list) to avoid stale content.
-              When False (default), only homes the cursor so content is
-              overwritten in-place — avoids flicker during same-screen
-              scrolling.
+        full: When True (default), erase the entire screen after homing
+              the cursor. This prevents stale content from lingering.
+              When False, only homes the cursor so content is
+              overwritten in-place — use this when scrolling within
+              the same list to avoid flicker.
     """
     if full:
         sys.stdout.write("\033[H\033[2J")

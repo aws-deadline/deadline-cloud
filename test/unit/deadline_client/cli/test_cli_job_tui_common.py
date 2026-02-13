@@ -188,10 +188,10 @@ class TestClearScreen:
         mock_sys.stdout.flush.assert_called_once()
 
     @patch("deadline.client.cli._groups._job_tui._common.sys")
-    def test_default_is_soft_clear(self, mock_sys):
-        """Default call with no args should be soft clear."""
+    def test_default_is_full_clear(self, mock_sys):
+        """Default call with no args should be full clear."""
         clear_screen()
-        mock_sys.stdout.write.assert_called_once_with("\033[H")
+        mock_sys.stdout.write.assert_called_once_with("\033[H\033[2J")
 
 
 class TestCopyToClipboard:
