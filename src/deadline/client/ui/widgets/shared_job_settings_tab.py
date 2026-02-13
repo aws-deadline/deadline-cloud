@@ -617,12 +617,9 @@ class DeadlineCloudSettingsWidget(QGroupBox):
 
     def _notify_parent_refresh(self):
         """Helper to notify parent widgets to refresh after config changes"""
-        # Find and call refresh_queue_parameters on parent chain
-        parent = self._find_parent_with_attr("refresh_queue_parameters")
-        if parent:
-            parent.refresh_queue_parameters()
-
-        # Find and call refresh_deadline_settings on parent chain
+        # Find and call refresh_deadline_settings on parent chain.
+        # refresh_deadline_settings already calls refresh_queue_parameters
+        # internally, so we don't call it separately here.
         parent = self._find_parent_with_attr("refresh_deadline_settings")
         if parent:
             parent.refresh_deadline_settings()
