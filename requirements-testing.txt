@@ -13,7 +13,7 @@ twine == 4.*; python_version == '3.7'
 twine == 6.*; python_version > '3.7'
 mypy == 1.13.*; python_version == '3.7'
 mypy == 1.*; python_version > '3.7'
-ruff == 0.14.*
+ruff == 0.15.*
 moto == 5.*
 jsondiff == 2.*
 pyinstrument == 5.*
