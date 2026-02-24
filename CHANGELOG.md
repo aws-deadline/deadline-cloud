@@ -1,17 +1,32 @@
-## 0.54.1 (2026-01-23)
+## 0.54.1 (2026-02-24)
+
+### DEPRECATIONS
+
+* `AssetSync.sync_inputs` and `AssetSync.attachment_sync_inputs` in Job Attachments are deprecated and will be removed in a future version. Use other public APIs under job attachments instead. (#991) ([`5bba469`](https://github.com/aws-deadline/deadline-cloud/commit/5bba469e07e64ed228a218e0b37743e4455bde53))
 
 ### Features
 
-* Update hash cache to support byte ranges for file chunking support (#953) ([`35a1802`](https://github.com/aws-deadline/deadline-cloud/commit/35a18026fffa0c1496975b5420a20cec3edca9da))
-  * Hash caches will regenerate on first submission after upgrade
-* Add help button and documentation link to job bundle GUI submitter (#961) ([`a3704fd`](https://github.com/aws-deadline/deadline-cloud/commit/a3704fd25834168197ca131e75ba826e6499c3f0))
-* Add option to bundle submit to always perform S3 head check (#957) ([`c53f3be`](https://github.com/aws-deadline/deadline-cloud/commit/c53f3be09e146fd7aa9f016ca5f455d692043d50))
+* Find jobs by search term with `deadline job get "search term"` instead of requiring an exact job ID (#982) ([`e01b353`](https://github.com/aws-deadline/deadline-cloud/commit/e01b353849610b9ce5b177d0a5e2e8ed38d81b31))
+* CLI now suggests available resources when a resource ID is not found or access is denied (#985) ([`478bf6e`](https://github.com/aws-deadline/deadline-cloud/commit/478bf6e072ba6f28d612689b679fe982735c1860))
+* Add `--force-s3-check` option to `deadline bundle submit` to verify job attachments exist in S3 before skipping upload, useful when S3 bucket contents may be out of sync with local caches (#957) ([`c53f3be`](https://github.com/aws-deadline/deadline-cloud/commit/c53f3be09e146fd7aa9f016ca5f455d692043d50))
+* Add help button with documentation link to the job bundle GUI submitter (#961) ([`a3704fd`](https://github.com/aws-deadline/deadline-cloud/commit/a3704fd25834168197ca131e75ba826e6499c3f0))
+* Support byte ranges in hash cache for file chunking (#953) ([`35a1802`](https://github.com/aws-deadline/deadline-cloud/commit/35a18026fffa0c1496975b5420a20cec3edca9da))
 
 ### Bug Fixes
 
-* Long path handling not applied when duplicate file names are downloaded (#964) ([`e2ed151`](https://github.com/aws-deadline/deadline-cloud/commit/e2ed15104d7cb57a8244d34bbcb75cb2e0916e42))
-* Load different job bundle button positioned oddly in GUI submitter (#945) ([`3f65662`](https://github.com/aws-deadline/deadline-cloud/commit/3f65662b070535c72557cfcb22bf0afe749152e5))
-* About dialog YAML key formatting not human-friendly for nested structures (#950) ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+* Settings dropdown shows configured resource ID instead of '\<none selected\>' when user lacks list permission (#993) ([`d4946d5`](https://github.com/aws-deadline/deadline-cloud/commit/d4946d578568ea26f3ba25285bba9677d844d64c))
+* Job output download failing when filtering active jobs by task run status (#994) ([`34d98eb`](https://github.com/aws-deadline/deadline-cloud/commit/34d98eb2b62e22be210f461277a5a51871bb40d3))
+* Downloaded files with duplicate names failing on Windows when the path exceeds the maximum length (#964) ([`e2ed151`](https://github.com/aws-deadline/deadline-cloud/commit/e2ed15104d7cb57a8244d34bbcb75cb2e0916e42))
+* "Load a different job bundle" button truncated and poorly positioned in the GUI submitter (#980) ([`9f77ba2`](https://github.com/aws-deadline/deadline-cloud/commit/9f77ba29de66e68249b1ea704372e9c25ec0f587)) (#945) ([`3f65662`](https://github.com/aws-deadline/deadline-cloud/commit/3f65662b070535c72557cfcb22bf0afe749152e5))
+* About dialog displays human-readable key names instead of raw YAML keys (#950) ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+
+### Experimental
+
+These changes are experimental and are subject to change.
+
+* MCP Server:
+  * Retrieve session logs by job ID without needing to know the session ID (#996) ([`df91974`](https://github.com/aws-deadline/deadline-cloud/commit/df91974759034f8c9cbad00f30a374ad37885af1))
+  * Add steering prompt and debug hooks for improved diagnostics (#995) ([`33b261d`](https://github.com/aws-deadline/deadline-cloud/commit/33b261d252879a77460448e4a40632e1cbdb9d51))
 
 
 ## 0.54.0 (2025-12-11)
