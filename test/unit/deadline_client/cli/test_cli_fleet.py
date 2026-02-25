@@ -4,7 +4,7 @@
 Tests for the CLI fleet commands.
 """
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 from copy import deepcopy
 import os
 from datetime import datetime
@@ -230,7 +230,9 @@ def test_cli_fleet_get_override_profile(fresh_deadline_config):
             ["fleet", "get", "--profile", "NonDefaultProfileName", "--fleet-id", MOCK_FLEET_ID],
         )
 
-        session_mock.assert_called_once_with(profile_name="NonDefaultProfileName")
+        session_mock.assert_called_once_with(
+            profile_name="NonDefaultProfileName", botocore_session=ANY
+        )
         session_mock().client().get_fleet.assert_called_once_with(
             farmId="farm-overriddenid", fleetId=MOCK_FLEET_ID
         )

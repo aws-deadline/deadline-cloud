@@ -29,7 +29,13 @@ MAX_SIZE_CACHE = 128
 # Should create a new botocore session since botocore session may be modified by boto3 session/client using it
 # https://github.com/boto/boto3/blob/61de529b5f9a7bdcc8c76debb472a7f934d048e6/boto3/session.py#L79
 def get_botocore_session() -> botocore.session.Session:
-    return botocore.session.get_session()
+    session = botocore.session.get_session()
+    # Use regional endpoints by default for STS and S3 (us-east-1) to avoid
+    # cross-region calls to the global endpoint. This is the default in newer verisons,
+    # but older botocore versions default to "legacy" which routes through us-east-1.
+    session.set_config_variable("sts_regional_endpoints", "regional")
+    session.set_config_variable("s3", {"us_east_1_regional_endpoint": "regional"})
+    return session
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)
@@ -72,7 +78,6 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
             user_agent_extra=f"S3A/Deadline/NA/JobAttachments/{version}",
             max_pool_connections=s3_max_pool_connections,
         ),
-        endpoint_url=f"https://s3.{session.region_name}.amazonaws.com",
     )
 
     def add_expected_bucket_owner(params, model, **kwargs):
@@ -115,10 +120,8 @@ def get_sts_client(session: Optional[boto3.session.Session] = None) -> BaseClien
     """
     if session is None:
         session = get_boto3_session()
-    return session.client(
-        "sts",
-        endpoint_url=f"https://sts.{session.region_name}.amazonaws.com",
-    )
+
+    return session.client("sts")
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)

@@ -23,7 +23,9 @@ def test_get_boto3_session(fresh_deadline_config):
 
         # Confirm it returned the mocked value, and was called with the correct args
         assert result == mock_session
-        boto3_session.assert_called_once_with(profile_name="SomeRandomProfileName")
+        boto3_session.assert_called_once_with(
+            profile_name="SomeRandomProfileName", botocore_session=ANY
+        )
 
 
 def test_get_boto3_session_caching_behavior(fresh_deadline_config):
@@ -33,7 +35,7 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
     """
 
     # mock boto3.Session to return a fresh object based on the input profile name
-    def mock_create_session(profile_name: Optional[str]):
+    def mock_create_session(profile_name: Optional[str], botocore_session=None):
         session = MagicMock()
         session._profile_name = profile_name
         return session
@@ -65,8 +67,8 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         # value of AWS profile name that was configured.
         boto3_session.assert_has_calls(
             [
-                call(profile_name=None),
-                call(profile_name="SomeRandomProfileName"),
+                call(profile_name=None, botocore_session=ANY),
+                call(profile_name="SomeRandomProfileName", botocore_session=ANY),
             ]
         )
 

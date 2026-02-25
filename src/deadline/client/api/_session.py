@@ -81,7 +81,10 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str):
-    session = boto3.Session(profile_name=profile_name)
+    # Use regional STS endpoint to avoid cross-region calls to the global endpoint.
+    botocore_session = get_botocore_session()
+    botocore_session.set_config_variable("sts_regional_endpoints", "regional")
+    session = boto3.Session(profile_name=profile_name, botocore_session=botocore_session)
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
