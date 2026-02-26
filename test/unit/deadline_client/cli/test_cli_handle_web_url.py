@@ -5,6 +5,8 @@ Tests for the CLI handle-web-url command.
 """
 
 import os
+import shutil
+import subprocess
 import sys
 from typing import Dict, List
 from unittest.mock import ANY, MagicMock, call, patch
@@ -678,3 +680,68 @@ def test_cli_handle_web_url_uninstall_all_users_monkeypatched_windows(
             ]
         )
         assert result.output.strip() == ""
+
+
+def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_path):
+    """
+    Tests that the generated .desktop file on Linux has the expected contents.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    desktop_file_path = str(entry_dir / "deadline.desktop")
+
+    with patch.object(sys, "platform", "linux"), \
+         patch.object(sys, "argv", ["/usr/bin/deadline"]), \
+         patch.object(shutil, "which", side_effect=lambda cmd: cmd if os.sep in cmd else "/usr/bin/" + cmd), \
+         patch.object(os.path, "expanduser", side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace("~/.config", str(config_dir))), \
+         patch.object(subprocess, "run"), \
+         patch.object(os, "makedirs"):
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+        install_deadline_web_url_handler(all_users=False)
+
+    desktop_content = open(desktop_file_path).read()
+    assert desktop_content == (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=deadline\n"
+        "Exec=/usr/bin/deadline handle-web-url %u\n"
+        "Terminal=true\n"
+        "MimeType=x-scheme-handler/deadline\n"
+    )
+
+
+def test_linux_install_resolves_binary_path_via_shutil_which(fresh_deadline_config, tmp_path):
+    """
+    Tests that on Linux, when sys.argv[0] is a bare command name (e.g. 'deadline'),
+    the install resolves the full path using shutil.which rather than os.path.abspath.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    desktop_file_path = str(entry_dir / "deadline.desktop")
+
+    def mock_which(cmd):
+        if cmd == "deadline":
+            return "/opt/deadline/bin/deadline"
+        return "/usr/bin/" + cmd
+
+    with patch.object(sys, "platform", "linux"), \
+         patch.object(sys, "argv", ["deadline"]), \
+         patch.object(shutil, "which", side_effect=mock_which), \
+         patch.object(os.path, "expanduser", side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace("~/.config", str(config_dir))), \
+         patch.object(subprocess, "run"), \
+         patch.object(os, "makedirs"):
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+        install_deadline_web_url_handler(all_users=False)
+
+    desktop_content = open(desktop_file_path).read()
+    assert "/opt/deadline/bin/deadline" in desktop_content, (
+        f"Expected resolved path in Exec line, got:\n{desktop_content}"
+    )
