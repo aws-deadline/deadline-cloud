@@ -693,17 +693,23 @@ def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_p
 
     desktop_file_path = str(entry_dir / "deadline.desktop")
 
-    with patch.object(sys, "platform", "linux"), \
-         patch.object(sys, "argv", ["/usr/bin/deadline"]), \
-         patch.object(shutil, "which", side_effect=lambda cmd: cmd if os.sep in cmd else "/usr/bin/" + cmd), \
-         patch.object(os.path, "expanduser", side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace("~/.config", str(config_dir))), \
-         patch.object(subprocess, "run"), \
-         patch.object(os, "makedirs"):
-
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["/usr/bin/deadline"]
+    ), patch.object(
+        shutil, "which", side_effect=lambda cmd: cmd if os.sep in cmd else "/usr/bin/" + cmd
+    ), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+            "~/.config", str(config_dir)
+        ),
+    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
         install_deadline_web_url_handler(all_users=False)
 
-    desktop_content = open(desktop_file_path).read()
+    with open(desktop_file_path) as f:
+        desktop_content = f.read()
     assert desktop_content == (
         "[Desktop Entry]\n"
         "Type=Application\n"
@@ -731,17 +737,21 @@ def test_linux_install_resolves_binary_path_via_shutil_which(fresh_deadline_conf
             return "/opt/deadline/bin/deadline"
         return "/usr/bin/" + cmd
 
-    with patch.object(sys, "platform", "linux"), \
-         patch.object(sys, "argv", ["deadline"]), \
-         patch.object(shutil, "which", side_effect=mock_which), \
-         patch.object(os.path, "expanduser", side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace("~/.config", str(config_dir))), \
-         patch.object(subprocess, "run"), \
-         patch.object(os, "makedirs"):
-
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["deadline"]
+    ), patch.object(shutil, "which", side_effect=mock_which), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+            "~/.config", str(config_dir)
+        ),
+    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
         install_deadline_web_url_handler(all_users=False)
 
-    desktop_content = open(desktop_file_path).read()
+    with open(desktop_file_path) as f:
+        desktop_content = f.read()
     assert "/opt/deadline/bin/deadline" in desktop_content, (
         f"Expected resolved path in Exec line, got:\n{desktop_content}"
     )
