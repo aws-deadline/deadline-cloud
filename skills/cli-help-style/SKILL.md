@@ -17,7 +17,18 @@ Use this skill when:
 
 ## Core Concepts
 
-Click renders Python docstrings as terminal help text. The docstring is the **only** documentation most users will see, so it must be complete, scannable, and render cleanly in an 80-column terminal.
+### Dual rendering: terminal and docs site
+
+These docstrings are rendered in two places:
+
+1. **Terminal** — `deadline <command> --help` via click's built-in formatter
+2. **Docs site** — https://aws-deadline.github.io/deadline-cloud/ via mkdocs-click, which passes docstring text through MkDocs as markdown
+
+Click's terminal formatter treats docstrings as plain text with paragraph reflowing. It does not understand markdown — backticks, links, and lists all render literally. MkDocs, on the other hand, renders the same text as markdown, so backticks become `<code>` tags and links become clickable.
+
+This dual rendering drives most of the style rules below. The goal is text that looks good in **both** contexts, prioritizing the terminal since that's where most users encounter it.
+
+> **Future improvement:** Click supports custom help formatters. A formatter that strips or transforms markdown for terminal display would let us use richer formatting in docstrings while keeping terminal output clean. This is not implemented today.
 
 ### Docstring Structure
 
@@ -80,7 +91,15 @@ Leaf commands that are simple (e.g., `get`, `list`) **MAY** omit the URL if thei
 
 ### No Markdown Reference Links
 
-You **MUST NOT** use click's markdown-style reference links. They render as ugly raw URL blocks in the terminal:
+You **MUST NOT** use click's markdown-style reference links. Click dumps them as raw text at the bottom of the help output, and terminal line wrapping breaks the URLs mid-string, producing unreadable noise like:
+
+```
+[Deadline Cloud jobs]: https://docs.aws.amazon.com/deadline-
+cloud/latest/userguide/deadline-cloud-jobs.html [queue]:
+https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+```
+
+These *would* render as proper clickable links on the MkDocs docs site, but the terminal experience is far more common and must take priority.
 
 Bad:
 ```python
@@ -104,6 +123,10 @@ Documentation: https://docs.aws.amazon.com/...
 
 ### Backtick Usage
 
+In the terminal, backticks render as literal `` ` `` characters. For CLI commands like `` `deadline bundle submit` ``, this is a useful visual delimiter that helps the command stand out — a convention terminal users expect. But wrapping product names like `` `Deadline Cloud` `` just looks like a formatting mistake with stray backtick characters.
+
+On the docs site, backticks render as `<code>` tags (monospace), so they work well for anything that's actually code.
+
 Use backticks **only** for:
 - CLI commands and subcommands: `` `deadline bundle submit` ``
 - CLI options: `` `--farm-id` ``
@@ -116,7 +139,18 @@ Do **not** use backticks for product names or concepts:
 
 ### Formatting for Terminal Readability
 
-**Lists:** Use `\b` before any list or block that must preserve its formatting. Without `\b`, click reflows text into a single paragraph:
+**The `\b` escape:** Click's terminal formatter reflows all text into wrapped paragraphs by default. Without `\b`, a numbered list like:
+
+```
+1. Ongoing sessions
+2. Most recently ended session
+```
+
+gets smashed into a single line: `1. Ongoing sessions 2. Most recently ended session`. The `\b` on a line by itself tells click "stop reflowing, preserve formatting from here until the next blank line."
+
+On the docs site, `\b` is stripped by mkdocs-click's `remove_ascii_art` option, so it doesn't affect markdown rendering.
+
+**Lists:** Use `\b` before any list or block that must preserve its formatting:
 
 ```python
 """
