@@ -64,15 +64,12 @@ def cli_handle_web_url(
     all_users: bool,
 ):
     """
-    Runs commands sent from a web application such as [Deadline Cloud monitor].
+    Runs commands sent from a web application such as Deadline Cloud monitor.
 
-    Use the `--install` and `--uninstall` options to set or remove the command as the `deadline://`
-    protocol handler in your operating system.
+    Use --install and --uninstall to set or remove the command as the
+    `deadline://` protocol handler in your operating system.
 
-    Commands use the format `deadline://<handle-web-url-command>?args=value&args=value`.
-
-    This function automatically picks the best AWS profile to use
-    based on the provided farm-id and queue-id.
+    Commands use the format `deadline://<command>?arg=value&arg=value`.
 
     \b
         deadline://download-output
@@ -81,8 +78,6 @@ def cli_handle_web_url(
             &job-id=<job-id>
             &step-id=<step-id>                      # optional
             &task-id=<task-id>                      # optional
-
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
     """
     ctx.obj[_PROMPT_WHEN_COMPLETE] = prompt_when_complete
 

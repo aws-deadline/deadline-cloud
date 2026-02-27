@@ -65,7 +65,7 @@ def test_cli_redirect_output(fresh_deadline_config, tmp_path):
     with open(out_file, encoding="utf-8") as fh:
         file_output = fh.read()
     assert file_output.startswith("Usage: ")
-    assert "Commands to show and update Deadline's workstation configuration." in file_output
+    assert "View and update Deadline's workstation configuration" in file_output
 
 
 @pytest.mark.parametrize("redirect_mode", ("append", "replace"))
@@ -110,9 +110,7 @@ def test_cli_redirect_output_with_mode(fresh_deadline_config, tmp_path, redirect
     else:
         # The starting file contents should be replaced
         assert file_output.startswith("Usage: "), file_output
-    assert "Commands to show and update Deadline's workstation configuration." in file_output, (
-        file_output
-    )
+    assert "View and update Deadline's workstation configuration" in file_output, file_output
 
 
 def test_cli_unfamiliar_exception(fresh_deadline_config):
