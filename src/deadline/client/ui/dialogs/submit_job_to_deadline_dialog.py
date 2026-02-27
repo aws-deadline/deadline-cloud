@@ -9,10 +9,11 @@ import logging
 import os
 import sys
 import json
+import threading as _threading
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
-from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
+from qtpy.QtCore import QSize, Qt, Signal as _Signal  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -36,6 +37,8 @@ from ...api._session import session_context as _session_context
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
 from ...config import get_setting, set_setting, config_file
+from ...config.config_file import _SETTING_FARM_ID
+from ...config.config_file import _SETTING_QUEUE_ID
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.parameters import JobParameter
@@ -103,6 +106,8 @@ class SubmitJobToDeadlineDialog(QDialog):
             to False.
         submitter_info (SubmitterInfo): Information related to the submitter window and application it's running in
     """
+
+    _auto_select_complete = _Signal()
 
     def __init__(
         self,
@@ -229,6 +234,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.api_availability_changed.connect(
             self.refresh_deadline_settings
         )
+        self._auto_select_complete.connect(self.refresh_deadline_settings)
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
@@ -257,8 +263,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Submit button based on whether the
         # AWS Deadline Cloud API is accessible and the farm+queue are configured.
         api_available = self.deadline_authentication_status.api_availability is True
-        farm_configured = get_setting("defaults.farm_id") != ""
-        queue_configured = get_setting("defaults.queue_id") != ""
+        farm_configured = get_setting(_SETTING_FARM_ID) != ""
+        queue_configured = get_setting(_SETTING_QUEUE_ID) != ""
         queue_valid = self.shared_job_settings.is_queue_valid()
 
         enable = api_available and farm_configured and queue_configured and queue_valid
@@ -295,6 +301,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.submit_button.setToolTip("")
 
     def refresh_deadline_settings(self):
+        self._auto_select_defaults()
         self._set_submit_button_state()
 
         self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
@@ -302,6 +309,51 @@ class SubmitJobToDeadlineDialog(QDialog):
         )
         # If necessary, this reloads the queue parameters
         self.shared_job_settings.refresh_queue_parameters()
+
+    def _auto_select_defaults(self):
+        """Auto-select farm/queue in a background thread if only one is available."""
+        if self.deadline_authentication_status.api_availability is not True:
+            return
+        if get_setting(_SETTING_FARM_ID) and get_setting(_SETTING_QUEUE_ID):
+            return
+        if getattr(self, "_auto_select_in_progress", False):
+            return
+        self._auto_select_in_progress = True
+
+        _threading.Thread(target=self._do_auto_select, daemon=True).start()
+
+    def _do_auto_select(self):
+        """Background worker that auto-selects farm/queue if only one exists."""
+        try:
+            farm_changed = self._try_auto_select_farm()
+            queue_changed = self._try_auto_select_queue()
+            if farm_changed or queue_changed:
+                self._auto_select_complete.emit()
+        except Exception:
+            logger.debug("Auto-select defaults failed", exc_info=True)
+        finally:
+            self._auto_select_in_progress = False
+
+    def _try_auto_select_farm(self) -> bool:
+        if get_setting(_SETTING_FARM_ID):
+            return False
+        farms = api.list_farms().get("farms", [])
+        if len(farms) == 1:
+            set_setting(_SETTING_FARM_ID, farms[0]["farmId"])
+            logger.info("Auto-selected farm: %s", farms[0]["farmId"])
+            return True
+        return False
+
+    def _try_auto_select_queue(self) -> bool:
+        if not get_setting(_SETTING_FARM_ID) or get_setting(_SETTING_QUEUE_ID):
+            return False
+        farm_id = get_setting(_SETTING_FARM_ID)
+        queues = api.list_queues(farmId=farm_id).get("queues", [])
+        if len(queues) == 1:
+            set_setting(_SETTING_QUEUE_ID, queues[0]["queueId"])
+            logger.info("Auto-selected queue: %s", queues[0]["queueId"])
+            return True
+        return False
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """

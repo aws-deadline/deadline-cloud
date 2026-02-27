@@ -1,12 +1,20 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import json
+from unittest.mock import patch
+
 import pytest
 
 import click
 import yaml
 
-from deadline.client.cli._common import _parse_file_parameter, _parse_multi_format_parameters
+from deadline.client.cli._common import (
+    _auto_select_farm,
+    _auto_select_queue,
+    _parse_file_parameter,
+    _parse_multi_format_parameters,
+)
+from deadline.client.config import config_file
 
 
 class TestParseFileParameter:
@@ -282,3 +290,55 @@ class TestProgressBarCallbackManager:
 
         assert manager._bar_status == manager.BAR_CREATED
         manager._exit_stack.close()
+
+
+class TestAutoSelectFarm:
+    def test_single_farm_returns_id(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": [{"farmId": "farm-abc123"}]}
+            assert _auto_select_farm() == "farm-abc123"
+
+    def test_multiple_farms_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": [{"farmId": "farm-1"}, {"farmId": "farm-2"}]}
+            assert _auto_select_farm() is None
+
+    def test_no_farms_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": []}
+            assert _auto_select_farm() is None
+
+    def test_api_error_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.side_effect = Exception("API error")
+            assert _auto_select_farm() is None
+
+
+class TestAutoSelectQueue:
+    def test_single_queue_returns_id(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": [{"queueId": "queue-xyz789"}]}
+            assert _auto_select_queue() == "queue-xyz789"
+            mock_list.assert_called_once_with(farmId="farm-abc123", config=None)
+
+    def test_multiple_queues_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": [{"queueId": "queue-1"}, {"queueId": "queue-2"}]}
+            assert _auto_select_queue() is None
+
+    def test_no_queues_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": []}
+            assert _auto_select_queue() is None
+
+    def test_no_farm_id_returns_none(self, fresh_deadline_config):
+        assert _auto_select_queue() is None
+
+    def test_api_error_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.side_effect = Exception("API error")
+            assert _auto_select_queue() is None
