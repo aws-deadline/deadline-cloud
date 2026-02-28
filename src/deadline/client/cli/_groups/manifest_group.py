@@ -53,7 +53,7 @@ def cli_manifest():
     that track the files associated with a job.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -118,7 +118,7 @@ def manifest_snapshot(
     attachment manifest.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(root):
@@ -212,7 +212,7 @@ def manifest_diff(
     job attachment manifest for new, modified or deleted files.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isfile(manifest):
@@ -282,7 +282,7 @@ def manifest_download(
     dependencies.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -338,7 +338,7 @@ def manifest_upload(
     also use --profile to specify an AWS profile with S3 bucket access.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     # Input checking.
     if not manifest_file or not os.path.isfile(manifest_file):

@@ -37,7 +37,7 @@ def cli_attachment():
     using manifest files.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -87,7 +87,7 @@ def attachment_download(
     manifest(s).
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 
@@ -185,7 +185,7 @@ def attachment_upload(
     manifest(s).
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 

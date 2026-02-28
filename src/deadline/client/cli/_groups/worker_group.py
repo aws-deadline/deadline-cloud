@@ -27,7 +27,7 @@ def cli_worker():
     worker.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
+    Learn more about [fleets and workers](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
     """
 
 

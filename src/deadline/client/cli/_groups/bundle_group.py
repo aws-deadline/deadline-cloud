@@ -56,7 +56,7 @@ def cli_bundle():
     review and edit parameters in a GUI before submitting.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
 
@@ -252,7 +252,7 @@ def bundle_submit(
     and more.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
     # Apply the CLI args to the config
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -436,7 +436,7 @@ def bundle_gui_submit(
     shown in the GUI.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
     if submitter_name:

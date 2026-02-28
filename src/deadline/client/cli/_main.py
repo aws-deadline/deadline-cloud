@@ -130,7 +130,7 @@ def deadline(
     for identity-provider-based login (see `deadline auth login`).
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html)
+    Learn more about [Deadline Cloud](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html)
     """
     if redirect_output:
         # Set both stdout and stderr to write to the specified file, writing in line buffering mode

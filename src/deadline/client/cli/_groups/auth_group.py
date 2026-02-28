@@ -40,7 +40,7 @@ def cli_auth():
     monitor, log out, or check the status of your current AWS credentials.
 
     \b
-    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html)
+    Learn more about [Deadline Cloud monitor](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html)
     """
 
 
