@@ -28,7 +28,7 @@ Click's terminal formatter treats docstrings as plain text with paragraph reflow
 
 This dual rendering drives most of the style rules below. The goal is text that looks good in **both** contexts, prioritizing the terminal since that's where most users encounter it.
 
-> **Future improvement:** Click supports custom help formatters. A formatter that strips or transforms markdown for terminal display would let us use richer formatting in docstrings while keeping terminal output clean. This is not implemented today.
+The `ContextTrackingCommand` and `ContextTrackingGroup` classes in `_main.py` override `format_help_text` to strip markdown at display time using `_markdown_strip.py`. This means you can write markdown in docstrings and get clean output in both contexts.
 
 ### Docstring Structure
 
@@ -89,37 +89,35 @@ Documentation: https://docs.aws.amazon.com/deadline-cloud/...
 
 Leaf commands that are simple (e.g., `get`, `list`) **MAY** omit the URL if their parent group already has one pointing to the same page.
 
-### No Markdown Reference Links
+### Markdown Links
 
-You **MUST NOT** use click's markdown-style reference links. Click dumps them as raw text at the bottom of the help output, and terminal line wrapping breaks the URLs mid-string, producing unreadable noise like:
+Both inline and reference-style markdown links are supported. The custom `format_help_text` override in `_main.py` strips markdown for terminal display while preserving it for the MkDocs docs site.
 
+**Inline links** — best for "learn more" lines at the end of docstrings:
+
+```python
+"""
+\b
+Learn more about [job bundles](https://docs.aws.amazon.com/...).
+"""
 ```
-[Deadline Cloud jobs]: https://docs.aws.amazon.com/deadline-
-cloud/latest/userguide/deadline-cloud-jobs.html [queue]:
-https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
-```
 
-These *would* render as proper clickable links on the MkDocs docs site, but the terminal experience is far more common and must take priority.
+Terminal: `Learn more about job bundles (https://docs.aws.amazon.com/...)`
+Docs site: Learn more about [job bundles](https://docs.aws.amazon.com/...)
 
-Bad:
+**Reference links** — best for linking terms in body text without cluttering the sentence with URLs:
+
 ```python
 """
 Commands to work with [Deadline Cloud jobs] in a [queue].
 
-[Deadline Cloud jobs]: https://docs.aws.amazon.com/...
-[queue]: https://docs.aws.amazon.com/...
+[Deadline Cloud jobs]: https://docs.aws.amazon.com/.../deadline-cloud-jobs.html
+[queue]: https://docs.aws.amazon.com/.../queues.html
 """
 ```
 
-Good:
-```python
-"""
-Commands to work with Deadline Cloud jobs in a queue.
-
-\b
-Documentation: https://docs.aws.amazon.com/...
-"""
-```
+Terminal: `Commands to work with Deadline Cloud jobs in a queue.`
+Docs site: Terms become clickable links
 
 ### Backtick Usage
 
@@ -197,8 +195,9 @@ These prefixes appear in both the command's own help and in the parent group's c
 
 | Element | Rule |
 |---|---|
-| Reference links `[text]: url` | Never use |
-| Doc URL | `\b` + `Documentation: <url>` at end |
+| Inline links `[text](url)` | Use for "learn more" lines at end of docstring |
+| Reference links `[text]: url` | Use for linking terms in body text |
+| Doc URL | `\b` + `Learn more about [topic](url)` at end |
 | Backticks | CLI commands, options, literals only |
 | Product names | Plain text, no backticks |
 | Lists in docstrings | Precede with `\b` |
