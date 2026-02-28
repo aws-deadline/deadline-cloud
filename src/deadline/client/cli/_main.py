@@ -16,6 +16,7 @@ from .. import version
 from ..api._session import session_context
 from ..config import get_setting, get_setting_default
 from ._common import _PROMPT_WHEN_COMPLETE
+from ._markdown_strip import strip_markdown_for_terminal
 
 logger = getLogger(__name__)
 
@@ -47,8 +48,18 @@ def _get_default_log_level() -> str:
 
 class ContextTrackingCommand(click.Command):
     """
-    Adds the current CLI command name to User Agent headers in boto requests
+    Adds the current CLI command name to User Agent headers in boto requests.
+    Strips markdown from help text for clean terminal rendering.
     """
+
+    def format_help_text(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        original_help = self.help
+        if self.help:
+            self.help = strip_markdown_for_terminal(self.help)
+        try:
+            super().format_help_text(ctx, formatter)
+        finally:
+            self.help = original_help
 
     def invoke(self, ctx: click.Context):
         # This is a global variable used to modify User Agent header in the default boto config
@@ -58,7 +69,8 @@ class ContextTrackingCommand(click.Command):
 
 class ContextTrackingGroup(click.Group):
     """
-    Adds the current CLI command name to User Agent headers in boto requests
+    Adds the current CLI command name to User Agent headers in boto requests.
+    Strips markdown from help text for clean terminal rendering.
     """
 
     # Special value documented in Click to make this group class the default
@@ -68,6 +80,15 @@ class ContextTrackingGroup(click.Group):
     # Special value documented in Click to make this command class the default
     # See https://click.palletsprojects.com/en/stable/api/#click.Group.command_class
     command_class = ContextTrackingCommand
+
+    def format_help_text(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        original_help = self.help
+        if self.help:
+            self.help = strip_markdown_for_terminal(self.help)
+        try:
+            super().format_help_text(ctx, formatter)
+        finally:
+            self.help = original_help
 
 
 @click.group(cls=ContextTrackingGroup, context_settings=CONTEXT_SETTINGS)
