@@ -48,7 +48,7 @@ def cli_queue():
     definitions, or sync job output for all jobs in a queue.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html)
     """
 
 
@@ -111,7 +111,7 @@ def queue_export_credentials(mode, output_format, **args):
     job attachments S3 bucket and any other resources authorized by the role.
 
     \b
-    Documentation: https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
+    [Documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html)
     """
     start_time = time.time()
     is_success = True
@@ -198,7 +198,7 @@ def queue_paramdefs(**args):
     queue environments configured for the queue.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/create-queue-environment.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/create-queue-environment.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -332,7 +332,7 @@ def sync_output(
     download from the same machine.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/auto-downloads.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/auto-downloads.html)
     """
     api._session.session_context["cli-command-name"] = "deadline.queue.sync-output"
 

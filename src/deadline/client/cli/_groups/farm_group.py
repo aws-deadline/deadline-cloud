@@ -26,7 +26,7 @@ def cli_farm():
     List available Deadline Cloud farms or get details of a specific farm.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html)
     """
 
 

@@ -113,7 +113,7 @@ def cli_job():
     cancel, or requeue failed tasks.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
 
 
@@ -129,7 +129,7 @@ def job_list(page_size, item_offset, **args):
     Lists the Deadline Cloud jobs in the queue.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -199,7 +199,7 @@ def job_get(search_term: Optional[str], **args):
     If no arguments provided, shows the default job from config.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Check if search_term is actually a job ID
     if search_term and re.match(r"^job-[0-9a-f]{32}$", search_term):
@@ -246,7 +246,7 @@ def job_cancel(mark_as: str, yes: bool, **args):
     alternative status such as SUSPENDED, SUCCEEDED or FAILED.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -344,7 +344,7 @@ def job_requeue_tasks(run_status: Optional[list[str]], **args):
     Use the --run-status option to requeue tasks of different status.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -953,7 +953,7 @@ def job_download_output(step_id, task_id, output, **args):
     attachments.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
@@ -1017,7 +1017,7 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
         5 - Job is not compatible
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1229,7 +1229,7 @@ def job_logs(
     next page of log output.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/view-logs.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/view-logs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)

@@ -26,7 +26,7 @@ def cli_fleet():
     List available Deadline Cloud fleets or get details of a specific fleet.
 
     \b
-    Documentation: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    [Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
     """
 
 
