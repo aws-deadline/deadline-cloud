@@ -1,4 +1,4 @@
-## 0.54.1 (2026-02-24)
+## 0.54.1 (2026-02-27)
 
 ### DEPRECATIONS
 
@@ -19,6 +19,7 @@
 * Downloaded files with duplicate names failing on Windows when the path exceeds the maximum length (#964) ([`e2ed151`](https://github.com/aws-deadline/deadline-cloud/commit/e2ed15104d7cb57a8244d34bbcb75cb2e0916e42))
 * "Load a different job bundle" button truncated and poorly positioned in the GUI submitter (#980) ([`9f77ba2`](https://github.com/aws-deadline/deadline-cloud/commit/9f77ba29de66e68249b1ea704372e9c25ec0f587)) (#945) ([`3f65662`](https://github.com/aws-deadline/deadline-cloud/commit/3f65662b070535c72557cfcb22bf0afe749152e5))
 * About dialog displays human-readable key names instead of raw YAML keys (#950) ([`d07d075`](https://github.com/aws-deadline/deadline-cloud/commit/d07d075f08df54fdf6b05f0b545a30f2efb03a25))
+* STS and S3 endpoint URL overrides are now respected (#1005) ([`c7df111`](https://github.com/aws-deadline/deadline-cloud/commit/c7df1112dab7969eda65c29c71baac3d93ab4c23))
 
 ### Experimental
 

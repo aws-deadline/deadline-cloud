@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from typing import Dict, List
 from unittest.mock import ANY, MagicMock, call, patch
 
@@ -489,6 +490,58 @@ def test_handle_web_url_require_url_or_install_option(fresh_deadline_config):
 
     assert "At least one of a URL, --install, or --uninstall must be provided." in result.output
     assert result.exit_code != 0
+
+
+def test_cli_handle_web_url_install_frozen_exe(fresh_deadline_config, monkeypatch):
+    """
+    When running as a PyInstaller frozen binary, sys.argv[0] is already
+    "deadline.exe". with_suffix(".exe") should be a no-op.
+    """
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+
+    exe_path = r"C:\Program Files\DeadlineClient\deadline.exe"
+
+    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [exe_path]), patch(
+        "deadline.client.cli._deadline_web_url.Path.resolve",
+        return_value=Path(exe_path),
+    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+        winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+        winreg_mock.REG_SZ = "REG_SZ"
+        winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+        # with_suffix(".exe") is a no-op when already .exe
+        isfile_mock.assert_called_once_with(exe_path)
+
+
+def test_cli_handle_web_url_install_pip_console_script(fresh_deadline_config, monkeypatch):
+    """
+    When running from a pip/uv-installed console_script, sys.argv[0] is
+    extensionless (e.g. "deadline"). The handler should append .exe.
+    """
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+
+    script_path = r"C:\Scripts\deadline"
+
+    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [script_path]), patch(
+        "deadline.client.cli._deadline_web_url.Path.resolve",
+        return_value=Path(script_path),
+    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+        winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+        winreg_mock.REG_SZ = "REG_SZ"
+        winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+        # Should append .exe to the extensionless console_script path
+        isfile_mock.assert_called_once_with(script_path + ".exe")
 
 
 @pytest.mark.parametrize("install_command", ["install", "uninstall"])
