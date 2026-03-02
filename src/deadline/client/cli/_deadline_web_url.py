@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import urllib.parse
+from pathlib import Path
 from logging import getLogger
 from typing import Any, Dict, List
 
@@ -124,13 +125,14 @@ def install_deadline_web_url_handler(all_users: bool) -> None:
     if sys.platform == "win32":
         import winreg
 
-        # Get the CLI program path, either an .exe or a .py with the Python interpreter
-        deadline_cli_program = os.path.abspath(sys.argv[0])
-        if deadline_cli_program.endswith(".py"):
-            deadline_cli_prefix = f'"{sys.executable}" "{deadline_cli_program}"'
-        else:
-            deadline_cli_program = deadline_cli_program + ".exe"
-            deadline_cli_prefix = f'"{deadline_cli_program}"'
+        # Get the CLI program path as a .exe. Handles both PyInstaller frozen
+        # binaries (sys.argv[0] is already "deadline.exe") and pip/uv console_scripts
+        # (sys.argv[0] is extensionless "deadline" but the actual file is .exe).
+        # with_suffix(".exe") is idempotent so both cases resolve correctly.
+        # The .exe path is required because the Windows registry shell handler
+        # won't resolve via PATHEXT like the shell does.
+        deadline_cli_program = str(Path(sys.argv[0]).resolve().with_suffix(".exe"))
+        deadline_cli_prefix = f'"{deadline_cli_program}"'
 
         if not os.path.isfile(deadline_cli_program):
             raise DeadlineOperationError(
