@@ -76,6 +76,7 @@ class _PrivateClass:  # Private
 ```
 
 ### Commit Messages
+Always sign commits with `git commit -s`.
 Use [conventional commits](https://www.conventionalcommits.org/):
 - `feat:` - New features
 - `fix:` - Bug fixes
