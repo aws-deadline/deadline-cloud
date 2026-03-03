@@ -20,7 +20,7 @@ jobs:
 
       - name: Install Hatch
         run: |
-          pip install --upgrade hatch
+          pip install --upgrade hatch "virtualenv<21"
 
       - name: Check for API breaking changes (griffe)
         run: |

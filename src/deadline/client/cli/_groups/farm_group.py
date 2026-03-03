@@ -10,7 +10,12 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from .._main import deadline as main
 
 
@@ -18,9 +23,10 @@ from .._main import deadline as main
 @_handle_error
 def cli_farm():
     """
-    Commands to work with [Deadline Cloud farms].
+    List available Deadline Cloud farms or get details of a specific farm.
 
-    [Deadline Cloud farms]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
+    \b
+    Learn more about [farms](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html)
     """
 
 
@@ -29,12 +35,9 @@ def cli_farm():
 @_handle_error
 def farm_list(**args):
     """
-    Lists the available [Deadline Cloud farms]. If the AWS profile is created
-    from a [Deadline Cloud monitor] login, it will list the farms you have permission to access,
-    otherwise it will list all farms.
-
-    [Deadline Cloud farms]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    Lists the available Deadline Cloud farms. If the AWS profile is created
+    from a Deadline Cloud monitor login, it will list only the farms you have
+    permission to access.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
@@ -42,7 +45,10 @@ def farm_list(**args):
     try:
         response = api.list_farms(config=config)
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Farms from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(exc, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Farms from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     # Select which fields to print and in which order
     structured_farm_list = [
@@ -58,9 +64,7 @@ def farm_list(**args):
 @_handle_error
 def farm_get(**args):
     """
-    Get the details of a [Deadline Cloud farm].
-
-    [Deadline Cloud farm]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
+    Get the details of a Deadline Cloud farm.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -68,7 +72,13 @@ def farm_get(**args):
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
 
     deadline = api.get_boto3_client("deadline", config=config)
-    response = deadline.get_farm(farmId=farm_id)
+    try:
+        response = deadline.get_farm(farmId=farm_id)
+    except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(exc, farm_id=farm_id, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Farm from Deadline:\n{exc}{suggestion}"
+        ) from exc
     response.pop("ResponseMetadata", None)
 
     click.echo(_cli_object_repr(response))

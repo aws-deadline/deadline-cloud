@@ -45,7 +45,7 @@ from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
-from ._about_dialog import _AboutDialog
+from ._help_dialog import _HelpDialog
 
 logger = logging.getLogger(__name__)
 
@@ -233,12 +233,16 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.settings_button = QPushButton(tr("Settings..."))
         self.settings_button.clicked.connect(self.on_settings_button_clicked)
         self.button_box.addButton(self.settings_button, QDialogButtonBox.ResetRole)
-        self.about_button = QPushButton(tr("About") + "...")
-        self.about_button.clicked.connect(self._on_about_button_clicked)
-        self.button_box.addButton(self.about_button, QDialogButtonBox.HelpRole)
+        self.help_button = QPushButton(tr("Help"))
+        self.help_button.clicked.connect(self._on_help_button_clicked)
+        self.button_box.addButton(self.help_button, QDialogButtonBox.HelpRole)
         self.submit_button = QPushButton(tr("Submit"))
         self.submit_button.clicked.connect(self.on_submit)
         self.button_box.addButton(self.submit_button, QDialogButtonBox.AcceptRole)
+        if hasattr(initial_job_settings, "browse_enabled") and initial_job_settings.browse_enabled:
+            self.load_bundle_button = QPushButton(tr("Load Bundle"))
+            self.load_bundle_button.clicked.connect(self._on_load_bundle)
+            self.button_box.addButton(self.load_bundle_button, QDialogButtonBox.AcceptRole)
         self.export_bundle_button = QPushButton(tr("Export bundle"))
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
@@ -403,18 +407,23 @@ class SubmitJobToDeadlineDialog(QDialog):
         if DeadlineConfigDialog.configure_settings(parent=self):
             self.refresh_deadline_settings()
 
-    def _on_about_button_clicked(self):
-        """Show the About dialog with submitter information."""
+    def _on_help_button_clicked(self):
+        """Show the Help dialog with submitter information."""
         try:
-            dialog = _AboutDialog(self.submitter_info, parent=self)
+            dialog = _HelpDialog(self.submitter_info, parent=self)
             dialog.exec_()
         except Exception as e:
-            logger.error(f"Failed to create AboutDialog: {e}")
+            logger.error(f"Failed to create HelpDialog: {e}")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to display About dialog: {str(e)}",
+                f"Failed to display Help dialog: {str(e)}",
             )
+
+    def _on_load_bundle(self):
+        """Delegates to the job_settings widget's on_load_bundle method."""
+        if hasattr(self.job_settings, "on_load_bundle"):
+            self.job_settings.on_load_bundle()
 
     def on_export_bundle(self):
         """

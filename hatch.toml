@@ -23,6 +23,7 @@ pre-install-commands = [
 
 [envs.integ.scripts]
 test = "pytest --xfail-tb --no-cov -vvv --numprocesses=1 {args:test/integ}"
+proxy-test = "sudo -E env PATH=$PATH bash scripts/run_proxy_integ_tests.sh {args:test/integ/cli/}"
 
 [envs.installer]
 pre-install-commands = ["pip install -r requirements-installer.txt"]

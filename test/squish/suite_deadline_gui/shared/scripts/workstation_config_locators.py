@@ -9,7 +9,7 @@ deadline_config_dialog = {
 }
 # OK button
 deadlinedialog_ok_button = {
-    "text": "OK",
+    "text": "Ok",
     "type": "QPushButton",
     "unnamed": 1,
     "visible": 1,

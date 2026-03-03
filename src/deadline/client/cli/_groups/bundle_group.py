@@ -35,6 +35,7 @@ from .._common import (
     _handle_error,
     _ProgressBarCallbackManager,
     _parse_multi_format_parameters,
+    _suggest_resources_on_client_error,
 )
 from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
@@ -49,10 +50,13 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_bundle():
     """
-    Commands to work with Open Job Description [job bundles]. Use these commands to
-    submit jobs to run on a Deadline Cloud queue.
+    Submit Open Job Description job bundles to a Deadline Cloud queue.
 
-    [job bundles]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+    Use `submit` for headless/scripted submission, or `gui-submit` to
+    review and edit parameters in a GUI before submitting.
+
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
 
@@ -243,12 +247,12 @@ def bundle_submit(
     **args,
 ):
     """
-    Submits an Open Job Description [job bundle] to a
-    [Deadline Cloud queue]. You can provide options
-    to set parameter values, the job name, priority, and more.
+    Submits an Open Job Description job bundle to a Deadline Cloud queue.
+    You can provide options to set parameter values, the job name, priority,
+    and more.
 
-    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
-    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
     # Apply the CLI args to the config
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -335,8 +339,14 @@ def bundle_submit(
             click.echo("Canceled waiting for final status of CreateJob.")
             sys.exit(1)
     except ClientError as exc:
+        suggestion = _suggest_resources_on_client_error(
+            exc,
+            farm_id=config_file.get_setting("defaults.farm_id", config=config),
+            queue_id=config_file.get_setting("defaults.queue_id", config=config),
+            config=config,
+        )
         raise DeadlineOperationError(
-            f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}"
+            f"Failed to submit the job bundle to AWS Deadline Cloud:\n{exc}{suggestion}"
         ) from exc
     except MisconfiguredInputsError as exc:
         click.echo(str(exc))
@@ -421,12 +431,12 @@ def bundle_gui_submit(
     **args,
 ):
     """
-    Opens a GUI to submit an Open Job Description [job bundle] to a
-    [Deadline Cloud queue]. You can provide options
-    to set the initial parameter values shown in the GUI.
+    Opens a GUI to submit an Open Job Description job bundle to a Deadline
+    Cloud queue. You can provide options to set the initial parameter values
+    shown in the GUI.
 
-    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
-    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
     if submitter_name:

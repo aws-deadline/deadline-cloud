@@ -49,9 +49,11 @@ from .click_logger import ClickLogger
 @_handle_error
 def cli_manifest():
     """
-    BETA - Commands to work with [Deadline Cloud job attachments].
+    BETA - Create, compare, download, and upload job attachment manifests
+    that track the files associated with a job.
 
-    [Deadline Cloud job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -112,9 +114,11 @@ def manifest_snapshot(
     **args,
 ):
     """
-    BETA - Generates a snapshot of files in a directory root as a [job attachments] Manifest.
+    BETA - Generates a snapshot of files in a directory root as a job
+    attachment manifest.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(root):
@@ -205,9 +209,10 @@ def manifest_diff(
 ):
     """
     BETA - Compute the file difference of a root directory against an existing
-    [job attachments] manifest for new, modified or deleted files.
+    job attachment manifest for new, modified or deleted files.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isfile(manifest):
@@ -273,9 +278,11 @@ def manifest_download(
     **args,
 ):
     """
-    BETA - Download [job attachments] Manifests for a Job, or Step including dependencies.
+    BETA - Download job attachment manifests for a job, or step including
+    dependencies.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -326,11 +333,12 @@ def manifest_upload(
     **args,
 ):
     """
-    BETA - Uploads a [job attachments] manifest file to a Content Addressable Storage's Manifest store.
-    If calling via --s3-cas-path, it is recommended to use with --profile for a specific AWS profile
-    with CAS S3 bucket access. Check exit code for success or failure.
+    BETA - Upload a job attachment manifest file to a Content Addressable
+    Storage manifest store. When using --s3-cas-uri, it is recommended to
+    also use --profile to specify an AWS profile with S3 bucket access.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     # Input checking.
     if not manifest_file or not os.path.isfile(manifest_file):

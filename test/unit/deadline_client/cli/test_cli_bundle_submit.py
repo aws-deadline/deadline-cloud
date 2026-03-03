@@ -119,7 +119,7 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config, temp_job_bundle_d
             ],
         )
 
-    session_mock.assert_called_with(profile_name="NonDefaultProfileName")
+    session_mock.assert_called_with(profile_name="NonDefaultProfileName", botocore_session=ANY)
     session_mock().client().create_job.assert_called_once_with(
         farmId=MOCK_FARM_ID,
         queueId=MOCK_QUEUE_ID,

@@ -16,6 +16,7 @@ from .. import version
 from ..api._session import session_context
 from ..config import get_setting, get_setting_default
 from ._common import _PROMPT_WHEN_COMPLETE
+from ._markdown_strip import strip_markdown_for_terminal
 
 logger = getLogger(__name__)
 
@@ -47,8 +48,18 @@ def _get_default_log_level() -> str:
 
 class ContextTrackingCommand(click.Command):
     """
-    Adds the current CLI command name to User Agent headers in boto requests
+    Adds the current CLI command name to User Agent headers in boto requests.
+    Strips markdown from help text for clean terminal rendering.
     """
+
+    def format_help_text(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        original_help = self.help
+        if self.help:
+            self.help = strip_markdown_for_terminal(self.help)
+        try:
+            super().format_help_text(ctx, formatter)
+        finally:
+            self.help = original_help
 
     def invoke(self, ctx: click.Context):
         # This is a global variable used to modify User Agent header in the default boto config
@@ -58,7 +69,8 @@ class ContextTrackingCommand(click.Command):
 
 class ContextTrackingGroup(click.Group):
     """
-    Adds the current CLI command name to User Agent headers in boto requests
+    Adds the current CLI command name to User Agent headers in boto requests.
+    Strips markdown from help text for clean terminal rendering.
     """
 
     # Special value documented in Click to make this group class the default
@@ -68,6 +80,15 @@ class ContextTrackingGroup(click.Group):
     # Special value documented in Click to make this command class the default
     # See https://click.palletsprojects.com/en/stable/api/#click.Group.command_class
     command_class = ContextTrackingCommand
+
+    def format_help_text(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        original_help = self.help
+        if self.help:
+            self.help = strip_markdown_for_terminal(self.help)
+        try:
+            super().format_help_text(ctx, formatter)
+        finally:
+            self.help = original_help
 
 
 @click.group(cls=ContextTrackingGroup, context_settings=CONTEXT_SETTINGS)
@@ -94,21 +115,22 @@ def deadline(
     ctx: click.Context, log_level: Optional[str], redirect_output: str, redirect_mode: str
 ):
     """
-    The `deadline` command provides functionality to interact with [AWS Deadline Cloud].
+    Interact with AWS Deadline Cloud to submit, monitor, and manage render jobs.
 
-    For example, you can submit jobs to a queue with `deadline bundle submit` or
-    `deadline bundle gui-submit`, monitor the status of a job with `deadline job get` and
-    `deadline job logs`, wait for job completion with `deadline job wait`, then retrieve
-    the output with `deadline job download-output`. You can also use
-    `deadline queue sync-output` as an alternative to downloading individual jobs,
-    to retrieve all the output of jobs in a queue over time.
+    Common workflows:
 
-    The command works with any local AWS credentials you have configured, or together with
-    [Deadline Cloud monitor] to use AWS credentials from logging into the identity provider
-    configured for your farm.
+    \b
+      Submit a job:       deadline bundle submit <path>
+      Monitor a job:      deadline job get [search] | deadline job logs
+      Wait for a job:     deadline job wait
+      Download output:    deadline job download-output
+      Sync all output:    deadline queue sync-output
 
-    [AWS Deadline Cloud]: https://aws.amazon.com/deadline-cloud/
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    Works with any configured AWS credentials, or with Deadline Cloud monitor
+    for identity-provider-based login (see `deadline auth login`).
+
+    \b
+    Learn more about [Deadline Cloud](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html)
     """
     if redirect_output:
         # Set both stdout and stderr to write to the specified file, writing in line buffering mode

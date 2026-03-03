@@ -11,15 +11,10 @@ from logging import getLogger
 from typing import Any, Optional
 
 from qtpy.QtCore import Signal  # type: ignore
-from .._utils import tr
 from qtpy.QtWidgets import (  # type: ignore
     QVBoxLayout,
-    QHBoxLayout,
     QWidget,
     QFileDialog,
-    QPushButton,
-    QSpacerItem,
-    QSizePolicy,
     QMessageBox,
 )
 
@@ -61,14 +56,6 @@ class JobBundleSettingsWidget(QWidget):
         self.input_job_bundle_dir = initial_settings.input_job_bundle_dir
 
         layout = QVBoxLayout(self)
-
-        if initial_settings.browse_enabled:
-            btnBox = QHBoxLayout()
-            self.load_bundle_button = QPushButton(tr("Load a different job bundle"))
-            self.load_bundle_button.clicked.connect(self.on_load_bundle)
-            btnBox.addWidget(self.load_bundle_button)
-            btnBox.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
-            layout.addLayout(btnBox)
 
         layout.addLayout(self.param_layout)
         self.refresh_ui(initial_settings)

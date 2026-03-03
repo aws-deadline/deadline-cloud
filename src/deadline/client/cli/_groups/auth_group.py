@@ -36,9 +36,11 @@ def _cli_on_pending_authorization(**kwargs):
 @_handle_error
 def cli_auth():
     """
-    Commands to handle authentication, such as logging in to [Deadline Cloud monitor].
+    Manage authentication for Deadline Cloud. Log in via Deadline Cloud
+    monitor, log out, or check the status of your current AWS credentials.
 
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    \b
+    Learn more about [Deadline Cloud monitor](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html)
     """
 
 
@@ -46,11 +48,8 @@ def cli_auth():
 @_handle_error
 def auth_login():
     """
-    Opens [Deadline Cloud monitor] to log in to your farm. Supports
-    profiles created by Deadline Cloud monitor.
-
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
-
+    Opens Deadline Cloud monitor to log in to your farm. Supports profiles
+    created by Deadline Cloud monitor.
     """
     click.echo(
         f"Logging into AWS Profile {config_file.get_setting('defaults.aws_profile_name')!r} for AWS Deadline Cloud"
@@ -91,11 +90,7 @@ def auth_logout():
 @_handle_error
 def auth_status(output, **args):
     """Gets the status of the selected AWS profile, including its name, whether it was created by
-    [Deadline Cloud monitor], and whether
-    [Deadline Cloud APIs] are accessible.
-
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
-    [Deadline Cloud APIs]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html
+    Deadline Cloud monitor, and whether Deadline Cloud APIs are accessible.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)

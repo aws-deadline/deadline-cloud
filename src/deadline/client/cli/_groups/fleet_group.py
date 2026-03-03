@@ -10,7 +10,12 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
-from .._common import _apply_cli_options_to_config, _cli_object_repr, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _cli_object_repr,
+    _handle_error,
+    _suggest_resources_on_client_error,
+)
 from .._main import deadline as main
 
 
@@ -18,9 +23,10 @@ from .._main import deadline as main
 @_handle_error
 def cli_fleet():
     """
-    Commands to work with [Deadline Cloud fleets].
+    List available Deadline Cloud fleets or get details of a specific fleet.
 
-    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    \b
+    Learn more about [fleets and workers](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
     """
 
 
@@ -30,12 +36,9 @@ def cli_fleet():
 @_handle_error
 def fleet_list(**args):
     """
-    Lists the available [Deadline Cloud fleets] in the farm. If the AWS profile is created
-    from a [Deadline Cloud monitor] login, it will list the fleets you have permission to access,
-    otherwise it will list all fleets.
-
-    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    Lists the available Deadline Cloud fleets in the farm. If the AWS profile
+    is created from a Deadline Cloud monitor login, it will list only the
+    fleets you have permission to access.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -45,7 +48,10 @@ def fleet_list(**args):
     try:
         response = api.list_fleets(farmId=farm_id, config=config)
     except ClientError as exc:
-        raise DeadlineOperationError(f"Failed to get Fleets from Deadline:\n{exc}") from exc
+        suggestion = _suggest_resources_on_client_error(exc, farm_id=farm_id, config=config)
+        raise DeadlineOperationError(
+            f"Failed to get Fleets from Deadline:\n{exc}{suggestion}"
+        ) from exc
 
     # Select which fields to print and in which order
     structured_fleet_list = [
@@ -66,10 +72,8 @@ def fleet_list(**args):
 @_handle_error
 def fleet_get(fleet_id, queue_id, **args):
     """
-    Get the details of a [Deadline Cloud fleet] in the farm. If no fleet id is provided, it gets
-    the details of all the fleets associated with the queue.
-
-    [Deadline Cloud fleet]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    Get the details of a Deadline Cloud fleet in the farm. If no fleet ID is
+    provided, it gets the details of all fleets associated with the queue.
     """
     if fleet_id and queue_id:
         raise DeadlineOperationError(
@@ -90,12 +94,28 @@ def fleet_get(fleet_id, queue_id, **args):
     deadline = api.get_boto3_client("deadline", config=config)
 
     if fleet_id:
-        response = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
+        try:
+            response = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
+        except ClientError as exc:
+            suggestion = _suggest_resources_on_client_error(
+                exc, farm_id=farm_id, fleet_id=fleet_id, config=config
+            )
+            raise DeadlineOperationError(
+                f"Failed to get Fleet from Deadline:\n{exc}{suggestion}"
+            ) from exc
         response.pop("ResponseMetadata", None)
 
         click.echo(_cli_object_repr(response))
     else:
-        response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+        try:
+            response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+        except ClientError as exc:
+            suggestion = _suggest_resources_on_client_error(
+                exc, farm_id=farm_id, queue_id=queue_id, config=config
+            )
+            raise DeadlineOperationError(
+                f"Failed to get Queue from Deadline:\n{exc}{suggestion}"
+            ) from exc
         queue_name = response["displayName"]
 
         response = api._list_apis._call_paginated_deadline_list_api(
