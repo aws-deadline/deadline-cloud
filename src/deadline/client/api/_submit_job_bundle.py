@@ -386,6 +386,7 @@ def create_job_from_job_bundle(
     target_task_run_status: Optional[str] = None,
     require_paths_exist: bool = False,
     submitter_name: Optional[str] = None,
+    submitter_version: Optional[str] = None,
     known_asset_paths: Collection[str] = [],
     debug_snapshot_dir: Optional[str] = None,
     from_gui: bool = False,
@@ -477,6 +478,7 @@ def create_job_from_job_bundle(
         submitter_name = "Custom"
 
     session_context["submitter-name"] = submitter_name
+    session_context["submitter-version"] = submitter_version
 
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(job_bundle_dir)
