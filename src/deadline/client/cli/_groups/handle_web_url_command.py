@@ -124,6 +124,10 @@ def cli_handle_web_url(
             config = config_file.read_config()
             config_file.set_setting("defaults.aws_profile_name", aws_profile_name, config=config)
 
+            # handle-web-url is always launched non-interactively by the OS protocol handler
+            # (e.g. Deadline Cloud Monitor), so always auto-accept to avoid hanging on prompts.
+            config_file.set_setting("settings.auto_accept", "true", config=config)
+
             _download_job_output(config, farm_id, queue_id, job_id, step_id, task_id)
         else:
             raise DeadlineOperationError(

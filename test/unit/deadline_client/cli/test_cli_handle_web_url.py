@@ -378,6 +378,58 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
         )
 
 
+def test_cli_handle_web_url_download_output_auto_accept(fresh_deadline_config):
+    """
+    Confirm that handle-web-url always auto-accepts prompts regardless of the user's
+    config setting, since it is always launched non-interactively by the OS protocol
+    handler (e.g. Deadline Cloud Monitor).
+    """
+    # Start with auto_accept disabled in config
+    set_setting("settings.auto_accept", "false")
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as MockOutputDownloader, patch.object(api, "get_queue_user_boto3_session"):
+        mock_download = MagicMock()
+        mock_download.return_value = DownloadSummaryStatistics(
+            total_time=12,
+            processed_files=3,
+            processed_bytes=1024,
+        )
+        MockOutputDownloader.return_value.download_job_output = mock_download
+        mock_host_path_format_name = PathFormat.get_host_path_format_string()
+
+        boto3_client_mock().get_job.return_value = {
+            "name": "Mock Job",
+            "attachments": {
+                "manifests": [
+                    {
+                        "rootPath": "/root/path",
+                        "rootPathFormat": PathFormat(mock_host_path_format_name),
+                        "outputRelativeDirectories": ["."],
+                    }
+                ],
+            },
+        }
+        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+
+        # No auto-accept param in URL — the CLI should auto-accept unconditionally
+        web_url = (
+            f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}"
+            f"&job-id={MOCK_JOB_ID}"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["handle-web-url", web_url])
+
+        assert result.exit_code == 0, result.output
+        # download should have proceeded without prompts despite auto_accept=false in config
+        mock_download.assert_called_once_with(
+            file_conflict_resolution=FileConflictResolution.CREATE_COPY,
+            on_downloading_files=ANY,
+        )
+
+
 def test_cli_handle_web_url_unsupported_protocol_scheme(fresh_deadline_config):
     """
     Tests that an error is returned when an unsupported url is passed to the handle-web-url command
