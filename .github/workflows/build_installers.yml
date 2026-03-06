@@ -1,4 +1,4 @@
-name: "Deadline Cloud Client Build Installer"
+name: "Build Installers"
 
 on:
   workflow_dispatch:
