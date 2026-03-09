@@ -32,6 +32,7 @@ from .submit_job_progress_dialog import SubmitJobProgressDialog
 from ..dataclasses import HostRequirements
 from ...dataclasses import SubmitterInfo
 from ... import api
+from ...api._session import session_context as _session_context
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
 from ...config import get_setting, set_setting, config_file
@@ -139,6 +140,9 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.submitter_info = submitter_info or SubmitterInfo(
             submitter_name=self.job_settings_type().submitter_name
         )
+        _session_context["submitter-name"] = self.submitter_info.submitter_name
+        _session_context["submitter-version"] = self.submitter_info.submitter_package_version
+
         self.on_create_job_bundle_callback = on_create_job_bundle_callback
         self.job_id = None
         self.job_history_bundle_dir: Optional[str] = None
