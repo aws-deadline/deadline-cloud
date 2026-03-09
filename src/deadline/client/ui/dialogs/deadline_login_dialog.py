@@ -13,12 +13,12 @@ Example code:
 __all__ = ["DeadlineLoginDialog"]
 
 import html
-import threading
 from configparser import ConfigParser
 from typing import Optional
 
-from qtpy.QtCore import Signal
+from qtpy.QtCore import Qt, Signal
 from .._utils import tr
+from ..controllers import AsyncTaskRunner
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMessageBox,
@@ -86,7 +86,11 @@ class DeadlineLoginDialog(QMessageBox):
         self.close_on_success = close_on_success
         self.config = config
         self.canceled = False
-        self.__login_thread: Optional[threading.Thread] = None
+
+        # Use AsyncTaskRunner for background login
+        self._runner = AsyncTaskRunner(self)
+        self._runner.task_error.connect(self._handle_task_error, Qt.QueuedConnection)
+
         self.login_thread_exception.connect(self.handle_login_thread_exception)
         self.login_thread_message.connect(self.handle_login_thread_message)
         self.login_thread_succeeded.connect(self.handle_login_thread_succeeded)
@@ -98,45 +102,49 @@ class DeadlineLoginDialog(QMessageBox):
 
         self._start_login()
 
-    def _login_background_thread(self):
+    def _handle_task_error(self, operation_name: str, error: BaseException) -> None:
+        """Handle errors from the async runner."""
+        self.login_thread_exception.emit(error)
+
+    def _login_background_task(self) -> str:
         """
-        This function gets started in a background thread to run the login handshake. It
-        polls the `self.canceled` flag for cancellation, and fills in details about the
-        login when they become available.
+        This function runs in a background thread to perform the login handshake.
+        It polls the `self.canceled` flag for cancellation.
         """
-        try:
 
-            def on_pending_authorization(**kwargs):
-                if (
-                    kwargs["credentials_source"]
-                    == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
-                ):
-                    self.login_thread_message.emit(
-                        tr("Opening Deadline Cloud monitor. Please log in before returning here.")
-                    )
+        def on_pending_authorization(**kwargs):
+            if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
+                self.login_thread_message.emit(
+                    tr("Opening Deadline Cloud monitor. Please log in before returning here.")
+                )
 
-            def on_cancellation_check():
-                return self.canceled
+        def on_cancellation_check():
+            return self.canceled
 
-            success_message = api.login(
-                on_pending_authorization,
-                on_cancellation_check,
-                config=self.config,
-            )
-            self.login_thread_succeeded.emit(success_message)
-        except BaseException as e:
-            # Send the exception to the dialog
-            self.login_thread_exception.emit(e)
+        return api.login(
+            on_pending_authorization,
+            on_cancellation_check,
+            config=self.config,
+        )
+
+    def _on_login_success(self, success_message: str) -> None:
+        """Handle successful login."""
+        self.login_thread_succeeded.emit(success_message)
+
+    def _on_login_error(self, error: BaseException) -> None:
+        """Handle login error."""
+        self.login_thread_exception.emit(error)
 
     def _start_login(self) -> None:
         """
-        Starts the background login thread.
+        Starts the background login task.
         """
-
-        self.__login_thread = threading.Thread(
-            target=self._login_background_thread, name="AWS Deadline Cloud login thread"
+        self._runner.run(
+            operation_key="login",
+            fn=self._login_background_task,
+            on_success=self._on_login_success,
+            on_error=self._on_login_error,
         )
-        self.__login_thread.start()
 
     def handle_login_thread_exception(self, e: BaseException) -> None:
         """
@@ -177,11 +185,12 @@ class DeadlineLoginDialog(QMessageBox):
 
     def on_button_clicked(self, button):
         if self.standardButton(button) == QMessageBox.Cancel:
-            # Tell the login thread to cancel, then wait for it.
+            # Tell the login task to cancel
             self.canceled = True
-            if self.__login_thread:
-                while self.__login_thread.is_alive():
-                    QApplication.instance().processEvents()  # type: ignore[union-attr]
+            self._runner.cancel_all()
+            # Process events to allow the task to complete
+            while self._runner.is_running("login"):
+                QApplication.instance().processEvents()  # type: ignore[union-attr]
 
     def exec_(self) -> bool:
         """

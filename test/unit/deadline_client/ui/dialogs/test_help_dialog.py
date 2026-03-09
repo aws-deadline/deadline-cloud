@@ -222,10 +222,13 @@ class TestHelpDialog:
             # Get the layout and find all QLabel widgets
             layout = help_dialog.layout()
             labels = []
-            for i in range(layout.count()):
-                widget = layout.itemAt(i).widget()
-                if isinstance(widget, QLabel):
-                    labels.append(widget)
+            if layout is not None:
+                for i in range(layout.count()):
+                    item = layout.itemAt(i)
+                    if item is not None:
+                        widget = item.widget()
+                        if isinstance(widget, QLabel):
+                            labels.append(widget)
 
             # Filter labels that contain documentation links (have href tags)
             doc_labels = [label for label in labels if "<a href=" in label.text()]

@@ -22,17 +22,17 @@ The status includes three parts:
 """
 
 import os
-import threading
 from configparser import ConfigParser
 from logging import getLogger
 from typing import Optional
 
-from qtpy.QtCore import QObject, QFileSystemWatcher, Signal
+from qtpy.QtCore import QObject, QFileSystemWatcher, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 from .. import api
 from ..config import config_file
+from .controllers import AsyncTaskRunner
 
 logger = getLogger(__name__)
 
@@ -78,6 +78,10 @@ class DeadlineAuthenticationStatus(QObject):
         self.__auth_status: Optional[api.AwsAuthenticationStatus] = None
         self.__api_availability: Optional[bool] = None
 
+        # Use AsyncTaskRunner for background API calls
+        self._runner = AsyncTaskRunner(self)
+        self._runner.task_error.connect(self._handle_task_error, Qt.QueuedConnection)
+
         # Load the default config
         self.config = ConfigParser()
         self.config.read_dict(config_file.read_config())
@@ -100,6 +104,12 @@ class DeadlineAuthenticationStatus(QObject):
             )
         self.aws_creds_file_watcher.fileChanged.connect(self.files_changed)
         self.aws_creds_file_watcher.directoryChanged.connect(self.files_changed)
+
+        self.refresh_status()
+
+    def _handle_task_error(self, operation_name: str, error: BaseException) -> None:
+        """Handle errors from async tasks."""
+        logger.exception(f"Error in {operation_name}: {error}")
 
         self.refresh_status()
 
@@ -152,16 +162,23 @@ class DeadlineAuthenticationStatus(QObject):
         # file
         if changed_path in self.aws_creds_paths:
             logger.info(f"Path {changed_path} changed, refreshing authentication status")
-            # Send it to another thread to avoid blocking the Qt event loop
-            self.session_thread = threading.Thread(
-                target=self._get_session, kwargs={"changed_path": changed_path}
+            # Use AsyncTaskRunner to avoid blocking the Qt event loop
+            self._runner.run(
+                operation_key="get_session",
+                fn=self._get_session_background,
+                on_success=lambda _: self._on_session_refreshed(changed_path),
+                on_error=lambda e: logger.exception(f"Error refreshing session: {e}"),
             )
-            self.session_thread.start()
         else:
             logger.info(f"Path {changed_path} changed, does not affect authentication status")
 
-    def _get_session(self, changed_path):
+    def _get_session_background(self):
+        """Background task to refresh boto3 session."""
         api.get_boto3_session(force_refresh=True)
+        return True
+
+    def _on_session_refreshed(self, changed_path):
+        """Called after session is refreshed."""
         self.refresh_status()
 
         if changed_path in self.aws_creds_paths:
@@ -169,39 +186,79 @@ class DeadlineAuthenticationStatus(QObject):
         elif changed_path in self.deadline_config_paths:
             self.deadline_config_changed.emit()
 
-    def _refresh_creds_source(self) -> None:
+    def _refresh_creds_source(self) -> api.AwsCredentialsSource:
+        """Background task to get credentials source."""
+        return api.get_credentials_source(config=self.config)
+
+    def _on_creds_source_success(self, result: api.AwsCredentialsSource) -> None:
+        """Handle successful credentials source fetch."""
+        self.__creds_source = result
+        self.creds_source_changed.emit()
+
+    def _on_creds_source_error(self, error: BaseException) -> None:
+        """Handle credentials source fetch error."""
+        logger.exception(error)
         self.__creds_source = None
         self.creds_source_changed.emit()
-        self.__creds_source = api.get_credentials_source(config=self.config)
-        self.creds_source_changed.emit()
 
-    def _refresh_auth_status(self) -> None:
-        self.__auth_status = None
-        self.auth_status_changed.emit()
-        try:
-            self.__auth_status = api.check_authentication_status(config=self.config)
-        except BaseException as e:
-            logger.exception(e)
-            self.__auth_status = api.AwsAuthenticationStatus.CONFIGURATION_ERROR
+    def _refresh_auth_status(self) -> api.AwsAuthenticationStatus:
+        """Background task to check authentication status."""
+        return api.check_authentication_status(config=self.config)
+
+    def _on_auth_status_success(self, result: api.AwsAuthenticationStatus) -> None:
+        """Handle successful authentication status check."""
+        self.__auth_status = result
         self.auth_status_changed.emit()
 
-    def _refresh_api_availability(self) -> None:
-        self.__api_availability = None
+    def _on_auth_status_error(self, error: BaseException) -> None:
+        """Handle authentication status check error."""
+        logger.exception(error)
+        self.__auth_status = api.AwsAuthenticationStatus.CONFIGURATION_ERROR
+        self.auth_status_changed.emit()
+
+    def _refresh_api_availability(self) -> bool:
+        """Background task to check API availability."""
+        return api.check_deadline_api_available(config=self.config)
+
+    def _on_api_availability_success(self, result: bool) -> None:
+        """Handle successful API availability check."""
+        self.__api_availability = result
         self.api_availability_changed.emit()
-        try:
-            self.__api_availability = api.check_deadline_api_available(config=self.config)
-        except BaseException as e:
-            logger.exception(e)
-            self.__api_availability = False
+
+    def _on_api_availability_error(self, error: BaseException) -> None:
+        """Handle API availability check error."""
+        logger.exception(error)
+        self.__api_availability = False
         self.api_availability_changed.emit()
 
     def refresh_status(self) -> None:
         """
         Initiates an asynchronous status refresh.
         """
-        self.__creds_source_thread = threading.Thread(target=self._refresh_creds_source)
-        self.__creds_source_thread.start()
-        self.__auth_status_thread = threading.Thread(target=self._refresh_auth_status)
-        self.__auth_status_thread.start()
-        self.__api_availability_thread = threading.Thread(target=self._refresh_api_availability)
-        self.__api_availability_thread.start()
+        # Clear current values and emit signals to indicate refresh started
+        self.__creds_source = None
+        self.creds_source_changed.emit()
+        self.__auth_status = None
+        self.auth_status_changed.emit()
+        self.__api_availability = None
+        self.api_availability_changed.emit()
+
+        # Start async tasks for each status check
+        self._runner.run(
+            operation_key="creds_source",
+            fn=self._refresh_creds_source,
+            on_success=self._on_creds_source_success,
+            on_error=self._on_creds_source_error,
+        )
+        self._runner.run(
+            operation_key="auth_status",
+            fn=self._refresh_auth_status,
+            on_success=self._on_auth_status_success,
+            on_error=self._on_auth_status_error,
+        )
+        self._runner.run(
+            operation_key="api_availability",
+            fn=self._refresh_api_availability,
+            on_success=self._on_api_availability_success,
+            on_error=self._on_api_availability_error,
+        )

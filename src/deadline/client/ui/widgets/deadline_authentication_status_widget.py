@@ -44,8 +44,9 @@ class RightAlignedQMenu(QMenu):
         """
         Override showEvent to position the menu to the right of the parent button.
         """
-        if self.parent():
-            parent_top_right = self.parent().mapToGlobal(self.parent().rect().topRight())
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "mapToGlobal") and hasattr(parent, "rect"):
+            parent_top_right = parent.mapToGlobal(parent.rect().topRight())  # type: ignore[union-attr]
             self.move(parent_top_right.x(), parent_top_right.y())
 
         super().showEvent(event)
@@ -403,4 +404,4 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
         if any(action.isVisible() for action in self._auth_menu.actions()):
             self._profile_button.setMenu(self._auth_menu)
         else:
-            self._profile_button.setMenu(None)
+            self._profile_button.setMenu(None)  # type: ignore[arg-type]

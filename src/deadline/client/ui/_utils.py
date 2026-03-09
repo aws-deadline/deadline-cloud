@@ -234,6 +234,14 @@ class CancelationFlag:
     function of the class. With this object, you can bind it
     to the cancelation flag's set_canceled method instead.
 
+    .. deprecated::
+        This class is deprecated and will be removed in a future release.
+        Use Qt's native threading mechanisms instead:
+        - For simple async operations, use `AsyncTaskRunner` from
+          `deadline.client.ui.controllers`
+        - For complex operations with progress callbacks, use a
+          `QThread` subclass with signals
+
     Example usage:
 
     class MyWidget(QWidget):
@@ -251,6 +259,15 @@ class CancelationFlag:
     """
 
     def __init__(self):
+        import warnings
+
+        warnings.warn(
+            "CancelationFlag is deprecated and will be removed in a future release. "
+            "Use AsyncTaskRunner from deadline.client.ui.controllers for simple async operations, "
+            "or a QThread subclass with signals for complex operations with progress callbacks.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.canceled = False
 
     def set_canceled(self):

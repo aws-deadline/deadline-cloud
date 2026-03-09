@@ -59,8 +59,9 @@ def test_input_in_hardware_requirements_widget_should_be_integer_within_range(qt
 
 
 def test_name_in_custom_amount_widget_should_be_truncated(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     invalid_str = "a" * (AMOUNT_NAME_MAX_LENGTH + 1)
     widget.name_line_edit.setText(invalid_str)
@@ -68,17 +69,19 @@ def test_name_in_custom_amount_widget_should_be_truncated(qtbot):
 
 
 def test_name_in_custom_amount_widget_should_not_allow_invalid_chars(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
-    invalid_str = ""
+    invalid_str = ""
     widget.name_line_edit.setText(invalid_str)
     assert widget.name_line_edit.hasAcceptableInput() is False
 
 
 def test_name_in_custom_amount_widget_should_allow_identifiers(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     valid_identifier = "a" + (".a" * math.floor((AMOUNT_NAME_MAX_LENGTH - 1) / 2))
     widget.name_line_edit.setText(valid_identifier)
@@ -86,8 +89,9 @@ def test_name_in_custom_amount_widget_should_allow_identifiers(qtbot):
 
 
 def test_name_in_custom_amount_widget_does_not_allow_invalid_identifiers(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     valid_identifier = "a"
     invalid_identifier = "a" * (IDENTFIER_MAX_LENGTH + 1)
@@ -97,8 +101,9 @@ def test_name_in_custom_amount_widget_does_not_allow_invalid_identifiers(qtbot):
 
 
 def test_name_in_custom_amount_widget_should_not_allow_missing_identifiers(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     missing_identifier = "a..a"
     widget.name_line_edit.setText(missing_identifier)
@@ -106,8 +111,9 @@ def test_name_in_custom_amount_widget_should_not_allow_missing_identifiers(qtbot
 
 
 def test_name_in_custom_amount_widget_should_not_allow_reserved_first_identifier(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     for reserved_identifier in RESERVED_FIRST_IDENTIFIERS:
         widget.name_line_edit.setText(reserved_identifier)
@@ -122,8 +128,9 @@ def test_name_in_custom_amount_widget_should_not_allow_reserved_first_identifier
 
 
 def test_value_in_custom_amount_widget_should_be_integer_within_range(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     assert widget.min_spin_box.min == 0
     assert widget.min_spin_box.max == MAX_INT_VALUE
@@ -144,7 +151,7 @@ def test_name_in_custom_attribute_widget_should_follow_regex_pattern(qtbot):
     widget = CustomAttributeWidget(MagicMock(), 1, CustomRequirementsWidget())
     qtbot.addWidget(widget)
 
-    invalid_str = ""
+    invalid_str = ""
     widget.name_line_edit.setText(invalid_str)
     assert widget.name_line_edit.hasAcceptableInput() is False
 
@@ -164,7 +171,7 @@ def test_value_in_custom_attribute_widget_should_follow_regex_pattern(qtbot):
     widget = CustomAttributeValueWidget(MagicMock(), parent_widget)
     qtbot.addWidget(widget)
 
-    invalid_str = ""
+    invalid_str = ""
     widget.line_edit.setText(invalid_str)
     assert widget.line_edit.hasAcceptableInput() is False
 
@@ -235,8 +242,9 @@ def test_name_in_custom_attribute_widget_should_not_allow_reserved_first_identif
 
 
 def test_custom_amount_widget_includes_zero_minimum(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     widget.name_line_edit.setText("test.amount")
     widget.min_spin_box.setValue(0)
@@ -250,8 +258,9 @@ def test_custom_amount_widget_includes_zero_minimum(qtbot):
 
 
 def test_custom_amount_widget_includes_zero_maximum(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     widget.name_line_edit.setText("test.amount")
     widget.min_spin_box.setValue(0)
@@ -265,8 +274,9 @@ def test_custom_amount_widget_includes_zero_maximum(qtbot):
 
 
 def test_custom_amount_widget_includes_zero_only_minimum(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     widget.name_line_edit.setText("test.amount")
     widget.min_spin_box.setValue(0)
@@ -279,8 +289,9 @@ def test_custom_amount_widget_includes_zero_only_minimum(qtbot):
 
 
 def test_custom_amount_widget_includes_zero_only_maximum(qtbot):
-    widget = CustomAmountWidget(MagicMock(), 1)
-    qtbot.addWidget(widget)
+    parent = CustomRequirementsWidget()
+    qtbot.addWidget(parent)
+    widget = CustomAmountWidget(MagicMock(), 1, parent)
 
     widget.name_line_edit.setText("test.amount")
     widget.max_spin_box.setValue(0)

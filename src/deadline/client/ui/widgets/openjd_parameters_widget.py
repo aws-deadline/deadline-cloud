@@ -6,6 +6,7 @@ UI widgets for the Scene Settings tab.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
@@ -90,10 +91,13 @@ class OpenJDParametersWidget(QWidget):
         if isinstance(layout, QVBoxLayout):
             for index in reversed(range(layout.count())):
                 child = layout.takeAt(index)
-                if child.widget():
-                    child.widget().deleteLater()
+                if child is None:
+                    continue
+                widget = child.widget()
+                if widget:
+                    widget.deleteLater()
                 elif child.layout():
-                    child.layout().deleteLater()
+                    child.layout().deleteLater()  # type: ignore[union-attr]
         else:
             layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -323,7 +327,7 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
         return self.edit_control.text()
 
     def set_value(self, value):
-        self.edit_control.setText(str(value))
+        self.edit_control.setText(value.as_posix() if isinstance(value, Path) else str(value))
 
     def _handle_text_changed(self, text, callback):
         message = deepcopy(self.job_template_parameter)
@@ -377,7 +381,7 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
         return self.edit_control.toPlainText()
 
     def set_value(self, value):
-        self.edit_control.setPlainText(str(value))
+        self.edit_control.setPlainText(value.as_posix() if isinstance(value, Path) else str(value))
 
     def _handle_text_changed(self, text, callback):
         message = deepcopy(self.job_template_parameter)

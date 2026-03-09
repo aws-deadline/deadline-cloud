@@ -1,3 +1,10 @@
+## 0.54.2 (2026-03-04)
+
+
+### Features
+* Improve CLI help text for completeness and readability, including scannable workflows, documentation links, and terminal formatting fixes (#1018) ([`dbc514f`](https://github.com/aws-deadline/deadline-cloud/commit/dbc514f))
+
+
 ## 0.54.1 (2026-02-27)
 
 ### DEPRECATIONS
