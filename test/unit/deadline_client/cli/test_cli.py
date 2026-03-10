@@ -211,3 +211,37 @@ def test_context_tracking_command_sets_boto_user_agent_extra():
     config = get_default_client_config()
 
     assert "cli-command/main.subcommand.command" in config.user_agent_extra
+
+
+def test_submitter_version_in_user_agent():
+    """
+    Verifies that the submitter version is included in the user_agent_extra when set.
+    """
+    from deadline.client.api._session import session_context
+
+    # Save original state
+    original_context = session_context.copy()
+
+    try:
+        # Test: submitter name + version
+        session_context["submitter-name"] = "Blender"
+        session_context["submitter-version"] = "0.5.0"
+        session_context["cli-command-name"] = None
+        config = get_default_client_config()
+        assert "submitter/Blender#0.5.0" in config.user_agent_extra
+
+        # Test: submitter name only (no version)
+        session_context["submitter-name"] = "Blender"
+        session_context["submitter-version"] = None
+        config = get_default_client_config()
+        assert "submitter/Blender" in config.user_agent_extra
+        assert "submitter/Blender#" not in config.user_agent_extra
+
+        # Test: no submitter
+        session_context["submitter-name"] = None
+        session_context["submitter-version"] = None
+        config = get_default_client_config()
+        assert "submitter/" not in config.user_agent_extra
+    finally:
+        # Restore original state
+        session_context.update(original_context)

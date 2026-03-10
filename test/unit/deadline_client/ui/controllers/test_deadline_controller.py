@@ -153,6 +153,7 @@ class TestDeadlineUIController:
         controller.refresh_farms()
 
         qtbot.waitUntil(lambda: len(farms_received) > 0, timeout=2000)
+        qtbot.waitUntil(lambda: len(errors_received) > 0, timeout=2000)
 
         # Should emit empty list on error
         assert farms_received[0] == []
