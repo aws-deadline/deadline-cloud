@@ -5,7 +5,7 @@ import glob
 import json
 from pathlib import Path
 from typing import List, Optional
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.models import GlobConfig
 
 

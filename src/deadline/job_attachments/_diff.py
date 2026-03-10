@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List, Tuple
 from math import trunc
 from deadline.client.config import config_file
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
@@ -77,7 +77,7 @@ def find_file_with_status(
             }
             status_paths: List[tuple] = []
             for future in concurrent.futures.as_completed(futures):
-                (file_status, _, manifestPath) = future.result()
+                file_status, _, manifestPath = future.result()
                 if file_status in statuses:
                     status_paths.append((file_status, manifestPath))
 

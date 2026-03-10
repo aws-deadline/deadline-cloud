@@ -20,7 +20,7 @@ from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
 from deadline.job_attachments.upload import S3AssetUploader
 
 from deadline.client.config import config_file
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 
 
 def _attachment_download(
