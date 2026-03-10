@@ -10,5 +10,5 @@ cp -r /code/.git /home/hostuser/code/
 cd code
 python -m venv .venv
 source .venv/bin/activate
-pip install hatch "virtualenv<21"
+pip install hatch
 hatch run pytest --cov=src/deadline --cov-report=html:build/coverage --cov-report=xml:build/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=25 -m docker
