@@ -8,8 +8,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
 
-from deadline.client.api._session import _get_queue_user_boto3_session, get_default_client_config
-from deadline.job_attachments._diff import _fast_file_list_to_manifest_diff, compare_manifest
+from deadline.client.api._session import (
+    _get_queue_user_boto3_session,
+    get_default_client_config,
+)
+from deadline.job_attachments._diff import (
+    _fast_file_list_to_manifest_diff,
+    compare_manifest,
+)
 from deadline.job_attachments._glob import _process_glob_inputs, _glob_paths
 from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests._create_manifest import (
@@ -83,6 +89,7 @@ def _glob_files(
 
 
 def _manifest_snapshot(
+    *,
     root: str,
     destination: str,
     name: str,
@@ -92,6 +99,8 @@ def _manifest_snapshot(
     diff: Optional[str] = None,
     force_rehash: bool = False,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    hash_cache_dir: Optional[str] = None,
+    telemetry_callback: Optional[Callable] = None,
 ) -> Optional[ManifestSnapshot]:
     # Get all files in the root.
     glob_config: GlobConfig
@@ -112,7 +121,11 @@ def _manifest_snapshot(
     # Compute the output manifest immediately and hash.
     if not diff:
         output_manifest = _create_manifest_for_single_root(
-            files=current_files, root=root, print_function_callback=print_function_callback
+            files=current_files,
+            root=root,
+            print_function_callback=print_function_callback,
+            hash_cache_dir=hash_cache_dir,
+            telemetry_callback=telemetry_callback,
         )
         if not output_manifest:
             return None
@@ -143,7 +156,11 @@ def _manifest_snapshot(
         else:
             # In "slow / thorough" mode, we check by hash, which is definitive.
             output_manifest = _create_manifest_for_single_root(
-                files=current_files, root=root, print_function_callback=print_function_callback
+                files=current_files,
+                root=root,
+                print_function_callback=print_function_callback,
+                hash_cache_dir=hash_cache_dir,
+                telemetry_callback=telemetry_callback,
             )
             if not output_manifest:
                 return None
@@ -164,7 +181,11 @@ def _manifest_snapshot(
 
         # Since the files are already hashed, we can easily re-use has_attachments to remake a diff manifest.
         output_manifest = _create_manifest_for_single_root(
-            files=changed_paths, root=root, print_function_callback=print_function_callback
+            files=changed_paths,
+            root=root,
+            print_function_callback=print_function_callback,
+            hash_cache_dir=hash_cache_dir,
+            telemetry_callback=telemetry_callback,
         )
         if not output_manifest:
             return None
@@ -237,7 +258,10 @@ def _manifest_diff(
 
     # Find all files matching our regex
     input_files = _glob_files(
-        root=root, include=include, exclude=exclude, include_exclude_config=include_exclude_config
+        root=root,
+        include=include,
+        exclude=exclude,
+        include_exclude_config=include_exclude_config,
     )
     input_paths = [Path(p) for p in input_files]
 
@@ -271,7 +295,8 @@ def _manifest_diff(
 
         # Hash based compare manifests.
         differences: List[Tuple[FileStatus, BaseManifestPath]] = compare_manifest(
-            reference_manifest=local_manifest_object, compare_manifest=directory_manifest_object
+            reference_manifest=local_manifest_object,
+            compare_manifest=directory_manifest_object,
         )
         # Map to output datastructure.
         for item in differences:
@@ -318,7 +343,12 @@ def _manifest_upload(
 
     # Always upload the manifest file to case root /Manifest with the original file name.
     manifest_path: str = "/".join(
-        [s3_cas_prefix, S3_MANIFEST_FOLDER_NAME, s3_key_prefix, Path(manifest_file).name]
+        [
+            s3_cas_prefix,
+            S3_MANIFEST_FOLDER_NAME,
+            s3_key_prefix,
+            Path(manifest_file).name,
+        ]
         if s3_key_prefix
         else [s3_cas_prefix, S3_MANIFEST_FOLDER_NAME, Path(manifest_file).name]
     )
@@ -430,7 +460,9 @@ def _manifest_download(
             if asset_manifest is not None:
                 print_function_callback(f"Found input manifest for root: {root_path}")
                 add_manifest_by_root(
-                    manifests_by_root=manifests_by_root, root=root_path, manifest=asset_manifest
+                    manifests_by_root=manifests_by_root,
+                    root=root_path,
+                    manifest=asset_manifest,
                 )
 
         # Now handle step-step dependencies
@@ -471,7 +503,9 @@ def _manifest_download(
                                 f"Found step-step output manifest for root: {root}"
                             )
                             add_manifest_by_root(
-                                manifests_by_root=manifests_by_root, root=root, manifest=manifest
+                                manifests_by_root=manifests_by_root,
+                                root=root,
+                                manifest=manifest,
                             )
 
                 next_token = step_dep_response.get("nextToken")

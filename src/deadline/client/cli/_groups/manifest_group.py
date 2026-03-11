@@ -18,6 +18,7 @@ from typing import List, Optional
 import boto3
 import click
 
+from deadline.client.api._submit_job_bundle import hashing_telemetry_callback
 from deadline.client import api
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
@@ -99,7 +100,12 @@ def cli_manifest():
     help="Rehash all files to compare using file hashes.",
 )
 @click.option("--diff", default=None, help="File Path to Asset Manifest to diff against.")
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_snapshot(
     root: str,
@@ -130,6 +136,8 @@ def manifest_snapshot(
         destination = root
         logger.echo(f"Manifest creation path defaulted to {root} \n")
 
+    hash_cache_dir = config_file.get_cache_directory()
+
     manifest_out = _manifest_snapshot(
         root=root,
         destination=destination,
@@ -140,6 +148,8 @@ def manifest_snapshot(
         diff=diff,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
+        hash_cache_dir=hash_cache_dir,
+        telemetry_callback=hashing_telemetry_callback,
     )
     if manifest_out:
         if (
@@ -156,7 +166,10 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
                 )
             )
             logger.json(
-                dict(dataclasses.asdict(manifest_out), **{"warning": long_manifest_path_warning})
+                dict(
+                    dataclasses.asdict(manifest_out),
+                    **{"warning": long_manifest_path_warning},
+                )
             )
         else:
             logger.json(dataclasses.asdict(manifest_out))
@@ -195,7 +208,12 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
     is_flag=True,
     help="Rehash all files to compare using file hashes.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_diff(
     root: str,
@@ -266,7 +284,10 @@ def manifest_diff(
     ),
 )
 @click.option(
-    "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting. "
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting. ",
 )
 @_handle_error
 def manifest_download(
@@ -313,17 +334,28 @@ def manifest_download(
 @cli_manifest.command(name="upload")
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--s3-cas-uri", help="The URI to the Content Addressable Storage S3 bucket and root.")
 @click.option(
-    "--s3-manifest-prefix", help="Prefix subpath in the manifest folder to upload the manifest."
+    "--s3-cas-uri",
+    help="The URI to the Content Addressable Storage S3 bucket and root.",
 )
 @click.option(
-    "--farm-id", help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri."
+    "--s3-manifest-prefix",
+    help="Prefix subpath in the manifest folder to upload the manifest.",
 )
 @click.option(
-    "--queue-id", help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri."
+    "--farm-id",
+    help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--queue-id",
+    help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri.",
+)
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_upload(
     manifest_file: str,

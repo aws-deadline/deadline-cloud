@@ -1,29 +1,37 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from .. import api
-from ..config import config_file
-from ...job_attachments.models import AssetRootGroup, AssetRootManifest
-from ...job_attachments.upload import S3AssetManager, SummaryStatistics
-from ...job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
-
-
 import textwrap
-from configparser import ConfigParser
-from typing import Callable, List, Optional, Tuple
+
+from typing import Any, Optional, List, Callable, Tuple
+
+from deadline.job_attachments.models import (
+    AssetRootGroup,
+    AssetRootManifest,
+)
+from deadline.job_attachments.progress_tracker import (
+    ProgressReportMetadata,
+    ProgressStatus,
+)
+from deadline.job_attachments.upload import S3AssetManager, SummaryStatistics
 
 
 def _hash_attachments(
+    *,
     asset_manager: S3AssetManager,
     asset_groups: List[AssetRootGroup],
     total_input_files: int,
     total_input_bytes: int,
-    print_function_callback: Callable = lambda msg: None,
-    hashing_progress_callback: Optional[Callable] = None,
-    config: Optional[ConfigParser] = None,
+    print_function_callback: Callable[[str], None] = lambda msg: None,
+    hashing_progress_callback: Optional[Callable[[Any], bool]] = None,
+    hash_cache_dir: Optional[str] = None,
+    telemetry_callback: Optional[Callable[[SummaryStatistics], None]] = None,
 ) -> Tuple[SummaryStatistics, List[AssetRootManifest]]:
     """
-    Starts the job attachments hashing and handles the progress reporting
-    callback. Returns a list of the asset manifests of the hashed files.
+    Starts the job attachments hashing and returns a list of the asset manifests of the hashed files.
+    Provides callbacks for:
+      * Printing output
+      * Hashing progress reporting
+      * Sending hashing telemetry
     """
 
     def _default_update_hash_progress(hashing_metadata: ProgressReportMetadata) -> bool:
@@ -36,12 +44,11 @@ def _hash_attachments(
         asset_groups=asset_groups,
         total_input_files=total_input_files,
         total_input_bytes=total_input_bytes,
-        hash_cache_dir=config_file.get_cache_directory(),
+        hash_cache_dir=hash_cache_dir,
         on_preparing_to_submit=hashing_progress_callback,
     )
-    api.get_deadline_cloud_library_telemetry_client(config=config).record_hashing_summary(
-        hashing_summary
-    )
+    if telemetry_callback:
+        telemetry_callback(hashing_summary)
     if hashing_summary.total_files > 0:
         print_function_callback("Hashing Summary:")
         print_function_callback(textwrap.indent(str(hashing_summary), "    "))
