@@ -18,6 +18,10 @@ from typing import List, Optional
 import boto3
 import click
 
+from deadline.client.api._session import (
+    _get_queue_user_boto3_session,
+    get_default_client_config,
+)
 from deadline.client import api
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
@@ -99,7 +103,12 @@ def cli_manifest():
     help="Rehash all files to compare using file hashes.",
 )
 @click.option("--diff", default=None, help="File Path to Asset Manifest to diff against.")
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_snapshot(
     root: str,
@@ -156,7 +165,10 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
                 )
             )
             logger.json(
-                dict(dataclasses.asdict(manifest_out), **{"warning": long_manifest_path_warning})
+                dict(
+                    dataclasses.asdict(manifest_out),
+                    **{"warning": long_manifest_path_warning},
+                )
             )
         else:
             logger.json(dataclasses.asdict(manifest_out))
@@ -195,7 +207,12 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
     is_flag=True,
     help="Rehash all files to compare using file hashes.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_diff(
     root: str,
@@ -266,7 +283,10 @@ def manifest_diff(
     ),
 )
 @click.option(
-    "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting. "
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting. ",
 )
 @_handle_error
 def manifest_download(
@@ -296,15 +316,34 @@ def manifest_download(
     farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
     boto3_session: boto3.Session = api.get_boto3_session(config=config)
+    # Deadline Client and get the Queue to download.
+    deadline_client = boto3_session.client("deadline", config=get_default_client_config())
+    queue: dict = deadline_client.get_queue(
+        farmId=farm_id,
+        queueId=queue_id,
+    )
+    # Queue's Job Attachment settings.
+    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+
+    # assume queue role - session permissions
+    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
+        deadline=deadline_client,
+        base_session=boto3_session,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
 
     output = _manifest_download(
         download_dir=download_dir,
         farm_id=farm_id,
         queue_id=queue_id,
+        queue_s3_settings=queue_s3_settings,
         job_id=job_id,
         step_id=step_id,
         asset_type=AssetType(asset_type),
-        boto3_session=boto3_session,
+        deadline_client=deadline_client,
+        queue_role_session=queue_role_session,
         print_function_callback=logger.echo,
     )
     logger.json(dataclasses.asdict(output))
@@ -313,17 +352,28 @@ def manifest_download(
 @cli_manifest.command(name="upload")
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--s3-cas-uri", help="The URI to the Content Addressable Storage S3 bucket and root.")
 @click.option(
-    "--s3-manifest-prefix", help="Prefix subpath in the manifest folder to upload the manifest."
+    "--s3-cas-uri",
+    help="The URI to the Content Addressable Storage S3 bucket and root.",
 )
 @click.option(
-    "--farm-id", help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri."
+    "--s3-manifest-prefix",
+    help="Prefix subpath in the manifest folder to upload the manifest.",
 )
 @click.option(
-    "--queue-id", help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri."
+    "--farm-id",
+    help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--queue-id",
+    help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri.",
+)
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_upload(
     manifest_file: str,

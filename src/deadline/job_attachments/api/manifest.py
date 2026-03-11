@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
+import botocore.client
 
-from deadline.client.api._session import _get_queue_user_boto3_session, get_default_client_config
-from deadline.job_attachments._diff import _fast_file_list_to_manifest_diff, compare_manifest
+from deadline.job_attachments._diff import (
+    _fast_file_list_to_manifest_diff,
+    compare_manifest,
+)
 from deadline.job_attachments._glob import _process_glob_inputs, _glob_paths
 from deadline.job_attachments.api._utils import _read_manifests
 from deadline.job_attachments.asset_manifests._create_manifest import (
@@ -112,7 +115,9 @@ def _manifest_snapshot(
     # Compute the output manifest immediately and hash.
     if not diff:
         output_manifest = _create_manifest_for_single_root(
-            files=current_files, root=root, print_function_callback=print_function_callback
+            files=current_files,
+            root=root,
+            print_function_callback=print_function_callback,
         )
         if not output_manifest:
             return None
@@ -143,7 +148,9 @@ def _manifest_snapshot(
         else:
             # In "slow / thorough" mode, we check by hash, which is definitive.
             output_manifest = _create_manifest_for_single_root(
-                files=current_files, root=root, print_function_callback=print_function_callback
+                files=current_files,
+                root=root,
+                print_function_callback=print_function_callback,
             )
             if not output_manifest:
                 return None
@@ -164,7 +171,9 @@ def _manifest_snapshot(
 
         # Since the files are already hashed, we can easily re-use has_attachments to remake a diff manifest.
         output_manifest = _create_manifest_for_single_root(
-            files=changed_paths, root=root, print_function_callback=print_function_callback
+            files=changed_paths,
+            root=root,
+            print_function_callback=print_function_callback,
         )
         if not output_manifest:
             return None
@@ -237,7 +246,10 @@ def _manifest_diff(
 
     # Find all files matching our regex
     input_files = _glob_files(
-        root=root, include=include, exclude=exclude, include_exclude_config=include_exclude_config
+        root=root,
+        include=include,
+        exclude=exclude,
+        include_exclude_config=include_exclude_config,
     )
     input_paths = [Path(p) for p in input_files]
 
@@ -271,7 +283,8 @@ def _manifest_diff(
 
         # Hash based compare manifests.
         differences: List[Tuple[FileStatus, BaseManifestPath]] = compare_manifest(
-            reference_manifest=local_manifest_object, compare_manifest=directory_manifest_object
+            reference_manifest=local_manifest_object,
+            compare_manifest=directory_manifest_object,
         )
         # Map to output datastructure.
         for item in differences:
@@ -318,7 +331,12 @@ def _manifest_upload(
 
     # Always upload the manifest file to case root /Manifest with the original file name.
     manifest_path: str = "/".join(
-        [s3_cas_prefix, S3_MANIFEST_FOLDER_NAME, s3_key_prefix, Path(manifest_file).name]
+        [
+            s3_cas_prefix,
+            S3_MANIFEST_FOLDER_NAME,
+            s3_key_prefix,
+            Path(manifest_file).name,
+        ]
         if s3_key_prefix
         else [s3_cas_prefix, S3_MANIFEST_FOLDER_NAME, Path(manifest_file).name]
     )
@@ -339,48 +357,33 @@ def _manifest_upload(
 
 
 def _manifest_download(
+    *,
+    deadline_client: botocore.client.BaseClient,
     download_dir: str,
     farm_id: str,
-    queue_id: str,
     job_id: str,
-    boto3_session: boto3.Session,
-    step_id: Optional[str] = None,
+    queue_id: str,
+    queue_role_session: boto3.Session,
+    queue_s3_settings: JobAttachmentS3Settings,
     asset_type: AssetType = AssetType.ALL,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    step_id: Optional[str] = None,
 ) -> ManifestDownloadResponse:
     """
     BETA API - This API is still evolving but will be made public in the near future.
     API to download the Job Attachment manifest for a Job, and optionally dependencies for Step.
+    deadline_client: Deadline client for API calls.
     download_dir: Download directory.
     farm_id: The Deadline Farm to download from.
-    queue_id: The Deadline Queue to download from.
     job_id: Job Id to download.
-    boto_session: Boto3 session.
-    step_id: Optional[str]: Optional, download manifest for a step
+    queue_id: The Deadline Queue to download from.
+    queue_role_session: Boto3 session for the queue role.
+    queue_s3_settings: S3 settings for the queue's job attachments.
     asset_type: Which asset manifests should be downloaded for given job (& optionally step), options are Input, Output, All. Default behaviour is All.
     print_function_callback: Callback function to handle print messages.
+    step_id: Optional, download manifest for a step.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
-
-    # Deadline Client and get the Queue to download.
-    deadline = boto3_session.client("deadline", config=get_default_client_config())
-
-    queue: dict = deadline.get_queue(
-        farmId=farm_id,
-        queueId=queue_id,
-    )
-
-    # assume queue role - session permissions
-    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
-        deadline=deadline,
-        base_session=boto3_session,
-        farm_id=farm_id,
-        queue_id=queue_id,
-        queue_display_name=queue["displayName"],
-    )
-
-    # Queue's Job Attachment settings.
-    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
 
     # Get S3 prefix
     s3_prefix: Path = Path(queue_s3_settings.rootPrefix, S3_MANIFEST_FOLDER_NAME)
@@ -407,7 +410,7 @@ def _manifest_download(
         manifests_by_root[root].append(manifest)
 
     # Get the job from deadline api
-    job: dict = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job: dict = deadline_client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
 
     # If input manifests need to be downloaded
     if download_input:
@@ -430,7 +433,9 @@ def _manifest_download(
             if asset_manifest is not None:
                 print_function_callback(f"Found input manifest for root: {root_path}")
                 add_manifest_by_root(
-                    manifests_by_root=manifests_by_root, root=root_path, manifest=asset_manifest
+                    manifests_by_root=manifests_by_root,
+                    root=root_path,
+                    manifest=asset_manifest,
                 )
 
         # Now handle step-step dependencies
@@ -440,7 +445,7 @@ def _manifest_download(
             # Get Step-Step dependencies with pagination
             next_token = ""
             while next_token is not None:
-                step_dep_response = deadline.list_step_dependencies(
+                step_dep_response = deadline_client.list_step_dependencies(
                     farmId=farm_id,
                     queueId=queue_id,
                     jobId=job_id,
@@ -471,7 +476,9 @@ def _manifest_download(
                                 f"Found step-step output manifest for root: {root}"
                             )
                             add_manifest_by_root(
-                                manifests_by_root=manifests_by_root, root=root, manifest=manifest
+                                manifests_by_root=manifests_by_root,
+                                root=root,
+                                manifest=manifest,
                             )
 
                 next_token = step_dep_response.get("nextToken")
