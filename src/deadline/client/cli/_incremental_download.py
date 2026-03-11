@@ -20,7 +20,7 @@ from botocore.client import BaseClient  # type: ignore[import]
 from ..exceptions import DeadlineOperationError
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
 from ..api._session import get_session_client
-from ...common.path_utils import summarize_path_list, human_readable_file_size
+from ...job_attachments.api import summarize_path_list, human_readable_file_size
 from ...job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
     IncrementalDownloadJob,
@@ -32,7 +32,10 @@ from ...job_attachments._incremental_downloads._manifest_s3_downloads import (
     _merge_absolute_path_manifest_list,
     _download_manifest_paths,
 )
-from ...job_attachments._path_mapping import _generate_path_mapping_rules, _PathMappingRuleApplier
+from ...job_attachments._path_mapping import (
+    _generate_path_mapping_rules,
+    _PathMappingRuleApplier,
+)
 from ...job_attachments.asset_manifests import (
     BaseAssetManifest,
     BaseManifestPath,
@@ -49,7 +52,6 @@ from ...job_attachments.progress_tracker import (
     ProgressReportMetadata,
 )
 from ._common import _cli_object_repr, sigint_handler
-
 
 SESSIONS_API_MAX_CONCURRENCY = 3
 
@@ -108,7 +110,13 @@ def _get_download_candidate_jobs(
                         "stringListFilter": {
                             "name": "TASK_RUN_STATUS",
                             "operator": "ANY_EQUALS",
-                            "values": ["READY", "ASSIGNED", "STARTING", "SCHEDULED", "RUNNING"],
+                            "values": [
+                                "READY",
+                                "ASSIGNED",
+                                "STARTING",
+                                "SCHEDULED",
+                                "RUNNING",
+                            ],
                         },
                     }
                 ],

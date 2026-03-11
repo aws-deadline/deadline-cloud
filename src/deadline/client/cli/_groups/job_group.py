@@ -35,7 +35,7 @@ from ....job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
 )
-from ....job_attachments._path_summarization import (
+from ....job_attachments.api import (
     human_readable_file_size,
     summarize_path_list,
 )

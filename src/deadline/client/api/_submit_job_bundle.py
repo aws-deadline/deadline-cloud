@@ -56,7 +56,7 @@ from ...job_attachments.progress_tracker import ProgressReportMetadata, Progress
 from ...job_attachments.upload import S3AssetManager
 from ._session import session_context
 from ._job_attachment import _hash_attachments  # type: ignore[import]
-from ...job_attachments._path_summarization import human_readable_file_size, summarize_path_list
+from ...job_attachments.api import human_readable_file_size, summarize_path_list
 
 logger = logging.getLogger(__name__)
 
