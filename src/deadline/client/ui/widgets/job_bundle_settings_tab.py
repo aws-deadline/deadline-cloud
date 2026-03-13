@@ -116,9 +116,9 @@ class JobBundleSettingsWidget(QWidget):
             logger.warning(msg)
             return
 
-        parent = self.parent()
-        if parent is not None and hasattr(parent, "refresh"):
-            parent.refresh(  # type: ignore[union-attr]
+        dialog = self.window()
+        if dialog is not None and hasattr(dialog, "refresh"):
+            dialog.refresh(  # type: ignore[union-attr]
                 job_settings=job_settings,
                 auto_detected_attachments=asset_references,
                 attachments=None,
