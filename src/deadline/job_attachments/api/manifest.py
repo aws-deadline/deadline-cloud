@@ -9,10 +9,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import boto3
 import botocore.client
 
-from deadline.client.api._session import (
-    _get_queue_user_boto3_session,
-    get_default_client_config,
-)
 from deadline.job_attachments._diff import (
     _fast_file_list_to_manifest_diff,
     compare_manifest,
@@ -26,7 +22,6 @@ from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
     BaseManifestPath,
 )
-from deadline.client.config import config_file
 from deadline.job_attachments.asset_manifests.decode import decode_manifest
 from deadline.job_attachments.asset_manifests.hash_algorithms import hash_data
 from deadline.job_attachments.caches.hash_cache import HashCache
@@ -244,6 +239,7 @@ def _manifest_diff(
     include_exclude_config: Optional[str] = None,
     force_rehash=False,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    cache_dir: Optional[str] = None,
 ) -> ManifestDiff:
     """
     BETA API - This API is still evolving but will be made public in the near future.
@@ -288,7 +284,7 @@ def _manifest_diff(
 
     if force_rehash:
         # hash and create manifest of local directory
-        cache_config = config_file.get_cache_directory()
+        cache_config = cache_dir
         with HashCache(cache_config) as hash_cache:
             directory_manifest_object = asset_manager._create_manifest_file(
                 input_paths=input_paths, root_path=root, hash_cache=hash_cache
@@ -355,7 +351,11 @@ def _manifest_upload(
     )
 
     # S3 uploader.
-    upload = S3AssetUploader(session=boto_session)
+    upload = S3AssetUploader(
+        session=boto_session,
+        s3_max_pool_connections=50,
+        small_file_threshold_multiplier=20,
+    )
 
     manifest_file = str(_get_long_path_compatible_path(manifest_file))
 

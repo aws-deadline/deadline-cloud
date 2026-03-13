@@ -12,10 +12,7 @@ import botocore
 from boto3.s3.transfer import create_transfer_manager
 from botocore.client import BaseClient, Config
 
-from deadline.client.config import config_file
-
 from .. import version
-from ..exceptions import AssetSyncError
 from .aws_config import (
     S3_CONNECT_TIMEOUT_IN_SECS,
     S3_READ_TIMEOUT_IN_SECS,
@@ -59,14 +56,14 @@ def get_deadline_client(
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)
-def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
+def get_s3_client(
+    session: Optional[boto3.Session] = None, s3_max_pool_connections: int = 50
+) -> BaseClient:
     """
     Get a boto3 S3 client to make API calls to S3
     """
     if session is None:
         session = get_boto3_session()
-
-    s3_max_pool_connections = get_s3_max_pool_connections()
 
     client = session.client(
         "s3",
@@ -92,21 +89,6 @@ def get_s3_client(session: Optional[boto3.Session] = None) -> BaseClient:
     return client
 
 
-def get_s3_max_pool_connections() -> int:
-    try:
-        s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
-    except ValueError as ve:
-        raise AssetSyncError(
-            "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
-            "'s3_max_pool_connections'"
-        ) from ve
-    if s3_max_pool_connections <= 0:
-        raise AssetSyncError(
-            f"Nonvalid value for configuration setting: 's3_max_pool_connections' ({s3_max_pool_connections}) must be positive integer."
-        )
-    return s3_max_pool_connections
-
-
 @lru_cache(maxsize=MAX_SIZE_CACHE)
 def get_s3_transfer_manager(s3_client: BaseClient):
     transfer_config = boto3.s3.transfer.TransferConfig()
@@ -125,7 +107,9 @@ def get_sts_client(session: Optional[boto3.session.Session] = None) -> BaseClien
 
 
 @lru_cache(maxsize=MAX_SIZE_CACHE)
-def get_caller_identity(session: Optional[boto3.session.Session] = None) -> dict[str, str]:
+def get_caller_identity(
+    session: Optional[boto3.session.Session] = None,
+) -> dict[str, str]:
     """
     Get the caller identity for the current session.
     """

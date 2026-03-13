@@ -62,7 +62,10 @@ from .models import (
     PathMappingRule,
 )
 from .upload import S3AssetUploader
-from .os_file_permission import FileSystemPermissionSettings, PosixFileSystemPermissionSettings
+from .os_file_permission import (
+    FileSystemPermissionSettings,
+    PosixFileSystemPermissionSettings,
+)
 from ._path_summarization import human_readable_file_size
 from ._utils import (
     _float_to_iso_datetime_string,
@@ -85,6 +88,8 @@ class AssetSync:
         manifest_version: ManifestVersion = ManifestVersion.v2023_03_03,
         deadline_endpoint_url: Optional[str] = None,
         session_id: Optional[str] = None,
+        s3_max_pool_connections: int = 50,
+        small_file_threshold_multiplier: int = 20,
     ) -> None:
         self.farm_id = farm_id
 
@@ -99,7 +104,11 @@ class AssetSync:
             self.session = boto3_session
 
         self.deadline_endpoint_url = deadline_endpoint_url
-        self.s3_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
+        self.s3_uploader: S3AssetUploader = S3AssetUploader(
+            session=boto3_session,
+            s3_max_pool_connections=s3_max_pool_connections,
+            small_file_threshold_multiplier=small_file_threshold_multiplier,
+        )
         self.manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
@@ -357,7 +366,7 @@ class AssetSync:
         manifest_paths_by_root: dict[str, str] = dict()
 
         for root, manifest in merged_manifests_by_root.items():
-            (_, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
+            _, manifest_name = S3AssetUploader._get_hashed_file_name_from_root_str(
                 manifest=manifest,
                 source_root=self._local_root_to_src_map[root],
                 manifest_name_suffix=manifest_name_suffix,

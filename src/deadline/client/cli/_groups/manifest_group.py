@@ -20,6 +20,10 @@ import click
 
 from deadline.client.api._submit_job_bundle import hashing_telemetry_callback
 from deadline.client import api
+from deadline.client.api._session import (
+    _get_queue_user_boto3_session,
+    get_default_client_config,
+)
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
 from deadline.job_attachments._utils import (
@@ -248,6 +252,7 @@ def manifest_diff(
         include_exclude_config=include_exclude_config,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
+        cache_dir=config_file.get_cache_directory(),
     )
 
     # Print results to console.

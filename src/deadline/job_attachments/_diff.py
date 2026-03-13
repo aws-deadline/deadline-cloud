@@ -4,9 +4,8 @@ import concurrent.futures
 import logging
 import os
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from math import trunc
-from deadline.client.config import config_file
 from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.asset_manifests.base_manifest import (
     BaseAssetManifest,
@@ -56,14 +55,13 @@ def find_file_with_status(
     root_path: str,
     update: bool,
     statuses: List[FileStatus],
+    cache_dir: Optional[str] = None,
 ) -> List[(Tuple[FileStatus, BaseManifestPath])]:
     """
     Checks a manifest file, compares it to specified root directory or manifest of files with the local hash cache, and finds files that match the specified statuses.
     Returns a list of tuples containing the file information, and its corresponding file status.
     """
-    cache_config: str = config_file.get_cache_directory()
-
-    with HashCache(cache_config) as hash_cache:
+    with HashCache(cache_dir) as hash_cache:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = {
                 executor.submit(

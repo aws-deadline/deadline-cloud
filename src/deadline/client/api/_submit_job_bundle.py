@@ -676,11 +676,18 @@ def create_job_from_job_bundle(
             queue_display_name=queue["displayName"],
         )
 
+        s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+        small_file_threshold_multiplier = int(
+            config_file.get_setting("settings.small_file_threshold_multiplier")
+        )
+
         asset_manager = S3AssetManager(
             farm_id=farm_id,
             queue_id=queue_id,
             job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
             session=queue_role_session,
+            s3_max_pool_connections=s3_max_pool_connections,
+            small_file_threshold_multiplier=small_file_threshold_multiplier,
         )
 
         upload_group = asset_manager.prepare_paths_for_upload(

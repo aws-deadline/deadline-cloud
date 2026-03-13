@@ -15,7 +15,6 @@ import json
 import deadline
 
 from deadline.client import api
-from deadline.client.config import config_file
 from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.api.attachment import (
     _attachment_download,
@@ -414,7 +413,7 @@ class TestAttachmentUpload:
             },
             source_root=Path(PATH_MAPPING["source_path"]),
             asset_root=Path(PATH_MAPPING["destination_path"]),
-            s3_check_cache_dir=config_file.get_cache_directory(),
+            s3_check_cache_dir=None,
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -447,7 +446,7 @@ class TestAttachmentUpload:
             manifest_metadata={"Metadata": {"asset-root": temp_assets_dir}},
             source_root=Path(temp_assets_dir),
             asset_root=Path(temp_assets_dir),
-            s3_check_cache_dir=config_file.get_cache_directory(),
+            s3_check_cache_dir=None,
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())

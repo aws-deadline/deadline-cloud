@@ -26,7 +26,7 @@ from botocore.exceptions import (  # type: ignore[import]
 from botocore.session import get_session as get_botocore_session
 
 from .. import version
-from ..config import get_setting
+from ..config import get_setting, config_file
 from ..exceptions import DeadlineOperationError
 from ...job_attachments._aws.aws_clients import get_s3_client
 
@@ -164,7 +164,9 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
     return get_session_client(session=session, service_name=service_name)
 
 
-def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
+def get_credentials_source(
+    config: Optional[ConfigParser] = None,
+) -> AwsCredentialsSource:
     """
     Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials, HOST_PROVIDED otherwise.
 
@@ -284,7 +286,9 @@ def _modified_logging_level(logger, level):
         logger.setLevel(old_level)
 
 
-def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAuthenticationStatus:
+def check_authentication_status(
+    config: Optional[ConfigParser] = None,
+) -> AwsAuthenticationStatus:
     """
     Checks the status of the provided session, by
     calling the sts::GetCallerIdentity API.
@@ -371,7 +375,10 @@ def precache_clients(
         queue_display_name=queue_display_name,
     )
     # Initialize the S3 client to populate the cache
-    return deadline, get_s3_client(queue_role_session)
+    s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+    return deadline, get_s3_client(
+        queue_role_session, s3_max_pool_connections=s3_max_pool_connections
+    )
 
 
 class QueueUserCredentialProvider(CredentialProvider):

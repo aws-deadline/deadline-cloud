@@ -27,8 +27,6 @@ import boto3
 from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.exceptions import BotoCoreError, ClientError
 
-from deadline.client.config import config_file
-
 from .asset_manifests import (
     BaseAssetManifest,
     BaseManifestModel,
@@ -140,38 +138,25 @@ class S3AssetUploader:
     def __init__(
         self,
         session: Optional[boto3.Session] = None,
+        *,
+        s3_max_pool_connections: int,
+        small_file_threshold_multiplier: int,
     ) -> None:
         if session is None:
             self._session = get_boto3_session()
         else:
             self._session = session
 
-        try:
-            # The small file threshold is the chunk size multiplied by the small file threshold multiplier.
-            small_file_threshold_multiplier = int(
-                config_file.get_setting("settings.small_file_threshold_multiplier")
-            )
-            self.small_file_threshold = (
-                S3_MULTIPART_UPLOAD_CHUNK_SIZE * small_file_threshold_multiplier
-            )
+        self.small_file_threshold = S3_MULTIPART_UPLOAD_CHUNK_SIZE * small_file_threshold_multiplier
 
-            s3_max_pool_connections = int(
-                config_file.get_setting("settings.s3_max_pool_connections")
-            )
-            self.num_upload_workers = int(
-                s3_max_pool_connections
-                / min(small_file_threshold_multiplier, S3_UPLOAD_MAX_CONCURRENCY)
-            )
-            if self.num_upload_workers <= 0:
-                # This can result in triggering "Connection pool is full" warning messages during uploads.
-                self.num_upload_workers = 1
-        except ValueError as ve:
-            raise AssetSyncError(
-                "Failed to parse configuration settings. Please ensure that the following settings in the config file are integers: "
-                "'s3_max_pool_connections', 'small_file_threshold_multiplier'"
-            ) from ve
+        self.num_upload_workers = int(
+            s3_max_pool_connections
+            / min(small_file_threshold_multiplier, S3_UPLOAD_MAX_CONCURRENCY)
+        )
+        if self.num_upload_workers <= 0:
+            self.num_upload_workers = 1
 
-        self._s3 = get_s3_client(self._session)  # pylint: disable=invalid-name
+        self._s3 = get_s3_client(self._session, s3_max_pool_connections=s3_max_pool_connections)
 
         # Confirm that the settings values are all positive.
         error_msg = ""
@@ -220,10 +205,11 @@ class S3AssetUploader:
                 - False/None: Use the S3 check cache, with periodic integrity sampling against S3 (default)
 
         Returns:
-            A tuple of (the partial key for the manifest on S3, the hash of input manifest)."""
+            A tuple of (the partial key for the manifest on S3, the hash of input manifest).
+        """
 
         # Upload asset manifest
-        (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
+        hash_alg, manifest_bytes, manifest_name = S3AssetUploader._gather_upload_metadata(
             manifest=manifest,
             source_root=source_root,
             file_system_location_name=file_system_location_name,
@@ -314,7 +300,7 @@ class S3AssetUploader:
         """
 
         # Snapshot asset manifest
-        (hash_alg, manifest_bytes, manifest_name) = S3AssetUploader._gather_upload_metadata(
+        hash_alg, manifest_bytes, manifest_name = S3AssetUploader._gather_upload_metadata(
             manifest=manifest,
             source_root=source_root,
             file_system_location_name=file_system_location_name,
@@ -454,7 +440,7 @@ class S3AssetUploader:
         # Separate 'large' files from 'small' files so that we can process 'large' files serially.
         # This wastes less bandwidth if uploads are cancelled, as it's better to use the multi-threaded
         # multi-part upload for a single large file than multiple large files at the same time.
-        (small_file_queue, large_file_queue) = self._separate_files_by_size(
+        small_file_queue, large_file_queue = self._separate_files_by_size(
             manifest.paths, self.small_file_threshold
         )
 
@@ -479,13 +465,13 @@ class S3AssetUploader:
                 }
                 # surfaces any exceptions in the thread
                 for future in concurrent.futures.as_completed(futures):
-                    (is_uploaded, file_size) = future.result()
+                    is_uploaded, file_size = future.result()
                     if progress_tracker and not is_uploaded:
                         progress_tracker.increase_skipped(1, file_size)
 
             # Now process the whole 'large file' queue with serial object uploads (but still parallel multi-part upload.)
             for file in large_file_queue:
-                (is_uploaded, file_size) = self.upload_object_to_cas(
+                is_uploaded, file_size = self.upload_object_to_cas(
                     file,
                     manifest.hashAlg,
                     s3_bucket,
@@ -542,7 +528,8 @@ class S3AssetUploader:
             progress_tracker.report_progress()
             if not progress_tracker.continue_reporting:
                 raise AssetSyncCancelledError(
-                    "File snapshot cancelled.", progress_tracker.get_summary_statistics()
+                    "File snapshot cancelled.",
+                    progress_tracker.get_summary_statistics(),
                 )
 
     def reset_s3_check_cache(self, s3_check_cache_dir: Optional[str]) -> None:
@@ -781,7 +768,8 @@ class S3AssetUploader:
             except concurrent.futures.CancelledError as ce:
                 if progress_tracker and progress_tracker.continue_reporting is False:
                     raise AssetSyncCancelledError(
-                        "File upload cancelled.", progress_tracker.get_summary_statistics()
+                        "File upload cancelled.",
+                        progress_tracker.get_summary_statistics(),
                     )
                 else:
                     raise AssetSyncError("File upload failed.", ce) from ce
@@ -1044,6 +1032,8 @@ class S3AssetManager:
         asset_uploader: Optional[S3AssetUploader] = None,
         session: Optional[boto3.Session] = None,
         asset_manifest_version: ManifestVersion = ManifestVersion.v2023_03_03,
+        s3_max_pool_connections: int = 50,
+        small_file_threshold_multiplier: int = 20,
     ) -> None:
         self.farm_id = farm_id
         self.queue_id = queue_id
@@ -1060,7 +1050,11 @@ class S3AssetManager:
                 )
 
         if asset_uploader is None:
-            asset_uploader = S3AssetUploader(session=session)
+            asset_uploader = S3AssetUploader(
+                session=session,
+                s3_max_pool_connections=s3_max_pool_connections,
+                small_file_threshold_multiplier=small_file_threshold_multiplier,
+            )
 
         self.asset_uploader = asset_uploader
         self.session = session
@@ -1144,12 +1138,16 @@ class S3AssetManager:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(
-                        self._process_input_path, path, root_path, hash_cache, progress_tracker
+                        self._process_input_path,
+                        path,
+                        root_path,
+                        hash_cache,
+                        progress_tracker,
                     ): path
                     for path in input_paths
                 }
                 for future in concurrent.futures.as_completed(futures):
-                    (file_status, file_size, path_to_put_in_manifest) = future.result()
+                    file_status, file_size, path_to_put_in_manifest = future.result()
                     paths.append(path_to_put_in_manifest)
                     if progress_tracker:
                         if file_status == FileStatus.NEW or file_status == FileStatus.MODIFIED:
@@ -1450,7 +1448,7 @@ class S3AssetManager:
             storage_profile,
             require_paths_exist,
         )
-        (input_file_count, input_bytes) = self._get_total_input_size_from_asset_group(asset_groups)
+        input_file_count, input_bytes = self._get_total_input_size_from_asset_group(asset_groups)
         return AssetUploadGroup(
             asset_groups=asset_groups,
             total_input_files=input_file_count,
@@ -1495,7 +1493,10 @@ class S3AssetManager:
                 # Create manifest, using local hash cache
                 with HashCache(hash_cache_dir) as hash_cache:
                     asset_manifest = self._create_manifest_file(
-                        sorted(list(group.inputs)), group.root_path, hash_cache, progress_tracker
+                        sorted(list(group.inputs)),
+                        group.root_path,
+                        hash_cache,
+                        progress_tracker,
                     )
 
             asset_root_manifests.append(
@@ -1540,7 +1541,7 @@ class S3AssetManager:
             raise JobAttachmentsError("upload_assets: Farm or Fleet ID is missing.")
 
         # Sets up progress tracker to report upload progress back to the caller.
-        (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
+        input_files, input_bytes = self._get_total_input_size_from_manifests(manifests)
         progress_tracker = ProgressTracker(
             status=ProgressStatus.UPLOAD_IN_PROGRESS,
             total_files=input_files,
@@ -1566,7 +1567,7 @@ class S3AssetManager:
             )
 
             if asset_root_manifest.asset_manifest:
-                (partial_manifest_key, asset_manifest_hash) = self.asset_uploader.upload_assets(
+                partial_manifest_key, asset_manifest_hash = self.asset_uploader.upload_assets(
                     job_attachment_settings=self.job_attachment_settings,  # type: ignore[arg-type]
                     manifest=asset_root_manifest.asset_manifest,
                     partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(  # type: ignore[union-attr]
@@ -1631,7 +1632,7 @@ class S3AssetManager:
             raise JobAttachmentsError("snapshot_assets: Farm or Fleet ID is missing.")
 
         # Sets up progress tracker to report upload progress back to the caller.
-        (input_files, input_bytes) = self._get_total_input_size_from_manifests(manifests)
+        input_files, input_bytes = self._get_total_input_size_from_manifests(manifests)
         progress_tracker = ProgressTracker(
             status=ProgressStatus.SNAPSHOT_IN_PROGRESS,
             total_files=input_files,
@@ -1657,7 +1658,7 @@ class S3AssetManager:
             )
 
             if asset_root_manifest.asset_manifest:
-                (partial_manifest_key, asset_manifest_hash) = self.asset_uploader._snapshot_assets(
+                partial_manifest_key, asset_manifest_hash = self.asset_uploader._snapshot_assets(
                     snapshot_dir=Path(snapshot_dir),
                     manifest=asset_root_manifest.asset_manifest,
                     partial_manifest_prefix=self.job_attachment_settings.partial_manifest_prefix(  # type: ignore[union-attr]

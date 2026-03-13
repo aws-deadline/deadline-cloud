@@ -230,6 +230,13 @@ def attachment_upload(
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
 
+    s3_max_pool_connections = int(
+        config_file.get_setting("settings.s3_max_pool_connections", config=config)
+    )
+    small_file_threshold_multiplier = int(
+        config_file.get_setting("settings.small_file_threshold_multiplier", config=config)
+    )
+
     _attachment_upload(
         root_dirs=root_dirs,
         manifests=manifests,
@@ -238,4 +245,7 @@ def attachment_upload(
         path_mapping_rules=path_mapping_rules,
         upload_manifest_path=upload_manifest_path,
         print_function_callback=logger.echo,
+        s3_check_cache_dir=config_file.get_cache_directory(),
+        s3_max_pool_connections=s3_max_pool_connections,
+        small_file_threshold_multiplier=small_file_threshold_multiplier,
     )
