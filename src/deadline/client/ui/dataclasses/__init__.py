@@ -46,6 +46,9 @@ class JobBundleSettings:  # pylint: disable=too-many-instance-attributes
     # Whether to allow ability to "Load a different job bundle"
     browse_enabled: bool = field(default=False)
 
+    # Whether to show HIDDEN parameters in the UI
+    show_hidden_parameters: bool = field(default=False)
+
 
 @dataclass
 class CliJobSettings:  # pylint: disable=too-many-instance-attributes

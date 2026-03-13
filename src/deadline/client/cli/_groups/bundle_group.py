@@ -418,6 +418,11 @@ def bundle_submit(
     'OR --submitter-info \'{"submitter_name": "MyApp", "additional_info": {"render_engine": "Cycles"}}\' '
     "OR --submitter-info file://path/to/submitter.json",
 )
+@click.option(
+    "--show-hidden-parameters",
+    is_flag=True,
+    help="Reveal parameters that are normally hidden from the submission UI, allowing inspection and modification of their values.",
+)
 @_handle_error
 def bundle_gui_submit(
     parameter,
@@ -428,6 +433,7 @@ def bundle_gui_submit(
     known_asset_path,
     submitter_name,
     submitter_info,
+    show_hidden_parameters,
     **args,
 ):
     """
@@ -473,6 +479,7 @@ def bundle_gui_submit(
             submitter_info=submitter_info,
             known_asset_paths=known_asset_path,
             job_parameters=parameter,
+            show_hidden_parameters=show_hidden_parameters,
         )
 
         if not submitter:

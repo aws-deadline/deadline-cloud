@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from copy import deepcopy
 
 from qtpy.QtCore import QRegularExpression, Qt, Signal  # type: ignore
 from qtpy.QtGui import QValidator
 from qtpy.QtWidgets import (  # type: ignore
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -23,6 +24,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QSizePolicy,
     QSpacerItem,
     QSpinBox,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -30,6 +32,7 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from ...job_bundle.job_template import ControlType
 from ...job_bundle.parameters import JobParameter, get_ui_control_for_parameter_definition
+from .._utils import tr
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -63,10 +66,12 @@ class OpenJDParametersWidget(QWidget):
         *,
         parameter_definitions: List[JobParameter] = [],
         async_loading_state: str = "",
+        show_hidden_parameters: bool = False,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
 
+        self._show_hidden_parameters = show_hidden_parameters
         self.rebuild_ui(
             parameter_definitions=parameter_definitions, async_loading_state=async_loading_state
         )
@@ -144,6 +149,15 @@ class OpenJDParametersWidget(QWidget):
 
             control_type_name = get_ui_control_for_parameter_definition(parameter)
 
+            # When show_hidden_parameters is enabled, replace HIDDEN controls with the
+            # default control for the parameter's type so the value is visible.
+            originally_hidden = False
+            if self._show_hidden_parameters and control_type_name == ControlType.HIDDEN.name:
+                originally_hidden = True
+                unhidden_param = cast(JobParameter, dict(parameter))
+                unhidden_param.pop("userInterface", None)
+                control_type_name = get_ui_control_for_parameter_definition(unhidden_param)
+
             if parameter["type"] == "INT" and control_type_name == "SPIN_BOX":
                 control_widget = _JobTemplateIntSpinBoxWidget
             elif parameter["type"] == "FLOAT" and control_type_name == "SPIN_BOX":
@@ -156,6 +170,9 @@ class OpenJDParametersWidget(QWidget):
             control = control_widget(self, parameter)
             self.controls[control.name()] = control
             control.connect_parameter_changed(lambda message: self.parameter_changed.emit(message))
+
+            if originally_hidden:
+                _mark_label_as_revealed_hidden(control)
 
             if control_type_name != ControlType.HIDDEN.name:
                 if group_label:
@@ -207,6 +224,28 @@ def _get_parameter_label(parameter):
         return parameter["userInterface"].get("label", name)
     else:
         return name
+
+
+_HIDDEN_PARAMETER_HINT = tr("This parameter is normally hidden")
+
+
+def _mark_label_as_revealed_hidden(control: QWidget) -> None:
+    """Add a visual and accessible indicator that this parameter is normally hidden."""
+    label = getattr(control, "label", None)
+    if not isinstance(label, QLabel):
+        return
+    hint = _HIDDEN_PARAMETER_HINT
+    icon = QApplication.style().standardIcon(QStyle.SP_MessageBoxInformation)
+    icon_label = QLabel(parent=control)
+    icon_label.setPixmap(icon.pixmap(14, 14))
+    icon_label.setToolTip(hint)
+    icon_label.setAccessibleDescription(hint)
+    # Insert the icon before the text label in the control's layout
+    control_layout = control.layout()
+    if control_layout is not None:
+        idx = control_layout.indexOf(label)
+        if idx >= 0:
+            control_layout.insertWidget(idx, icon_label)
 
 
 class _JobTemplateLineEditValidator(QValidator):
@@ -514,7 +553,6 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
                     )
             self.edit_control.setMaximum(max_value)
 
-        # Control customizations
         # Control customizations
         if "userInterface" in parameter:
             decimals = parameter["userInterface"].get("decimals", -1)
