@@ -7,7 +7,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to generate attributions document" }
 
 pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Failed to update pip" }
-pip install --upgrade hatch "virtualenv<21"
+pip install --upgrade hatch
 if ($LASTEXITCODE -ne 0) { throw "Failed to update hatch" }
 
 hatch build
