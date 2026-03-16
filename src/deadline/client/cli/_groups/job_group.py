@@ -53,7 +53,11 @@ from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 from ...api._session import get_default_client_config
 from .._timestamp_formatter import TimestampFormat, TimestampFormatter
-from ._job_helpers import _resolve_job_search, _print_job_details
+from ._job_helpers import (
+    _resolve_job_search,
+    _print_job_details,
+    _estimate_remaining_time,
+)
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -160,8 +164,9 @@ def job_list(page_size, item_offset, **args):
     name_field = "displayName"
     if len(response["jobs"]) and "name" in response["jobs"][0]:
         name_field = "name"
-    structured_job_list = [
-        {
+    structured_job_list = []
+    for job in response["jobs"]:
+        job_entry = {
             field: job.get(field, "")
             for field in [
                 name_field,
@@ -173,8 +178,9 @@ def job_list(page_size, item_offset, **args):
                 "createdAt",
             ]
         }
-        for job in response["jobs"]
-    ]
+        est = _estimate_remaining_time(job)
+        job_entry["estimatedTimeRemaining"] = est if est else "N/A"
+        structured_job_list.append(job_entry)
 
     click.echo(
         f"Displaying {len(structured_job_list)} of {total_results} Jobs starting at {item_offset}"
@@ -325,7 +331,8 @@ def job_cancel(mark_as: str, yes: bool, **args):
 @click.option(
     "--run-status",
     type=click.Choice(
-        ["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"], case_sensitive=False
+        ["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"],
+        case_sensitive=False,
     ),
     multiple=True,
     help="Requeue tasks of this status. Repeat the option to provide multiple statuses.",
@@ -1316,7 +1323,8 @@ def job_logs(
                     latest_session = max(
                         ongoing_sessions,
                         key=lambda s: s.get(
-                            "startedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                            "startedAt",
+                            datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
                         ),
                     )
                 else:
@@ -1324,7 +1332,8 @@ def job_logs(
                     latest_session = max(
                         completed_sessions,
                         key=lambda s: s.get(
-                            "endedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                            "endedAt",
+                            datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
                         ),
                     )
 

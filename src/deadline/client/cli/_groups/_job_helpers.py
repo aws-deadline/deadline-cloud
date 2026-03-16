@@ -5,7 +5,7 @@ Private helper functions for job CLI commands.
 """
 
 from configparser import ConfigParser
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import click
@@ -97,7 +97,12 @@ def _resolve_job_search(config: Optional[ConfigParser], search_term: str) -> Opt
             pageSize=5,
             filterExpressions={
                 "filters": [
-                    {"searchTermFilter": {"searchTerm": search_term, "matchType": "CONTAINS"}}
+                    {
+                        "searchTermFilter": {
+                            "searchTerm": search_term,
+                            "matchType": "CONTAINS",
+                        }
+                    }
                 ],
                 "operator": "AND",
             },
@@ -155,3 +160,48 @@ def _print_job_details(config: Optional[ConfigParser], job_id: str) -> None:
         ) from exc
     response.pop("ResponseMetadata", None)
     click.echo(_cli_object_repr(response))
+    est = _estimate_remaining_time(response)
+    click.echo(f"estimatedTimeRemaining: {est if est else 'N/A'}")
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds as human-readable duration (e.g., '1 hour, 30 minutes')."""
+    if seconds < 60:
+        return f"{int(seconds)} seconds"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    hours = minutes // 60
+    mins = minutes % 60
+    parts = [f"{hours} hour{'s' if hours != 1 else ''}"]
+    if mins:
+        parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
+    return ", ".join(parts)
+
+
+def _count_tasks_by_group(counts: dict) -> tuple:
+    """Group task status counts into (completed, in_progress, pending) totals."""
+    completed = sum(counts.get(s, 0) for s in ("SUCCEEDED", "FAILED", "CANCELED"))
+    in_progress = sum(counts.get(s, 0) for s in ("RUNNING", "STARTING", "ASSIGNED"))
+    pending = sum(counts.get(s, 0) for s in ("PENDING", "READY", "SCHEDULED"))
+    return completed, in_progress, pending
+
+
+def _estimate_remaining_time(job: dict) -> Optional[str]:
+    """Estimate job completion time based on task progress and elapsed time."""
+    counts = job.get("taskRunStatusCounts", {})
+    started_at = job.get("startedAt")
+    if not counts or not started_at:
+        return None
+
+    completed, in_progress, pending = _count_tasks_by_group(counts)
+
+    if completed == 0 or (pending == 0 and in_progress == 0):
+        return None
+
+    elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+    if elapsed <= 0:
+        return None
+
+    estimated_remaining = (elapsed / completed) * (in_progress + pending)
+    return _format_duration(estimated_remaining)

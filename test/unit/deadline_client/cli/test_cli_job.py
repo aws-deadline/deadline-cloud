@@ -4,6 +4,7 @@
 Tests for the CLI job commands.
 """
 
+from datetime import timezone
 import datetime
 import json
 import os
@@ -25,6 +26,10 @@ from deadline.client.cli._groups.job_group import (
     _get_summary_of_files_to_download_message,
     _get_json_line,
     _get_download_summary_message,
+)
+from deadline.client.cli._groups._job_helpers import (
+    _format_duration,
+    _estimate_remaining_time,
 )
 from deadline.client.exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from deadline.job_attachments.models import (
@@ -104,6 +109,7 @@ def test_cli_job_list(fresh_deadline_config):
   endedAt: 2023-01-27 07:39:17+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
+  estimatedTimeRemaining: N/A
 - name: CLI Job
   jobId: job-0d239749fa05435f90263b3a8be54144
   taskRunStatus: COMPLETED
@@ -111,6 +117,7 @@ def test_cli_job_list(fresh_deadline_config):
   endedAt: 2023-01-27 07:29:51+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:24:22+00:00
+  estimatedTimeRemaining: N/A
 
 """
         )
@@ -146,6 +153,7 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
   endedAt: 2023-01-27 07:39:17+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:34:41+00:00
+  estimatedTimeRemaining: N/A
 - name: CLI Job
   jobId: job-0d239749fa05435f90263b3a8be54144
   taskRunStatus: COMPLETED
@@ -153,6 +161,7 @@ def test_cli_job_list_explicit_farm_and_queue_id(fresh_deadline_config):
   endedAt: 2023-01-27 07:29:51+00:00
   createdBy: b801f3c0-c071-70bc-b869-6804bc732408
   createdAt: 2023-01-27 07:24:22+00:00
+  estimatedTimeRemaining: N/A
 
 """
         )
@@ -277,6 +286,7 @@ startedAt: 2023-01-27 07:37:53+00:00
 endedAt: 2023-01-27 07:39:17+00:00
 priority: 50
 
+estimatedTimeRemaining: N/A
 """
         )
         session_mock().client("deadline").get_job.assert_called_once_with(
@@ -310,7 +320,11 @@ def test_cli_job_download_output_stdout_with_only_required_input(
         )
         MockOutputDownloader.return_value.download_job_output = mock_download
         mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
-        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        mock_files_list = [
+            "outputs/file1.txt",
+            "outputs/file2.txt",
+            "outputs/file3.txt",
+        ]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
@@ -423,7 +437,11 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
         MockOutputDownloader.return_value.download_job_output = mock_download
 
         mock_root_path = "C:\\Users\\username" if sys.platform != "win32" else "/root/path"
-        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        mock_files_list = [
+            "outputs/file1.txt",
+            "outputs/file2.txt",
+            "outputs/file3.txt",
+        ]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
@@ -525,7 +543,11 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
 
         # UNC format (which refers to the same location as 'C:\Users\username')
         mock_root_path = "\\\\127.0.0.1\\c$\\Users\\username"
-        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        mock_files_list = [
+            "outputs/file1.txt",
+            "outputs/file2.txt",
+            "outputs/file3.txt",
+        ]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
@@ -693,7 +715,11 @@ def test_cli_job_download_output_stdout_with_json_format(
             ],
         )
         MockOutputDownloader.return_value.download_job_output = mock_download
-        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        mock_files_list = [
+            "outputs/file1.txt",
+            "outputs/file2.txt",
+            "outputs/file3.txt",
+        ]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
@@ -814,7 +840,10 @@ def test_cli_job_download_output_stdout_with_json_format(
         ),
         (
             {
-                "/home/username/project01": ["renders/image1.png", "renders/image2.png"],
+                "/home/username/project01": [
+                    "renders/image1.png",
+                    "renders/image2.png",
+                ],
                 "/home/username/project02": [
                     "renders/image1.png",
                     "renders/image2.png",
@@ -1065,7 +1094,9 @@ def test_cli_job_wait_not_compatible(fresh_deadline_config):
         assert result.exit_code == 5
 
 
-def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(fresh_deadline_config):
+def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(
+    fresh_deadline_config,
+):
     """
     Test that job wait command returns exit code 2 when there are failed tasks, even if status is SUCCEEDED.
     """
@@ -1290,7 +1321,9 @@ def test_cli_job_wait_error_handling_json_output(fresh_deadline_config):
         assert result.exit_code == 2
 
 
-def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadline_config):
+def test_cli_job_download_output_handle_web_url_with_optional_input(
+    fresh_deadline_config,
+):
     """
     Confirm that the CLI interface prints out the expected list of
     farms, given mock data.
@@ -1366,7 +1399,9 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(fresh_deadli
 
 
 @pytest.mark.usefixtures("fresh_deadline_config")
-def test_cli_job_download_output_with_different_asset_root_path_format_than_job(tmp_path: Path):
+def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
+    tmp_path: Path,
+):
     """
     Tests whether the output messages printed to stdout match expected messages
     when `download-output` command is executed.
@@ -1395,7 +1430,11 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
         windows_root_path = "C:\\Users\\username"
         not_windows_root_path = "/root/path"
         mock_root_path = not_windows_root_path if sys.platform == "win32" else windows_root_path
-        mock_files_list = ["outputs/file1.txt", "outputs/file2.txt", "outputs/file3.txt"]
+        mock_files_list = [
+            "outputs/file1.txt",
+            "outputs/file2.txt",
+            "outputs/file3.txt",
+        ]
         MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
@@ -1485,7 +1524,9 @@ class TestJsonLineHelpers:
     def test_get_json_line_with_kwargs(self):
         """Test _get_json_line with additional properties."""
         result = _get_json_line(
-            "summary", "Downloaded 5 files", extra_properties={"fileCount": 5, "status": "complete"}
+            "summary",
+            "Downloaded 5 files",
+            extra_properties={"fileCount": 5, "status": "complete"},
         )
         parsed = json.loads(result)
 
@@ -1667,3 +1708,64 @@ def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
         )
+
+
+class TestEstimateCompletionTime:
+    def test_format_duration_seconds(self):
+        assert _format_duration(30) == "30 seconds"
+
+    def test_format_duration_minutes(self):
+        assert _format_duration(120) == "2 minutes"
+        assert _format_duration(60) == "1 minute"
+
+    def test_format_duration_hours(self):
+        assert _format_duration(3600) == "1 hour"
+        assert _format_duration(5400) == "1 hour, 30 minutes"
+
+    def test_estimate_remaining_time_no_tasks(self):
+        job: dict = {"taskRunStatusCounts": {}, "startedAt": None}
+        assert _estimate_remaining_time(job) is None
+
+    def test_estimate_remaining_time_completed_job(self):
+        job = {
+            "taskRunStatusCounts": {"SUCCEEDED": 10, "RUNNING": 0, "READY": 0},
+            "startedAt": datetime.datetime.now(timezone.utc),
+        }
+        assert _estimate_remaining_time(job) is None
+
+
+def test_cli_job_list_with_estimates(fresh_deadline_config, deadline_mock):
+    """
+    Confirm that the CLI interface prints estimated time remaining
+    for in-progress jobs.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    mock_job_with_task_counts = {
+        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+        "name": "CLI Job",
+        "taskRunStatus": "RUNNING",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "createdBy": "b801f3c0-c071-70bc-b869-6804bc732408",
+        "createdAt": datetime.datetime(2023, 1, 27, 7, 34, 41, tzinfo=tzutc()),
+        "startedAt": datetime.datetime(2023, 1, 27, 7, 37, 53, tzinfo=tzutc()),
+        "priority": 50,
+        "taskRunStatusCounts": {
+            "SUCCEEDED": 5,
+            "RUNNING": 2,
+            "READY": 3,
+        },
+    }
+
+    deadline_mock.search_jobs.return_value = {
+        "jobs": [mock_job_with_task_counts],
+        "totalResults": 1,
+        "itemOffset": 1,
+    }
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["job", "list"])
+
+    assert result.exit_code == 0
+    assert "estimatedTimeRemaining:" in result.output
