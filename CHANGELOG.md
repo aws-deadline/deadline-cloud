@@ -4,10 +4,9 @@
 ### Features
 * show estimated time remaining for in-progress jobs (#992) ([`509af3c`](https://github.com/aws-deadline/deadline-cloud/commit/509af3c63a3620ad625e681210d945b9ea0683f6))
 * bundle Qt dependencies in installer (#1021) ([`7ec10cc`](https://github.com/aws-deadline/deadline-cloud/commit/7ec10cc4b5a9bec9e861f0fb904bfc8ef9da331b))
-* bundle Qt dependencies in installer ([`7ec10cc`](https://github.com/aws-deadline/deadline-cloud/commit/7ec10cc4b5a9bec9e861f0fb904bfc8ef9da331b))
 
 ### Bug Fixes
-* load job bundle does nothing (#1041) ([`eee187e`](https://github.com/aws-deadline/deadline-cloud/commit/eee187e7f763a1f52d7d09ee8980801e8c1841c6))
+* fix load job bundle button not working (#1041) ([`eee187e`](https://github.com/aws-deadline/deadline-cloud/commit/eee187e7f763a1f52d7d09ee8980801e8c1841c6))
 
 
 ## 0.54.2 (2026-03-04)
