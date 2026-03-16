@@ -1,0 +1,6 @@
+Copyright (C) The Qt Company Ltd.
+License: LGPL-3.0-only (see Qt license above)
+Source code: https://code.qt.io/cgit/pyside/pyside-setup.git/
+
+Source code for this component may be downloaded here:
+https://s3.amazonaws.com/amazon-source-code-downloads/deadline-cloud/pyside-setup-6.8.3-src.tar.gz

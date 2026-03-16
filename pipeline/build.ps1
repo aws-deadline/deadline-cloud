@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # Install/upgrade packages
 python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Failed to update pip" }
-python -m pip install --upgrade hatch "virtualenv<21"
+python -m pip install --upgrade hatch
 if ($LASTEXITCODE -ne 0) { throw "Failed to update hatch" }
 python -m pip install --upgrade twine
 if ($LASTEXITCODE -ne 0) { throw "Failed to update twine" }
