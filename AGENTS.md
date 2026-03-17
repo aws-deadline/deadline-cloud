@@ -34,8 +34,7 @@ src/deadline/
 
 Always use `hatch` for running builds, tests, formatting, and linting.
 If running just a few tests, always add `--numprocesses=1` to the `hatch run test`
-command so that it starts quicker. Always run 'hatch run lint' and 'hatch run fmt' before any code
-is submitted.
+command so that it starts quicker.
 
 ```bash
 # Development
@@ -76,7 +75,6 @@ class _PrivateClass:  # Private
 ```
 
 ### Commit Messages
-Always sign commits with `git commit -s`.
 Use [conventional commits](https://www.conventionalcommits.org/):
 - `feat:` - New features
 - `fix:` - Bug fixes
@@ -85,6 +83,20 @@ Use [conventional commits](https://www.conventionalcommits.org/):
 - `refactor:` - Code refactoring
 - `perf:` - Performance improvements
 - `feat!:` or `fix!:` - Breaking changes (Also include `BREAKING CHANGES:` section in message body)
+
+### Before Committing / Raising a PR
+
+After completing any code changes:
+1. Always run `hatch run fmt` and `hatch run lint` to verify the changes are clean.
+2. If also committing, run the full checklist: fmt → lint → test → build → `git commit -s`.
+
+```bash
+hatch run fmt            # Auto-format code
+hatch run lint           # Linting and type checking
+hatch run test           # Unit tests (must pass with ≥80% coverage)
+hatch build              # Build wheel/sdist
+git commit -s            # Always sign commits with -s
+```
 
 ## Testing
 
