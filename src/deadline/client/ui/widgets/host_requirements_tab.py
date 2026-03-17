@@ -1099,6 +1099,8 @@ class OptionalMultiSelectComboBox(QComboBox):
 
     def __init__(self, items: List[str], parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
+        # Use QListView so check indicators render on macOS
+        self.setView(QListView(self))
         self.model().itemChanged.connect(self.handleModelChanged)
         self.setPlaceholderText("-")
         self.addItems(items)
