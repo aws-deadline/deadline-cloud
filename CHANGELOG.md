@@ -1,3 +1,23 @@
+## 0.54.3 (2026-03-18)
+
+
+### Features
+* add worker log retrieval to MCP server for job troubleshooting (#999) ([`0378f77`](https://github.com/aws-deadline/deadline-cloud/commit/0378f7792372eecec17e9c72d7bb81f1da977bc3))
+* show estimated time remaining for in-progress jobs (#992) ([`509af3c`](https://github.com/aws-deadline/deadline-cloud/commit/509af3c63a3620ad625e681210d945b9ea0683f6))
+* bundle Qt dependencies in installer (#1021) ([`7ec10cc`](https://github.com/aws-deadline/deadline-cloud/commit/7ec10cc4b5a9bec9e861f0fb904bfc8ef9da331b))
+* bundle Qt dependencies in installer ([`7ec10cc`](https://github.com/aws-deadline/deadline-cloud/commit/7ec10cc4b5a9bec9e861f0fb904bfc8ef9da331b))
+
+### Bug Fixes
+* update attributions for OS-specific dependencies (#1057) ([`2616a75`](https://github.com/aws-deadline/deadline-cloud/commit/2616a75e63eb8191c3903895507f83247dbb3fed))
+* update attributions for os-specific dependencies ([`2616a75`](https://github.com/aws-deadline/deadline-cloud/commit/2616a75e63eb8191c3903895507f83247dbb3fed))
+* show friendly OS name instead of sys.platform in error messages (#1004) (#1045) ([`e0346ce`](https://github.com/aws-deadline/deadline-cloud/commit/e0346ce1aba96dee825d2c650f064d8740fa99aa))
+* missing newline in terminal output when submitting a job with no attachments (#1008) (#1043) ([`5bce616`](https://github.com/aws-deadline/deadline-cloud/commit/5bce616d4b9c07508b5a0b7de8eb54607ed0ffcf))
+* show checkboxes in multiselect combo boxes on macOS (#1052) ([`c4eb36b`](https://github.com/aws-deadline/deadline-cloud/commit/c4eb36b93c850330c0928afa00efb84cd3b1864f))
+* accept hidden parameters with empty string defaults (#1032) ([`347adcc`](https://github.com/aws-deadline/deadline-cloud/commit/347adcce70e873792b62e554d70ab311f2d3ba09))
+* accept hidden parameters with empty string defaults ([`347adcc`](https://github.com/aws-deadline/deadline-cloud/commit/347adcce70e873792b62e554d70ab311f2d3ba09))
+* load job bundle does nothing (#1041) ([`eee187e`](https://github.com/aws-deadline/deadline-cloud/commit/eee187e7f763a1f52d7d09ee8980801e8c1841c6))
+
+
 ## 0.54.3 (2026-03-16)
 
 
