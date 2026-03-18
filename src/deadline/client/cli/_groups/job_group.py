@@ -53,7 +53,11 @@ from .._main import deadline as main
 from ._sigint_handler import SigIntHandler
 from ...api._session import get_default_client_config
 from .._timestamp_formatter import TimestampFormat, TimestampFormatter
-from ._job_helpers import _resolve_job_search, _print_job_details
+from ._job_helpers import (
+    _resolve_job_search,
+    _print_job_details,
+    _estimate_remaining_time,
+)
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -106,13 +110,14 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_job():
     """
-    Commands to work with [Deadline Cloud jobs] in a [queue].
+    Monitor and manage Deadline Cloud jobs in a queue.
 
-    Use the `deadline bundle submit` or `deadline bundle gui-submit` commands to create a job
-    from a job bundle.
+    Use `deadline bundle submit` to create a job. Then use these commands
+    to check status, read logs, wait for completion, download output,
+    cancel, or requeue failed tasks.
 
-    [Deadline Cloud jobs]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
-    [queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
 
 
@@ -125,9 +130,10 @@ def cli_job():
 @_handle_error
 def job_list(page_size, item_offset, **args):
     """
-    Lists the [Deadline Cloud jobs] in the queue.
+    Lists the Deadline Cloud jobs in the queue.
 
-    [Deadline Cloud jobs]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -158,8 +164,9 @@ def job_list(page_size, item_offset, **args):
     name_field = "displayName"
     if len(response["jobs"]) and "name" in response["jobs"][0]:
         name_field = "name"
-    structured_job_list = [
-        {
+    structured_job_list = []
+    for job in response["jobs"]:
+        job_entry = {
             field: job.get(field, "")
             for field in [
                 name_field,
@@ -171,8 +178,9 @@ def job_list(page_size, item_offset, **args):
                 "createdAt",
             ]
         }
-        for job in response["jobs"]
-    ]
+        est = _estimate_remaining_time(job)
+        job_entry["estimatedTimeRemaining"] = est if est else "N/A"
+        structured_job_list.append(job_entry)
 
     click.echo(
         f"Displaying {len(structured_job_list)} of {total_results} Jobs starting at {item_offset}"
@@ -190,13 +198,14 @@ def job_list(page_size, item_offset, **args):
 @_handle_error
 def job_get(search_term: Optional[str], **args):
     """
-    Get the details of a [Deadline Cloud job], or search for jobs with a search term.
+    Get the details of a Deadline Cloud job, or search for jobs with a search term.
 
     SEARCH_TERM can be a job ID (job-xxx) or a search string to find matching jobs.
     If exactly one job matches, shows full details. If multiple match, shows a summary list.
     If no arguments provided, shows the default job from config.
 
-    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Check if search_term is actually a job ID
     if search_term and re.match(r"^job-[0-9a-f]{32}$", search_term):
@@ -239,10 +248,11 @@ def job_get(search_term: Optional[str], **args):
 @_handle_error
 def job_cancel(mark_as: str, yes: bool, **args):
     """
-    Cancel a [Deadline Cloud job] from running, optionally marking it with an alternative status such
-    as SUSPENDED, SUCCEEDED or FAILED.
+    Cancel a Deadline Cloud job from running, optionally marking it with an
+    alternative status such as SUSPENDED, SUCCEEDED or FAILED.
 
-    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -321,7 +331,8 @@ def job_cancel(mark_as: str, yes: bool, **args):
 @click.option(
     "--run-status",
     type=click.Choice(
-        ["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"], case_sensitive=False
+        ["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"],
+        case_sensitive=False,
     ),
     multiple=True,
     help="Requeue tasks of this status. Repeat the option to provide multiple statuses.",
@@ -334,11 +345,13 @@ def job_cancel(mark_as: str, yes: bool, **args):
 @_handle_error
 def job_requeue_tasks(run_status: Optional[list[str]], **args):
     """
-    Requeue tasks of a [Deadline Cloud job]. By default, requeues all FAILED, CANCELED, and SUSPENDED tasks.
+    Requeue tasks of a Deadline Cloud job. By default, requeues all FAILED,
+    CANCELED, and SUSPENDED tasks.
 
     Use the --run-status option to requeue tasks of different status.
 
-    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -943,10 +956,11 @@ def _assert_valid_path(path: str) -> None:
 @_handle_error
 def job_download_output(step_id, task_id, output, **args):
     """
-    Download a the output of a [Deadline Cloud job] in the queue that was saved as [job attachments].
+    Download the output of a Deadline Cloud job that was saved as job
+    attachments.
 
-    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
@@ -989,14 +1003,15 @@ def job_download_output(step_id, task_id, output, **args):
 @_handle_error
 def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     """
-    Wait for a [Deadline Cloud job] to complete and then print information about failed step-task IDs.
+    Wait for a Deadline Cloud job to complete and then print information
+    about failed step-task IDs.
 
-    This command blocks until the job's taskRunStatus reaches a terminal state
-    (SUCCEEDED, FAILED, CANCELED, SUSPENDED, or NOT_COMPATIBLE),
-    then prints a list of any failed step-task combinations.
+    Blocks until the job reaches a terminal state (SUCCEEDED, FAILED,
+    CANCELED, SUSPENDED, or NOT_COMPATIBLE), then prints any failed
+    step-task combinations.
 
-    The command uses exponential backoff for polling, starting at 0.5 seconds and doubling
-    the interval after each check until it reaches the maximum polling interval.
+    Uses exponential backoff for polling, starting at 0.5s and doubling
+    until reaching --max-poll-interval.
 
     Exit codes:
 
@@ -1008,7 +1023,8 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
         4 - Job was suspended
         5 - Job is not compatible
 
-    [Deadline Cloud job]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html
+    \b
+    Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1205,23 +1221,22 @@ def job_logs(
     **args,
 ):
     """
-    Prints a [Deadline Cloud session log] stored in [CloudWatch logs] for the job.
-    Defaults to a recent/ongoing session if a session id is not provided.
+    Print session logs from CloudWatch for a job. Defaults to the most
+    recent or ongoing session if no session ID is provided.
 
-    By default, it returns the most recent 100 log lines, but this can be
-    adjusted using the --limit parameter.
+    Returns the most recent 100 log lines by default (adjust with --limit).
 
-    If session-id is not provided but job-id is, the command will automatically
-    select a session using the following priority:
-    1. If there are ongoing sessions (no endedAt time), always prefer them
-    2. Among ongoing sessions, select the one that started most recently
-    3. If no ongoing sessions exist, select the completed session that ended most recently
+    Session auto-selection priority when --session-id is omitted:
 
-    Use --next-token with the value from a previous response to get the next page of results
-    of log output prior to the last page.
+    \b
+      1. Ongoing sessions (no endedAt), preferring most recently started
+      2. Most recently ended completed session
 
-    [Deadline Cloud session log]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/view-logs.html
-    [CloudWatch logs]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/monitoring-cloudwatch.html
+    Use --next-token with the value from a previous response to get the
+    next page of log output.
+
+    \b
+    Learn more about [session logs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/view-logs.html)
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -1308,7 +1323,8 @@ def job_logs(
                     latest_session = max(
                         ongoing_sessions,
                         key=lambda s: s.get(
-                            "startedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                            "startedAt",
+                            datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
                         ),
                     )
                 else:
@@ -1316,7 +1332,8 @@ def job_logs(
                     latest_session = max(
                         completed_sessions,
                         key=lambda s: s.get(
-                            "endedAt", datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                            "endedAt",
+                            datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
                         ),
                     )
 
@@ -1538,9 +1555,7 @@ def job_trace_schedule(verbose, trace_format, trace_file, **args):
 
     To visualize the trace output file when providing the options
     "--trace-format chrome --trace-file output.json", open
-    the [Perfetto Tracing UI] in a browser and choose "Open trace file".
-
-    [Perfetto Tracing UI]: https://ui.perfetto.dev
+    https://ui.perfetto.dev in a browser and choose "Open trace file".
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(

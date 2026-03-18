@@ -33,9 +33,11 @@ from ....job_attachments.progress_tracker import DownloadSummaryStatistics
 @_handle_error
 def cli_attachment():
     """
-    BETA - Commands to work with [Deadline Cloud job attachments].
+    BETA - Upload or download Deadline Cloud job attachment data files
+    using manifest files.
 
-    [Deadline Cloud job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -81,9 +83,11 @@ def attachment_download(
     **args,
 ):
     """
-    BETA - Download Job Attachment data files for given [job attachments] manifest(s).
+    BETA - Download Job Attachment data files for given job attachment
+    manifest(s).
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 
@@ -177,9 +181,11 @@ def attachment_upload(
     **args,
 ):
     """
-    BETA - Upload Job Attachment data files for given [job attachments] manifest(s).
+    BETA - Upload Job Attachment data files for given job attachment
+    manifest(s).
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 

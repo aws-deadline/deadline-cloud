@@ -216,11 +216,52 @@ _ADDITIONAL_ATTRIBUTIONS = [
         "url": "https://github.com/libexpat/libexpat",
         "spdx": _MIT,
     },
+    {
+        "name": "ICU",
+        "attribution_path": "ICU_LICENSE.txt",
+        "url": "https://github.com/unicode-org/icu",
+        "spdx": "Unicode-DFS-2016",
+        "platforms": ["Linux"],
+    },
+    {
+        "name": "PySide6",
+        "sort_key": "Qt.PySide6",
+        "attribution_path": "PYSIDE6_LICENSE.txt",
+        "url": "https://code.qt.io/cgit/pyside/pyside-setup.git/",
+        "spdx": "LGPL-3.0-only",
+    },
+    {
+        "name": "Qt",
+        "sort_key": "Qt",
+        "attribution_path": "QT_LICENSE.txt",
+        "url": "https://code.qt.io/",
+        "spdx": "LGPL-3.0-only",
+    },
+    {
+        "name": "Shiboken6",
+        "sort_key": "Qt.Shiboken6",
+        "attribution_path": "SHIBOKEN6_LICENSE.txt",
+        "url": "https://code.qt.io/cgit/pyside/pyside-setup.git/",
+        "spdx": "LGPL-3.0-only",
+    },
 ]
 
 # Some packages specify their license but do not include it in the repository/package
 # We attribute these manually using _ADDITIONAL_ATTRIBUTIONS
 _EXPECTED_MISSING_LICENSE = {"pywin32"}
+
+# Mapping from import/module names used in the PyInstaller allowlist's DEPENDENCIES
+# to the package names used in attributions. Only needed when they differ.
+_BUNDLED_IMPORT_TO_PACKAGE_NAME = {
+    "dateutil": "python-dateutil",
+    "yaml": "PyYAML",
+    "qtpy": "QtPy",
+    "PySide6": "PySide6",
+    "shiboken6": "Shiboken6",
+}
+
+# Dependencies that are our own packages and don't need third-party attribution
+_BUNDLED_OWN_PACKAGES = {"deadline", "deadline_job_attachments"}
 
 
 def _get_desired_python_version() -> str:
@@ -569,6 +610,38 @@ def packages_to_markdown_table(
     return "\n".join(lines)
 
 
+def _validate_bundled_attributions() -> None:
+    """
+    Validates that every dependency in the PyInstaller allowlist has a
+    corresponding entry in _ATTRIBUTIONS_ALLOW_LIST or _ADDITIONAL_ATTRIBUTIONS.
+    """
+    pyinstaller_dir = Path(__file__).parent.parent / "pyinstaller"
+    sys.path.insert(0, str(pyinstaller_dir))
+    from allowlist import DEPENDENCIES
+
+    attributed_names = set(_ATTRIBUTIONS_ALLOW_LIST.keys())
+    for entry in _ADDITIONAL_ATTRIBUTIONS:
+        attributed_names.add(entry["name"])
+    attributed_lower = {n.lower() for n in attributed_names}
+
+    errors = []
+    for dep in DEPENDENCIES:
+        if dep in _BUNDLED_OWN_PACKAGES:
+            continue
+        package_name = _BUNDLED_IMPORT_TO_PACKAGE_NAME.get(dep, dep)
+        if package_name not in attributed_names and package_name.lower() not in attributed_lower:
+            errors.append(
+                f"Bundled dependency '{dep}' (package: '{package_name}') has no attribution entry. "
+                f"Add it to _ATTRIBUTIONS_ALLOW_LIST or _ADDITIONAL_ATTRIBUTIONS."
+            )
+
+    if errors:
+        print("ERROR: Bundled dependencies missing attributions:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        sys.exit(1)
+
+
 def generate_attributions_document(
     out_file: Path,
     python_arg: Optional[str],
@@ -579,6 +652,7 @@ def generate_attributions_document(
     """
     Generate an attributions document for this package and write it to `out_file`
     """
+    _validate_bundled_attributions()
     desired_python_version = _get_desired_python_version()
     python_install = PythonInstall(python_arg, desired_python_version, dev)
     license_info = _get_license_info(python_install, dev)
@@ -593,7 +667,8 @@ def generate_attributions_document(
 
     additional_attributions_path = Path(__file__).parent / "additional"
     for attribution in sorted(
-        _ADDITIONAL_ATTRIBUTIONS, key=lambda attribution: attribution["name"]
+        _ADDITIONAL_ATTRIBUTIONS,
+        key=lambda attribution: attribution.get("sort_key", attribution["name"]),
     ):
         if "platforms" not in attribution or platform.system() in attribution["platforms"]:
             with open(

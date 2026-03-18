@@ -386,6 +386,7 @@ def create_job_from_job_bundle(
     target_task_run_status: Optional[str] = None,
     require_paths_exist: bool = False,
     submitter_name: Optional[str] = None,
+    submitter_version: Optional[str] = None,
     known_asset_paths: Collection[str] = [],
     debug_snapshot_dir: Optional[str] = None,
     from_gui: bool = False,
@@ -477,6 +478,7 @@ def create_job_from_job_bundle(
         submitter_name = "Custom"
 
     session_context["submitter-name"] = submitter_name
+    session_context["submitter-version"] = submitter_version
 
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(job_bundle_dir)
@@ -749,11 +751,13 @@ def create_job_from_job_bundle(
 
     if not files_processed:
         # Call each callback once indicating nothing to do.
+        # Use progress=100 to ensure the progress bar is properly closed
+        # and a newline is emitted. (See https://github.com/aws-deadline/deadline-cloud/issues/1008)
         if hashing_progress_callback is not None:
             hashing_progress_callback(
                 ProgressReportMetadata(
                     status=ProgressStatus.PREPARING_IN_PROGRESS,
-                    progress=0,
+                    progress=100,
                     transferRate=0,
                     progressMessage="No files to hash",
                     processedFiles=0,
@@ -763,7 +767,7 @@ def create_job_from_job_bundle(
             upload_progress_callback(
                 ProgressReportMetadata(
                     status=ProgressStatus.UPLOAD_IN_PROGRESS,
-                    progress=0,
+                    progress=100,
                     transferRate=0,
                     progressMessage="No files to upload",
                     processedFiles=0,

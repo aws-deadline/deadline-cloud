@@ -46,6 +46,7 @@ class AwsAuthenticationStatus(Enum):
 # Place for stashing context to be attached to boto clients.
 session_context: dict[str, Optional[str]] = {
     "submitter-name": None,
+    "submitter-version": None,
     "cli-command-name": None,
 }
 
@@ -81,7 +82,10 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str):
-    session = boto3.Session(profile_name=profile_name)
+    # Use regional STS endpoint to avoid cross-region calls to the global endpoint.
+    botocore_session = get_botocore_session()
+    botocore_session.set_config_variable("sts_regional_endpoints", "regional")
+    session = boto3.Session(profile_name=profile_name, botocore_session=botocore_session)
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
@@ -118,7 +122,10 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
     """
     user_agent_extra = f"app/deadline-client#{version}"
     if session_context.get("submitter-name"):
-        user_agent_extra += f" submitter/{session_context['submitter-name']}"
+        submitter_extra = f" submitter/{session_context['submitter-name']}"
+        if session_context.get("submitter-version"):
+            submitter_extra += f"#{session_context['submitter-version']}"
+        user_agent_extra += submitter_extra
     if session_context.get("cli-command-name"):
         user_agent_extra += f" cli-command/{session_context['cli-command-name']}"
     client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)

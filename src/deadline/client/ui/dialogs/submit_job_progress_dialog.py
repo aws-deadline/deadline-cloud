@@ -7,10 +7,7 @@ AWS Deadline Cloud
 from __future__ import annotations
 
 import logging
-import threading
 from typing import Any, Optional
-from functools import partial
-import time
 
 from qtpy.QtCore import Qt, Signal, QSize
 from qtpy.QtGui import QCloseEvent, QFontMetrics
@@ -31,90 +28,24 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QSizePolicy,
 )
 
-from .._utils import CancelationFlag, tr
-from ... import api
+from .._utils import tr
 from ...config import set_setting
 from ....job_attachments.progress_tracker import ProgressReportMetadata
+from ._job_submission_worker import JobSubmissionWorker
 
 __all__ = ["SubmitJobProgressDialog"]
 
 logger = logging.getLogger(__name__)
 
 
-def _print_function_callback(
-    cancelation_flag: CancelationFlag, dialog: SubmitJobProgressDialog, message: str
-):
-    """Callback for when api.create_job_from_job_bundle prints a message."""
-    if not cancelation_flag:
-        dialog.submission_thread_print.emit(message)
-
-
-def _interactive_confirmation_callback(
-    cancelation_flag: CancelationFlag,
-    dialog: SubmitJobProgressDialog,
-    message: str,
-    default_response: bool,
-) -> bool:
-    """Callback for when api.create_job_from_job_bundle presents a warning to users."""
-    if not cancelation_flag.canceled:
-        # The handler for the submission_thread_request_warning_dialog signal will show
-        # the warning dialog in the main GUI thread, then will set the _warning_dialog_completed
-        # property to True when it is done.
-        dialog._warning_dialog_completed = False
-        dialog.submission_thread_request_warning_dialog.emit(message, default_response)
-    while not cancelation_flag.canceled and not dialog._warning_dialog_completed:
-        time.sleep(0.1)
-    return not cancelation_flag.canceled and not dialog._warning_dialog_canceled
-
-
-def _hashing_progress_callback(
-    cancelation_flag: CancelationFlag,
-    dialog: SubmitJobProgressDialog,
-    progress_report_metadata: ProgressReportMetadata,
-):
-    """Callback for when api.create_job_from_job_bundle provides a hashing progress update."""
-    if not cancelation_flag.canceled:
-        dialog.submission_thread_hashing_progress.emit(progress_report_metadata)
-    return not cancelation_flag.canceled
-
-
-def _upload_progress_callback(
-    cancelation_flag: CancelationFlag,
-    dialog: SubmitJobProgressDialog,
-    progress_report_metadata: ProgressReportMetadata,
-):
-    """Callback for when api.create_job_from_job_bundle provides an upload progress update."""
-    if not cancelation_flag.canceled:
-        dialog.submission_thread_upload_progress.emit(progress_report_metadata)
-    return not cancelation_flag.canceled
-
-
-def _create_job_result_callback(cancelation_flag: CancelationFlag):
-    """Callback for when api.create_job_from_job_bundle checks whether to cancel."""
-    return not cancelation_flag.canceled
-
-
-def _submission_thread_runner(
-    cancelation_flag: CancelationFlag, dialog: SubmitJobProgressDialog, kwargs
-):
-    """Function to run api.create_job_from_job_bundle in a background thread."""
-    try:
-        job_id = api.create_job_from_job_bundle(**kwargs)
-        if not cancelation_flag.canceled:
-            dialog.job_id = job_id
-            dialog.submission_thread_succeeded.emit(job_id)
-    except Exception as e:
-        if not cancelation_flag.canceled:
-            dialog.submission_thread_exception.emit(e)
-
-
 class SubmitJobProgressDialog(QDialog):
     """
     A modal dialog box for the submission progress while submitting a job bundle
     to AWS Deadline Cloud.
-    """
 
-    cancelation_flag: CancelationFlag
+    This dialog uses a QThread-based worker (JobSubmissionWorker) to run the
+    submission in the background while displaying progress updates.
+    """
 
     # This signal is sent when the background thread raises an exception.
     submission_thread_exception = Signal(BaseException)
@@ -127,21 +58,18 @@ class SubmitJobProgressDialog(QDialog):
 
     # This signal is sent when the background thread succeeds.
     submission_thread_succeeded = Signal(str)
-    progress_window_closed = Signal(None)
+    progress_window_closed = Signal()
 
     job_id: Optional[str] = None
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
 
-        # Use the CancelationFlag object to decouple the cancelation value
-        # from the window lifetime.
-        self.cancelation_flag = CancelationFlag()
-        self.destroyed.connect(self.cancelation_flag.set_canceled)
         self._warning_dialog_canceled = False
-
         self._submission_complete = False
-        self.__submission_thread: Optional[threading.Thread] = None
+        self._worker: Optional[JobSubmissionWorker] = None
+
+        # Connect internal signals to handlers
         self.submission_thread_print.connect(self.handle_print)
         self.submission_thread_hashing_progress.connect(self.handle_hashing_thread_progress_report)
         self.submission_thread_upload_progress.connect(self.handle_upload_thread_progress_report)
@@ -170,30 +98,57 @@ class SubmitJobProgressDialog(QDialog):
         kwargs["from_gui"] = True
         kwargs["submitter_name"] = kwargs.get("submitter_name", "CustomGUI")
 
-        # The CancelationFlag object has a lifetime decoupled from the dialog. Each callback
-        # always checks for cancelation before calling a method or accessing a property of the dialog,
-        # and the Qt object's destroyed event is connected to set its canceled flag.
-        kwargs["print_function_callback"] = partial(
-            _print_function_callback, self.cancelation_flag, self
-        )
-        kwargs["interactive_confirmation_callback"] = partial(
-            _interactive_confirmation_callback, self.cancelation_flag, self
-        )
-        kwargs["hashing_progress_callback"] = partial(
-            _hashing_progress_callback, self.cancelation_flag, self
-        )
-        kwargs["upload_progress_callback"] = partial(
-            _upload_progress_callback, self.cancelation_flag, self
-        )
-        kwargs["create_job_result_callback"] = partial(
-            _create_job_result_callback, self.cancelation_flag
-        )
+        # Create and configure the worker
+        self._worker = JobSubmissionWorker(self)
 
-        self.__submission_thread = threading.Thread(
-            target=partial(_submission_thread_runner, self.cancelation_flag, self, kwargs),
-            name="AWS Deadline Cloud Job Submission",
+        # Connect worker signals to dialog signals/handlers
+        # Using Qt.QueuedConnection ensures thread-safe signal delivery
+        self._worker.print_message.connect(self.submission_thread_print.emit, Qt.QueuedConnection)
+        self._worker.hashing_progress.connect(
+            self.submission_thread_hashing_progress.emit, Qt.QueuedConnection
         )
-        self.__submission_thread.start()
+        self._worker.upload_progress.connect(
+            self.submission_thread_upload_progress.emit, Qt.QueuedConnection
+        )
+        self._worker.confirmation_requested.connect(
+            self._handle_confirmation_requested, Qt.QueuedConnection
+        )
+        self._worker.succeeded.connect(self._handle_worker_succeeded, Qt.QueuedConnection)
+        self._worker.failed.connect(self._handle_worker_failed, Qt.QueuedConnection)
+
+        # Set submission parameters and start
+        self._worker.set_submission_kwargs(**kwargs)
+        self._worker.start()
+
+    def _handle_confirmation_requested(self, message: str, default_response: bool) -> None:
+        """
+        Handle confirmation request from worker thread.
+
+        Shows the warning dialog and sends the result back to the worker.
+        """
+        if self._worker is None or self._worker.is_canceled:
+            return
+
+        # Show the dialog (this blocks until user responds)
+        dialog = _JobSumissionWarningDialog(message, default_response, self)
+        selection = dialog.exec()
+
+        accepted = selection != QDialog.Rejected
+        if not accepted:
+            self._warning_dialog_canceled = True
+
+        # Send result back to worker
+        if self._worker is not None:
+            self._worker.set_confirmation_result(accepted)
+
+    def _handle_worker_succeeded(self, job_id: str) -> None:
+        """Handle successful job submission from worker."""
+        self.job_id = job_id
+        self.submission_thread_succeeded.emit(job_id)
+
+    def _handle_worker_failed(self, error: BaseException) -> None:
+        """Handle failed job submission from worker."""
+        self.submission_thread_exception.emit(error)
 
     def _build_ui(self):
         """Builds job submission progress UI"""
@@ -241,16 +196,13 @@ class SubmitJobProgressDialog(QDialog):
             default_response (bool):
                 True if the default is to continue. This adds a "Do not ask again" button as well.
                 False if the default is to Cancel.
+
+        Note:
+            This method is kept for backward compatibility with the signal-based approach.
+            The actual handling is done in _handle_confirmation_requested.
         """
-        # Build the UI for user confirmation
-        dialog = _JobSumissionWarningDialog(message, default_response, self)
-
-        selection = dialog.exec()
-
-        if selection == QDialog.Rejected:
-            self._warning_dialog_canceled = True
-
-        self._warning_dialog_completed = True
+        # This is now handled by _handle_confirmation_requested
+        pass
 
     def handle_print(self, message: str) -> None:
         """
@@ -295,12 +247,16 @@ class SubmitJobProgressDialog(QDialog):
                 self.progress_window_closed.emit
             )
         else:
-            if self.cancelation_flag or self._warning_dialog_canceled:
+            if self._is_canceled() or self._warning_dialog_canceled:
                 self.status_label.setText(tr("Submission canceled"))
             else:
                 self.status_label.setText(tr("Submission error"))
             self.button_box.setStandardButtons(QDialogButtonBox.Close)
             self.button_box.button(QDialogButtonBox.Close).setDefault(True)
+
+    def _is_canceled(self) -> bool:
+        """Check if the submission has been canceled."""
+        return self._worker is not None and self._worker.is_canceled
 
     def handle_thread_exception(self, e: BaseException) -> None:
         """
@@ -321,11 +277,12 @@ class SubmitJobProgressDialog(QDialog):
         if self._submission_complete:
             self.accept()
         else:
-            self.cancelation_flag.set_canceled()
-            logger.info("Canceling submission...")
-            self.status_label.setText(tr("Canceling submission..."))
-            if self.__submission_thread is not None:
-                while self.__submission_thread.is_alive():
+            if self._worker is not None:
+                self._worker.cancel()
+                logger.info("Canceling submission...")
+                self.status_label.setText(tr("Canceling submission..."))
+                # Wait for worker to finish with event processing
+                while self._worker.isRunning():
                     QApplication.instance().processEvents()  # type: ignore[union-attr]
             super().closeEvent(event)
 

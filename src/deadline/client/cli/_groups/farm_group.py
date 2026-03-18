@@ -23,9 +23,10 @@ from .._main import deadline as main
 @_handle_error
 def cli_farm():
     """
-    Commands to work with [Deadline Cloud farms].
+    List available Deadline Cloud farms or get details of a specific farm.
 
-    [Deadline Cloud farms]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
+    \b
+    Learn more about [farms](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html)
     """
 
 
@@ -34,12 +35,9 @@ def cli_farm():
 @_handle_error
 def farm_list(**args):
     """
-    Lists the available [Deadline Cloud farms]. If the AWS profile is created
-    from a [Deadline Cloud monitor] login, it will list the farms you have permission to access,
-    otherwise it will list all farms.
-
-    [Deadline Cloud farms]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    Lists the available Deadline Cloud farms. If the AWS profile is created
+    from a Deadline Cloud monitor login, it will list only the farms you have
+    permission to access.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
@@ -66,9 +64,7 @@ def farm_list(**args):
 @_handle_error
 def farm_get(**args):
     """
-    Get the details of a [Deadline Cloud farm].
-
-    [Deadline Cloud farm]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/farms.html
+    Get the details of a Deadline Cloud farm.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)

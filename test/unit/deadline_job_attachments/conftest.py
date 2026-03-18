@@ -59,6 +59,10 @@ def boto_config() -> Generator[None, None, None]:
     os.environ["AWS_SESSION_TOKEN"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
 
+    os.environ.pop("AWS_ENDPOINT_URL_S3", None)
+    os.environ.pop("AWS_ENDPOINT_URL_STS", None)
+    os.environ.pop("AWS_ENDPOINT_URL_DEADLINE", None)
+
     mock = mock_aws()
     mock.start()
     yield

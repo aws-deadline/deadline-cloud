@@ -23,7 +23,11 @@ from .._main import deadline as main
 @_handle_error
 def cli_worker():
     """
-    Commands to work with workers.
+    List Deadline Cloud workers in a fleet or get details of a specific
+    worker.
+
+    \b
+    Learn more about [fleets and workers](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
     """
 
 
@@ -36,7 +40,7 @@ def cli_worker():
 @_handle_error
 def worker_list(page_size, item_offset, fleet_id, **args):
     """
-    Lists the Workers in a fleet.
+    Lists the Deadline Cloud workers in a fleet.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -79,7 +83,7 @@ def worker_list(page_size, item_offset, fleet_id, **args):
 @_handle_error
 def worker_get(fleet_id, worker_id, **args):
     """
-    Get the details of a worker.
+    Get the details of a Deadline Cloud worker in a fleet.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)

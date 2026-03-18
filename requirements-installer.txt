@@ -1,1 +1,2 @@
 pyinstaller == 6.14.*
+PySide6-Essentials == 6.8.3  # Use 6.8 to align with VFXP 2026: https://vfxplatform.com/#reference-platform
