@@ -4,7 +4,7 @@
 set -e
 
 pip3 install --upgrade pip
-pip3 install --upgrade hatch "virtualenv<21"
+pip3 install --upgrade hatch
 
 hatch run attributions:generate
 hatch build

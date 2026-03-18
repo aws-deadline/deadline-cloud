@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
+import botocore.client
 
 from deadline.client.api._session import (
     _get_queue_user_boto3_session,
@@ -369,48 +370,33 @@ def _manifest_upload(
 
 
 def _manifest_download(
+    *,
+    deadline_client: botocore.client.BaseClient,
     download_dir: str,
     farm_id: str,
-    queue_id: str,
     job_id: str,
-    boto3_session: boto3.Session,
-    step_id: Optional[str] = None,
+    queue_id: str,
+    queue_role_session: boto3.Session,
+    queue_s3_settings: JobAttachmentS3Settings,
     asset_type: AssetType = AssetType.ALL,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    step_id: Optional[str] = None,
 ) -> ManifestDownloadResponse:
     """
     BETA API - This API is still evolving but will be made public in the near future.
     API to download the Job Attachment manifest for a Job, and optionally dependencies for Step.
+    deadline_client: Deadline client for API calls.
     download_dir: Download directory.
     farm_id: The Deadline Farm to download from.
-    queue_id: The Deadline Queue to download from.
     job_id: Job Id to download.
-    boto_session: Boto3 session.
-    step_id: Optional[str]: Optional, download manifest for a step
+    queue_id: The Deadline Queue to download from.
+    queue_role_session: Boto3 session for the queue role.
+    queue_s3_settings: S3 settings for the queue's job attachments.
     asset_type: Which asset manifests should be downloaded for given job (& optionally step), options are Input, Output, All. Default behaviour is All.
     print_function_callback: Callback function to handle print messages.
+    step_id: Optional, download manifest for a step.
     return ManifestDownloadResponse Downloaded Manifest data. Contains source S3 key and local download path.
     """
-
-    # Deadline Client and get the Queue to download.
-    deadline = boto3_session.client("deadline", config=get_default_client_config())
-
-    queue: dict = deadline.get_queue(
-        farmId=farm_id,
-        queueId=queue_id,
-    )
-
-    # assume queue role - session permissions
-    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
-        deadline=deadline,
-        base_session=boto3_session,
-        farm_id=farm_id,
-        queue_id=queue_id,
-        queue_display_name=queue["displayName"],
-    )
-
-    # Queue's Job Attachment settings.
-    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
 
     # Get S3 prefix
     s3_prefix: Path = Path(queue_s3_settings.rootPrefix, S3_MANIFEST_FOLDER_NAME)
@@ -437,7 +423,7 @@ def _manifest_download(
         manifests_by_root[root].append(manifest)
 
     # Get the job from deadline api
-    job: dict = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    job: dict = deadline_client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
 
     # If input manifests need to be downloaded
     if download_input:
@@ -472,7 +458,7 @@ def _manifest_download(
             # Get Step-Step dependencies with pagination
             next_token = ""
             while next_token is not None:
-                step_dep_response = deadline.list_step_dependencies(
+                step_dep_response = deadline_client.list_step_dependencies(
                     farmId=farm_id,
                     queueId=queue_id,
                     jobId=job_id,

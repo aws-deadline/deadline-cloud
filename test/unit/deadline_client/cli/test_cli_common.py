@@ -234,3 +234,51 @@ class TestParseMultiFormatParameters:
 
         with pytest.raises(click.BadParameter, match="not formatted correctly"):
             _parse_multi_format_parameters(params)
+
+
+class TestProgressBarCallbackManager:
+    """Tests for _ProgressBarCallbackManager"""
+
+    def test_progress_bar_closes_on_completion(self):
+        """
+        Regression test for https://github.com/aws-deadline/deadline-cloud/issues/1008
+        When the progress bar callback is called with progress equal to the bar length,
+        the bar should be properly closed (emitting a newline).
+        """
+        from deadline.client.cli._common import _ProgressBarCallbackManager
+        from deadline.job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
+
+        manager = _ProgressBarCallbackManager(length=100, label="Uploading Attachments")
+        manager.callback(
+            ProgressReportMetadata(
+                status=ProgressStatus.UPLOAD_IN_PROGRESS,
+                progress=100,
+                transferRate=0,
+                progressMessage="No files to upload",
+                processedFiles=0,
+            )
+        )
+
+        assert manager._bar_status == manager.BAR_CLOSED
+
+    def test_progress_bar_not_closed_at_zero(self):
+        """
+        Verifies that calling the callback with progress=0 does NOT close the bar.
+        This is the scenario that caused the missing newline bug in issue #1008.
+        """
+        from deadline.client.cli._common import _ProgressBarCallbackManager
+        from deadline.job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
+
+        manager = _ProgressBarCallbackManager(length=100, label="Uploading Attachments")
+        manager.callback(
+            ProgressReportMetadata(
+                status=ProgressStatus.UPLOAD_IN_PROGRESS,
+                progress=0,
+                transferRate=0,
+                progressMessage="No files to upload",
+                processedFiles=0,
+            )
+        )
+
+        assert manager._bar_status == manager.BAR_CREATED
+        manager._exit_stack.close()

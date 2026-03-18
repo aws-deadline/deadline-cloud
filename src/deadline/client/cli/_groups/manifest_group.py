@@ -317,15 +317,34 @@ def manifest_download(
     farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
     boto3_session: boto3.Session = api.get_boto3_session(config=config)
+    # Deadline Client and get the Queue to download.
+    deadline_client = boto3_session.client("deadline", config=get_default_client_config())
+    queue: dict = deadline_client.get_queue(
+        farmId=farm_id,
+        queueId=queue_id,
+    )
+    # Queue's Job Attachment settings.
+    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+
+    # assume queue role - session permissions
+    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
+        deadline=deadline_client,
+        base_session=boto3_session,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
 
     output = _manifest_download(
         download_dir=download_dir,
         farm_id=farm_id,
         queue_id=queue_id,
+        queue_s3_settings=queue_s3_settings,
         job_id=job_id,
         step_id=step_id,
         asset_type=AssetType(asset_type),
-        boto3_session=boto3_session,
+        deadline_client=deadline_client,
+        queue_role_session=queue_role_session,
         print_function_callback=logger.echo,
     )
     logger.json(dataclasses.asdict(output))

@@ -28,7 +28,7 @@ jobs:
 
       - name: Install Hatch
         run: |
-          pip install --upgrade hatch "virtualenv<21"
+          pip install --upgrade hatch
 
       - name: Build and deploy documentation
         run: hatch run docs:deploy --force

@@ -232,7 +232,7 @@ x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}={DEADLINE_URL_SCHEME_NAME}.desktop;
 
     else:
         raise DeadlineOperationError(
-            f"Installing the web URL handler is not supported on OS {sys.platform}"
+            "Installing the web URL handler is only supported on Windows and Linux"
         )
 
 
@@ -300,5 +300,5 @@ def uninstall_deadline_web_url_handler(all_users: bool) -> None:
 
     else:
         raise DeadlineOperationError(
-            f"Uninstalling the web URL handler is not supported on OS {sys.platform}"
+            "Uninstalling the web URL handler is only supported on Windows and Linux"
         )

@@ -6,7 +6,7 @@ from typing import Dict
 import pytest
 from unittest.mock import patch
 
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.asset_manifests.base_manifest import BaseAssetManifest
 from deadline.job_attachments.api._utils import _read_manifests
 
