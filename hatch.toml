@@ -53,7 +53,8 @@ python {root}/scripts/attributions/cli.py \
 --versions-file {root}/software-versions.json \
 {args:}
 """
-generate_local = "python {root}/scripts/attributions/cli.py -o {root}/THIRD_PARTY_LICENSES --dev --python uv {args:}"
+check = "python {root}/scripts/attributions/cli.py -o {root}/THIRD_PARTY_LICENSES --dev --python uv {args:}"
+update_approved_text = "python {root}/scripts/attributions/cli.py -o {root}/THIRD_PARTY_LICENSES --dev --python uv --update-approved-text {args:}"
 merge_versions = """
 python {root}/scripts/attributions/merge_versions.py \
 --python-dependencies-file {root}/python-dependencies.json \

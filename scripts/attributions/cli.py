@@ -528,6 +528,22 @@ class _PackageLicenseInfo:
             )
 
 
+_ALL_PLATFORMS = ["Darwin", "Linux", "Windows"]
+
+# Packages that are only installed on certain platforms as transitive
+# dependencies. When generating attributions, these are always installed
+# so that a single venv can produce output for all platforms.
+_PLATFORM_CONDITIONAL_PACKAGES: dict[str, list[str]] = {
+    "Windows": ["colorama"],
+}
+
+# Inverse lookup: package name -> set of platforms it belongs to
+_PACKAGE_PLATFORMS: dict[str, set[str]] = {}
+for _plat, _pkgs in _PLATFORM_CONDITIONAL_PACKAGES.items():
+    for _pkg in _pkgs:
+        _PACKAGE_PLATFORMS.setdefault(_pkg, set()).add(_plat)
+
+
 def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_PackageLicenseInfo]:
     repository_root = Path(__file__).parent.parent.parent
     with tempfile.TemporaryDirectory() as td:
@@ -537,6 +553,11 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
         uv_venv_args = ["uv", "venv", venv, *python_args]
         subprocess.check_call(uv_venv_args)
         uv_pip(["install", repository_root], venv, dev)
+        # Install all platform-conditional packages so pip-licenses discovers
+        # them regardless of which OS we're running on.
+        all_conditional = [pkg for pkgs in _PLATFORM_CONDITIONAL_PACKAGES.values() for pkg in pkgs]
+        if all_conditional:
+            uv_pip(["install", *all_conditional], venv, dev)
         if platform.system() == "Windows":
             python_path = venv / "Scripts" / "python.exe"
         else:
@@ -593,7 +614,8 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
 
 
 def packages_to_markdown_table(
-    packages: list[_PackageLicenseInfo], additional: list[dict[str, str]]
+    packages: list[_PackageLicenseInfo],
+    additional: list[dict[str, str]],
 ) -> str:
     lines = ["| Name | Version | License | URL |", "| --- | --- | --- | --- |"]
     for pkg in packages:
@@ -648,35 +670,22 @@ def generate_attributions_document(
     dev: bool,
     inventory_file: Optional[Path],
     versions_file: Optional[Path],
+    update_approved_text: bool = False,
 ) -> None:
     """
-    Generate an attributions document for this package and write it to `out_file`
+    Generate an attributions document for this package and write it to `out_file`.
+    Validates (or updates) the approved text golden files for all platforms.
     """
     _validate_bundled_attributions()
     desired_python_version = _get_desired_python_version()
     python_install = PythonInstall(python_arg, desired_python_version, dev)
     license_info = _get_license_info(python_install, dev)
-    attributions = []
     versions: dict[str, str] = {}
 
     for package in sorted(license_info, key=lambda info: info.name):
         versions[package.name] = package.version
         if package.name not in _EXPECTED_MISSING_LICENSE:
             package.check_against_attributions_allow_list()
-            attributions.append(package.get_attribution_text())
-
-    additional_attributions_path = Path(__file__).parent / "additional"
-    for attribution in sorted(
-        _ADDITIONAL_ATTRIBUTIONS,
-        key=lambda attribution: attribution.get("sort_key", attribution["name"]),
-    ):
-        if "platforms" not in attribution or platform.system() in attribution["platforms"]:
-            with open(
-                additional_attributions_path / attribution["attribution_path"], "r", encoding="utf8"
-            ) as f:
-                attributions.append(f"{attribution['name']}\n\n{f.read()}\n")
-
-    attributions = "".join(attributions)
 
     if inventory_file is not None:
         inventory = packages_to_markdown_table(license_info, _ADDITIONAL_ATTRIBUTIONS)
@@ -687,31 +696,71 @@ def generate_attributions_document(
         with open(versions_file, "w", encoding="utf8") as f:
             json.dump(versions, f, indent=2)
 
-    approved_text_path = (
-        Path(__file__).parent / "approved_text" / platform.system() / "THIRD_PARTY_LICENSES"
-    )
+    for target_platform in _ALL_PLATFORMS:
+        # Filter packages to those relevant to this platform
+        platform_packages = [
+            pkg
+            for pkg in license_info
+            if pkg.name not in _PACKAGE_PLATFORMS or target_platform in _PACKAGE_PLATFORMS[pkg.name]
+        ]
 
-    # Read as bytes first, then decode explicitly
-    # because otherwise certain unicode characters
-    # are not decoded properly on Windows
-    with open(approved_text_path, "rb") as f:
-        raw_bytes = f.read()
-    approved_text = raw_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        attributions = []
+        for package in sorted(platform_packages, key=lambda info: info.name):
+            if package.name not in _EXPECTED_MISSING_LICENSE:
+                attributions.append(package.get_attribution_text())
 
-    if approved_text != attributions:
-        diff = "".join(
-            difflib.unified_diff(
-                approved_text.splitlines(keepends=True),
-                attributions.replace("\r\n", "\n").replace("\r", "\n").splitlines(keepends=True),
-                lineterm="",
-            )
+        additional_attributions_path = Path(__file__).parent / "additional"
+        for attribution in sorted(
+            _ADDITIONAL_ATTRIBUTIONS,
+            key=lambda attribution: attribution.get("sort_key", attribution["name"]),
+        ):
+            if "platforms" not in attribution or target_platform in attribution["platforms"]:
+                with open(
+                    additional_attributions_path / attribution["attribution_path"],
+                    "r",
+                    encoding="utf8",
+                ) as f:
+                    attributions.append(f"{attribution['name']}\n\n{f.read()}\n")
+
+        attributions_text = "".join(attributions)
+
+        approved_text_path = (
+            Path(__file__).parent / "approved_text" / target_platform / "THIRD_PARTY_LICENSES"
         )
-        print("ERROR: Attributions generated did not match approved text:", file=sys.stderr)
-        print(diff, file=sys.stderr)
-        sys.exit(1)
 
-    with open(out_file, "w", encoding="utf8") as f:
-        f.write(attributions)
+        if update_approved_text:
+            approved_text_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(approved_text_path, "w", encoding="utf8") as f:
+                f.write(attributions_text)
+            print(f"Updated approved text for {target_platform}")
+        else:
+            # Read as bytes first, then decode explicitly
+            # because otherwise certain unicode characters
+            # are not decoded properly on Windows
+            with open(approved_text_path, "rb") as f:
+                raw_bytes = f.read()
+            approved_text = raw_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+            if approved_text != attributions_text:
+                diff = "".join(
+                    difflib.unified_diff(
+                        approved_text.splitlines(keepends=True),
+                        attributions_text.replace("\r\n", "\n")
+                        .replace("\r", "\n")
+                        .splitlines(keepends=True),
+                        lineterm="",
+                    )
+                )
+                print(
+                    f"ERROR: Attributions for {target_platform} did not match approved text:",
+                    file=sys.stderr,
+                )
+                print(diff, file=sys.stderr)
+                sys.exit(1)
+
+        if target_platform == platform.system():
+            with open(out_file, "w", encoding="utf8") as f:
+                f.write(attributions_text)
 
 
 if __name__ == "__main__":
@@ -747,8 +796,19 @@ if __name__ == "__main__":
         required=False,
         help="The path to output the versions file to",
     )
+    parser.add_argument(
+        "--update-approved-text",
+        action="store_true",
+        required=False,
+        help="Update the approved text golden files instead of diffing against them.",
+    )
     args = parser.parse_args()
 
     generate_attributions_document(
-        args.out_file, args.python, args.dev, args.inventory_file, args.versions_file
+        args.out_file,
+        args.python,
+        args.dev,
+        args.inventory_file,
+        args.versions_file,
+        args.update_approved_text,
     )

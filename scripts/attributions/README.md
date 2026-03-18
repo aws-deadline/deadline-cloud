@@ -37,6 +37,16 @@ pip-licenses (auto-discovers pip packages)
 | Golden file diff                         | Any change to the generated output           | `cli.py` at generation time |
 | Bundled dependency check                 | Bundled dependency missing from attributions | `cli.py` at generation time |
 
+### Cross-Platform Generation
+
+The generator always validates golden files for all three platforms (Darwin, Linux, Windows)
+in a single invocation. It creates one venv, installs all platform-conditional dependencies
+(e.g., `colorama` for Windows), and then generates and validates the output for each platform
+by varying which additional attributions and pip packages are included.
+
+This means any change to attributions is validated against all platforms regardless of which
+OS you're running on.
+
 ### Key Data Structures in cli.py
 
 - **`_ATTRIBUTIONS_ALLOW_LIST`** — Pip-discoverable packages with SHA256 hashes of their
@@ -45,6 +55,10 @@ pip-licenses (auto-discovers pip packages)
 - **`_ADDITIONAL_ATTRIBUTIONS`** — Manually attributed packages. Each entry has a `name`,
   `attribution_path` (file in `additional/`), and optional `platforms`, `spdx`, `url`,
   and `sort_key` fields.
+- **`_PLATFORM_CONDITIONAL_PACKAGES`** — Pip packages that are only installed as transitive
+  dependencies on certain platforms (e.g., `colorama` on Windows via `click`). These are
+  always installed in the venv so pip-licenses can discover them, then filtered per-platform
+  when assembling the output.
 - **`_EXPECTED_MISSING_LICENSE`** — Packages where pip-licenses won't find a license file
   (e.g., pywin32). These must have entries in `_ADDITIONAL_ATTRIBUTIONS`.
 
@@ -61,10 +75,13 @@ These three components are LGPL-licensed and attributed separately:
 ## Commands
 
 ```bash
-# Generate attributions (local dev) — also validates bundled deps have attributions
-hatch run attributions:generate_local
+# Validate attributions and license text for all platforms
+hatch run attributions:check
 
-# Generate attributions (CI / pinned Python)
+# Update golden files for all platforms
+hatch run attributions:update_approved_text
+
+# Generate and validate attributions (CI / pinned Python)
 hatch run attributions:generate
 
 # Generate LGPL source tarballs (version read from requirements-installer.txt)
@@ -89,9 +106,11 @@ under `deadline-cloud/`.
    ```
    Then replace the third-party section in `additional/QT_LICENSE.txt` (everything after
    the LGPLv3 full text) with the generated output.
-4. Regenerate attributions: `hatch run attributions:generate_local`
-5. If the golden file diff fails, review the changes and copy the new output to
-   `approved_text/<platform>/THIRD_PARTY_LICENSES`
+4. Regenerate attributions and update golden files:
+   ```bash
+   hatch run attributions:update_approved_text
+   ```
+5. Verify all platforms pass: `hatch run attributions:check`
 6. Generate new source tarballs:
    ```bash
    python scripts/attributions/generate_source_tarballs.py --output-dir ./source-tarballs
@@ -103,14 +122,18 @@ under `deadline-cloud/`.
 1. Add the package to `pyproject.toml`
 2. If it will be bundled in the installer, add it to `scripts/pyinstaller/allowlist.py`'s
    `DEPENDENCIES` list
-3. Run `hatch run attributions:generate_local`
+3. Run `hatch run attributions:check`
    - **If pip-licenses finds it**: Add an entry to `_ATTRIBUTIONS_ALLOW_LIST` in `cli.py`
      with the SHA256 of its license text. Run generation again.
    - **If pip-licenses doesn't find it**: Add the license file to `additional/` and add an
      entry to `_ADDITIONAL_ATTRIBUTIONS` in `cli.py`. Add the package name to
      `_EXPECTED_MISSING_LICENSE` if needed.
-4. Copy the new generated output to `approved_text/<platform>/THIRD_PARTY_LICENSES`
-5. If the dependency is LGPL/GPL licensed, generate and upload source tarballs
+   - **If the package is only installed on certain platforms** (e.g., a conditional
+     transitive dependency): Add it to `_PLATFORM_CONDITIONAL_PACKAGES` in `cli.py`
+     so cross-platform generation works correctly.
+4. Update golden files: `hatch run attributions:update_approved_text`
+5. Verify all platforms: `hatch run attributions:check`
+6. If the dependency is LGPL/GPL licensed, generate and upload source tarballs
 
 ## File Reference
 
