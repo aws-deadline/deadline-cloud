@@ -45,7 +45,11 @@ from deadline.job_attachments.models import (
 )
 
 from ...exceptions import NonValidInputError
-from .._common import _apply_cli_options_to_config, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _handle_error,
+    _ProgressBarCallbackManager,
+)
 from .._main import deadline as main
 from .click_logger import ClickLogger
 
@@ -152,8 +156,11 @@ def manifest_snapshot(
         diff=diff,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
-        hash_cache_dir=hash_cache_dir,
+        hashing_progress_callback=_ProgressBarCallbackManager(
+            length=100, label="Hashing Attachments"
+        ).callback,
         telemetry_callback=hashing_telemetry_callback,
+        hash_cache_dir=hash_cache_dir,
     )
     if manifest_out:
         if (

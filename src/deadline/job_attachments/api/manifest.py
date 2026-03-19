@@ -43,8 +43,9 @@ from deadline.job_attachments.models import (
     default_glob_all,
     AssetType,
 )
+from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 from deadline.job_attachments._utils import _get_long_path_compatible_path
-from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader
+from deadline.job_attachments.upload import S3AssetManager, S3AssetUploader, SummaryStatistics
 
 """
 APIs here should be business logic only. It should perform one thing, and one thing well. 
@@ -95,8 +96,9 @@ def _manifest_snapshot(
     diff: Optional[str] = None,
     force_rehash: bool = False,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    telemetry_callback: Optional[Callable[[SummaryStatistics], None]] = None,
     hash_cache_dir: Optional[str] = None,
-    telemetry_callback: Optional[Callable] = None,
 ) -> Optional[ManifestSnapshot]:
     # Get all files in the root.
     glob_config: GlobConfig
@@ -120,8 +122,9 @@ def _manifest_snapshot(
             files=current_files,
             root=root,
             print_function_callback=print_function_callback,
-            hash_cache_dir=hash_cache_dir,
+            hashing_progress_callback=hashing_progress_callback,
             telemetry_callback=telemetry_callback,
+            hash_cache_dir=hash_cache_dir,
         )
         if not output_manifest:
             return None
@@ -155,8 +158,9 @@ def _manifest_snapshot(
                 files=current_files,
                 root=root,
                 print_function_callback=print_function_callback,
-                hash_cache_dir=hash_cache_dir,
+                hashing_progress_callback=hashing_progress_callback,
                 telemetry_callback=telemetry_callback,
+                hash_cache_dir=hash_cache_dir,
             )
             if not output_manifest:
                 return None
@@ -180,8 +184,9 @@ def _manifest_snapshot(
             files=changed_paths,
             root=root,
             print_function_callback=print_function_callback,
-            hash_cache_dir=hash_cache_dir,
+            hashing_progress_callback=hashing_progress_callback,
             telemetry_callback=telemetry_callback,
+            hash_cache_dir=hash_cache_dir,
         )
         if not output_manifest:
             return None
