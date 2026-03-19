@@ -1162,6 +1162,7 @@ def mount_vfs_from_manifests(
     os_env_vars: dict[str, str],
     fs_permission_settings: FileSystemPermissionSettings,
     cas_prefix: Optional[str] = None,
+    on_mount_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
     """
     Given manifests, downloads all files from a CAS in those manifests.
@@ -1173,6 +1174,8 @@ def mount_vfs_from_manifests(
         session_dir: the directory that the session is going to use.
         os_env_vars: environment variables to set for launched subprocesses
         cas_prefix: The CAS prefix of the files.
+        on_mount_complete: optional callback invoked with a bool indicating whether
+            each VFS mount succeeded. Callers can use this for telemetry or logging.
 
     Returns:
         None
@@ -1228,6 +1231,7 @@ def mount_vfs_from_manifests(
             getattr(fs_permission_settings, "os_group", ""),
             cas_prefix,
             str(vfs_cache_dir),
+            on_mount_complete=on_mount_complete,
         )
         vfs_manager.start(session_dir=session_dir)
 

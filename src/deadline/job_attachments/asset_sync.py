@@ -262,6 +262,7 @@ class AssetSync:
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
         os_env_vars: dict[str, str] | None = None,
+        on_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> bool:
         """
         Args:
@@ -284,6 +285,7 @@ class AssetSync:
                 fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                 os_env_vars=os_env_vars,  # type: ignore[arg-type]
                 cas_prefix=s3_settings.full_cas_prefix(),
+                on_mount_complete=on_mount_complete,
             )
             return True
         except VFSExecutableMissingError:
@@ -396,6 +398,7 @@ class AssetSync:
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         os_env_vars: Dict[str, str] | None = None,
+        on_vfs_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -425,6 +428,8 @@ class AssetSync:
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
             os_env_vars: environment variables to set for launched subprocesses
+            on_vfs_mount_complete: optional callback invoked with a bool indicating whether
+                each VFS mount succeeded. Callers can use this for telemetry or logging.
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -487,6 +492,7 @@ class AssetSync:
                 fs_permission_settings=fs_permission_settings,
                 merged_manifests_by_root=merged_manifests_by_root,
                 os_env_vars=os_env_vars,
+                on_mount_complete=on_vfs_mount_complete,
             )
         else:
             # Copied Download flow
@@ -771,6 +777,7 @@ class AssetSync:
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         os_env_vars: Dict[str, str] | None = None,
+        on_vfs_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -796,6 +803,8 @@ class AssetSync:
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
             os_env_vars: environment variables to set for launched subprocesses
+            on_vfs_mount_complete: optional callback invoked with a bool indicating whether
+                each VFS mount succeeded. Callers can use this for telemetry or logging.
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -908,6 +917,7 @@ class AssetSync:
                     fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
+                    on_mount_complete=on_vfs_mount_complete,
                 )
                 summary_statistics = SummaryStatistics()
                 self._record_attachment_mtimes(merged_manifests_by_root)
