@@ -89,20 +89,21 @@ def _handle_error(func: Callable) -> Callable:
 
 def _apply_cli_options_to_config(
     *, config: Optional[ConfigParser] = None, required_options: Set[str] = set(), **args
-) -> Optional[ConfigParser]:
+) -> ConfigParser:
     """
-    Modifies an AWS Deadline Cloud config object to apply standard option names to it, such as
-    the AWS profile, AWS Deadline Cloud Farm, or AWS Deadline Cloud Queue to use.
+    Returns an in-memory AWS Deadline Cloud config with standard CLI option overrides applied.
+    Always returns a fresh copy — never mutates the caller's config or the read_config() cache.
 
     Args:
-        config (ConfigParser, optional): an AWS Deadline Cloud config, read by config_file.read_config().
-                If not provided, loads the config from disk.
+        config (ConfigParser, optional): a base config to copy from. If not provided, loads from disk.
     """
-    # Only work with a custom config if there are standard options provided
-    if any(value is not None for value in args.values()):
-        if config is None:
-            config = config_file.read_config()
+    # Always start from a copy so we never mutate the caller's object or the cache
+    base = config if config is not None else config_file.read_config()
+    config = ConfigParser()
+    config.read_dict(base)
 
+    # Apply any provided standard options
+    if any(value is not None for value in args.values()):
         aws_profile_name = args.pop("profile", None)
         if aws_profile_name:
             config_file.set_setting("defaults.aws_profile_name", aws_profile_name, config=config)

@@ -371,3 +371,72 @@ def test_posix_config_file_permissions(fresh_deadline_config) -> None:
     config_file.set_setting("defaults.aws_profile_name", "goodguyprofile")
 
     assert config_file_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_persist_job_id_with_default_config(fresh_deadline_config) -> None:
+    """persist_job_id writes the job ID under the specified farm/queue section."""
+    config.set_setting("defaults.farm_id", "farm-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    config.set_setting("defaults.queue_id", "queue-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+    config_file.persist_job_id(
+        "job-ccccccccccccccccccccccccccccccc",
+        profile="(default)",
+        farm_id="farm-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        queue_id="queue-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+
+    assert config.get_setting("defaults.job_id") == "job-ccccccccccccccccccccccccccccccc"
+
+
+def test_persist_job_id_with_overridden_farm_queue(fresh_deadline_config) -> None:
+    """persist_job_id writes the job ID under the overridden farm/queue section
+    without changing the on-disk farm/queue defaults."""
+    # Set up on-disk defaults
+    config.set_setting("defaults.farm_id", "farm-disk1111111111111111111111111")
+    config.set_setting("defaults.queue_id", "queue-disk111111111111111111111111")
+
+    # Persist job ID under a different farm/queue
+    config_file.persist_job_id(
+        "job-submitted111111111111111111111",
+        profile="(default)",
+        farm_id="farm-cli11111111111111111111111111",
+        queue_id="queue-cli1111111111111111111111111",
+    )
+
+    # On-disk farm/queue defaults are unchanged
+    assert config.get_setting("defaults.farm_id") == "farm-disk1111111111111111111111111"
+    assert config.get_setting("defaults.queue_id") == "queue-disk111111111111111111111111"
+
+    # Job ID under the default farm/queue section is NOT set
+    assert config.get_setting("defaults.job_id") == ""
+
+    # Job ID IS set when we read using the overridden farm/queue
+    from configparser import ConfigParser
+
+    session = ConfigParser()
+    session.read_dict(config_file.read_config())
+    config_file.set_setting(
+        "defaults.farm_id", "farm-cli11111111111111111111111111", config=session
+    )
+    config_file.set_setting(
+        "defaults.queue_id", "queue-cli1111111111111111111111111", config=session
+    )
+    assert (
+        config_file.get_setting("defaults.job_id", config=session)
+        == "job-submitted111111111111111111111"
+    )
+
+
+def test_persist_job_id_creates_section_if_missing(fresh_deadline_config) -> None:
+    """persist_job_id creates the section if it doesn't exist yet."""
+    config_file.persist_job_id(
+        "job-newwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+        profile="(default)",
+        farm_id="farm-newwwwwwwwwwwwwwwwwwwwwwwwwwww",
+        queue_id="queue-newwwwwwwwwwwwwwwwwwwwwwwwwww",
+    )
+
+    # Re-read from disk to confirm it was persisted
+    fresh = config_file.read_config()
+    section = "profile-(default) farm-newwwwwwwwwwwwwwwwwwwwwwwwwwww queue-newwwwwwwwwwwwwwwwwwwwwwwwwww defaults"
+    assert fresh.get(section, "job_id") == "job-newwwwwwwwwwwwwwwwwwwwwwwwwwwwww"

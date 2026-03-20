@@ -11,6 +11,7 @@ Example code:
 __all__ = ["DeadlineConfigDialog"]
 
 from configparser import ConfigParser
+from dataclasses import dataclass
 from logging import getLogger, root
 from typing import Callable, Dict, List, Optional
 
@@ -30,6 +31,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -60,10 +62,23 @@ logger = getLogger(__name__)
 NOT_VALID_MARKER = "[NOT VALID]"
 
 
+@dataclass
+class ConfigureSettingsResult:
+    """Result from DeadlineConfigDialog.configure_settings()."""
+
+    changes_applied: bool
+    session_config: Optional[ConfigParser] = None
+
+
 class DeadlineConfigDialog(QDialog):
     """
     A modal dialog box for modifying the AWS Deadline Cloud local workstation
     configuration.
+
+    When a session_config is provided, "Ok" applies changes to the in-memory
+    session and closes. "Save to Disk" writes to the on-disk config, and
+    "Load from Disk" reverts the session to match the on-disk config.
+    Without a session_config, "Ok" saves to disk and closes.
 
     Example code:
         DeadlineConfigDialog.configure_settings(parent=self)
@@ -71,30 +86,42 @@ class DeadlineConfigDialog(QDialog):
 
     @staticmethod
     def configure_settings(
-        parent: Optional[QWidget] = None, set_profile_focus: bool = False
-    ) -> bool:
+        parent: Optional[QWidget] = None,
+        set_profile_focus: bool = False,
+        session_config: Optional[ConfigParser] = None,
+    ) -> ConfigureSettingsResult:
         """
         Static method that runs the Deadline Config Dialog.
 
         Args:
             parent: Parent widget
             set_profile_focus: Optional boolean to set the initial focus to the profile selector
+            session_config: Optional in-memory config for session mode
 
-        Returns True if any changes were applied, False otherwise.
+        Returns a ConfigureSettingsResult with changes_applied and the
+        (possibly modified) session_config.
         """
-        deadline_config = DeadlineConfigDialog(parent=parent)
+        deadline_config = DeadlineConfigDialog(parent=parent, session_config=session_config)
 
         if set_profile_focus:
             deadline_config.config_box.aws_profiles_box.setFocus()
 
         deadline_config.exec_()
-        return deadline_config.changes_were_applied
+        return ConfigureSettingsResult(
+            changes_applied=deadline_config.changes_were_applied,
+            session_config=deadline_config._session_config,
+        )
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        session_config: Optional[ConfigParser] = None,
+    ) -> None:
         super().__init__(
             parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
+        self._session_config = session_config
         self.setWindowTitle(tr("AWS Deadline Cloud workstation configuration"))
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self._build_ui()
@@ -116,7 +143,10 @@ class DeadlineConfigDialog(QDialog):
     def _build_ui(self):
         self.layout = QVBoxLayout(self)
 
-        self.config_box = DeadlineWorkstationConfigWidget(parent=self)
+        self.config_box = DeadlineWorkstationConfigWidget(
+            parent=self,
+            session_config=self._session_config,
+        )
 
         self.scrollArea = DeadlineScrollArea(self)
         self.scrollArea.setWidget(self.config_box)
@@ -139,16 +169,38 @@ class DeadlineConfigDialog(QDialog):
             self.on_auth_status_update
         )
 
-        # We only use a Close button, not OK/Cancel, because we live update the settings.
+        # Build the button bar: Ok, Cancel, and "Config File" dropdown.
         self.button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply, Qt.Horizontal
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal
         )
         self.button_box.button(QDialogButtonBox.Ok).setText(tr("Ok"))
         self.button_box.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
-        self.button_box.button(QDialogButtonBox.Apply).setText(tr("Apply"))
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
-        self.button_box.clicked.connect(self.on_button_box_clicked)
+
+        # Config File dropdown menu with Save to Disk / Load from Disk
+        self._config_file_button = QPushButton(tr("Config File"))
+        config_file_menu = QMenu(self._config_file_button)
+        self._save_to_disk_action = config_file_menu.addAction(
+            tr("Save to Disk"), self._on_save_to_disk
+        )
+        self._save_to_disk_action.setEnabled(False)
+        self._load_from_disk_action = config_file_menu.addAction(
+            tr("Load from Disk"), self._on_load_from_disk
+        )
+        self._load_from_disk_action.setEnabled(False)
+        self._config_file_button.setMenu(config_file_menu)
+        self.button_box.addButton(self._config_file_button, QDialogButtonBox.ActionRole)
+
+        # Set initial enabled state: in session mode, enable if session differs from disk
+        if self._session_config is not None:
+            differs = not self._effective_config_matches_disk()
+            self._config_file_button.setEnabled(differs)
+            self._save_to_disk_action.setEnabled(differs)
+            self._load_from_disk_action.setEnabled(differs)
+        else:
+            self._config_file_button.setEnabled(False)
+
         self.auth_status_box.logout_clicked.connect(self.on_logout)
         self.auth_status_box.login_clicked.connect(self.on_login)
         self.layout.addWidget(self.button_box)
@@ -160,9 +212,55 @@ class DeadlineConfigDialog(QDialog):
     def changes_were_applied(self) -> bool:
         return self.config_box.changes_were_applied
 
+    def _effective_config_matches_disk(self) -> bool:
+        """Return True if the effective config (session + pending changes) matches disk."""
+        disk = config_file.read_config()
+        effective = self.config_box.config if self.config_box.config else self._session_config
+        if effective is None:
+            return True
+        return {s: dict(disk[s]) for s in disk} == {s: dict(effective[s]) for s in effective}
+
+    def _on_load_from_disk(self) -> None:
+        """Reload config from disk, discarding pending changes (and session overrides if any)."""
+        if self._session_config is not None:
+            self._session_config = ConfigParser()
+            self._session_config.read_dict(config_file.read_config())
+            self.config_box.set_session_config(self._session_config)
+        else:
+            self.config_box.changes.clear()
+            self.config_box.refresh()
+
+    def _on_save_to_disk(self) -> bool:
+        """Save the current changes to the on-disk config. Returns True on success."""
+        if not self.config_box._validate_changes("Save to Disk"):
+            return False
+        if self._session_config is not None:
+            # Session path: apply pending changes to session config, then write it all to disk
+            for setting_name, value in self.config_box.changes.items():
+                config_file.set_setting(setting_name, value, self._session_config)
+            config_file.write_config(self._session_config)
+        else:
+            # Workstation path: read from disk, apply changes, write back
+            config = config_file.read_config()
+            for setting_name, value in self.config_box.changes.items():
+                config_file.set_setting(setting_name, value, config)
+            config_file.write_config(config)
+        self.config_box.changes.clear()
+        self.config_box.changes_were_applied = True
+        self.config_box.refresh()
+        return True
+
     def accept(self):
-        if self.config_box.apply():
-            super().accept()
+        if self._session_config is not None:
+            # Session mode: Ok = Apply to session + close
+            if not self.config_box.apply():
+                return
+            self._session_config = self.config_box.config
+        else:
+            # Workstation mode: Ok = Save to Disk + close
+            if not self._on_save_to_disk():
+                return
+        super().accept()
 
     def reject(self):
         self.deadline_authentication_status.set_config(config_file.read_config())
@@ -178,13 +276,17 @@ class DeadlineConfigDialog(QDialog):
         self.deadline_authentication_status.refresh_status()
         self.config_box.refresh()
 
-    def on_button_box_clicked(self, button):
-        if self.button_box.standardButton(button) == QDialogButtonBox.Apply:
-            self.config_box.apply()
-
     def on_refresh(self):
-        # Enable the "Apply" button only if there are changes
-        self.button_box.button(QDialogButtonBox.Apply).setEnabled(bool(self.config_box.changes))
+        has_changes = bool(self.config_box.changes)
+        differs_from_disk = not self._effective_config_matches_disk()
+        if self._session_config is not None:
+            self._save_to_disk_action.setEnabled(differs_from_disk)
+            self._load_from_disk_action.setEnabled(differs_from_disk)
+            self._config_file_button.setEnabled(differs_from_disk)
+        else:
+            self._save_to_disk_action.setEnabled(has_changes)
+            self._load_from_disk_action.setEnabled(has_changes)
+            self._config_file_button.setEnabled(has_changes)
         # Update the auth status with the refreshed config
         self.deadline_authentication_status.set_config(self.config_box.config)
 
@@ -223,12 +325,15 @@ class DeadlineWorkstationConfigWidget(QWidget):
     # provides (operation_name, BaseException)
     _background_exception = Signal(str, BaseException)
 
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(
+        self, parent: Optional[QWidget] = None, session_config: Optional[ConfigParser] = None
+    ):
         super().__init__(parent)
 
         self.changes: dict = {}
         self.config: Optional[ConfigParser] = None
         self.changes_were_applied = False
+        self._session_config = session_config
 
         # Flags to track when we're waiting for cascading list refreshes
         # These prevent the list_updated handlers from interfering with manual user selections
@@ -241,6 +346,13 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def minimumSizeHint(self):
         return QSize(500, 700)
+
+    def set_session_config(self, session_config: ConfigParser) -> None:
+        """Replace the session config and refresh the UI."""
+        self._session_config = session_config
+        self.changes.clear()
+        self.refresh()
+        self.refresh_lists()
 
     def _build_ui(self):
         # Ensure the widget expands horizontally
@@ -755,9 +867,21 @@ class DeadlineWorkstationConfigWidget(QWidget):
         """
         Refreshes all the configuration UI elements from the current config.
         """
-        # Make self.config be a deep copy of the config, with changes applied
+        # Make self.config be a deep copy of the config, with changes applied.
+        # In session mode, start from the session config; otherwise from disk.
         self.config = ConfigParser()
-        self.config.read_dict(config_file.read_config())
+        base_config = (
+            self._session_config if self._session_config is not None else config_file.read_config()
+        )
+        self.config.read_dict(base_config)
+
+        # Remove changes that match the base config (e.g. user changed a value then changed it back)
+        for setting_name in list(self.changes):
+            if self.changes[setting_name] == config_file.get_setting(
+                setting_name, config=self.config
+            ):
+                del self.changes[setting_name]
+
         for setting_name, value in self.changes.items():
             config_file.set_setting(setting_name, value, self.config)
         self.default_farm_box.set_config(self.config)
@@ -803,9 +927,24 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         self.refreshed.emit()
 
+    def _validate_changes(self, action_name: str) -> bool:
+        """Check that no pending changes contain NOT_VALID_MARKER. Shows a warning and returns False if invalid."""
+        for setting_name, value in self.changes.items():
+            if value.startswith(NOT_VALID_MARKER):
+                QMessageBox.warning(
+                    self,
+                    action_name,
+                    f"Cannot apply changes, {value} is not valid for setting {setting_name}",
+                )
+                return False
+        return True
+
     def apply(self) -> bool:
         """
-        Apply all the settings that the user has changed into the config file.
+        Apply all the settings that the user has changed.
+
+        In workstation mode, writes changes to the on-disk config file.
+        In session mode, mutates the in-memory session config without writing to disk.
 
         Returns True if the settings were applied, False otherwise.
         """
@@ -815,19 +954,22 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.default_storage_profile_box.box.currentData()
         )
 
-        for setting_name, value in self.changes.items():
-            if value.startswith(NOT_VALID_MARKER):
-                QMessageBox.warning(  # type: ignore[call-arg]
-                    self,
-                    "Apply changes",
-                    f"Cannot apply changes, {value} is not valid for setting {setting_name}",
-                )
-                return False
+        if not self._validate_changes("Apply changes"):
+            return False
 
-        self.config = config_file.read_config()
+        if self._session_config is not None:
+            # Session mode: mutate the in-memory config without writing to disk
+            for setting_name, value in self.changes.items():
+                config_file.set_setting(setting_name, value, self._session_config)
+            self.config = ConfigParser()
+            self.config.read_dict(self._session_config)
+        else:
+            # Workstation mode: read from disk, apply changes, write back
+            self.config = config_file.read_config()
+            for setting_name, value in self.changes.items():
+                config_file.set_setting(setting_name, value, self.config)
+            config_file.write_config(self.config)
 
-        for setting_name, value in self.changes.items():
-            config_file.set_setting(setting_name, value, self.config)
         root.setLevel(config_file.get_setting("settings.log_level"))
         api.get_deadline_cloud_library_telemetry_client().set_opt_out(config=self.config)
 
@@ -837,8 +979,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
             self.changes_were_applied = len(self.changes) > 0
 
         self.changes.clear()
-
-        config_file.write_config(self.config)
 
         # Refresh the GUI (writing the config file should cause this, but do this redundantly to make sure)
         self.refresh()

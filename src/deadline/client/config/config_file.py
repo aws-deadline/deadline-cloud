@@ -429,6 +429,30 @@ def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = 
         write_config(config)
 
 
+def persist_job_id(job_id: str, profile: str, farm_id: str, queue_id: str) -> None:
+    """
+    Persists a job ID to the on-disk config file under the correct
+    hierarchical section (profile / farm / queue).
+
+    The caller provides the explicit profile, farm, and queue that the job
+    was submitted to.  The job ID is written into the matching section of
+    the on-disk config without changing the on-disk farm/queue defaults.
+
+    Args:
+        job_id: The job ID to persist.
+        profile: The AWS profile name used for submission.
+        farm_id: The farm ID the job was submitted to.
+        queue_id: The queue ID the job was submitted to.
+    """
+    section = f"profile-{profile} {farm_id} {queue_id} defaults"
+
+    disk_config = read_config()
+    if section not in disk_config:
+        disk_config[section] = {}
+    disk_config.set(section, "job_id", job_id)
+    write_config(disk_config)
+
+
 def clear_setting(setting_name: str, config: Optional[ConfigParser] = None):
     """
     Sets the value of the specified setting back to the default value.

@@ -15,14 +15,6 @@ deadlinedialog_ok_button = {
     "visible": 1,
     "window": deadline_config_dialog,
 }
-# Apply button
-deadlinedialog_apply_button = {
-    "text": "Apply",
-    "type": "QPushButton",
-    "unnamed": 1,
-    "visible": 1,
-    "window": deadline_config_dialog,
-}
 
 # global settings box
 deadlinedialog_globalsettings_box = {

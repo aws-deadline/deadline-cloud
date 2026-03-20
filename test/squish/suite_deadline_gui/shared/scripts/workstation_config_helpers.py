@@ -78,15 +78,6 @@ def open_settings_dialogue():
     )
 
 
-def hit_apply_button():
-    test.log("Hitting `Apply` button to apply selected settings.")
-    # hit 'Apply' button
-    squish.clickButton(
-        squish.waitForObject(workstation_config_locators.deadlinedialog_apply_button)
-    )
-    test.log("Settings have been applied.")
-
-
 def set_farm_name(farm_name: str):
     # open Default farm drop down menu
     squish.mouseClick(

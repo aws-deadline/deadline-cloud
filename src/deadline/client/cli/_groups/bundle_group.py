@@ -20,7 +20,7 @@ import click
 from botocore.exceptions import ClientError
 
 from ... import api
-from ...config import config_file
+from ...config import config_file, get_setting, persist_job_id
 from ...dataclasses import SubmitterInfo
 from ....job_attachments.exceptions import (
     AssetSyncError,
@@ -310,17 +310,16 @@ def bundle_submit(
             click.echo("Saved job debug snapshot:")
             click.echo(f"    {save_debug_snapshot}")
 
-        # Check Whether the CLI options are modifying any of the default settings that affect
-        # the job id. If not, we'll save the job id submitted as the default job id.
+        # Persist the job ID to the on-disk config under the correct
+        # farm/queue section so `deadline job get` picks it up.
         # If a job snapshot directory was provided, the job_id will be None.
-        if (
-            args.get("profile") is None
-            and args.get("farm_id") is None
-            and args.get("queue_id") is None
-            and args.get("storage_profile_id") is None
-            and job_id
-        ):
-            config_file.set_setting("defaults.job_id", job_id)
+        if job_id:
+            persist_job_id(
+                job_id,
+                profile=get_setting("defaults.aws_profile_name", config=config),
+                farm_id=get_setting("defaults.farm_id", config=config),
+                queue_id=get_setting("defaults.queue_id", config=config),
+            )
 
     except AssetSyncCancelledError as exc:
         if sigint_handler.continue_operation:
@@ -418,6 +417,10 @@ def bundle_submit(
     'OR --submitter-info \'{"submitter_name": "MyApp", "additional_info": {"render_engine": "Cycles"}}\' '
     "OR --submitter-info file://path/to/submitter.json",
 )
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--storage-profile-id", help="The storage profile to use.")
 @_handle_error
 def bundle_gui_submit(
     parameter,
@@ -439,6 +442,9 @@ def bundle_gui_submit(
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
+    # Apply CLI options (--profile, --farm-id, --queue-id, --storage-profile-id) to an in-memory config.
+    # _apply_cli_options_to_config always returns a fresh copy, so the on-disk cache is never mutated.
+    config = _apply_cli_options_to_config(**args)
     if submitter_name:
         click.echo(
             click.style(
@@ -473,6 +479,7 @@ def bundle_gui_submit(
             submitter_info=submitter_info,
             known_asset_paths=known_asset_path,
             job_parameters=parameter,
+            session_config=config,
         )
 
         if not submitter:

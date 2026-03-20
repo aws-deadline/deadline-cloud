@@ -3,6 +3,7 @@
 from __future__ import annotations
 import copy
 import os
+from configparser import ConfigParser
 from logging import getLogger
 from typing import Any, Optional, Dict
 
@@ -123,6 +124,7 @@ def show_job_bundle_submitter(
     submitter_info: Optional[SubmitterInfo] = None,
     known_asset_paths: Optional[list[str]] = None,
     job_parameters: Optional[list[dict[str, Any]]] = None,
+    session_config: Optional[ConfigParser] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -305,6 +307,7 @@ def show_job_bundle_submitter(
         f=f,
         submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
+        session_config=session_config,
     )
 
     if job_parameters:
