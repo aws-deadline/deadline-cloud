@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
+from deadline.client.api._stack_trace_sanitizer import sanitize_exception, sanitize_message
 
 from ._session import (
     get_monitor_id,
@@ -163,6 +164,26 @@ class TelemetryClient:
         except Exception:
             # Silently swallow any exceptions
             return
+
+    def record_error_with_trace(
+        self,
+        exc: BaseException,
+        exception_scope: str,
+        extra_details: Optional[dict] = None,
+    ) -> None:
+        event_details: dict = {
+            "exception_type": type(exc).__qualname__,
+            "exception_scope": exception_scope,
+            "message": sanitize_message(str(exc)),
+            "stack_trace": sanitize_exception(exc),
+        }
+        if extra_details:
+            event_details.update(extra_details)
+
+        self.record_event(
+            event_type="com.amazon.rum.deadline.error",
+            event_details=event_details,
+        )
 
     @property
     def is_initialized(self) -> bool:
