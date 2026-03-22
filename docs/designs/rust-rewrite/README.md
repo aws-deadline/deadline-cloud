@@ -1,9 +1,20 @@
 # Rust Rewrite
 
 Tracking the implementation of the AWS Deadline Cloud CLI in Rust.
+The Python source lives at `../deadline-cloud-python`.
+
+## Getting started
+
+1. Read `workflow.md` in this directory — it defines the development cycle.
+2. Read `../../AGENTS.md` — repo-wide conventions, build commands, doc-sync rules.
+3. Read `../../TESTING.md` — testing philosophy, TDD, test levels, no mocking.
+4. Check the **Progress** table below to find what's in progress or next.
+5. Read `../../specs/<crate>.md` for the crate you'll be working on.
+6. Read the relevant `test_specs/` section for behavioral test cases.
 
 ## Reference Material
 
+- `workflow.md` — Development workflow: study Python → update spec → red → green → refactor → update docs
 - `data_flow.md` — Persistent data formats (INI config, job bundle layout,
   manifest JSON, cache schemas, checkpoint format)
 - `observations.md` — Behavioral notes and ambiguities discovered during analysis
@@ -19,13 +30,13 @@ Tracking the implementation of the AWS Deadline Cloud CLI in Rust.
 | `deadline-models` | §51, §52 | Error types, submitter info |
 | `deadline-common` | §36 | Path utilities |
 | `deadline-config` | §1 (partial) | INI read/write, hierarchical settings, str2bool, get/set/clear |
-| `deadline-test-server` | — | TestHarness, wiremock fake server scaffolding |
+| `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | CLI skeleton with clap, config subcommands, Level 3 tests |
+| `deadline-cli` | §37 (cases 1-2 done), §38 (cases 1-8) | Config subcommands (show, get, set, clear), Level 2 tests |
 
 ### Not Started
 

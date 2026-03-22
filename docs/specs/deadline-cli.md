@@ -3,21 +3,39 @@
 Binary crate. Clap-based argument parsing, subcommand dispatch, output
 formatting. Contains no business logic — delegates to library crates.
 
-## Status: Stub
+## Root Command
 
-Currently prints a placeholder message. Phase 2 will add:
+The `deadline` binary is the single entry point. It accepts global options
+before any subcommand:
 
-- `deadline --version` / `deadline --help`
-- `deadline config show` (verbose and JSON)
-- `deadline config get <setting>`
-- `deadline config set <setting> <value>`
-- `deadline config clear <setting>`
+- `--version` — prints `deadline <version>` and exits 0
+- `-h` / `--help` — prints help text listing subcommands and global options, exits 0
+- `--log-level <LEVEL>` — sets logging verbosity (ERROR, WARNING, INFO, DEBUG).
+  If omitted, reads `settings.log_level` from config. If the config value is
+  invalid, falls back to WARNING.
 
-## Design
+The help text includes a short description and a "common workflows" section
+showing typical command sequences.
 
-Each subcommand group lives in `src/commands/<group>.rs`. The main entry point
-parses args with clap, loads config once, applies CLI flag overrides in memory,
-then dispatches to the appropriate command handler.
+Both `-h` and `--help` are accepted (matching the Python CLI's behavior).
+
+## Subcommands
+
+Each subcommand group lives in `src/commands/<group>.rs`.
+
+### `deadline config`
+
+Manages the Deadline Cloud configuration file. All subcommands operate on the
+config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
+
+- `deadline config show` — prints every known setting with its current value,
+  whether it's the default, and a short description. With `--output json`,
+  prints a JSON object instead.
+- `deadline config get <setting>` — prints the current value of a single setting.
+  If not explicitly set, prints the default.
+- `deadline config set <setting> <value>` — persists a value to the config file.
+- `deadline config clear <setting>` — reverts a setting to its default by writing
+  the default value back to the config file (does not remove the key).
 
 ## Dependencies
 

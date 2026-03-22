@@ -26,6 +26,21 @@ over five unit tests that each test a helper in isolation.
 
 ---
 
+## Workflow: Red → Green → Refactor
+
+All new features follow test-driven development:
+
+1. **Red.** Write tests that assert on observable behavior (stdout, stderr,
+   exit code, file contents). Run them. They must fail — if they pass, the
+   test isn't testing anything new.
+2. **Green.** Write the minimum implementation to make the tests pass.
+3. **Refactor.** Clean up the implementation. Tests must still pass.
+
+Tests describe *what the system does*, never *how it does it*. A test that
+breaks when you rename an internal function was written at the wrong level.
+
+---
+
 ## Scenario Coverage
 
 For each interface (CLI command or public function), systematically consider
