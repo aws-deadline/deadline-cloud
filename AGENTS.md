@@ -23,7 +23,6 @@ This is the Rust implementation of the AWS Deadline Cloud CLI.
 
 - Comments explain *what* and *why*, not Rust language concepts.
 - Test names: `{command_or_function}_{scenario}_{expected_outcome}`
-- Every test gets a `// §N case M` traceability comment linking to the test spec.
 - No mocking. Use real temp directories, real HTTP servers (wiremock).
 
 ## Build and test

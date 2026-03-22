@@ -139,35 +139,30 @@ impl std::error::Error for JobAttachmentsError {}
 mod tests {
     use super::*;
 
-    // §51 case 1: OperationError("msg") → display returns "msg"
     #[test]
     fn operation_error_displays_message_verbatim() {
         let err = DeadlineError::OperationError("something went wrong".into());
         assert_eq!(err.to_string(), "something went wrong");
     }
 
-    // §51 case 2: OperationCanceled default → "Operation canceled"
     #[test]
     fn operation_canceled_default_message() {
         let err = DeadlineError::operation_canceled();
         assert_eq!(err.to_string(), "Operation canceled");
     }
 
-    // §51 case 3: OperationCanceled("custom") → "custom"
     #[test]
     fn operation_canceled_custom_message() {
         let err = DeadlineError::OperationCanceled("custom".into());
         assert_eq!(err.to_string(), "custom");
     }
 
-    // §51 case 4: OperationTimedOut default → "Operation timed out"
     #[test]
     fn operation_timed_out_default_message() {
         let err = DeadlineError::operation_timed_out();
         assert_eq!(err.to_string(), "Operation timed out");
     }
 
-    // §51 case 5: CreateJobWaiterCanceled default → mentions "waiting for CreateJob"
     #[test]
     fn create_job_waiter_canceled_default_message() {
         let err = DeadlineError::create_job_waiter_canceled();
@@ -178,14 +173,12 @@ mod tests {
         );
     }
 
-    // §51 case 6: UserInitiatedCancel default → "Operation canceled by user"
     #[test]
     fn user_initiated_cancel_default_message() {
         let err = DeadlineError::user_initiated_cancel();
         assert_eq!(err.to_string(), "Operation canceled by user");
     }
 
-    // §51 case 7: All cancel/timeout variants are DeadlineError variants
     // In Rust, enum variants are inherently part of the enum — this test
     // verifies they can all be handled as &dyn Error (the trait object
     // equivalent of a base exception class).

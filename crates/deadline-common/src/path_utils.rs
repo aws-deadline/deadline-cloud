@@ -290,7 +290,6 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // §36 cases 1-7: human_readable_file_size
     #[test_case(0, "0 B" ; "zero bytes")]
     #[test_case(999, "999 B" ; "sub-kilobyte")]
     #[test_case(1000, "1.0 KB" ; "exactly 1 KB")]
@@ -302,7 +301,6 @@ mod tests {
         assert_eq!(human_readable_file_size(input), expected);
     }
 
-    // §36 case 8: Numbered files grouped into a sequence
     #[test]
     fn sequence_of_numbered_files() {
         let paths = vec![
@@ -325,7 +323,6 @@ mod tests {
         assert!(result[0].index_set.contains(&10));
     }
 
-    // §36 case 9: Mix of numbered and non-numbered files
     #[test]
     fn mixed_numbered_and_non_numbered() {
         let paths = vec![
@@ -344,7 +341,6 @@ mod tests {
         assert_eq!(individual.file_count, 1);
     }
 
-    // §36 case 10: Zero-padded number reflects padding width
     #[test]
     fn zero_padded_sequence_reflects_padding() {
         let paths = vec![
@@ -362,7 +358,6 @@ mod tests {
         );
     }
 
-    // §36 case 11: Variable-width number
     #[test]
     fn variable_width_number_sequence() {
         let paths = vec![
@@ -381,7 +376,6 @@ mod tests {
         assert!(result[0].index_set.contains(&907));
     }
 
-    // §36 case 12: File with no number listed individually
     #[test]
     fn non_numbered_file_listed_individually() {
         let paths = vec!["no_number.txt"];
@@ -392,7 +386,6 @@ mod tests {
         assert_eq!(result[0].file_count, 1);
     }
 
-    // §36 case 13: Files in nested directories grouped by prefix
     #[test]
     fn nested_directories_grouped() {
         let paths = vec![
@@ -407,7 +400,6 @@ mod tests {
         assert_eq!(total_files, 3);
     }
 
-    // §36 case 14: Single file returns single entry
     #[test]
     fn single_file_returns_single_entry() {
         let paths = vec!["only_file.txt"];

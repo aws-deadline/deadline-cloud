@@ -50,7 +50,6 @@ impl SubmitterInfo {
 mod tests {
     use super::*;
 
-    // §52 case 1: Create with only submitter_name → all optional fields are None
     #[test]
     fn new_with_name_only_has_none_optional_fields() {
         let info = SubmitterInfo::new("CLI");
@@ -62,7 +61,6 @@ mod tests {
         assert!(info.additional_info.is_none());
     }
 
-    // §52 case 2: Create with all fields populated → all accessible
     #[test]
     fn all_fields_populated_and_accessible() {
         let info = SubmitterInfo {
@@ -84,7 +82,6 @@ mod tests {
         assert!(info.additional_info.is_some());
     }
 
-    // §52 case 3: additional_info with nested dicts and lists → stored as-is
     #[test]
     fn additional_info_with_nested_data() {
         let mut plugins = HashMap::new();
@@ -132,7 +129,6 @@ mod tests {
         }
     }
 
-    // §52 case 4: additional_info is None → attribute is None
     #[test]
     fn additional_info_defaults_to_none() {
         let info = SubmitterInfo::new("CLI");

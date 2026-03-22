@@ -332,27 +332,16 @@ mod tests {
     use serial_test::serial;
     use test_case::test_case;
 
-    // §1 cases 58-67: str2bool
 
-    // §1 case 58
     #[test_case("true", Ok(true) ; "literal_true")]
-    // §1 case 59
     #[test_case("false", Ok(false) ; "literal_false")]
-    // §1 case 60a
     #[test_case("on", Ok(true) ; "on")]
-    // §1 case 60b
     #[test_case("off", Ok(false) ; "off")]
-    // §1 case 61a
     #[test_case("yes", Ok(true) ; "yes")]
-    // §1 case 61b
     #[test_case("no", Ok(false) ; "no")]
-    // §1 case 62a
     #[test_case("1", Ok(true) ; "one")]
-    // §1 case 62b
     #[test_case("0", Ok(false) ; "zero")]
-    // §1 case 63
     #[test_case("TrUe", Ok(true) ; "mixed case true")]
-    // §1 case 64
     #[test_case("FaLsE", Ok(false) ; "mixed case false")]
     fn str2bool_valid(input: &str, expected: Result<bool, ()>) {
         let result = str2bool(input);
@@ -362,19 +351,16 @@ mod tests {
         }
     }
 
-    // §1 case 65
     #[test]
     fn str2bool_not_boolean_returns_error() {
         assert!(str2bool("not_boolean").is_err());
     }
 
-    // §1 case 66
     #[test]
     fn str2bool_empty_returns_error() {
         assert!(str2bool("").is_err());
     }
 
-    // §1 case 67
     #[test]
     fn str2bool_two_returns_error() {
         assert!(str2bool("2").is_err());
@@ -385,10 +371,8 @@ mod tests {
         assert!(str2bool("maybe").is_err());
     }
 
-    // §1 cases 1-5: get_config_file_path with env var
     // These tests must be serial because they mutate process-wide env vars.
 
-    // §1 case 1
     #[test]
     #[serial]
     fn get_config_file_path_default_no_env() {
@@ -401,7 +385,6 @@ mod tests {
         );
     }
 
-    // §1 case 2
     #[test]
     #[serial]
     fn get_config_file_path_env_override() {
@@ -410,7 +393,6 @@ mod tests {
         assert_eq!(get_config_file_path(), PathBuf::from("/tmp/my_config"));
     }
 
-    // §1 case 3
     #[test]
     #[serial]
     fn get_config_file_path_env_tilde() {
@@ -424,7 +406,6 @@ mod tests {
         assert!(path.to_str().unwrap().ends_with("custom/config"));
     }
 
-    // §1 case 4
     #[test]
     #[serial]
     fn get_config_file_path_env_empty_falls_back() {
@@ -434,7 +415,6 @@ mod tests {
         assert!(path.to_str().unwrap().ends_with(".deadline/config"));
     }
 
-    // §1 case 5
     #[test]
     #[serial]
     fn get_config_file_path_env_unset_mid_session() {
@@ -446,9 +426,7 @@ mod tests {
         assert!(path.to_str().unwrap().ends_with(".deadline/config"));
     }
 
-    // §1 cases 7-9: read_config_from with various file states
 
-    // §1 case 7
     #[test]
     fn read_config_from_valid_ini() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -459,7 +437,6 @@ mod tests {
         assert_eq!(config.get("defaults", "aws_profile_name"), Some("test"));
     }
 
-    // §1 case 8
     #[test]
     fn read_config_from_missing_file_returns_empty() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -469,7 +446,6 @@ mod tests {
         assert_eq!(config.get("defaults", "aws_profile_name"), None);
     }
 
-    // §1 case 9
     #[test]
     fn read_config_from_empty_file_returns_empty() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -480,7 +456,6 @@ mod tests {
         assert_eq!(config.get("defaults", "aws_profile_name"), None);
     }
 
-    // §1 case 10
     #[test]
     fn read_config_from_malformed_ini_returns_error() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -490,9 +465,7 @@ mod tests {
         assert!(read_config_from(&path).is_err());
     }
 
-    // §1 cases 16-19: atomic write + directory creation + permissions
 
-    // §1 case 16
     #[test]
     fn write_config_to_writes_content() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -506,7 +479,6 @@ mod tests {
         assert!(content.contains("aws_profile_name = test"));
     }
 
-    // §1 case 17
     #[test]
     fn write_config_to_creates_parent_dirs() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -518,7 +490,6 @@ mod tests {
         assert!(path.exists());
     }
 
-    // §1 case 18
     #[test]
     fn write_config_to_existing_parent_no_error() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -532,7 +503,6 @@ mod tests {
         assert!(path.exists());
     }
 
-    // §1 case 19
     #[cfg(unix)]
     #[test]
     fn write_config_to_sets_permissions_600() {

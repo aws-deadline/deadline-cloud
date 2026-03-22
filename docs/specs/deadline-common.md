@@ -6,7 +6,7 @@ Utility functions shared across crates.
 
 Not yet implemented. Will contain:
 
-- `human_readable_file_size()` — Format byte counts (§36)
+- `human_readable_file_size()` — Format byte counts
 - Path utilities
 - Timestamp formatting
 
