@@ -6,3 +6,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+test-case = { workspace = true }

@@ -7,3 +7,6 @@ license.workspace = true
 
 [dependencies]
 deadline-models = { workspace = true }
+
+[dev-dependencies]
+test-case = { workspace = true }
