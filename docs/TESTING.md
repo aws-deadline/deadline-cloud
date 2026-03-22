@@ -21,6 +21,54 @@ CLI-level testing would be imprecise.
 2. If the CLI can't reach it, test the public function directly.
 3. No traditional mocking. Ever.
 
+The goal is to maximize coverage through the highest-level interface available.
+Tests that go through the CLI survive internal refactors — if you rename a
+helper function, restructure modules, or change how data flows internally,
+CLI tests keep passing as long as the observable behavior is the same. Tests
+that call internal helpers break on every refactor, even when nothing the user
+sees has changed. Prefer one CLI test that exercises a code path end-to-end
+over five unit tests that each test a helper in isolation.
+
+---
+
+## Scenario Coverage
+
+For each interface (CLI command or public function), systematically consider
+these categories. Skip any that don't apply.
+
+| Category | What to test |
+|----------|-------------|
+| Happy path | Valid inputs producing expected output |
+| Missing/invalid args | Omit required args, wrong types, malformed values |
+| Boundary values | Empty strings, zero, max lengths, empty collections |
+| Error handling | Expected errors, error messages, exit codes |
+| Auth/credential states | No creds, expired creds, wrong permissions |
+| Config interaction | How configuration settings alter behavior |
+| Pagination/batching | Large result sets, partial pages, empty pages |
+| Interactive vs scripted | Prompts, `--yes` flags, piped input |
+| Output formats | JSON, table, human-readable; stdout vs stderr |
+| Cross-resource references | Referencing nonexistent or mismatched resources |
+| Concurrency/cancellation | Parallel operations, interrupted transfers, timeouts |
+
+This is a checklist, not a quota. A simple getter might only need happy path
+and error handling. A complex submission command might hit all eleven.
+
+---
+
+## Behavioral Ambiguity
+
+When the Python reference does something that seems wrong, inconsistent, or
+surprising, still write the test case but flag it:
+
+```rust
+// §1 case 53: clear_setting writes default back rather than removing key
+// ⚠️ Python behavior — intentional per data_flow.md observation #6
+```
+
+This keeps the decision visible. The Rust implementation can choose to
+replicate or fix the behavior, but the flag ensures it's a deliberate choice
+rather than an accidental copy.
+
 ---
 
 ## No Mocking
