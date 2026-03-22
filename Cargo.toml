@@ -7,6 +7,7 @@ members = [
     "crates/deadline-job-bundle",
     "crates/deadline-client",
     "crates/deadline-cli",
+    "crates/deadline-test-server",
 ]
 resolver = "3"
 
@@ -16,9 +17,25 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+# Internal crates
 deadline-models = { path = "crates/deadline-models" }
 deadline-common = { path = "crates/deadline-common" }
 deadline-config = { path = "crates/deadline-config" }
 deadline-job-attachments = { path = "crates/deadline-job-attachments" }
 deadline-job-bundle = { path = "crates/deadline-job-bundle" }
 deadline-client = { path = "crates/deadline-client" }
+deadline-test-server = { path = "crates/deadline-test-server" }
+
+# Shared dependencies
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+
+# Test dependencies
+test-case = "3"
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+wiremock = "0.6"
