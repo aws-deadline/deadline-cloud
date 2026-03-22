@@ -7,7 +7,6 @@ This is the Rust implementation of the AWS Deadline Cloud CLI.
 1. Read `docs/ARCHITECTURE.md` — crate dependency graph and shared conventions.
 2. Read `docs/specs/<crate>.md` for whichever crate you're working on.
 3. Read `docs/TESTING.md` for how tests are structured (Level 1 vs Level 3, no mocking).
-4. Read the relevant sections of `../documentation/test_specs/` for behavioral requirements.
 
 ## Keeping docs in sync with code
 
