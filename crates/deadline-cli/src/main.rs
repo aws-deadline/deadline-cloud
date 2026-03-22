@@ -1,3 +1,15 @@
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "deadline", version, about = "Interact with AWS Deadline Cloud")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(clap::Subcommand)]
+enum Commands {}
+
 fn main() {
-    println!("deadline CLI - not yet implemented");
+    let _cli = Cli::parse();
 }
