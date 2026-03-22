@@ -85,7 +85,7 @@ impl NumberedPath {
 }
 
 /// Parse a path into (prefix, number_string, extension) if it contains a trailing number.
-/// Matches the Python regex: `^(.*\D|)(\d+)(\.[^/\\]+)?$`
+/// Matches the regex: `^(.*\D|)(\d+)(\.[^/\\]+)?$`
 fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
     // Find the extension: last '.' that isn't preceded by '/' or '\'
     let (base, ext) = if let Some(dot_pos) = path.rfind('.') {

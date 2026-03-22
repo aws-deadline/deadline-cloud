@@ -15,7 +15,7 @@ pub struct SettingDef {
     pub description: &'static str,
 }
 
-/// All known settings, in the same order as the Python SETTINGS dict.
+/// All known settings, in definition order.
 pub static SETTINGS: &[(&str, SettingDef)] = &[
     (
         "deadline-cloud-monitor.path",

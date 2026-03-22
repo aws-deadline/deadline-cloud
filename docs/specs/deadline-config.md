@@ -4,8 +4,6 @@ Manages the `~/.deadline/config` INI file — reading, writing, and resolving
 settings through a hierarchical section naming scheme scoped to the active
 AWS profile, farm, and queue.
 
-Rust equivalent of Python's `deadline.client.config.config_file`.
-
 ## Modules
 
 ### `ini` — INI parser/writer
@@ -72,7 +70,7 @@ Two tiers — config-explicit (primary) and convenience wrappers:
 | `get_setting_default(name)` | No (reads disk) | Read |
 
 `clear_setting` writes the default value back rather than removing the key
-(matches Python behavior — see data_flow.md observation #6).
+(see data_flow.md observation #6).
 
 #### Validation
 

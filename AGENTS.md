@@ -1,7 +1,6 @@
 # AGENTS.md
 
-This is the Rust implementation of the AWS Deadline Cloud CLI, a port of
-[deadline-cloud-python](../deadline-cloud-python/).
+This is the Rust implementation of the AWS Deadline Cloud CLI.
 
 ## Before you start
 

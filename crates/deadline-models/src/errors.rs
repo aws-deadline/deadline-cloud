@@ -187,8 +187,8 @@ mod tests {
 
     // §51 case 7: All cancel/timeout variants are DeadlineError variants
     // In Rust, enum variants are inherently part of the enum — this test
-    // verifies they can all be handled as &dyn Error (the trait object equivalent
-    // of Python's exception hierarchy).
+    // verifies they can all be handled as &dyn Error (the trait object
+    // equivalent of a base exception class).
     #[test]
     fn all_variants_implement_error_trait() {
         let errors: Vec<Box<dyn std::error::Error>> = vec![

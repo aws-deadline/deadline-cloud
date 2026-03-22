@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 /// A YAML-safe value that can be arbitrarily nested.
-/// Mirrors the Python `YamlValue` type alias.
+/// Mirrors the `YamlValue` type alias used for flexible YAML data.
 #[derive(Debug, Clone, PartialEq)]
 pub enum YamlValue {
     String(String),

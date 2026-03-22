@@ -57,15 +57,15 @@ and error handling. A complex submission command might hit all eleven.
 
 ## Behavioral Ambiguity
 
-When the Python reference does something that seems wrong, inconsistent, or
+When the reference implementation does something that seems wrong, inconsistent, or
 surprising, still write the test case but flag it:
 
 ```rust
 // §1 case 53: clear_setting writes default back rather than removing key
-// ⚠️ Python behavior — intentional per data_flow.md observation #6
+// ⚠️ Intentional per data_flow.md observation #6
 ```
 
-This keeps the decision visible. The Rust implementation can choose to
+This keeps the decision visible. The implementation can choose to
 replicate or fix the behavior, but the flag ensures it's a deliberate choice
 rather than an accidental copy.
 
@@ -79,11 +79,7 @@ or hand-rolled mock objects that record calls and return canned values in-proces
 **Why:** Mocks test interaction ("was this function called with these args?").
 We test behavior ("given this input, does the system produce this output?").
 Mocks couple tests to implementation details. When you refactor internals,
-mock-based tests break even though behavior is unchanged. This is the
-overmocking trap the Python codebase fell into — patching
-`botocore.client.BaseClient._make_api_call` with regex dispatchers, wrapping
-every dependency in `MagicMock`, and ending up with tests that pass but don't
-catch real bugs.
+mock-based tests break even though behavior is unchanged.
 
 **What we use instead:**
 

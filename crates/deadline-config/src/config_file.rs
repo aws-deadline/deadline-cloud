@@ -1,9 +1,7 @@
 // Configuration file management for ~/.deadline/config
 //
-// Implements the same behavior as the Python config_file.py:
-// - INI config file read/write with hierarchical section naming
-// - Atomic writes (temp file + rename)
-// - Environment variable override for file path
+// INI config file read/write with hierarchical section naming,
+// atomic writes, and environment variable override for file path.
 //
 // Design: The primary API operates on IniConfig values passed explicitly.
 // CLI commands call read_config_from() once at startup, apply CLI flag
