@@ -31,12 +31,13 @@ The Python source lives at `../deadline-cloud-python`.
 | `deadline-common` | §36 | Path utilities |
 | `deadline-config` | §1 (partial) | INI read/write, hierarchical settings, str2bool, get/set/clear |
 | `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
+| `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-cli` | §37 (cases 1-2 done), §38 (cases 1-8) | Config subcommands (show, get, set, clear), Level 2 tests |
+| `deadline-cli` | §37 (cases 3-58) | Root group utilities (log level, redirect, markdown strip, SIGINT, etc.) |
 
 ### Not Started
 

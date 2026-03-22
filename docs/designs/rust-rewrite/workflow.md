@@ -24,22 +24,37 @@ Rust, but keep it at the design level — no code blocks unless they're
 needed to show a non-obvious interface or data format. This becomes the
 reference for both the tests and the implementation.
 
-### 3. Red — Write failing tests
+### 3. Review test specs
+
+Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
+the feature being ported. These files document behavioral test cases
+organized by section number (matching the Progress table in `README.md`).
+Use them as inspiration for what scenarios to cover — happy paths, error
+handling, boundary values, output formats, etc. Not every case needs a
+1:1 test, but the specs ensure you don't miss important scenarios.
+
+### 4. Red — Write failing tests
 
 Write tests that assert on observable behavior: stdout, stderr, exit code,
 file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
 they fail. If a test passes before implementation, it's not testing anything
 new.
 
-### 4. Green — Implement
+Do **not** reference section or case numbers from the test specs in test
+names, comments, or file headers. The test specs are migration-era
+scaffolding for porting from Python to Rust — they are not maintained
+after the tests are written. Tests should be self-describing through
+their names and assertions alone.
+
+### 5. Green — Implement
 
 Write the minimum code to make the tests pass.
 
-### 5. Refactor
+### 6. Refactor
 
 Clean up the implementation. Tests must still pass. Commit.
 
-### 6. Update docs
+### 7. Update docs
 
 Update `docs/specs/<crate>.md` if the implementation diverged from the
 initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships

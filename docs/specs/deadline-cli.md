@@ -28,9 +28,11 @@ Each subcommand group lives in `src/commands/<group>.rs`.
 Manages the Deadline Cloud configuration file. All subcommands operate on the
 config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
 
-- `deadline config show` — prints every known setting with its current value,
-  whether it's the default, and a short description. With `--output json`,
-  prints a JSON object instead.
+- `deadline config show` — verbose mode (default) prints the config file path,
+  then for each setting: `name: value (default)` (the suffix only when value
+  equals the default), followed by the description indented with 3 spaces.
+  With `--output json`, prints a JSON object containing
+  `settings.config_file_path` and all setting name/value pairs.
 - `deadline config get <setting>` — prints the current value of a single setting.
   If not explicitly set, prints the default.
 - `deadline config set <setting> <value>` — persists a value to the config file.
