@@ -1,0 +1,12 @@
+[package]
+name = "deadline-client"
+description = "AWS Deadline Cloud client API, session, and telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+deadline-models = { workspace = true }
+deadline-config = { workspace = true }
+deadline-job-attachments = { workspace = true }
+deadline-job-bundle = { workspace = true }

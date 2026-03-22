@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "crates/deadline-models",
+    "crates/deadline-common",
+    "crates/deadline-config",
+    "crates/deadline-job-attachments",
+    "crates/deadline-job-bundle",
+    "crates/deadline-client",
+    "crates/deadline-cli",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+deadline-models = { path = "crates/deadline-models" }
+deadline-common = { path = "crates/deadline-common" }
+deadline-config = { path = "crates/deadline-config" }
+deadline-job-attachments = { path = "crates/deadline-job-attachments" }
+deadline-job-bundle = { path = "crates/deadline-job-bundle" }
+deadline-client = { path = "crates/deadline-client" }

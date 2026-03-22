@@ -1,0 +1,9 @@
+[package]
+name = "deadline-config"
+description = "Configuration management for AWS Deadline Cloud"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+deadline-models = { workspace = true }

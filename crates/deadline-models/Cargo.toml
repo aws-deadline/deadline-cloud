@@ -1,0 +1,8 @@
+[package]
+name = "deadline-models"
+description = "Shared types and error definitions for AWS Deadline Cloud"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

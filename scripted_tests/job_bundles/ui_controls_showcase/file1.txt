@@ -1,3 +1,0 @@
-This is file1.txt for the PathDropdown parameter.
-It's one of the options in the dropdown list.
-PathDropdown option 1 content.

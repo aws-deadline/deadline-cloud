@@ -1,4 +1,0 @@
-deadline-cloud-test-fixtures ~= 0.18.10
-# MCP (Model Context Protocol) library for MCP server integration tests
-mcp >= 1.13.0
-pytest-asyncio == 1.*
