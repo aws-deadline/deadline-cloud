@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
-from deadline.client.api._stack_trace_sanitizer import sanitize_exception, sanitize_message
+from ._stack_trace_sanitizer import sanitize_exception, sanitize_message
 
 from ._session import (
     get_monitor_id,
