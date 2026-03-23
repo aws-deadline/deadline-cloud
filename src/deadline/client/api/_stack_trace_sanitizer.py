@@ -23,7 +23,7 @@ _KNOWN_PACKAGES: FrozenSet[str] = frozenset(
     }
 )
 
-_FRAME_RE = re.compile(r'^(\s*File\s+)"([^"]+)",(\s+line\s+\d+,\s+in\s+.*)$')
+_FRAME_RE = re.compile(r'^( {0,10}File )"([^"]+)",( +line \d+, in .*)$')
 
 
 def _sanitize_path(filepath: str) -> str:
@@ -46,15 +46,16 @@ def _sanitize_path(filepath: str) -> str:
 
 
 # Matches file paths in exception messages — paths are typically quoted with ' or "
-_MSG_PATH_RE = re.compile(r"""(['"])(.*?[/\\].*?)\1""")
+_MSG_PATH_RE = re.compile(r"'([^']*[/\\][^']*)'|\"([^\"]*[/\\][^\"]*)\"")
 
 
 def sanitize_message(message: str) -> str:
     """Sanitize an exception message by replacing file paths with safe versions."""
 
     def _replace(m: re.Match) -> str:
-        quote, path = m.group(1), m.group(2)
-        return f"{quote}{_sanitize_path(path)}{quote}"
+        if m.group(1) is not None:
+            return f"'{_sanitize_path(m.group(1))}'"
+        return f'"{_sanitize_path(m.group(2))}"'
 
     return _MSG_PATH_RE.sub(_replace, message)
 
