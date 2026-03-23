@@ -35,7 +35,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 18
+    assert len(settings.keys()) == 19
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -104,6 +104,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.known_asset_paths", "/known/asset/path")
     config.set_setting("settings.locale", "ja_JP")
     config.set_setting("settings.force_s3_check", "true")
+    config.set_setting("settings.submitter_update_notification", "false")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])

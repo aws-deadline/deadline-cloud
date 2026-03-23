@@ -154,6 +154,13 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default)."
         ),
     },
+    "settings.submitter_update_notification": {
+        "default": "true",
+        "description": (
+            "Controls whether the submitter shows a dialog when a newer version is available. "
+            "Set to 'false' to suppress the update notification."
+        ),
+    },
 }
 
 
