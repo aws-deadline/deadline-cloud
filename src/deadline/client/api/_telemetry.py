@@ -21,7 +21,6 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
-from ._stack_trace_sanitizer import sanitize_exception, sanitize_message
 
 from ._session import (
     get_monitor_id,
@@ -171,6 +170,8 @@ class TelemetryClient:
         exception_scope: str,
         extra_details: Optional[dict] = None,
     ) -> None:
+        from ._stack_trace_sanitizer import sanitize_exception, sanitize_message
+
         event_details: dict = {
             "exception_type": type(exc).__qualname__,
             "exception_scope": exception_scope,
