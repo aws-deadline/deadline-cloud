@@ -46,7 +46,7 @@ def _sanitize_path(filepath: str) -> str:
 
 
 # Matches file paths in exception messages — paths are typically quoted with ' or "
-_MSG_PATH_RE = re.compile(r"'([^']*[/\\][^']*)'|\"([^\"]*[/\\][^\"]*)\"")
+_MSG_PATH_RE = re.compile(r"'([^'/\\]*[/\\][^']*)'|\"([^\"/\\]*[/\\][^\"]*)\"")
 
 
 def sanitize_message(message: str) -> str:
