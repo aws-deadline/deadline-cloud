@@ -412,6 +412,8 @@ No action needed — all Client callers were updated in the same PR set.
 The Worker Agent imports and uses `S3AssetUploader` from the `deadline-cloud` package (`deadline.job_attachments.upload`). As part of [PR #1040](https://github.com/aws-deadline/deadline-cloud/pull/1040), the `S3AssetUploader.__init__` signature in `deadline-cloud` was changed to require two additional keyword arguments — `s3_max_pool_connections` and `small_file_threshold_multiplier` — which were previously read internally from the Client's config. Since the Worker Agent calls this constructor directly, it must be updated to pass these values explicitly:
 
 ```python
+# For Example:
+
 # Before (deadline-cloud handled config lookup internally)
 uploader = S3AssetUploader(session=my_session)
 
@@ -422,6 +424,14 @@ uploader = S3AssetUploader(
     small_file_threshold_multiplier=20,   # or read from your own config
 )
 ```
+
+The Worker Agent's [`pyproject.toml`](https://github.com/aws-deadline/deadline-cloud-worker-agent/blob/mainline/pyproject.toml) pins the `deadline` package version range in its dependencies. This pin must be updated to require the `deadline` version that includes the breaking signature changes (at minimum the `S3AssetUploader` constructor change from PR #1040 and the `on_vfs_mount_complete` callback from PR #1062). If the version range allows older `deadline` versions, the agent will fail at runtime when it calls `S3AssetUploader()` without the now-required parameters.
+
+Version compatibility must be ensured across both deployment paths:
+
+
+- **Service-managed fleets:** The worker AMI is built using exact version pins for `deadline-cloud-worker-agent`, `deadline`, and `openjd-sessions`. Both the worker agent and `deadline` version pins must be updated together to versions that include the breaking changes. Linux and Windows configurations must stay in sync.
+- **Customer-managed fleets:** Customers install the worker agent via `pip install deadline-cloud-worker-agent`, which resolves the `deadline` dependency from the version range in the worker agent's `pyproject.toml`. As long as the version pin is correct, pip will pull compatible versions automatically.
 
 ### For external consumers importing from `deadline.common.path_utils`
 
