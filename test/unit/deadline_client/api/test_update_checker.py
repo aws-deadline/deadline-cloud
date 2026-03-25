@@ -327,6 +327,65 @@ class TestCheckForUpdates:
         assert result.error_message is not None and "Invalid version" in result.error_message
 
 
+class TestUncommonVersionFormats:
+    """Tests for uncommon or malformed current_version strings from DCCs."""
+
+    @pytest.mark.parametrize(
+        "current_version, expect_update",
+        [
+            # PEP 440 local version segment (e.g. dev builds like 1.2.3+patch1dkj3k)
+            ("0.9.0+patch1dkj3k", True),
+            ("0.10.0+patch1dkj3k", False),  # local segments are ignored in comparison
+            ("0.11.0+local", False),
+            # Pre-release versions
+            ("0.10.0a1", True),  # pre-release of 0.10.0 is less than 0.10.0
+            ("0.10.0rc1", True),
+            # Dev versions
+            ("0.10.0.dev1", True),  # dev release of 0.10.0 is less than 0.10.0
+            # Post-release
+            ("0.10.0.post1", False),  # post-release of 0.10.0 is greater than 0.10.0
+            ("0.9.0.post1", True),
+            # Leading 'v' prefix — packaging normalizes this to a valid version
+            ("v0.9.0", True),
+            ("v0.10.0", False),
+        ],
+    )
+    @patch("deadline.client.api._update_checker.get_current_platform", return_value="macos")
+    @patch("deadline.client.api._update_checker._fetch_manifest")
+    def test_uncommon_dcc_version_formats(
+        self, mock_fetch, mock_platform, current_version, expect_update
+    ):
+        """DCC integrations may report unusual but valid PEP 440 versions."""
+        mock_fetch.return_value = SAMPLE_MANIFEST
+
+        result = check_for_updates("deadline-cloud-for-cinema-4d", current_version)
+
+        assert result.status == UpdateCheckStatus.SUCCESS
+        assert result.update_available is expect_update
+
+    @pytest.mark.parametrize(
+        "malformed_version",
+        [
+            "not-a-version",
+            "abc.def.ghi",
+            "",
+            "1.2.3+patch1dkj3k+extra",  # double local segment
+        ],
+    )
+    @patch("deadline.client.api._update_checker.get_current_platform", return_value="macos")
+    @patch("deadline.client.api._update_checker._fetch_manifest")
+    def test_malformed_dcc_version(self, mock_fetch, mock_platform, malformed_version):
+        """Malformed version strings from DCCs should return INVALID_VERSION, not crash."""
+        mock_fetch.return_value = SAMPLE_MANIFEST
+
+        result = check_for_updates("deadline-cloud-for-cinema-4d", malformed_version)
+
+        assert result.status == UpdateCheckStatus.INVALID_VERSION
+        assert result.update_available is False
+        assert result.error_message is not None
+        assert result.error_message is not None
+
+
 class TestConfigOptOut:
     """Tests for the settings.submitter_update_notification opt-out."""
 

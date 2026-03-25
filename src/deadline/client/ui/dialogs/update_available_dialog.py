@@ -139,7 +139,7 @@ class UpdateAvailableDialog(QDialog):
         self.dismiss_button.setText(tr("Dismiss"))
         self.dismiss_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
 
-        self.download_button = QPushButton(tr("Download"))
+        self.download_button = QPushButton(tr("Download installer"))
         self.download_button.setStyleSheet(
             f"QPushButton {{ {_button_base} background-color: {_COLOR_ACCENT}; color: white; }}"
         )
@@ -166,7 +166,7 @@ class UpdateAvailableDialog(QDialog):
             self,
             tr("Application Restart Required"),
             tr(
-                "Please restart {integration_name} after installation to use the new version."
+                "Please run the installer and then restart {integration_name} to use the new version."
             ).format(integration_name=self.integration_name),
         )
         self.accept()
