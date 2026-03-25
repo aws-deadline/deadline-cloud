@@ -224,3 +224,12 @@ lstrip_blocks = true
 
 [tool.semantic_release.branches.release]
 match = "(mainline|release|patch_.*)"
+
+[tool.importlinter]
+root_package = "deadline"
+
+[[tool.importlinter.contracts]]
+name = "Job Attachments must not import from Client"
+type = "forbidden"
+source_modules = ["deadline.job_attachments"]
+forbidden_modules = ["deadline.client"]
