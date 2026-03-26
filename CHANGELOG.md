@@ -1,3 +1,15 @@
+## 0.54.4 (2026-03-26)
+
+
+### Features
+* add success message to handle-web-url --install and --uninstall (#1056) ([`6d0c5d9`](https://github.com/aws-deadline/deadline-cloud/commit/6d0c5d9dc167e8fd65721feb5cd6d318c7f38b44))
+
+### Bug Fixes
+* cache telemetry clients per package_name (#1055) ([`cb47435`](https://github.com/aws-deadline/deadline-cloud/commit/cb47435fefb6232137c66933539a2da259e297d3))
+* remove broken maxResults parameter from MCP (#1049) ([`a1df215`](https://github.com/aws-deadline/deadline-cloud/commit/a1df215a5669fd735a2d6f8f3a30911860afc219))
+* remove broken maxResults parameter from MCP ([`a1df215`](https://github.com/aws-deadline/deadline-cloud/commit/a1df215a5669fd735a2d6f8f3a30911860afc219))
+
+
 ## 0.54.3 (2026-03-19)
 
 
