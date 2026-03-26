@@ -194,12 +194,3 @@ class _PathMappingRuleApplier:
                 return result
 
         raise ValueError("No path mapping rule could be applied")
-
-    def transform(self, source_path: str) -> Union[str, Path]:
-        """Transform the provided path according to the path mapping rules. Return an untransformed path if no rule applied."""
-        if self.source_path_format is not None:
-            result = self._transform(source_path)
-            if result:
-                return result
-
-        return source_path

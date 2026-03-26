@@ -21,7 +21,6 @@ import click
 from botocore.exceptions import ClientError
 
 from ...api._session import _modified_logging_level
-from ....job_attachments.download import OutputDownloader
 from ....job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
@@ -59,10 +58,15 @@ from ._job_helpers import (
     _estimate_remaining_time,
 )
 from ._job_download_helpers import (
-    _apply_path_mappings_to_roots,
     _resolve_storage_profiles,
+    _transform_manifests_to_absolute_paths,
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
+from ....job_attachments.download import (
+    OutputDownloader,
+    download_files_from_manifests,
+    get_output_manifests_by_asset_root,
+)
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -580,11 +584,42 @@ def _download_job_output(
     )
 
     if resolved:
-        # Automatic path mapping via storage profiles
+        # Automatic path mapping via storage profiles using absolute-path transformation.
+        # This matches sync-output behavior: join root + relative, then transform the full
+        # absolute path. This correctly handles nested file system locations where a rule's
+        # source path is deeper than the asset root.
         rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
         click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
         if rules:
-            _apply_path_mappings_to_roots(job_output_downloader, output_paths_by_root, rules)
+            # Fetch manifests directly (same S3 data OutputDownloader uses internally)
+            manifests_by_root = get_output_manifests_by_asset_root(
+                s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                step_id=step_id,
+                task_id=task_id,
+                session_action_id=session_action_id,
+                session=queue_role_session,
+            )
+            mapped_manifests = _transform_manifests_to_absolute_paths(
+                manifests_by_root, rules, resolved.job_profile.osFamily
+            )
+            if mapped_manifests:
+                download_summary = download_files_from_manifests(
+                    s3_bucket=queue["jobAttachmentSettings"]["s3BucketName"],
+                    manifests_by_root=mapped_manifests,
+                    cas_prefix=JobAttachmentS3Settings(
+                        **queue["jobAttachmentSettings"]
+                    ).full_cas_prefix(),
+                    session=queue_role_session,
+                    on_downloading_files=None,
+                )
+                click.echo(_get_download_summary_message(download_summary, is_json_format))
+                click.echo()
+                return
+            # If no files could be mapped, fall through to the OutputDownloader path
+            # which will download to original (unmapped) paths.
         elif resolved.job_profile.storageProfileId != resolved.local_profile.storageProfileId:
             click.echo(
                 "Warning: Storage profiles have no matching file system location names. "

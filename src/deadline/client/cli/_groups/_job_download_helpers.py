@@ -9,6 +9,8 @@ validation, and path mapping for the `deadline job download-output` command.
 
 from __future__ import annotations
 
+import ntpath
+import posixpath
 from configparser import ConfigParser
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -21,10 +23,10 @@ from ...config import config_file
 from ....job_attachments._path_mapping import (
     _PathMappingRuleApplier,
 )
-from ....job_attachments.download import OutputDownloader
 from ....job_attachments.models import (
     PathMappingRule,
     StorageProfile,
+    StorageProfileOperatingSystemFamily,
 )
 
 
@@ -95,21 +97,71 @@ def _resolve_storage_profiles(
     return ResolvedStorageProfiles(job_profile=job_profile, local_profile=local_profile)
 
 
-def _apply_path_mappings_to_roots(
-    job_output_downloader: OutputDownloader,
-    output_paths_by_root: dict[str, list[str]],
+def _transform_manifests_to_absolute_paths(
+    manifests_by_root: dict[str, list[Any]],
     rules: list[PathMappingRule],
-) -> None:
-    """Apply path mapping rules to remap output root directories.
+    source_os_family: StorageProfileOperatingSystemFamily,
+) -> dict[str, Any]:
+    """Transform manifest paths using absolute-path mapping, matching sync-output behavior.
 
-    Modifies the downloader in-place via set_root_path().
+    Joins each root + relative path, applies path mapping rules to the full absolute path,
+    and returns a dict suitable for download_files_from_manifests(). This correctly handles
+    rules that match at any depth (e.g., nested file system locations), unlike root-only
+    transformation.
+
+    Args:
+        manifests_by_root: dict from asset root to list of BaseAssetManifest objects
+            (as returned by get_output_manifests_by_asset_root).
+        rules: path mapping rules from _generate_path_mapping_rules().
+        source_os_family: the OS family of the submitting machine (determines path joining).
+
+    Returns:
+        dict mapping "" to a merged BaseAssetManifest with absolute local paths.
+        The empty-string key means download_files_from_manifests() will use the
+        absolute paths directly (Path("").joinpath("/abs/path") == Path("/abs/path")).
     """
-    if not rules:
-        return
-
     applier = _PathMappingRuleApplier(rules)
-    for original_root in list(output_paths_by_root.keys()):
-        mapped_root = applier.transform(original_root)
-        if str(mapped_root) != original_root:
-            click.echo(f"  Mapping root: {original_root} -> {mapped_root}")
-            job_output_downloader.set_root_path(original_root, str(mapped_root))
+
+    if source_os_family == StorageProfileOperatingSystemFamily.WINDOWS:
+        source_os_path: Any = ntpath
+    else:
+        source_os_path = posixpath
+
+    unmapped_count = 0
+    mapped_count = 0
+
+    for root_path, manifest_list in manifests_by_root.items():
+        for manifest in manifest_list:
+            new_paths = []
+            for manifest_path in manifest.paths:
+                abs_path = source_os_path.normpath(
+                    source_os_path.join(root_path, manifest_path.path)
+                )
+                try:
+                    manifest_path.path = str(applier.strict_transform(abs_path))
+                    new_paths.append(manifest_path)
+                    mapped_count += 1
+                except ValueError:
+                    unmapped_count += 1
+            manifest.paths = new_paths
+
+    if unmapped_count > 0:
+        click.echo(
+            f"Warning: {unmapped_count} output file(s) could not be mapped and will be skipped."
+        )
+
+    if mapped_count > 0:
+        click.echo(f"  Mapped {mapped_count} output file(s) to local paths.")
+
+    # Collect all manifests with remaining paths into a flat dict keyed by "".
+    # Using "" as the key means Path("").joinpath(absolute_path) == absolute_path.
+    result: dict[str, Any] = {}
+    all_manifests = [m for ml in manifests_by_root.values() for m in ml if m.paths]
+    if all_manifests:
+        # Use the first manifest as the base and merge others into it
+        merged = all_manifests[0]
+        for extra in all_manifests[1:]:
+            merged.paths.extend(extra.paths)
+        result[""] = merged
+
+    return result

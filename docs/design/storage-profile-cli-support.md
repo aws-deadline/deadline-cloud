@@ -334,7 +334,7 @@ Both download commands already handle path mapping at the CLI layer using `_Path
 - `queue sync-output` transforms every individual file path (joins `rootPath + relativePath`, then calls `strict_transform()`) inside `_download_all_manifests_with_absolute_paths()`. It does not use `OutputDownloader` at all — it has its own manifest-based download pipeline.
 - `job download-output` (this proposal) transforms root paths via `OutputDownloader.set_root_path()`, then `OutputDownloader` joins root + relative internally during download.
 
-These are equivalent in outcome because each manifest has a single root path — transforming the root produces the same final absolute paths as transforming each `root + relative` individually. The proposed approach uses `set_root_path()` because `download-output` already depends on `OutputDownloader`, and rewriting it to use the manifest pipeline would be a larger change with no functional benefit.
+These are equivalent in outcome because each manifest has a single root path — transforming the root produces the same final absolute paths as transforming each `root + relative` individually. **Update (§13):** This equivalence only holds when all rules match exactly at the root level. With nested file system locations, a rule can match deeper than the root, and root-only transformation would miss it. The implementation now uses absolute-path transformation (joining root + relative before applying rules) when path mapping rules exist, matching `sync-output` behavior. See §13 for details.
 
 Since both download commands handle path mapping externally using the same trie, this TODO is stale and should be removed as part of Stage 3 (§8.3). `OutputDownloader` remains a download-only concern with no path mapping responsibility.
 
@@ -923,3 +923,86 @@ Storage profile affects path grouping during upload:
 
 - `hash_assets_and_create_manifest()` hashes files using xxHash XXH128 with a SQLite-backed cache
 - `upload_assets()` uploads to S3 using Content-Addressable Storage (CAS), with an S3CheckCache to prevent redundant uploads
+
+
+---
+
+## 13. Revision: Absolute-Path Transformation (Option E)
+
+### 13.1 Problem
+
+During code review, @mwiebe identified that transforming only root paths via `set_root_path()` is not equivalent to transforming full absolute paths (`root + relative`). A path mapping rule can match at a depth deeper than the asset root. For example, with nested file system locations:
+
+**Source profile (Windows):**
+- "Projects": `C:\Projects`
+- "SpecialProjects": `C:\Projects\Special`
+
+**Destination profile (Linux):**
+- "Projects": `/mnt/projects`
+- "SpecialProjects": `/opt/special`
+
+Asset root: `C:\Projects`, relative path: `Special\data.txt`.
+
+- Root-only: transforms `C:\Projects` → `/mnt/projects`. Final: `/mnt/projects/Special/data.txt`. **Wrong.**
+- Absolute-path: transforms `C:\Projects\Special\data.txt` → `/opt/special/data.txt`. **Correct** (more specific rule wins).
+
+The Deadline Cloud API does not prevent nested file system locations in storage profiles, so this is a real scenario.
+
+### 13.2 Solution: Option E — Dual Code Path
+
+When path mapping rules exist (both profiles resolved, rules generated), bypass `OutputDownloader` and use the manifest-based download pipeline directly — the same approach `queue sync-output` uses:
+
+1. Call `get_output_manifests_by_asset_root()` to fetch manifests from S3 (same data `OutputDownloader.__init__` fetches internally)
+2. For each manifest path, join `root + relative` using the source OS path module (`ntpath` or `posixpath`)
+3. Call `strict_transform()` on the full absolute path (trie picks the most specific matching rule)
+4. Download via `download_files_from_manifests()` with the transformed absolute paths
+
+When no path mapping rules exist (no profiles, ignore flag, same profile, mismatch warnings), the existing `OutputDownloader` code path is completely unchanged.
+
+### 13.3 Implementation
+
+**New function:** `_transform_manifests_to_absolute_paths()` in `_job_download_helpers.py`
+
+```python
+def _transform_manifests_to_absolute_paths(
+    manifests_by_root: dict[str, list[Any]],
+    rules: list[PathMappingRule],
+    source_os_family: StorageProfileOperatingSystemFamily,
+) -> dict[str, Any]:
+```
+
+- Joins root + relative using `ntpath` (Windows source) or `posixpath` (POSIX source)
+- Applies `strict_transform()` on each absolute path
+- Merges all manifests into a single result keyed by `""` (empty string)
+- `download_files_from_manifests()` with key `""` works because `Path("").joinpath("/abs/path")` == `Path("/abs/path")`
+
+**Updated flow in `_download_job_output()`:**
+
+```
+resolved = _resolve_storage_profiles(...)
+if resolved:
+    rules = _generate_path_mapping_rules(...)
+    if rules:
+        manifests = get_output_manifests_by_asset_root(...)  # same S3 data
+        mapped = _transform_manifests_to_absolute_paths(manifests, rules, ...)
+        download_files_from_manifests(mapped)                # absolute-path download
+        return  # early return, skip OutputDownloader path
+    elif different profiles:
+        warn about no matching location names
+else:
+    # existing OutputDownloader path (manual prompt, etc.) — unchanged
+```
+
+### 13.4 Test Coverage
+
+New unit tests in `test_job_download_helpers.py`:
+
+| Test | Description |
+|------|-------------|
+| `test_basic_windows_to_posix_mapping` | Standard cross-OS mapping via absolute paths |
+| `test_nested_location_picks_most_specific_rule` | Key case: nested locations, most specific rule wins |
+| `test_unmapped_paths_are_skipped` | Paths without matching rules are excluded |
+| `test_multiple_roots_merged` | Multiple asset roots merged into single download |
+| `test_empty_manifests_returns_empty` | Edge case: no paths to map |
+
+Updated CLI test `test_case1_both_profiles_match_auto_mapping` to verify the new code path calls `get_output_manifests_by_asset_root` instead of `set_root_path`.

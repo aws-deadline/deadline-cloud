@@ -15,6 +15,7 @@ import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from deadline.client import api, config
@@ -125,7 +126,7 @@ def _make_download_mocks(
 
 
 def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> None:
-    """Both profiles exist with matching location names → roots are remapped automatically."""
+    """Both profiles exist with matching location names → absolute-path mapping via manifests."""
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("settings.storage_profile_id", "sp-local-111")
@@ -137,7 +138,9 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
         job_group, "_get_conflicting_filenames", return_value=[]
     ), patch.object(job_group, "round", return_value=0), patch.object(
         api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile:
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group, "get_output_manifests_by_asset_root", return_value={}
+    ) as mock_get_manifests, patch.object(job_group, "download_files_from_manifests"):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
 
         root = "C:\\temp\\render"
@@ -160,7 +163,9 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
 
         assert result.exit_code == 0, result.output
         assert "Using storage profile: Local Linux Profile" in result.output
-        mock_downloader.return_value.set_root_path.assert_called()
+        # With the new absolute-path approach, we call get_output_manifests_by_asset_root
+        # instead of set_root_path
+        mock_get_manifests.assert_called_once()
 
 
 # ─── Case 2: Both profiles exist, locations don't match → no mapping ─────────
@@ -403,3 +408,306 @@ def test_case7_same_profile_both_sides(fresh_deadline_config: str) -> None:
         assert "Using storage profile: Local Linux Profile" in result.output
         # Same profile → empty rules → no set_root_path calls
         mock_downloader.return_value.set_root_path.assert_not_called()
+
+
+# ─── Case 8-E: Nested file system locations → most specific rule wins ────────
+
+# Profiles with nested locations: "special" is a subdirectory of "projects"
+MOCK_NESTED_JOB_PROFILE = StorageProfile(
+    storageProfileId="sp-nested-job-444",
+    displayName="Nested Windows Profile",
+    osFamily=StorageProfileOperatingSystemFamily.WINDOWS,
+    fileSystemLocations=[
+        FileSystemLocation(name="projects", path="C:\\Projects", type=FileSystemLocationType.LOCAL),
+        FileSystemLocation(
+            name="special", path="C:\\Projects\\Special", type=FileSystemLocationType.LOCAL
+        ),
+    ],
+)
+
+MOCK_NESTED_LOCAL_PROFILE = StorageProfile(
+    storageProfileId="sp-nested-local-555",
+    displayName="Nested Linux Profile",
+    osFamily=StorageProfileOperatingSystemFamily.LINUX,
+    fileSystemLocations=[
+        FileSystemLocation(
+            name="projects", path="/mnt/projects", type=FileSystemLocationType.LOCAL
+        ),
+        FileSystemLocation(name="special", path="/opt/special", type=FileSystemLocationType.LOCAL),
+    ],
+)
+
+
+def _make_mock_manifest(paths: list[tuple[str, int]]) -> MagicMock:
+    """Create a mock BaseAssetManifest with the given (relative_path, size) pairs."""
+    manifest = MagicMock()
+    manifest.hashAlg = "xxh128"
+    mock_paths = []
+    for path, size in paths:
+        mp = MagicMock()
+        mp.path = path
+        mp.size = size
+        mp.hash = "abc123"
+        mp.mtime = 1000000
+        mock_paths.append(mp)
+    manifest.paths = mock_paths
+    manifest.totalSize = sum(s for _, s in paths)
+    return manifest
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_case8e_nested_locations_most_specific_rule_wins(
+    fresh_deadline_config: str,
+) -> None:
+    """Nested file system locations: the most specific rule wins via absolute-path transformation.
+
+    Source profile (Windows):
+      - "projects": C:\\Projects
+      - "special":  C:\\Projects\\Special
+
+    Destination profile (Linux):
+      - "projects": /mnt/projects
+      - "special":  /opt/special
+
+    Job output root: C:\\Projects, relative path: Special\\data.txt
+    Absolute path: C:\\Projects\\Special\\data.txt → should match "special" rule → /opt/special/data.txt
+    NOT /mnt/projects/Special/data.txt (which root-only transformation would produce).
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-nested-local-555")
+    config.set_setting("settings.auto_accept", "true")
+
+    root = "C:\\Projects"
+    mock_manifest = _make_mock_manifest([("Special\\data.txt", 100)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+        mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
+        mock_download_manifests.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-nested-job-444",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["Special\\data.txt"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Using storage profile: Nested Linux Profile" in result.output
+        assert "Mapped 1 output file(s)" in result.output
+
+        # Verify the manifest path was transformed to the SPECIFIC rule destination
+        # The "special" rule (C:\Projects\Special -> /opt/special) should win over
+        # the "projects" rule (C:\Projects -> /mnt/projects)
+        assert mock_manifest.paths[0].path == "/opt/special/data.txt"
+
+        # Verify download_files_from_manifests was called (not OutputDownloader)
+        mock_download_manifests.assert_called_once()
+        mock_downloader.return_value.download_job_output.assert_not_called()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_case8e_nested_locations_broader_rule_for_non_nested_path(
+    fresh_deadline_config: str,
+) -> None:
+    """With nested locations, a file NOT under the nested path uses the broader rule.
+
+    Same profiles as Case 8-E, but relative path is "other\\file.txt" (not under Special).
+    Absolute path: C:\\Projects\\other\\file.txt → matches "projects" rule → /mnt/projects/other/file.txt
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-nested-local-555")
+    config.set_setting("settings.auto_accept", "true")
+
+    root = "C:\\Projects"
+    mock_manifest = _make_mock_manifest([("other\\file.txt", 50)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+        mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
+        mock_download_manifests.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-nested-job-444",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["other\\file.txt"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        # The broader "projects" rule should apply
+        assert mock_manifest.paths[0].path == "/mnt/projects/other/file.txt"
+        mock_download_manifests.assert_called_once()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_case8e_nested_locations_mixed_paths(
+    fresh_deadline_config: str,
+) -> None:
+    """With nested locations, files under different depths get the correct rules.
+
+    Two files in the same manifest:
+      - Special\\data.txt → "special" rule → /opt/special/data.txt
+      - other\\file.txt   → "projects" rule → /mnt/projects/other/file.txt
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-nested-local-555")
+    config.set_setting("settings.auto_accept", "true")
+
+    root = "C:\\Projects"
+    mock_manifest = _make_mock_manifest(
+        [
+            ("Special\\data.txt", 100),
+            ("other\\file.txt", 50),
+        ]
+    )
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+        mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
+        mock_download_manifests.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-nested-job-444",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["Special\\data.txt", "other\\file.txt"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Mapped 2 output file(s)" in result.output
+
+        # Verify each file got the correct rule
+        mapped_paths = {p.path for p in mock_manifest.paths}
+        assert "/opt/special/data.txt" in mapped_paths
+        assert "/mnt/projects/other/file.txt" in mapped_paths
+
+
+# ─── Rules exist but no output files match → fallback to OutputDownloader ────
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_rules_exist_but_no_files_match_falls_back_to_downloader(
+    fresh_deadline_config: str,
+) -> None:
+    """When rules are generated but no output files match any rule, fall back to
+    the OutputDownloader path and download to original (unmapped) paths.
+
+    This covers the case where the job's output root is outside all file system
+    locations in the storage profile. The rules exist but don't apply to the
+    actual output paths. Rather than skipping the download entirely, we fall
+    through to the existing OutputDownloader code path.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-local-111")
+    config.set_setting("settings.auto_accept", "true")
+
+    # Output root is NOT under any of the profile's locations
+    # (shared=Z:\shared, temp=C:\temp\render) — it's at D:\unrelated
+    root = "D:\\unrelated\\output"
+    mock_manifest = _make_mock_manifest([("result.exr", 100)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+        mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
+
+        mock_root = "/root/path"
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-job-222",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {mock_root: ["result.exr"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Using storage profile: Local Linux Profile" in result.output
+        # No files matched the rules, so download_files_from_manifests should NOT be called
+        mock_download_manifests.assert_not_called()
+        # Instead, the OutputDownloader path should have been used
+        mock_downloader.return_value.download_job_output.assert_called_once()

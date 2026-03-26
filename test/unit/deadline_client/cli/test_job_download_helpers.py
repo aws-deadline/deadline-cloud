@@ -20,8 +20,8 @@ from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
 from deadline.client.cli._groups._job_download_helpers import (
     ResolvedStorageProfiles,
-    _apply_path_mappings_to_roots,
     _resolve_storage_profiles,
+    _transform_manifests_to_absolute_paths,
 )
 from deadline.job_attachments._path_mapping import _generate_path_mapping_rules
 from deadline.job_attachments.models import (
@@ -172,141 +172,6 @@ class TestResolveStorageProfiles:
             )
 
 
-# ─── _apply_path_mappings_to_roots ──────────────────────────────────────────
-
-
-class TestApplyPathMappingsToRoots:
-    def test_empty_rules_is_noop(self) -> None:
-        downloader = MagicMock()
-        output_paths = {"/original/root": ["file1.txt"]}
-        _apply_path_mappings_to_roots(downloader, output_paths, [])
-        downloader.set_root_path.assert_not_called()
-
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
-    def test_single_mapping_applied_posix(self) -> None:
-        """On Linux/macOS: source is Windows, destination is local POSIX."""
-        downloader = MagicMock()
-        output_paths = {"C:\\temp\\render": ["output.exr"]}
-        rules = [
-            PathMappingRule(
-                source_path_format=PathFormat.WINDOWS.value,
-                source_path="C:\\temp\\render",
-                destination_path="/tmp/render",
-            )
-        ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        downloader.set_root_path.assert_called_once_with("C:\\temp\\render", "/tmp/render")
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows destination test")
-    def test_single_mapping_applied_windows(self) -> None:
-        """On Windows: source is POSIX, destination is local Windows."""
-        downloader = MagicMock()
-        output_paths = {"/tmp/render": ["output.exr"]}
-        rules = [
-            PathMappingRule(
-                source_path_format=PathFormat.POSIX.value,
-                source_path="/tmp/render",
-                destination_path="C:\\temp\\render",
-            )
-        ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        downloader.set_root_path.assert_called_once_with("/tmp/render", "C:\\temp\\render")
-
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
-    def test_multiple_mappings_applied_posix(self) -> None:
-        """On Linux/macOS: multiple Windows→POSIX mappings."""
-        downloader = MagicMock()
-        output_paths = {
-            "C:\\temp\\render": ["output.exr"],
-            "Z:\\shared": ["data.bin"],
-        }
-        rules = [
-            PathMappingRule(
-                source_path_format=PathFormat.WINDOWS.value,
-                source_path="C:\\temp\\render",
-                destination_path="/tmp/render",
-            ),
-            PathMappingRule(
-                source_path_format=PathFormat.WINDOWS.value,
-                source_path="Z:\\shared",
-                destination_path="/mnt/shared",
-            ),
-        ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        assert downloader.set_root_path.call_count == 2
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows destination test")
-    def test_multiple_mappings_applied_windows(self) -> None:
-        """On Windows: multiple POSIX→Windows mappings."""
-        downloader = MagicMock()
-        output_paths = {
-            "/tmp/render": ["output.exr"],
-            "/mnt/shared": ["data.bin"],
-        }
-        rules = [
-            PathMappingRule(
-                source_path_format=PathFormat.POSIX.value,
-                source_path="/tmp/render",
-                destination_path="C:\\temp\\render",
-            ),
-            PathMappingRule(
-                source_path_format=PathFormat.POSIX.value,
-                source_path="/mnt/shared",
-                destination_path="Z:\\shared",
-            ),
-        ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        assert downloader.set_root_path.call_count == 2
-
-    def test_no_matching_rule_skips_root(self) -> None:
-        downloader = MagicMock()
-        if sys.platform == "win32":
-            output_paths = {"D:\\other\\path": ["file.txt"]}
-            rules = [
-                PathMappingRule(
-                    source_path_format=PathFormat.WINDOWS.value,
-                    source_path="C:\\temp\\render",
-                    destination_path="D:\\mapped",
-                )
-            ]
-        else:
-            output_paths = {"/some/other/path": ["file.txt"]}
-            rules = [
-                PathMappingRule(
-                    source_path_format=PathFormat.POSIX.value,
-                    source_path="/mnt/shared",
-                    destination_path="/opt/shared",
-                )
-            ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        downloader.set_root_path.assert_not_called()
-
-    def test_root_already_matches_destination_skips(self) -> None:
-        downloader = MagicMock()
-        if sys.platform == "win32":
-            # Root is already the Windows destination — no source match
-            output_paths = {"C:\\temp\\render": ["file.txt"]}
-            rules = [
-                PathMappingRule(
-                    source_path_format=PathFormat.POSIX.value,
-                    source_path="/tmp/render",
-                    destination_path="C:\\temp\\render",
-                )
-            ]
-        else:
-            # Root is already the POSIX destination — no source match
-            output_paths = {"/tmp/render": ["file.txt"]}
-            rules = [
-                PathMappingRule(
-                    source_path_format=PathFormat.WINDOWS.value,
-                    source_path="C:\\temp\\render",
-                    destination_path="/tmp/render",
-                )
-            ]
-        _apply_path_mappings_to_roots(downloader, output_paths, rules)
-        downloader.set_root_path.assert_not_called()
-
-
 # ─── _generate_path_mapping_rules with StorageProfile dataclass ─────────────
 
 
@@ -349,6 +214,141 @@ class TestGeneratePathMappingRulesWithDataclass:
         )
         rules = _generate_path_mapping_rules(MOCK_JOB_PROFILE, no_match_profile)
         assert rules == []
+
+
+# ─── _transform_manifests_to_absolute_paths ──────────────────────────────────
+
+
+class TestTransformManifestsToAbsolutePaths:
+    """Tests for the absolute-path transformation that matches sync-output behavior."""
+
+    def _make_manifest(self, paths: list[tuple[str, int]]) -> Any:
+        """Create a mock manifest with the given (path, size) pairs."""
+        mock_manifest = MagicMock()
+        mock_paths = []
+        for path, size in paths:
+            mp = MagicMock()
+            mp.path = path
+            mp.size = size
+            mock_paths.append(mp)
+        mock_manifest.paths = mock_paths
+        return mock_manifest
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+    def test_basic_windows_to_posix_mapping(self) -> None:
+        """Windows source paths are joined and transformed to POSIX destinations."""
+        manifest = self._make_manifest([("output.exr", 100)])
+        manifests_by_root: dict[str, list[Any]] = {"C:\\temp\\render": [manifest]}
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\temp\\render",
+                destination_path="/tmp/render",
+            )
+        ]
+        result = _transform_manifests_to_absolute_paths(
+            manifests_by_root, rules, StorageProfileOperatingSystemFamily.WINDOWS
+        )
+        assert "" in result
+        assert result[""].paths[0].path == "/tmp/render/output.exr"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+    def test_nested_location_picks_most_specific_rule(self) -> None:
+        """When a rule matches deeper than the root, the most specific rule wins.
+
+        This is the key case that root-only transformation would get wrong.
+        Source profile has:
+          - "Projects": C:\\Projects -> /mnt/projects
+          - "SpecialProjects": C:\\Projects\\Special -> /opt/special
+        Asset root is C:\\Projects, relative path is Special\\data.txt.
+        The absolute path C:\\Projects\\Special\\data.txt should match the more
+        specific rule and map to /opt/special/data.txt, NOT /mnt/projects/Special/data.txt.
+        """
+        manifest = self._make_manifest([("Special\\data.txt", 50)])
+        manifests_by_root: dict[str, list[Any]] = {"C:\\Projects": [manifest]}
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\Projects",
+                destination_path="/mnt/projects",
+            ),
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\Projects\\Special",
+                destination_path="/opt/special",
+            ),
+        ]
+        result = _transform_manifests_to_absolute_paths(
+            manifests_by_root, rules, StorageProfileOperatingSystemFamily.WINDOWS
+        )
+        assert "" in result
+        # The more specific rule should win
+        assert result[""].paths[0].path == "/opt/special/data.txt"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+    def test_unmapped_paths_are_skipped(self) -> None:
+        """Paths that don't match any rule are excluded from the result."""
+        manifests_by_root: dict[str, list[Any]] = {
+            "C:\\temp\\render": [self._make_manifest([("output.exr", 100)])],
+            "D:\\other": [self._make_manifest([("stray.txt", 50)])],
+        }
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\temp\\render",
+                destination_path="/tmp/render",
+            )
+        ]
+        result = _transform_manifests_to_absolute_paths(
+            manifests_by_root, rules, StorageProfileOperatingSystemFamily.WINDOWS
+        )
+        assert "" in result
+        mapped_paths = [p.path for p in result[""].paths]
+        assert "/tmp/render/output.exr" in mapped_paths
+        # stray.txt should not appear (no matching rule)
+        assert not any("stray" in p for p in mapped_paths)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+    def test_multiple_roots_merged(self) -> None:
+        """Manifests from multiple roots are merged into a single result."""
+        manifests_by_root: dict[str, list[Any]] = {
+            "C:\\temp\\render": [self._make_manifest([("output.exr", 100)])],
+            "Z:\\shared": [self._make_manifest([("data.bin", 200)])],
+        }
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\temp\\render",
+                destination_path="/tmp/render",
+            ),
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="Z:\\shared",
+                destination_path="/mnt/shared",
+            ),
+        ]
+        result = _transform_manifests_to_absolute_paths(
+            manifests_by_root, rules, StorageProfileOperatingSystemFamily.WINDOWS
+        )
+        assert "" in result
+        mapped_paths = [p.path for p in result[""].paths]
+        assert "/tmp/render/output.exr" in mapped_paths
+        assert "/mnt/shared/data.bin" in mapped_paths
+
+    def test_empty_manifests_returns_empty(self) -> None:
+        """Empty manifests produce an empty result."""
+        manifests_by_root: dict[str, list[Any]] = {"C:\\temp": [self._make_manifest([])]}
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.WINDOWS.value,
+                source_path="C:\\temp",
+                destination_path="/tmp",
+            )
+        ]
+        result = _transform_manifests_to_absolute_paths(
+            manifests_by_root, rules, StorageProfileOperatingSystemFamily.WINDOWS
+        )
+        assert result == {}
 
 
 # ─── CLI-level tests for download-output with storage profile options ────────
