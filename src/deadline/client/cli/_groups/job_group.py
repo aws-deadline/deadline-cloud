@@ -58,13 +58,13 @@ from ._job_helpers import (
     _estimate_remaining_time,
 )
 from ._job_download_helpers import (
+    _download_mapped_manifests,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
     OutputDownloader,
-    download_files_from_manifests,
     get_output_manifests_by_asset_root,
 )
 
@@ -606,14 +606,12 @@ def _download_job_output(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
             if mapped_manifests:
-                download_summary = download_files_from_manifests(
-                    s3_bucket=queue["jobAttachmentSettings"]["s3BucketName"],
-                    manifests_by_root=mapped_manifests,
-                    cas_prefix=JobAttachmentS3Settings(
-                        **queue["jobAttachmentSettings"]
-                    ).full_cas_prefix(),
-                    session=queue_role_session,
-                    on_downloading_files=None,
+                download_summary = _download_mapped_manifests(
+                    mapped_manifests=mapped_manifests,
+                    queue=queue,
+                    queue_role_session=queue_role_session,
+                    conflict_resolution_setting=conflict_resolution,
+                    is_json_format=is_json_format,
                 )
                 click.echo(_get_download_summary_message(download_summary, is_json_format))
                 click.echo()

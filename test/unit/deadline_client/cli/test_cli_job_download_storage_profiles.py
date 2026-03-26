@@ -140,7 +140,7 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
         api, "get_queue_user_boto3_session"
     ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
         job_group, "get_output_manifests_by_asset_root", return_value={}
-    ) as mock_get_manifests, patch.object(job_group, "download_files_from_manifests"):
+    ) as mock_get_manifests, patch.object(job_group, "_download_mapped_manifests"):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
 
         root = "C:\\temp\\render"
@@ -491,7 +491,7 @@ def test_case8e_nested_locations_most_specific_rule_wins(
         job_group,
         "get_output_manifests_by_asset_root",
         return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -523,7 +523,7 @@ def test_case8e_nested_locations_most_specific_rule_wins(
         # the "projects" rule (C:\Projects -> /mnt/projects)
         assert mock_manifest.paths[0].path == "/opt/special/data.txt"
 
-        # Verify download_files_from_manifests was called (not OutputDownloader)
+        # Verify mapped manifest download was called (not OutputDownloader)
         mock_download_manifests.assert_called_once()
         mock_downloader.return_value.download_job_output.assert_not_called()
 
@@ -555,7 +555,7 @@ def test_case8e_nested_locations_broader_rule_for_non_nested_path(
         job_group,
         "get_output_manifests_by_asset_root",
         return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -617,7 +617,7 @@ def test_case8e_nested_locations_mixed_paths(
         job_group,
         "get_output_manifests_by_asset_root",
         return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -684,7 +684,7 @@ def test_rules_exist_but_no_files_match_falls_back_to_downloader(
         job_group,
         "get_output_manifests_by_asset_root",
         return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "download_files_from_manifests") as mock_download_manifests:
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
 
         mock_root = "/root/path"
@@ -707,7 +707,171 @@ def test_rules_exist_but_no_files_match_falls_back_to_downloader(
 
         assert result.exit_code == 0, result.output
         assert "Using storage profile: Local Linux Profile" in result.output
-        # No files matched the rules, so download_files_from_manifests should NOT be called
+        # No files matched the rules, so mapped manifest download should NOT be called
         mock_download_manifests.assert_not_called()
         # Instead, the OutputDownloader path should have been used
         mock_downloader.return_value.download_job_output.assert_called_once()
+
+
+# ─── Mapped download path: progress callback and conflict resolution ─────────
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_mapped_download_passes_progress_callback(
+    fresh_deadline_config: str,
+) -> None:
+    """When downloading via the mapped manifest path, _download_mapped_manifests is called
+    which handles progress reporting internally."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-local-111")
+    config.set_setting("settings.auto_accept", "true")
+
+    root = "C:\\temp\\render"
+    mock_manifest = _make_mock_manifest([("output.exr", 100)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+        mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
+        mock_download_mapped.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-job-222",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["output.exr"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        mock_download_mapped.assert_called_once()
+        call_kwargs = mock_download_mapped.call_args[1]
+        # is_json_format=False for verbose mode
+        assert call_kwargs["is_json_format"] is False
+        # Conflict resolution setting must be passed
+        assert "conflict_resolution_setting" in call_kwargs
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_mapped_download_uses_configured_conflict_resolution(
+    fresh_deadline_config: str,
+) -> None:
+    """When conflict_resolution is set in config, _download_mapped_manifests receives it."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-local-111")
+    config.set_setting("settings.auto_accept", "true")
+    config.set_setting("settings.conflict_resolution", "SKIP")
+
+    root = "C:\\temp\\render"
+    mock_manifest = _make_mock_manifest([("output.exr", 100)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+        mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
+        mock_download_mapped.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-job-222",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["output.exr"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
+        )
+
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_download_mapped.call_args[1]
+        assert call_kwargs["conflict_resolution_setting"] == "SKIP"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
+def test_mapped_download_json_mode_emits_progress(
+    fresh_deadline_config: str,
+) -> None:
+    """In JSON mode, _download_mapped_manifests receives is_json_format=True."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.storage_profile_id", "sp-local-111")
+    config.set_setting("settings.auto_accept", "true")
+
+    root = "C:\\temp\\render"
+    mock_manifest = _make_mock_manifest([("output.exr", 100)])
+
+    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
+        job_group, "OutputDownloader"
+    ) as mock_downloader, patch.object(
+        job_group, "_get_conflicting_filenames", return_value=[]
+    ), patch.object(job_group, "round", return_value=0), patch.object(
+        api, "get_queue_user_boto3_session"
+    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
+        job_group,
+        "get_output_manifests_by_asset_root",
+        return_value={root: [mock_manifest]},
+    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+        mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
+        mock_download_mapped.return_value = DownloadSummaryStatistics(
+            total_time=1, processed_files=1, processed_bytes=100
+        )
+
+        _make_download_mocks(
+            boto3_client_mock,
+            mock_downloader,
+            _make_job_response(
+                storage_profile_id="sp-job-222",
+                root_path=root,
+                root_path_format=PathFormat.WINDOWS,
+            ),
+            {root: ["output.exr"]},
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "json"],
+        )
+
+        assert result.exit_code == 0, result.output
+        mock_download_mapped.assert_called_once()
+        call_kwargs = mock_download_mapped.call_args[1]
+        # JSON mode should pass is_json_format=True
+        assert call_kwargs["is_json_format"] is True

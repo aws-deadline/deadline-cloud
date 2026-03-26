@@ -9,6 +9,8 @@ validation, and path mapping for the `deadline job download-output` command.
 
 from __future__ import annotations
 
+import json
+import logging
 import ntpath
 import posixpath
 from configparser import ConfigParser
@@ -19,15 +21,23 @@ import click
 from botocore.client import BaseClient  # type: ignore[import]
 
 from ... import api
+from ...api._session import _modified_logging_level
 from ...config import config_file
 from ....job_attachments._path_mapping import (
     _PathMappingRuleApplier,
 )
+from ....job_attachments.download import download_files_from_manifests
 from ....job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentS3Settings,
     PathMappingRule,
     StorageProfile,
     StorageProfileOperatingSystemFamily,
 )
+from ....job_attachments.progress_tracker import ProgressReportMetadata
+
+# JSON message type constant — must match job_group.py's JSON_MSG_TYPE_PROGRESS
+_JSON_MSG_TYPE_PROGRESS = "progress"
 
 
 @dataclass
@@ -165,3 +175,77 @@ def _transform_manifests_to_absolute_paths(
         result[""] = merged
 
     return result
+
+
+def _download_mapped_manifests(
+    mapped_manifests: dict[str, Any],
+    queue: dict[str, Any],
+    queue_role_session: Any,
+    conflict_resolution_setting: str,
+    is_json_format: bool,
+) -> Any:
+    """Download output files using path-mapped manifests with progress reporting.
+
+    This handles the full download flow for the mapped-manifest code path:
+    conflict resolution, progress callback (click progressbar or JSON lines),
+    and the actual S3 download.
+
+    Args:
+        mapped_manifests: dict from _transform_manifests_to_absolute_paths(),
+            keyed by "" with absolute local paths in the manifest.
+        queue: the queue dict from deadline.get_queue().
+        queue_role_session: boto3 session with queue role credentials for S3 access.
+        conflict_resolution_setting: the raw config setting string for conflict resolution.
+        is_json_format: whether to emit JSON progress lines instead of a click progressbar.
+
+    Returns:
+        DownloadSummaryStatistics from the download.
+    """
+    # Determine conflict resolution: use config setting if specified, otherwise CREATE_COPY.
+    # No interactive prompt on the mapped path — the user opted into automatic mapping.
+    if conflict_resolution_setting != FileConflictResolution.NOT_SELECTED.name:
+        file_conflict_resolution = FileConflictResolution[conflict_resolution_setting]
+    else:
+        file_conflict_resolution = FileConflictResolution.CREATE_COPY
+
+    s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+
+    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+        if not is_json_format:
+            with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
+
+                def _on_progress(download_metadata: ProgressReportMetadata) -> bool:
+                    new_progress = int(download_metadata.progress) - download_progress.pos
+                    if new_progress > 0:
+                        download_progress.update(new_progress)
+                    return True
+
+                return download_files_from_manifests(
+                    s3_bucket=s3_settings.s3BucketName,
+                    manifests_by_root=mapped_manifests,
+                    cas_prefix=s3_settings.full_cas_prefix(),
+                    session=queue_role_session,
+                    on_downloading_files=_on_progress,
+                    conflict_resolution=file_conflict_resolution,
+                )
+        else:
+
+            def _on_progress_json(download_metadata: ProgressReportMetadata) -> bool:
+                json_line = json.dumps(
+                    {
+                        "messageType": _JSON_MSG_TYPE_PROGRESS,
+                        "value": str(int(download_metadata.progress)),
+                    },
+                    ensure_ascii=True,
+                )
+                click.echo(json_line)
+                return True
+
+            return download_files_from_manifests(
+                s3_bucket=s3_settings.s3BucketName,
+                manifests_by_root=mapped_manifests,
+                cas_prefix=s3_settings.full_cas_prefix(),
+                session=queue_role_session,
+                on_downloading_files=_on_progress_json,
+                conflict_resolution=file_conflict_resolution,
+            )
