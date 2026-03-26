@@ -1,3 +1,16 @@
+## 0.55.0 (2026-03-26)
+
+### BREAKING CHANGES
+* Decoupled Job Attachments from the Client package — `deadline.job_attachments` no longer imports from `deadline.client` ([migration guide](https://github.com/aws-deadline/deadline-cloud/blob/mainline/docs/design/client-job-attachments-decoupling.md#migration-guide)) (#1076)
+
+### Features
+* `deadline handle-web-url --install` and `--uninstall` now print a confirmation message on success (#1056) ([`6d0c5d9`](https://github.com/aws-deadline/deadline-cloud/commit/6d0c5d9dc167e8fd65721feb5cd6d318c7f38b44))
+
+### Bug Fixes
+* Telemetry client not correctly labeling the source package when multiple packages use telemetry (#1055) ([`cb47435`](https://github.com/aws-deadline/deadline-cloud/commit/cb47435fefb6232137c66933539a2da259e297d3))
+* `maxResults` parameter in MCP server not working correctly and causing type errors (#1049) ([`a1df215`](https://github.com/aws-deadline/deadline-cloud/commit/a1df215a5669fd735a2d6f8f3a30911860afc219))
+
+
 ## 0.54.3 (2026-03-19)
 
 
