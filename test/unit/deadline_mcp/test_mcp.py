@@ -5,23 +5,20 @@
 
 """Unit tests for MCP server"""
 
-import sys
 from unittest.mock import MagicMock
 
 import pytest
 
-from deadline.client import api
+pytest.importorskip("mcp", reason="MCP dependencies not available")
 
-if sys.version_info >= (3, 10):
-    from deadline._mcp.registry import TOOL_REGISTRY, ToolDefinition
-    from deadline._mcp.utils import (
-        _create_wrapper,
-        _default_error_handler,
-        _default_serializer,
-        register_api_tools,
-    )
-else:
-    pytest.skip("MCP dependencies not available on Python before 3.10", allow_module_level=True)
+from deadline.client import api
+from deadline._mcp.registry import TOOL_REGISTRY, ToolDefinition  # noqa: E402
+from deadline._mcp.utils import (  # noqa: E402
+    _create_wrapper,
+    _default_error_handler,
+    _default_serializer,
+    register_api_tools,
+)
 
 
 class TestToolRegistry:

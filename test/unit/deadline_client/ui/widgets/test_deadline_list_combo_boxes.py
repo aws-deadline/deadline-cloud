@@ -8,16 +8,15 @@ import pytest
 from unittest.mock import patch
 from configparser import ConfigParser
 
-try:
-    from deadline.client.ui.widgets._deadline_list_combo_boxes import (
-        DeadlineFarmListComboBoxController,
-        DeadlineQueueListComboBoxController,
-        DeadlineStorageProfileListComboBoxController,
-    )
-    from deadline.client.ui.controllers._deadline_controller import DeadlineUIController
-    from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
-except ImportError:
-    pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes")
+pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes")
+
+from deadline.client.ui.widgets._deadline_list_combo_boxes import (  # noqa: E402
+    DeadlineFarmListComboBoxController,
+    DeadlineQueueListComboBoxController,
+    DeadlineStorageProfileListComboBoxController,
+)
+from deadline.client.ui.controllers._deadline_controller import DeadlineUIController  # noqa: E402
+from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool  # noqa: E402
 
 
 class TestDeadlineFarmListComboBoxController:
