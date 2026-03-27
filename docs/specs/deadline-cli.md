@@ -38,6 +38,13 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
 - `deadline config set <setting> <value>` — persists a value to the config file.
 - `deadline config clear <setting>` — reverts a setting to its default by writing
   the default value back to the config file (does not remove the key).
+- `deadline config gui` — spawns a Python process that loads the GUI widget
+  package and `deadline-gui-ffi` shared library, then shows the config dialog.
+
+### `deadline bundle gui-submit`
+
+Spawns a Python process that loads the GUI widget package and
+`deadline-gui-ffi` shared library, then shows the job submission dialog.
 
 ## Dependencies
 
@@ -46,8 +53,8 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
 | `clap` | Argument parsing |
 | `serde_json` | JSON output for `--output json` |
 | `deadline-config` | Config file operations |
-| `deadline-client` | AWS API calls (future) |
+| `deadline-client` | AWS API calls |
 | `deadline-models` | Shared types |
 | `deadline-common` | Utilities |
-| `deadline-job-bundle` | Bundle submission (future) |
-| `deadline-job-attachments` | Attachment handling (future) |
+| `deadline-job-bundle` | Bundle submission |
+| `deadline-job-attachments` | Attachment handling |

@@ -64,3 +64,10 @@
 | 50 | MCP server | ✅ Complete (39 cases) | [mcp.md](mcp.md) |
 | 51 | Exceptions (client) | ✅ Complete (7 cases) | [common.md](common.md) |
 | 52 | SubmitterInfo data structure | ✅ Complete (4 cases) | [common.md](common.md) |
+
+### Planned (new crates)
+
+| # | Section | Status | Phase |
+|---|---------|--------|-------|
+| 53+ | Worker agent: session management, attachment sync | Not started | Phase 2 |
+| TBD | GUI FFI: C ABI contract, JSON exchange, callbacks | Not started | Phase 3 |

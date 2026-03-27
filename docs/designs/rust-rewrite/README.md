@@ -1,23 +1,34 @@
 # Rust Rewrite
 
-Tracking the implementation of the AWS Deadline Cloud CLI in Rust.
+Migrating all AWS Deadline Cloud client software from Python to Rust.
 The Python source lives at `../deadline-cloud-python`.
+
+## Why Rust?
+
+Speed, type safety, and development velocity. See `migration_strategy.md` for
+the full rationale, downstream dependency analysis, and phased rollout plan.
 
 ## Getting started
 
-1. Read `workflow.md` in this directory — it defines the development cycle.
-2. Read `../../AGENTS.md` — repo-wide conventions, build commands, doc-sync rules.
-3. Read `../../TESTING.md` — testing philosophy, TDD, test levels, no mocking.
-4. Check the **Progress** table below to find what's in progress or next.
-5. Read `../../specs/<crate>.md` for the crate you'll be working on.
-6. Read the relevant `test_specs/` section for behavioral test cases.
+1. Read `migration_strategy.md` — goals, architecture, what we're migrating,
+   and how we ship iteratively.
+2. Read `workflow.md` — the development cycle for porting each feature.
+3. Read `../../AGENTS.md` — repo-wide conventions, build commands, doc-sync rules.
+4. Read `../../TESTING.md` — testing philosophy, TDD, test levels, no mocking.
+5. Check the **Progress** table below to find what's in progress or next.
+6. Read `../../specs/<crate>.md` for the crate you'll be working on.
+7. Read the relevant `test_specs/` section for behavioral test cases.
 
 ## Reference Material
 
-- `workflow.md` — Development workflow: study Python → update spec → red → green → refactor → update docs
+- `migration_strategy.md` — Goals, GUI strategy, DCC plugin constraints,
+  downstream dependency analysis, phased rollout, decision record
+- `workflow.md` — Development workflow: study Python → update spec → red →
+  green → refactor → update docs
 - `data_flow.md` — Persistent data formats (INI config, job bundle layout,
   manifest JSON, cache schemas, checkpoint format)
-- `observations.md` — Behavioral notes and ambiguities discovered during analysis
+- `observations.md` — Behavioral notes and ambiguities discovered during
+  analysis
 - `test_specs/` — Behavioral test specifications (52 sections, ~1,300 cases).
   Used as the implementation checklist — not maintained after tests are written.
 
@@ -41,20 +52,14 @@ The Python source lives at `../deadline-cloud-python`.
 
 ### Not Started
 
-| Crate | Sections | Scope |
-|-------|----------|-------|
-| `deadline-config` | §1 (remaining), §2 | Profile resolution, get_best_profile_for_farm |
-| `deadline-cli` | §37 (cases 3-58) | Root group utilities (log level, redirect, markdown strip, SIGINT, etc.) |
-| `deadline-cli` | §39 | Auth commands |
-| `deadline-cli` | §40-43 | Farm, fleet, queue, worker commands |
-| `deadline-cli` | §44 | Job commands |
-| `deadline-cli` | §45 | Bundle submit |
-| `deadline-cli` | §46-47 | Attachment and manifest commands |
-| `deadline-cli` | §48 | handle-web-url |
-| `deadline-cli` | §49 | MCP server (deferred — depends on MCP library) |
-| `deadline-client` | §3-5 | Session management, auth, credentials |
-| `deadline-client` | §6-10 | API resource management |
-| `deadline-client` | §11-14 | Job lifecycle, telemetry |
-| `deadline-job-bundle` | §15-18 | Bundle loading, parameters, history |
-| `deadline-job-attachments` | §19-35 | Models, hashing, upload, download, caches, manifests, VFS, path mapping |
-| `deadline-common` | §50 | MCP server (deferred) |
+| Crate | Phase | Sections | Scope |
+|-------|-------|----------|-------|
+| `deadline-config` | 1 | §1 (remaining), §2 | Profile resolution, get_best_profile_for_farm |
+| `deadline-cli` | 1 | §37-49 | All remaining CLI commands |
+| `deadline-client` | 1 | §3-14, §34 | Session, auth, API resource mgmt, job lifecycle, telemetry |
+| `deadline-job-bundle` | 1 | §15-18 | Bundle loading, parameters, history |
+| `deadline-job-attachments` | 1 | §19-35 | Models, hashing, upload, download, caches, manifests, VFS, path mapping |
+| `deadline-common` | 1 | §50 | MCP server (deferred) |
+| `deadline-worker-agent` | 2 | — | Session mgmt, attachment sync, progress reporting |
+| `deadline-gui-ffi` | 3 | — | C ABI shared library for GUI + DCC plugins |
+| `gui/` (Python) | 3 | — | Refactored QWidgets layout calling Rust FFI |

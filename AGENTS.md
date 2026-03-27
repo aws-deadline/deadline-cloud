@@ -1,12 +1,19 @@
 # AGENTS.md
 
-This is the Rust implementation of the AWS Deadline Cloud CLI.
+This is the Rust implementation of the AWS Deadline Cloud client software:
+CLI, worker agent, GUI FFI layer, and shared library crates. The Python GUI
+widget files also live in this repo under `gui/`.
+
+See `docs/designs/rust-rewrite/migration_strategy.md` for the full migration
+plan, goals, and phased rollout.
 
 ## Before you start
 
-1. Read `docs/ARCHITECTURE.md` — crate dependency graph and shared conventions.
-2. Read `docs/specs/<crate>.md` for whichever crate you're working on.
-3. Read `docs/TESTING.md` for how tests are structured (Level 1 vs Level 2, no mocking).
+1. Read `docs/designs/rust-rewrite/migration_strategy.md` — goals, what we're
+   migrating, architecture, and phased rollout.
+2. Read `docs/ARCHITECTURE.md` — crate dependency graph and shared conventions.
+3. Read `docs/specs/<crate>.md` for whichever crate you're working on.
+4. Read `docs/TESTING.md` for how tests are structured (Level 1 vs Level 2, no mocking).
 
 ## Keeping docs in sync with code
 
@@ -15,9 +22,8 @@ This is the Rust implementation of the AWS Deadline Cloud CLI.
 - **`docs/ARCHITECTURE.md`** — Describes how crates relate to each other.
   If you change a dependency direction or add a new crate, update this file.
 - **`docs/designs/`** — Topic-scoped documents (TDDs, feature designs, decision
-  records). These cover features that may span multiple crates. Named
-  `YYYY-MM-topic.md`. If you change a feature's design, update the relevant
-  design doc.
+  records). These cover features that may span multiple crates. If you change
+  a feature's design, update the relevant design doc.
 
 ## Code style
 
@@ -28,8 +34,10 @@ This is the Rust implementation of the AWS Deadline Cloud CLI.
 ## Build and test
 
 ```bash
-cargo build                    # full workspace
-cargo test                     # full test suite
-cargo test -p deadline-config  # single crate
-cargo test -p deadline-cli     # CLI subprocess tests (Level 2)
+cargo build                              # full workspace
+cargo test                               # full test suite
+cargo test -p deadline-config            # single crate
+cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
+cargo test -p deadline-worker-agent      # worker agent tests
+cargo test -p deadline-gui-ffi           # GUI FFI tests
 ```

@@ -7,8 +7,9 @@
 
 ## 1. Crate-to-Section Mapping
 
-The Rust workspace has 7 crates. Below is the mapping from each crate to the
-test spec sections it should own, plus gaps where no crate exists.
+The Rust workspace has 7 crates currently, expanding to 10. Below is the
+mapping from each crate to the test spec sections it should own, plus gaps
+where no crate exists.
 
 | Rust Crate | Test Spec Sections | Notes |
 |---|---|---|
@@ -19,8 +20,10 @@ test spec sections it should own, plus gaps where no crate exists.
 | `deadline-job-bundle` | §15–18 (loading, parameters, submission, history) | Has `loader.rs`, `parameters.rs`, `submission.rs` stubs |
 | `deadline-job-attachments` | §20–24 (hashing, upload, download, sync, caches), §26–32 (path mapping, glob, VFS, progress, permissions), §35 (incremental downloads) | Has `asset_manifests.rs`, `caches.rs`, `download.rs`, `upload.rs`, `models.rs`, `progress_tracker.rs`, `vfs.rs` stubs |
 | `deadline-cli` | §37–49 (all CLI commands) | Has `main.rs` stub only |
-| **⚠️ No crate** | §30–31 (public API: attachment/manifest download/upload) | These are standalone public APIs that bridge `deadline-client` + `deadline-job-attachments`. See Finding #1. |
-| **⚠️ No crate** | §50 (MCP server) | See Finding #2. |
+| `deadline-worker-agent` | New sections TBD (Phase 2) | Not yet scaffolded |
+| `deadline-gui-ffi` | New sections TBD (Phase 3) | Not yet scaffolded |
+| **⚠️ No crate** | §30–31 (public API: attachment/manifest download/upload) | See Finding #1. |
+| **⚠️ Deferred** | §50 (MCP server) | See Finding #2. |
 
 ---
 
@@ -192,20 +195,24 @@ Some sections are split too finely for the Rust crate structure:
 - §3 (session) + §4 (auth status) + §5 (queue credentials) → all map to
   `deadline-client::session`. Already in the same file.
 
-### 4d. Mark GUI-only test cases as out of scope
+### 4d. GUI test cases are in scope
 
-Several test cases reference GUI behavior that won't exist in the Rust CLI:
-- §38 cases 9–10 (`deadline config gui`)
-- §45 case 14 (`deadline bundle gui-submit`)
+GUI commands (`deadline config gui`, `deadline bundle gui-submit`) are in
+scope. The Rust CLI spawns a Python process that loads the GUI widget package
+and the `deadline-gui-ffi` shared library. Test cases §38.9–10 and §45.14
+should be implemented as Level 2 tests that verify the CLI spawns the correct
+process and handles errors (e.g., Python not installed, shared library not
+found).
 
-These should be annotated `> Out of scope for Rust CLI` (some already are).
+### 4e. Add new crate sections
 
-### 4e. Mark deferred/optional sections
+The following crates are not covered by the existing 52 test spec sections
+and will need new sections as they are implemented:
 
-Based on the Rust scaffolding, these sections may be deferred:
-- §28 (VFS) — 89 cases, Linux-only, complex subprocess management
-- §50 (MCP server) — 39 cases, depends on MCP protocol library availability in Rust
-- §49 (CLI mcp-server) — 4 cases, depends on §50
+- `deadline-worker-agent` — session management, attachment sync, progress
+  reporting (Phase 2)
+- `deadline-gui-ffi` — C ABI contract, JSON data exchange, error translation,
+  callback handling (Phase 3)
 
 ---
 
@@ -248,5 +255,7 @@ Based on the Rust scaffolding, these sections may be deferred:
 | `deadline-job-bundle` | §15–18 | 174 |
 | `deadline-job-attachments` | §20–24, §26–32, §35 | 556 |
 | `deadline-cli` | §37–49 | 224 |
-| `deadline-mcp` (new/deferred) | §50 | 39 |
-| **Total** | **52 sections** | **1,369** (excl. 5 GUI cases) |
+| `deadline-worker-agent` | TBD (Phase 2) | TBD |
+| `deadline-gui-ffi` | TBD (Phase 3) | TBD |
+| `deadline-mcp` (deferred) | §50 | 39 |
+| **Total (existing specs)** | **52 sections** | **1,369** |
