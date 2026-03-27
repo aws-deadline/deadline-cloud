@@ -43,12 +43,13 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 | `deadline-config` | §1 (partial) | INI read/write, hierarchical settings, str2bool, get/set/clear |
 | `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
 | `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
+| `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-cli` | §37 (cases 3-58) | Root group utilities (log level, redirect, markdown strip, SIGINT, etc.) |
+| `deadline-cli` | §37 (cases 48-53) | `suggest_resources_on_client_error` — blocked on `deadline-client` API layer |
 
 ### Not Started
 

@@ -12,10 +12,9 @@ before any subcommand:
 - `-h` / `--help` — prints help text listing subcommands and global options, exits 0
 - `--log-level <LEVEL>` — sets logging verbosity (ERROR, WARNING, INFO, DEBUG).
   If omitted, reads `settings.log_level` from config. If the config value is
-  invalid, falls back to WARNING.
-
+  invalid, falls back to WARNING and prints a warning to stderr.
 - `--redirect-output <PATH>` — redirects stdout and stderr to the given file
-  in append mode. Combined with `--redirect-mode replace`, opens in write mode.
+  via `dup2`. Combined with `--redirect-mode replace`, opens in write mode.
 - `--redirect-mode <MODE>` — `append` (default) or `replace`. Only meaningful
   with `--redirect-output`.
 
@@ -23,64 +22,108 @@ The help text includes a short description and a "common workflows" section
 showing typical command sequences. Markdown syntax in help text is stripped
 for terminal display (links become `text (url)`, bold markers removed).
 
-Both `-h` and `--help` are accepted (matching the Python CLI's behavior).
+Both `-h` and `--help` are accepted (clap provides both by default).
+
+## Error Handling
+
+Known errors (`CliError::Config`, `CliError::Operation`) print the error
+message to stdout and exit 1, matching the Python CLI's `click.echo(str(e))`
+behavior. The `CliError` enum in `commands/config.rs` distinguishes error
+types via `thiserror` derives with `From` conversions for `ConfigError`.
 
 ## Common Utilities (`src/common.rs`)
 
 ### `strip_markdown_for_terminal(text) -> String`
 
-Transforms markdown syntax into plain text for terminal display:
+Transforms markdown syntax into plain text for terminal display using
+compiled `regex::Regex` patterns stored in `LazyLock` statics:
 - `[text](url)` → `text (url)`
 - `[text][ref]` with reference definition → `text` (definition line removed)
-- `**bold**` → `bold`
-- `*italic*` → `italic` (but not list markers at line start)
+- `**bold**` / `__bold__` → `bold`
+- `*italic*` → `italic` (requires preceding non-`*` character to avoid
+  matching list markers; uses named capture groups since the `regex` crate
+  does not support lookbehind)
 - No-markdown text returned unchanged.
 
-### Error Handling
+### `CliOptions` and `apply_cli_options_to_config`
 
-Commands that fail with a known `DeadlineOperationError` print the error
-message to stderr and exit 1. Unexpected errors print
-"The AWS Deadline Cloud CLI encountered the following exception" followed
-by the error chain, then exit 1.
+`CliOptions` is a typed struct replacing Python's `**kwargs` pattern:
 
-### `apply_cli_options_to_config`
+```rust
+pub struct CliOptions {
+    pub profile: Option<String>,
+    pub farm_id: Option<String>,
+    pub queue_id: Option<String>,
+    pub job_id: Option<String>,
+    pub yes: bool,
+}
+```
 
-Applies `--profile`, `--farm-id`, `--queue-id`, `--job-id`, `--yes` flags
-to an in-memory config. If a required option (e.g. `farm_id`) is in
-`required_options` but not set in config or args, returns a usage error.
+`apply_cli_options_to_config` applies these to an `IniConfig` via
+`config_file::set_setting_in_config`, then validates required options.
+Missing required options return an error like
+`"Missing '--farm-id' or default Farm ID configuration"`.
 
 ### `cli_object_repr(obj) -> String`
 
-Formats an API response as YAML output. Multi-line strings that don't end
-with `\n` get one appended so YAML uses `|`-style block scalars.
+Formats a `serde_json::Value` as YAML via `serde_yaml::to_string`.
+Multi-line strings that don't end with `\n` get one appended so
+serde_yaml uses `|`-style block scalars.
 
-### `parse_file_parameter(path) -> Map`
+### `parse_file_parameter(path) -> HashMap`
 
-Parses a file as JSON (if `.json` extension) or YAML (otherwise). Errors
-if file missing, is a directory, has invalid content, or contains a
-non-dict top-level value.
+Parses a file as JSON (if `.json` extension) or YAML (otherwise) into
+`HashMap<String, serde_json::Value>`. Errors if file missing, is a
+directory, has invalid content, or contains a non-object top-level value.
 
-### `parse_multi_format_parameters(params) -> Map`
+### `parse_multi_format_parameters(params) -> HashMap`
 
-Parses a list of strings in mixed formats: `key=value`, inline JSON
-(`{"k":"v"}`), or `file://path`. Later values override earlier for same key.
+Parses a `&[String]` in mixed formats:
+1. `file://path` — delegates to `parse_file_parameter`
+2. Inline JSON — detected via `serde_json::from_str` attempt (no regex)
+3. `key=value` — split on first `=`
+4. Otherwise → error
 
-### `TimestampFormatter`
+Later values override earlier for same key.
 
-Formats timestamps in UTC (ISO 8601), LOCAL (local timezone ISO 8601), or
-RELATIVE (time delta from a reference start time). Both the reference time
-and the timestamp to format must have timezones.
+### `TimestampFormat`
 
-### `SigIntHandler`
+Enum with variants instead of Python's struct-with-field:
 
-Singleton that installs a SIGINT handler. `continue_operation` starts as
-`true` and is set to `false` on SIGINT.
+```rust
+pub enum TimestampFormat {
+    Utc,
+    Local,
+    Relative { reference: DateTime<FixedOffset> },
+}
+```
 
-### `ProgressBarCallbackManager`
+The reference time is only stored for `Relative`. Timezone-missing errors
+from Python (cases 38-39) are prevented at compile time — `DateTime<FixedOffset>`
+always has a timezone.
 
-Manages a progress bar lifecycle: created on first callback, updated on
-subsequent calls, closed at 100% or on SIGINT. Returns
-`continue_operation` from each callback.
+### SIGINT Handling
+
+Static `AtomicBool` instead of Python's singleton class:
+
+```rust
+static CONTINUE_OPERATION: AtomicBool = AtomicBool::new(true);
+```
+
+`install_sigint_handler()` registers a `libc::signal` handler.
+`should_continue()` reads the flag. No instantiation needed.
+
+### `ProgressBarManager`
+
+Uses `Option<ProgressBar>` (from `indicatif`) instead of Python's explicit
+state enum. `None` = not created, `Some` = active, `.take()` = closed.
+`callback(progress)` returns `should_continue()`.
+
+### `suggest_resources_on_client_error` (not yet implemented)
+
+Deferred until `deadline-client` API layer is functional. This function
+calls `list_farms`, `list_queues`, etc. to suggest alternatives when a
+command fails with AccessDenied or ResourceNotFound. See §37 cases 48-53.
 
 ## Subcommands
 
@@ -96,6 +139,7 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
   equals the default), followed by the description indented with 3 spaces.
   With `--output json`, prints a JSON object containing
   `settings.config_file_path` and all setting name/value pairs.
+  `OutputFormat` uses `#[derive(clap::ValueEnum)]`.
 - `deadline config get <setting>` — prints the current value of a single setting.
   If not explicitly set, prints the default.
 - `deadline config set <setting> <value>` — persists a value to the config file.
@@ -115,6 +159,14 @@ Spawns a Python process that loads the GUI widget package and
 |-------|---------|
 | `clap` | Argument parsing |
 | `serde_json` | JSON output for `--output json` |
+| `serde_yaml` | YAML output for `cli_object_repr` |
+| `regex` | Markdown stripping |
+| `log` / `env_logger` | Logging |
+| `chrono` | Timestamp formatting |
+| `libc` | Output redirection (`dup2`), SIGINT handler |
+| `indicatif` | Progress bars |
+| `thiserror` | Error type derives |
+| `textwrap` | Description wrapping in `config show` |
 | `deadline-config` | Config file operations |
 | `deadline-client` | AWS API calls |
 | `deadline-models` | Shared types |
