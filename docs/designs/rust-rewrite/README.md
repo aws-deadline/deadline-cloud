@@ -3,32 +3,6 @@
 Migrating all AWS Deadline Cloud client software from Python to Rust.
 The Python source lives at `../deadline-cloud-python`.
 
-## Working with the human
-
-When starting a new batch of work:
-
-1. **Present the plan before executing.** Explain what you're implementing,
-   which test spec cases it covers, what batches you'll group them into, and
-   how each batch will be implemented (Rust-specific design choices). Wait
-   for approval before writing code.
-2. **Cross-reference Python before implementing.** Read the Python source for
-   every feature being ported. Identify where Rust can do things better
-   (type-level guarantees, idiomatic patterns) while preserving identical
-   observable behavior.
-3. **Review existing implementation for improvements.** Before adding new
-   code, audit what's already written against the Python source. Flag
-   behavior gaps (e.g., stdout vs stderr for errors) and suggest cleanups.
-   Implement improvements first, then new features.
-4. **Commit-driven development.** Each logical batch gets its own commit
-   following red-green TDD: write failing tests → implement → full suite
-   check → commit. Keep commits small and focused.
-5. **Keep docs in sync.** After implementation, update `docs/specs/<crate>.md`
-   to reflect Rust-specific design decisions (not just "what" but "how" and
-   "why it differs from Python"). Update the Progress table in this file.
-6. **Defer honestly.** If a feature is blocked on an unimplemented crate,
-   say so and document it in the Progress table rather than building
-   throwaway scaffolding.
-
 ## Why Rust?
 
 Speed, type safety, and development velocity. See `migration_strategy.md` for
@@ -66,11 +40,10 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 |-------|----------|-------------|
 | `deadline-models` | §51, §52 | Error types, submitter info |
 | `deadline-common` | §36 | Path utilities |
-| `deadline-config` | §1 (partial) | INI read/write, hierarchical settings, str2bool, get/set/clear |
+| `deadline-config` | §1, §2 | INI read/write, hierarchical settings, str2bool, get/set/clear, get_best_profile_for_farm |
 | `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
 | `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
 | `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
-| `deadline-config` | §1 (remaining), §2 | get_setting_default, hierarchical scoping L1 tests, `get_best_profile_for_farm` |
 
 ### In Progress
 

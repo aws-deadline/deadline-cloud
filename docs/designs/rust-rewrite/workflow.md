@@ -2,6 +2,32 @@
 
 The workflow for porting each feature from the Python CLI to Rust.
 
+## Collaboration rules
+
+When starting a new batch of work:
+
+1. **Present the plan before executing.** Explain what you're implementing,
+   which test spec cases it covers, what batches you'll group them into, and
+   how each batch will be implemented (Rust-specific design choices). Wait
+   for approval before writing code.
+2. **Cross-reference Python before implementing.** Read the Python source for
+   every feature being ported. Identify where Rust can do things better
+   (type-level guarantees, idiomatic patterns) while preserving identical
+   observable behavior.
+3. **Review existing implementation for improvements.** Before adding new
+   code, audit what's already written against the Python source. Flag
+   behavior gaps (e.g., stdout vs stderr for errors) and suggest cleanups.
+   Implement improvements first, then new features.
+4. **Commit-driven development.** Each logical batch gets its own commit
+   following red-green TDD: write failing tests → implement → full suite
+   check → commit. Keep commits small and focused.
+5. **Keep docs in sync.** After implementation, update `docs/specs/<crate>.md`
+   to reflect Rust-specific design decisions (not just "what" but "how" and
+   "why it differs from Python"). Update the Progress table in `README.md`.
+6. **Defer honestly.** If a feature is blocked on an unimplemented crate,
+   say so and document it in the Progress table rather than building
+   throwaway scaffolding.
+
 ## Steps
 
 ### 1. Study the Python implementation
