@@ -1,6 +1,16 @@
 use deadline_config::config_file;
-use std::fmt;
 use textwrap;
+
+/// CLI-specific error type that distinguishes known operation errors
+/// from unexpected errors for the error handler in main.rs.
+#[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
+pub enum CliError {
+    #[error("{0}")]
+    Operation(String),
+    #[error("{0}")]
+    Config(#[from] deadline_config::config_file::ConfigError),
+}
 
 #[derive(clap::Subcommand)]
 pub enum ConfigAction {
@@ -24,33 +34,13 @@ pub enum ConfigAction {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, clap::ValueEnum)]
 pub enum OutputFormat {
     Verbose,
     Json,
 }
 
-impl fmt::Display for OutputFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            OutputFormat::Verbose => write!(f, "verbose"),
-            OutputFormat::Json => write!(f, "json"),
-        }
-    }
-}
-
-impl std::str::FromStr for OutputFormat {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "verbose" => Ok(OutputFormat::Verbose),
-            "json" => Ok(OutputFormat::Json),
-            _ => Err(format!("invalid output format: {s}")),
-        }
-    }
-}
-
-pub fn run(action: ConfigAction) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(action: ConfigAction) -> Result<(), CliError> {
     match action {
         ConfigAction::Show { output } => show(output),
         ConfigAction::Get { setting_name } => get(&setting_name),
@@ -59,7 +49,7 @@ pub fn run(action: ConfigAction) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn show(output: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+fn show(output: OutputFormat) -> Result<(), CliError> {
     let config = config_file::read_config()?;
 
     match output {
@@ -102,18 +92,18 @@ fn show(output: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn get(setting_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn get(setting_name: &str) -> Result<(), CliError> {
     let value = config_file::get_setting(setting_name)?;
     println!("{value}");
     Ok(())
 }
 
-fn set(setting_name: &str, value: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn set(setting_name: &str, value: &str) -> Result<(), CliError> {
     config_file::set_setting(setting_name, value)?;
     Ok(())
 }
 
-fn clear(setting_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn clear(setting_name: &str) -> Result<(), CliError> {
     config_file::clear_setting(setting_name)?;
     Ok(())
 }

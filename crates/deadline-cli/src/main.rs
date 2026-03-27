@@ -137,6 +137,7 @@ fn main() {
             Commands::Config { action } => commands::config::run(action),
         };
         if let Err(e) = result {
+            // Known operation/config errors: print message cleanly
             eprintln!("{e}");
             std::process::exit(1);
         }
