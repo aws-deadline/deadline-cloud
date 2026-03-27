@@ -100,6 +100,55 @@ pub fn apply_cli_options_to_config(
 }
 
 // ---------------------------------------------------------------------------
+// Timestamp formatting
+// ---------------------------------------------------------------------------
+
+use chrono::{DateTime, FixedOffset, Local, Utc};
+
+/// Timestamp display format.
+pub enum TimestampFormat {
+    /// ISO 8601 in UTC
+    Utc,
+    /// ISO 8601 in local timezone
+    Local,
+    /// Time delta from a reference start time
+    Relative { reference: DateTime<FixedOffset> },
+}
+
+impl TimestampFormat {
+    /// Create a formatter, validating that the reference time has a timezone.
+    pub fn new_relative(reference: DateTime<FixedOffset>) -> Self {
+        Self::Relative { reference }
+    }
+
+    /// Format a timezone-aware timestamp.
+    pub fn format(&self, ts: &DateTime<FixedOffset>) -> String {
+        match self {
+            Self::Utc => ts.with_timezone(&Utc).to_rfc3339(),
+            Self::Local => ts.with_timezone(&Local).to_rfc3339(),
+            Self::Relative { reference } => {
+                let delta = *ts - *reference;
+                format_timedelta(delta)
+            }
+        }
+    }
+}
+
+/// Format a chrono::TimeDelta like Python's str(timedelta).
+fn format_timedelta(d: chrono::TimeDelta) -> String {
+    let total_secs = d.num_seconds();
+    let hours = total_secs / 3600;
+    let mins = (total_secs % 3600) / 60;
+    let secs = total_secs % 60;
+    let micros = d.subsec_nanos() / 1000;
+    if micros > 0 {
+        format!("{hours}:{mins:02}:{secs:02}.{micros:06}")
+    } else {
+        format!("{hours}:{mins:02}:{secs:02}")
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -238,4 +287,34 @@ mod tests {
         .unwrap();
         assert_eq!(val, "true");
     }
+
+    // -- TimestampFormat --
+
+    #[test]
+    fn timestamp_utc_formats_as_rfc3339_utc() {
+        let ts = DateTime::parse_from_rfc3339("2024-06-15T10:30:00-07:00").unwrap();
+        let result = TimestampFormat::Utc.format(&ts);
+        assert!(result.contains("17:30:00"), "should be converted to UTC: {result}");
+        assert!(result.ends_with("+00:00"), "should have UTC offset: {result}");
+    }
+
+    #[test]
+    fn timestamp_local_formats_in_local_timezone() {
+        let ts = DateTime::parse_from_rfc3339("2024-06-15T10:30:00+00:00").unwrap();
+        let result = TimestampFormat::Local.format(&ts);
+        // Can't assert exact timezone, but should be valid RFC 3339
+        assert!(result.contains("2024"), "should contain year: {result}");
+    }
+
+    #[test]
+    fn timestamp_relative_formats_as_timedelta() {
+        let ref_time = DateTime::parse_from_rfc3339("2024-06-15T10:00:00+00:00").unwrap();
+        let ts = DateTime::parse_from_rfc3339("2024-06-15T11:30:45+00:00").unwrap();
+        let fmt = TimestampFormat::new_relative(ref_time);
+        assert_eq!(fmt.format(&ts), "1:30:45");
+    }
+
+    // Cases 38-39: In Rust, DateTime<FixedOffset> always has a timezone.
+    // The "no timezone" error cases from Python are prevented at compile time
+    // — you cannot construct a DateTime<FixedOffset> without a timezone.
 }
