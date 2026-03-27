@@ -290,6 +290,65 @@ pub fn clear_setting(setting_name: &str) -> Result<(), ConfigError> {
 }
 
 // ---------------------------------------------------------------------------
+// Profile resolution
+// ---------------------------------------------------------------------------
+
+/// Find the best AWS profile for a given farm and optional queue.
+///
+/// Priority:
+/// 1. Default profile if its farm matches
+/// 2. Any profile matching both farm and queue
+/// 3. Any profile matching farm only
+/// 4. Default profile (fallback)
+///
+/// Takes the profile list as a parameter so callers can source it from
+/// the AWS SDK (boto3.Session in Python, aws-config in Rust) without
+/// coupling this crate to the SDK.
+pub fn get_best_profile_for_farm(
+    config: &IniConfig,
+    aws_profile_names: &[&str],
+    farm_id: &str,
+    queue_id: Option<&str>,
+) -> String {
+    // Work on a copy so we don't mutate the caller's config
+    let mut scratch = config.clone();
+
+    let default_profile =
+        get_setting_with_config("defaults.aws_profile_name", &scratch).unwrap_or_default();
+
+    // Priority 1: default profile's farm matches
+    if get_setting_with_config("defaults.farm_id", &scratch).unwrap_or_default() == farm_id {
+        return default_profile;
+    }
+
+    let mut first_farm_match: Option<String> = None;
+    let queue_id = queue_id.filter(|q| !q.is_empty());
+
+    for &profile in aws_profile_names {
+        let _ = set_setting_in_config("defaults.aws_profile_name", profile, &mut scratch);
+
+        let profile_farm =
+            get_setting_with_config("defaults.farm_id", &scratch).unwrap_or_default();
+        if profile_farm == farm_id {
+            // Priority 2: farm + queue match
+            if let Some(qid) = queue_id {
+                let profile_queue =
+                    get_setting_with_config("defaults.queue_id", &scratch).unwrap_or_default();
+                if profile_queue == qid {
+                    return profile.to_string();
+                }
+            }
+            // Priority 3: first farm-only match
+            if first_farm_match.is_none() {
+                first_farm_match = Some(profile.to_string());
+            }
+        }
+    }
+
+    first_farm_match.unwrap_or(default_profile)
+}
+
+// ---------------------------------------------------------------------------
 // str2bool
 // ---------------------------------------------------------------------------
 
@@ -801,6 +860,161 @@ mod tests {
     fn clear_setting_unknown_name_returns_error() {
         let mut config = IniConfig::new();
         assert!(clear_setting_in_config("settings.fake", &mut config).is_err());
+    }
+
+    // -- get_best_profile_for_farm --
+
+    /// Helper: build a config with profiles and their farm/queue assignments.
+    fn config_with_profiles(
+        default_profile: &str,
+        assignments: &[(&str, &str, &str)], // (profile, farm_id, queue_id)
+    ) -> IniConfig {
+        let mut config = IniConfig::new();
+        set_setting_in_config("defaults.aws_profile_name", default_profile, &mut config).unwrap();
+
+        for &(profile, farm, queue) in assignments {
+            set_setting_in_config("defaults.aws_profile_name", profile, &mut config).unwrap();
+            if !farm.is_empty() {
+                set_setting_in_config("defaults.farm_id", farm, &mut config).unwrap();
+            }
+            if !queue.is_empty() {
+                set_setting_in_config("defaults.queue_id", queue, &mut config).unwrap();
+            }
+        }
+
+        // Restore default profile
+        set_setting_in_config("defaults.aws_profile_name", default_profile, &mut config).unwrap();
+        config
+    }
+
+    #[test]
+    fn best_profile_default_farm_matches() {
+        let config = config_with_profiles("ProfA", &[("ProfA", "farm-1", "")]);
+        let profiles = ["ProfA", "ProfB"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", None),
+            "ProfA"
+        );
+    }
+
+    #[test]
+    fn best_profile_other_matches_farm_and_queue() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-X", ""), ("Match", "farm-1", "queue-1")],
+        );
+        let profiles = ["Default", "Match"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", Some("queue-1")),
+            "Match"
+        );
+    }
+
+    #[test]
+    fn best_profile_farm_only_match() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-X", ""), ("FarmMatch", "farm-1", "queue-other")],
+        );
+        let profiles = ["Default", "FarmMatch"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", Some("queue-1")),
+            "FarmMatch"
+        );
+    }
+
+    #[test]
+    fn best_profile_no_match_returns_default() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-X", ""), ("Other", "farm-Y", "")],
+        );
+        let profiles = ["Default", "Other"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-missing", None),
+            "Default"
+        );
+    }
+
+    #[test]
+    fn best_profile_exact_match_beats_farm_only() {
+        let config = config_with_profiles(
+            "Default",
+            &[
+                ("Default", "farm-X", ""),
+                ("FarmOnly", "farm-1", "queue-other"),
+                ("Exact", "farm-1", "queue-1"),
+            ],
+        );
+        let profiles = ["Default", "FarmOnly", "Exact"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", Some("queue-1")),
+            "Exact"
+        );
+    }
+
+    #[test]
+    fn best_profile_default_farm_match_wins_over_other() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-1", ""), ("Other", "farm-1", "")],
+        );
+        let profiles = ["Default", "Other"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", None),
+            "Default"
+        );
+    }
+
+    #[test]
+    fn best_profile_no_queue_id_skips_queue_check() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-X", ""), ("Match", "farm-1", "queue-1")],
+        );
+        let profiles = ["Default", "Match"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", None),
+            "Match"
+        );
+    }
+
+    #[test]
+    fn best_profile_empty_queue_id_treated_as_none() {
+        let config = config_with_profiles(
+            "Default",
+            &[("Default", "farm-X", ""), ("Match", "farm-1", "queue-1")],
+        );
+        let profiles = ["Default", "Match"];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", Some("")),
+            "Match"
+        );
+    }
+
+    #[test]
+    fn best_profile_does_not_modify_default_setting() {
+        let config = config_with_profiles(
+            "Original",
+            &[("Original", "farm-X", ""), ("Other", "farm-1", "")],
+        );
+        let profiles = ["Original", "Other"];
+        let _ = get_best_profile_for_farm(&config, &profiles, "farm-1", None);
+        // Default profile should be unchanged
+        assert_eq!(
+            get_setting_with_config("defaults.aws_profile_name", &config).unwrap(),
+            "Original"
+        );
+    }
+
+    #[test]
+    fn best_profile_empty_profile_list_returns_default() {
+        let config = config_with_profiles("Default", &[("Default", "farm-X", "")]);
+        let profiles: [&str; 0] = [];
+        assert_eq!(
+            get_best_profile_for_farm(&config, &profiles, "farm-1", None),
+            "Default"
+        );
     }
 
     /// Saves and restores an env var when dropped, preventing test interference.

@@ -87,6 +87,21 @@ Everything else is an error.
 - `setting_names()` — Iterator over all setting names in definition order.
 - `setting_description(name)` — Human-readable description for a setting.
 
+#### Profile resolution
+
+`get_best_profile_for_farm(config, aws_profile_names, farm_id, queue_id)`
+finds the best AWS profile for a given farm/queue. Priority:
+
+1. Default profile if its farm matches
+2. Any profile matching both farm and queue
+3. Any profile matching farm only
+4. Default profile (fallback)
+
+Takes the profile list as a parameter — the caller sources it from the AWS
+SDK (`boto3.Session` in Python, `aws-config` in Rust). This keeps the
+function pure and testable without coupling `deadline-config` to the SDK.
+Works on a cloned config to avoid mutating the caller's state.
+
 ## Dependencies
 
 | Crate | Purpose |

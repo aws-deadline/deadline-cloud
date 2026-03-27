@@ -70,6 +70,7 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 | `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
 | `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
 | `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
+| `deadline-config` | §1 (remaining), §2 | get_setting_default, hierarchical scoping L1 tests, `get_best_profile_for_farm` |
 
 ### In Progress
 
@@ -81,7 +82,6 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 
 | Crate | Phase | Sections | Scope |
 |-------|-------|----------|-------|
-| `deadline-config` | 1 | §1 (remaining), §2 | Profile resolution, get_best_profile_for_farm |
 | `deadline-cli` | 1 | §37-49 | All remaining CLI commands |
 | `deadline-client` | 1 | §3-14, §34 | Session, auth, API resource mgmt, job lifecycle, telemetry |
 | `deadline-job-bundle` | 1 | §15-18 | Bundle loading, parameters, history |
