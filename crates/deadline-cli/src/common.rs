@@ -100,6 +100,38 @@ pub fn apply_cli_options_to_config(
 }
 
 // ---------------------------------------------------------------------------
+// SIGINT handling
+// ---------------------------------------------------------------------------
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Global flag set to false on SIGINT. Long-running operations check this
+/// to gracefully stop.
+static CONTINUE_OPERATION: AtomicBool = AtomicBool::new(true);
+
+/// Install the SIGINT handler. Safe to call multiple times.
+pub fn install_sigint_handler() {
+    unsafe {
+        libc::signal(libc::SIGINT, sigint_handler as *const () as usize);
+    }
+}
+
+extern "C" fn sigint_handler(_sig: libc::c_int) {
+    CONTINUE_OPERATION.store(false, Ordering::SeqCst);
+}
+
+/// Check whether the operation should continue (no SIGINT received).
+pub fn should_continue() -> bool {
+    CONTINUE_OPERATION.load(Ordering::SeqCst)
+}
+
+/// Reset the flag (for testing).
+#[cfg(test)]
+fn reset_sigint_flag() {
+    CONTINUE_OPERATION.store(true, Ordering::SeqCst);
+}
+
+// ---------------------------------------------------------------------------
 // Timestamp formatting
 // ---------------------------------------------------------------------------
 
@@ -317,4 +349,29 @@ mod tests {
     // Cases 38-39: In Rust, DateTime<FixedOffset> always has a timezone.
     // The "no timezone" error cases from Python are prevented at compile time
     // — you cannot construct a DateTime<FixedOffset> without a timezone.
+
+    // -- SigIntHandler --
+
+    #[test]
+    fn sigint_continue_operation_defaults_to_true() {
+        reset_sigint_flag();
+        assert!(should_continue());
+    }
+
+    #[test]
+    fn sigint_signal_sets_continue_to_false() {
+        reset_sigint_flag();
+        install_sigint_handler();
+        assert!(should_continue());
+
+        // Send SIGINT to ourselves
+        unsafe { libc::raise(libc::SIGINT); }
+
+        assert!(!should_continue());
+        // Restore for other tests
+        reset_sigint_flag();
+    }
+
+    // Case 47 (singleton): In Rust, CONTINUE_OPERATION is a static AtomicBool.
+    // There's no instantiation — it's inherently a single global value.
 }
