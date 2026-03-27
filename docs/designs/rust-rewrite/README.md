@@ -63,3 +63,4 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 | `deadline-worker-agent` | 2 | — | Session mgmt, attachment sync, progress reporting |
 | `deadline-gui-ffi` | 3 | — | C ABI shared library for GUI + DCC plugins |
 | `gui/` (Python) | 3 | — | Refactored QWidgets layout calling Rust FFI |
+| `deadline-mcp` | 5 | §49, §50 | MCP server binary (rmcp SDK) |

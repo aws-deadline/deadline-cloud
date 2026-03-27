@@ -30,6 +30,15 @@ deadline-gui-ffi (shared library, C ABI)
 ├── deadline-common
 └── deadline-models
 
+deadline-mcp (binary)
+├── rmcp
+├── deadline-config
+├── deadline-client
+├── deadline-job-bundle
+├── deadline-job-attachments
+├── deadline-common
+└── deadline-models
+
 deadline-test-server (dev-dependency of deadline-cli, deadline-worker-agent)
 ├── wiremock
 ├── tempfile
@@ -53,6 +62,7 @@ gui/ (Python, not a Cargo crate)
 | `deadline-job-bundle` | Job bundle directory parsing, template loading, parameter resolution. |
 | `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
+| `deadline-mcp` | Binary. MCP server exposing Deadline Cloud tools to AI assistants via the rmcp SDK. No GUI. |
 | `gui/` (Python) | Qt QWidgets layout code (~15 files). Pure presentation — no business logic. Calls `deadline-gui-ffi` for every operation. |
 
 ## Data Flows

@@ -40,6 +40,7 @@ plugins.
 | DCC submitter plugins | Python importing `deadline.client.*` | Thin Python: scene introspection + loads `deadline-gui-ffi` |
 | Unreal submitter | Python | Rust via `deadline-gui-ffi` C ABI (no Python) |
 | After Effects | JSX shelling out to CLI | No change (already uses CLI binary) |
+| MCP server | `deadline._mcp` (Python, FastMCP) | Rust binary (`deadline-mcp` crate, rmcp SDK) |
 | `deadline-cloud-python` | 15k+ lines of business logic + GUI | Deleted — GUI widget files move into monorepo `gui/` directory |
 
 ## GUI Strategy
@@ -96,6 +97,7 @@ deadline-cloud-rs/
 │   ├── deadline-cli/              # CLI binary
 │   ├── deadline-worker-agent/     # Worker agent binary
 │   ├── deadline-gui-ffi/          # C ABI shared library for GUI + DCC plugins
+│   ├── deadline-mcp/              # MCP server binary (rmcp SDK)
 │   ├── deadline-config/           # Config file read/write
 │   ├── deadline-client/           # AWS API calls
 │   ├── deadline-job-bundle/       # Job bundle parsing and parameters
@@ -241,12 +243,41 @@ instead of importing Python `deadline.client`.
 - Integration tests pass
 - Visual parity for submit dialog
 
-### Phase 5: Migrate Unreal to Full Rust
+### Phase 5: Rust MCP Server
+
+**Goal:** Implement the MCP server in Rust as `deadline-mcp` crate using the
+official Rust MCP SDK ([rmcp](https://rust.sdk.modelcontextprotocol.io/),
+4.7M+ downloads on crates.io).
+
+**Scope:**
+- `deadline-mcp` crate: MCP server binary using `rmcp`
+- All existing MCP tools: `list_farms`, `list_queues`, `list_jobs`,
+  `search_jobs`, `get_job`, `get_session`, `list_sessions`, `list_steps`,
+  `list_tasks`, `get_session_logs`, `get_session_and_worker_logs`,
+  `submit_job`, `download_job_output`, `check_authentication_status`,
+  `list_fleets`, `list_storage_profiles_for_queue`
+- Telemetry recording per tool invocation
+- `deadline mcp-server` CLI command starts the server
+
+**Prerequisites:** Phase 1 library crates complete (`deadline-client` for
+all API calls).
+
+**Ship criteria:**
+- All MCP tools produce identical results to Python implementation
+- Server starts via `deadline mcp-server` and responds to MCP protocol
+- Telemetry events match Python implementation format
+
+### Phase 6: Migrate Unreal to Full Rust
 
 **Goal:** Rewrite Unreal submitter using `deadline-gui-ffi` C ABI directly.
 No Python.
 
-### Phase 6: Delete `deadline-cloud-python`
+### Phase 6: Migrate Unreal to Full Rust
+
+**Goal:** Rewrite Unreal submitter using `deadline-gui-ffi` C ABI directly.
+No Python.
+
+### Phase 7: Delete `deadline-cloud-python`
 
 **Goal:** Remove the Python library repository.
 
