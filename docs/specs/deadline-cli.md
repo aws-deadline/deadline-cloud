@@ -58,3 +58,4 @@ Spawns a Python process that loads the GUI widget package and
 | `deadline-common` | Utilities |
 | `deadline-job-bundle` | Bundle submission |
 | `deadline-job-attachments` | Attachment handling |
+| `deadline-mcp` | MCP server (for `deadline mcp-server` subcommand) |

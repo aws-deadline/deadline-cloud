@@ -1,7 +1,7 @@
 # deadline-mcp
 
-Binary crate. MCP (Model Context Protocol) server exposing Deadline Cloud
-operations as tools for AI assistants.
+Library crate. Implements the MCP (Model Context Protocol) server logic,
+invoked by `deadline-cli` via the `deadline mcp-server` subcommand.
 
 ## Status: Not started (Phase 5)
 
@@ -9,7 +9,8 @@ operations as tools for AI assistants.
 
 Uses the official Rust MCP SDK
 ([rmcp](https://rust.sdk.modelcontextprotocol.io/)) to implement a stdio-based
-MCP server. Started via `deadline mcp-server` CLI command.
+MCP server. The `deadline-cli` crate calls `deadline_mcp::run()` when the user
+runs `deadline mcp-server`.
 
 The server exposes the same tools as the current Python MCP implementation,
 calling directly into `deadline-client` for all API operations.
