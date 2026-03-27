@@ -41,3 +41,91 @@ async fn log_level_invalid_config_value_falls_back_to_warning() {
         .success()
         .stderr(predicate::str::contains("TRACE").and(predicate::str::contains("WARNING")));
 }
+
+// --redirect-output redirects stdout to file in append mode
+#[tokio::test]
+async fn redirect_output_appends_to_file() {
+    let harness = TestHarness::new().await;
+    let out_file = harness.config_dir.path().join("output.log");
+
+    // Write some pre-existing content
+    std::fs::write(&out_file, "existing\n").unwrap();
+
+    harness
+        .cli(&[
+            "--redirect-output",
+            out_file.to_str().unwrap(),
+            "config",
+            "show",
+        ])
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&out_file).unwrap();
+    // Should contain both the pre-existing content and the new output
+    assert!(
+        content.starts_with("existing\n"),
+        "should preserve existing content"
+    );
+    assert!(
+        content.contains("AWS Deadline Cloud configuration file:"),
+        "should contain config show output"
+    );
+}
+
+// --redirect-output with --redirect-mode replace truncates file
+#[tokio::test]
+async fn redirect_output_replace_mode_truncates_file() {
+    let harness = TestHarness::new().await;
+    let out_file = harness.config_dir.path().join("output.log");
+
+    std::fs::write(&out_file, "this should be gone\n").unwrap();
+
+    harness
+        .cli(&[
+            "--redirect-output",
+            out_file.to_str().unwrap(),
+            "--redirect-mode",
+            "replace",
+            "config",
+            "show",
+        ])
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&out_file).unwrap();
+    assert!(
+        !content.contains("this should be gone"),
+        "replace mode should truncate"
+    );
+    assert!(
+        content.contains("AWS Deadline Cloud configuration file:"),
+        "should contain config show output"
+    );
+}
+
+// Help text with markdown links displays as "text (url)" in terminal
+#[tokio::test]
+async fn help_text_markdown_link_stripped_to_text_and_url() {
+    let harness = TestHarness::new().await;
+
+    harness
+        .cli(&["--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Deadline Cloud (https://docs.aws.amazon.com"))
+        .stdout(predicate::str::contains("[Deadline Cloud]").not());
+}
+
+// Help text with bold markers displays without the ** markers
+#[tokio::test]
+async fn help_text_bold_markers_stripped() {
+    let harness = TestHarness::new().await;
+
+    // The help text should not contain literal ** markers
+    harness
+        .cli(&["--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("**").not());
+}

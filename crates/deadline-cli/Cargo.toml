@@ -23,6 +23,7 @@ log = { workspace = true }
 env_logger = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
+libc = { workspace = true }
 
 [dev-dependencies]
 deadline-test-server = { workspace = true }

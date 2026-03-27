@@ -245,6 +245,7 @@ dependencies = [
  "deadline-models",
  "deadline-test-server",
  "env_logger",
+ "libc",
  "log",
  "predicates",
  "regex",

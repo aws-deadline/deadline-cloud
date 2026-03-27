@@ -1,5 +1,6 @@
 use clap::Parser;
 use log::debug;
+use std::fs::OpenOptions;
 
 mod commands;
 mod common;
@@ -7,14 +8,35 @@ mod common;
 const VALID_LOG_LEVELS: &[&str] = &["ERROR", "WARNING", "INFO", "DEBUG"];
 
 #[derive(Parser)]
-#[command(name = "deadline", version, about = "Interact with AWS Deadline Cloud")]
+#[command(
+    name = "deadline",
+    version,
+    about = common::strip_markdown_for_terminal(
+        "Interact with **AWS Deadline Cloud** to submit, monitor, and manage render jobs.\n\n\
+         Learn more about [Deadline Cloud](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html)"
+    )
+)]
 struct Cli {
     /// Set the logging level
     #[arg(long, value_parser = parse_log_level)]
     log_level: Option<String>,
 
+    /// Redirect stdout and stderr to the specified file
+    #[arg(long)]
+    redirect_output: Option<String>,
+
+    /// When using --redirect-output, append (default) or replace the file
+    #[arg(long, default_value = "append")]
+    redirect_mode: RedirectMode,
+
     #[command(subcommand)]
     command: Option<Commands>,
+}
+
+#[derive(Clone, clap::ValueEnum)]
+enum RedirectMode {
+    Append,
+    Replace,
 }
 
 fn parse_log_level(s: &str) -> Result<String, String> {
@@ -74,6 +96,34 @@ fn init_logging(level: &str) {
 
 fn main() {
     let cli = Cli::parse();
+
+    // Set up output redirection before anything prints
+    if let Some(ref path) = cli.redirect_output {
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(matches!(cli.redirect_mode, RedirectMode::Append))
+            .truncate(matches!(cli.redirect_mode, RedirectMode::Replace))
+            .open(path)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to open redirect file '{path}': {e}");
+                std::process::exit(1);
+            });
+
+        // Redirect stdout to the file. We use unsafe to set the global
+        // file descriptor — this is the Rust equivalent of Python's
+        // `sys.stdout = open(...)`.
+        use std::os::unix::io::AsRawFd;
+        let fd = file.as_raw_fd();
+        unsafe {
+            // dup2 stdout (fd 1) to our file
+            libc::dup2(fd, 1);
+            // dup2 stderr (fd 2) to our file
+            libc::dup2(fd, 2);
+        }
+        // Keep the file open for the process lifetime
+        std::mem::forget(file);
+    }
 
     let log_level = resolve_log_level(cli.log_level.as_deref());
     init_logging(&log_level);
