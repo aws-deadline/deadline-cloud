@@ -44,6 +44,7 @@ regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
 libc = "0.2"
 indicatif = "0.17"
+serde_yaml = "0.9"
 
 # Test dependencies
 test-case = "3"

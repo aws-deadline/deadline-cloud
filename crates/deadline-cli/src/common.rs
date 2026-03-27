@@ -100,6 +100,86 @@ pub fn apply_cli_options_to_config(
 }
 
 // ---------------------------------------------------------------------------
+// File and parameter parsing
+// ---------------------------------------------------------------------------
+
+use std::collections::HashMap;
+use std::path::Path;
+
+/// Parse a file as JSON (if .json extension) or YAML (otherwise) into a map.
+pub fn parse_file_parameter(path: &Path) -> Result<HashMap<String, serde_json::Value>, String> {
+    let path = if path.starts_with("~") {
+        if let Some(home) = std::env::var_os("HOME") {
+            std::path::PathBuf::from(home).join(path.strip_prefix("~").unwrap())
+        } else {
+            path.to_path_buf()
+        }
+    } else {
+        path.to_path_buf()
+    };
+
+    if !path.exists() {
+        return Err(format!("Provided file '{}' does not exist.", path.display()));
+    }
+    if !path.is_file() {
+        return Err(format!("Provided file '{}' is not a file.", path.display()));
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Could not open file '{}': {e}", path.display()))?;
+
+    let data: serde_json::Value = if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("json")) {
+        serde_json::from_str(&content)
+            .map_err(|e| format!("File '{}' is formatted incorrectly: {e}", path.display()))?
+    } else {
+        serde_yaml::from_str(&content)
+            .map_err(|e| format!("File '{}' is formatted incorrectly: {e}", path.display()))?
+    };
+
+    match data {
+        serde_json::Value::Object(map) => {
+            Ok(map.into_iter().collect())
+        }
+        _ => Err(format!("File '{}' should contain a dictionary.", path.display())),
+    }
+}
+
+/// Parse a list of parameters in mixed formats: key=value, inline JSON, file://path.
+pub fn parse_multi_format_parameters(params: &[String]) -> Result<HashMap<String, serde_json::Value>, String> {
+    let mut result = HashMap::new();
+
+    for param in params {
+        let param = param.trim();
+
+        if let Some(file_path) = param.strip_prefix("file://") {
+            let data = parse_file_parameter(Path::new(file_path))?;
+            result.extend(data);
+        } else if let Ok(data) = serde_json::from_str::<serde_json::Value>(param) {
+            // Try inline JSON
+            match data {
+                serde_json::Value::Object(map) => {
+                    result.extend(map.into_iter().collect::<HashMap<_, _>>());
+                }
+                _ => {
+                    return Err(format!(
+                        "Argument ('{param}') must contain a dictionary mapping keys to their values."
+                    ));
+                }
+            }
+        } else if let Some((key, val)) = param.split_once('=') {
+            result.insert(key.to_string(), serde_json::Value::String(val.to_string()));
+        } else {
+            return Err(format!(
+                "Parameter ('{param}') not formatted correctly. It must be key=value pairs, \
+                 inline JSON, or a path to a JSON or YAML document prefixed with 'file://'."
+            ));
+        }
+    }
+
+    Ok(result)
+}
+
+// ---------------------------------------------------------------------------
 // SIGINT handling
 // ---------------------------------------------------------------------------
 
@@ -372,6 +452,105 @@ mod tests {
         )
         .unwrap();
         assert_eq!(val, "true");
+    }
+
+    // -- parse_file_parameter --
+
+    #[test]
+    fn parse_file_parameter_valid_json() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("params.json");
+        std::fs::write(&path, r#"{"key": "value"}"#).unwrap();
+        let result = parse_file_parameter(&path).unwrap();
+        assert_eq!(result["key"], serde_json::Value::String("value".into()));
+    }
+
+    #[test]
+    fn parse_file_parameter_valid_yaml() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("params.yaml");
+        std::fs::write(&path, "key: value\n").unwrap();
+        let result = parse_file_parameter(&path).unwrap();
+        assert_eq!(result["key"], serde_json::Value::String("value".into()));
+    }
+
+    #[test]
+    fn parse_file_parameter_missing_file_returns_error() {
+        let result = parse_file_parameter(Path::new("/nonexistent/file.json"));
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn parse_file_parameter_directory_returns_error() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let result = parse_file_parameter(dir.path());
+        assert!(result.unwrap_err().contains("is not a file"));
+    }
+
+    #[test]
+    fn parse_file_parameter_invalid_content_returns_error() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, "not valid json{{{").unwrap();
+        let result = parse_file_parameter(&path);
+        assert!(result.unwrap_err().contains("formatted incorrectly"));
+    }
+
+    #[test]
+    fn parse_file_parameter_list_not_dict_returns_error() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("list.json");
+        std::fs::write(&path, "[1, 2, 3]").unwrap();
+        let result = parse_file_parameter(&path);
+        assert!(result.unwrap_err().contains("should contain a dictionary"));
+    }
+
+    // -- parse_multi_format_parameters --
+
+    #[test]
+    fn parse_multi_format_key_value_pairs() {
+        let params = vec!["key1=value1".into(), "key2=value2".into()];
+        let result = parse_multi_format_parameters(&params).unwrap();
+        assert_eq!(result["key1"], serde_json::Value::String("value1".into()));
+        assert_eq!(result["key2"], serde_json::Value::String("value2".into()));
+    }
+
+    #[test]
+    fn parse_multi_format_inline_json() {
+        let params = vec![r#"{"key": "value"}"#.into()];
+        let result = parse_multi_format_parameters(&params).unwrap();
+        assert_eq!(result["key"], serde_json::Value::String("value".into()));
+    }
+
+    #[test]
+    fn parse_multi_format_file_prefix() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("params.json");
+        std::fs::write(&path, r#"{"from_file": "yes"}"#).unwrap();
+        let params = vec![format!("file://{}", path.display())];
+        let result = parse_multi_format_parameters(&params).unwrap();
+        assert_eq!(result["from_file"], serde_json::Value::String("yes".into()));
+    }
+
+    #[test]
+    fn parse_multi_format_mixed_later_overrides() {
+        let params = vec!["key=first".into(), r#"{"key": "second"}"#.into()];
+        let result = parse_multi_format_parameters(&params).unwrap();
+        assert_eq!(result["key"], serde_json::Value::String("second".into()));
+    }
+
+    #[test]
+    fn parse_multi_format_malformed_returns_error() {
+        let params = vec!["no-equals-no-json".into()];
+        let result = parse_multi_format_parameters(&params);
+        assert!(result.unwrap_err().contains("not formatted correctly"));
+    }
+
+    #[test]
+    fn parse_multi_format_non_dict_json_returns_error() {
+        let params = vec!["[1, 2, 3]".into()];
+        let result = parse_multi_format_parameters(&params);
+        assert!(result.unwrap_err().contains("must contain a dictionary"));
     }
 
     // -- TimestampFormat --
