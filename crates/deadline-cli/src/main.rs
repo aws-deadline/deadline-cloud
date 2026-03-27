@@ -137,8 +137,8 @@ fn main() {
             Commands::Config { action } => commands::config::run(action),
         };
         if let Err(e) = result {
-            // Known operation/config errors: print message cleanly
-            eprintln!("{e}");
+            // Known operation/config errors: print message to stdout (matching Python CLI)
+            println!("{e}");
             std::process::exit(1);
         }
     }

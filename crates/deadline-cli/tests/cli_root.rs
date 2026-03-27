@@ -129,3 +129,27 @@ async fn help_text_bold_markers_stripped() {
         .success()
         .stdout(predicate::str::contains("**").not());
 }
+
+// Known operation error prints message to stdout and exits 1
+#[tokio::test]
+async fn known_error_prints_message_to_stdout_and_exits_one() {
+    let harness = TestHarness::new().await;
+
+    harness
+        .cli(&["config", "get", "nonexistent.setting"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("nonexistent.setting"));
+}
+
+// Known error output does NOT contain "CLI encountered the following exception"
+#[tokio::test]
+async fn known_error_does_not_print_exception_banner() {
+    let harness = TestHarness::new().await;
+
+    harness
+        .cli(&["config", "get", "nonexistent.setting"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("exception").not());
+}
