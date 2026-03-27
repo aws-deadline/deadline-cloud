@@ -100,6 +100,37 @@ pub fn apply_cli_options_to_config(
 }
 
 // ---------------------------------------------------------------------------
+// YAML output formatting
+// ---------------------------------------------------------------------------
+
+/// Format a JSON value as YAML for CLI output.
+/// Multi-line strings that don't end with \n get one appended so YAML
+/// uses |-style block scalars.
+pub fn cli_object_repr(obj: &serde_json::Value) -> String {
+    let fixed = fix_multiline_strings(obj);
+    serde_yaml::to_string(&fixed).unwrap_or_else(|_| format!("{obj}"))
+}
+
+fn fix_multiline_strings(val: &serde_json::Value) -> serde_json::Value {
+    match val {
+        serde_json::Value::String(s) if s.contains('\n') && !s.ends_with('\n') => {
+            serde_json::Value::String(format!("{s}\n"))
+        }
+        serde_json::Value::Object(map) => {
+            serde_json::Value::Object(
+                map.iter()
+                    .map(|(k, v)| (k.clone(), fix_multiline_strings(v)))
+                    .collect(),
+            )
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(fix_multiline_strings).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // File and parameter parsing
 // ---------------------------------------------------------------------------
 
@@ -551,6 +582,24 @@ mod tests {
         let params = vec!["[1, 2, 3]".into()];
         let result = parse_multi_format_parameters(&params);
         assert!(result.unwrap_err().contains("must contain a dictionary"));
+    }
+
+    // -- cli_object_repr --
+
+    #[test]
+    fn cli_object_repr_dict_with_string_values_formats_as_yaml() {
+        let obj = serde_json::json!({"name": "My Farm", "id": "farm-abc"});
+        let result = cli_object_repr(&obj);
+        assert!(result.contains("name: My Farm"));
+        assert!(result.contains("id: farm-abc"));
+    }
+
+    #[test]
+    fn cli_object_repr_multiline_string_uses_block_scalar() {
+        let obj = serde_json::json!({"log": "line1\nline2"});
+        let result = cli_object_repr(&obj);
+        // The |-style block scalar indicator should appear
+        assert!(result.contains('|'), "should use block scalar: {result}");
     }
 
     // -- TimestampFormat --
