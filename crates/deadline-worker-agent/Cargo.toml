@@ -1,0 +1,17 @@
+[package]
+name = "deadline-worker-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "deadline-worker-agent"
+path = "src/main.rs"
+
+[dependencies]
+deadline-config = { workspace = true }
+deadline-client = { workspace = true }
+deadline-job-attachments = { workspace = true }
+deadline-models = { workspace = true }
+deadline-common = { workspace = true }
+tokio = { workspace = true }

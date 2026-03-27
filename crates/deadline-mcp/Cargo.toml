@@ -1,0 +1,15 @@
+[package]
+name = "deadline-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+deadline-config = { workspace = true }
+deadline-client = { workspace = true }
+deadline-job-bundle = { workspace = true }
+deadline-job-attachments = { workspace = true }
+deadline-models = { workspace = true }
+deadline-common = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
