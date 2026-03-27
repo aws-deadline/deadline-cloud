@@ -518,6 +518,60 @@ mod tests {
         assert_eq!(perms.mode() & 0o777, 0o600);
     }
 
+    // -- get_setting_default --
+
+    #[test]
+    fn get_setting_default_aws_profile_name() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting_default_with_config("defaults.aws_profile_name", &config).unwrap(),
+            "(default)"
+        );
+    }
+
+    #[test]
+    fn get_setting_default_auto_accept() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting_default_with_config("settings.auto_accept", &config).unwrap(),
+            "false"
+        );
+    }
+
+    #[test]
+    fn get_setting_default_conflict_resolution() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting_default_with_config("settings.conflict_resolution", &config).unwrap(),
+            "NOT_SELECTED"
+        );
+    }
+
+    #[test]
+    fn get_setting_default_log_level() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting_default_with_config("settings.log_level", &config).unwrap(),
+            "WARNING"
+        );
+    }
+
+    #[test]
+    fn get_setting_default_job_history_dir_substitutes_profile() {
+        let config = IniConfig::new();
+        let val = get_setting_default_with_config("settings.job_history_dir", &config).unwrap();
+        assert!(
+            val.contains("(default)"),
+            "should substitute aws_profile_name into default: {val}"
+        );
+    }
+
+    #[test]
+    fn get_setting_default_nonexistent_returns_error() {
+        let config = IniConfig::new();
+        assert!(get_setting_default_with_config("settings.nonexistent", &config).is_err());
+    }
+
     /// Saves and restores an env var when dropped, preventing test interference.
     /// Only needed for the get_config_file_path tests that genuinely test env var behavior.
     struct EnvGuard {
