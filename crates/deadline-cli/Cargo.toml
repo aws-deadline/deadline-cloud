@@ -25,6 +25,7 @@ regex = { workspace = true }
 chrono = { workspace = true }
 libc = { workspace = true }
 thiserror = { workspace = true }
+indicatif = { workspace = true }
 
 [dev-dependencies]
 deadline-test-server = { workspace = true }

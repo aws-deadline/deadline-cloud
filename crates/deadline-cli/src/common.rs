@@ -132,6 +132,60 @@ fn reset_sigint_flag() {
 }
 
 // ---------------------------------------------------------------------------
+// Progress bar
+// ---------------------------------------------------------------------------
+
+use indicatif::{ProgressBar, ProgressStyle};
+
+/// Manages a progress bar lifecycle: created on first callback, updated
+/// incrementally, closed at 100% or on SIGINT.
+pub struct ProgressBarManager {
+    length: u64,
+    label: String,
+    bar: Option<ProgressBar>,
+}
+
+impl ProgressBarManager {
+    pub fn new(length: u64, label: &str) -> Self {
+        Self {
+            length,
+            label: label.to_string(),
+            bar: None,
+        }
+    }
+
+    /// Update progress. Returns whether the operation should continue.
+    pub fn callback(&mut self, progress: u64) -> bool {
+        if self.bar.is_none() {
+            let bar = ProgressBar::new(self.length);
+            bar.set_style(
+                ProgressStyle::default_bar()
+                    .template(&format!("{{bar:40}} {{pos}}/{{len}} {}", self.label))
+                    .unwrap_or_else(|_| ProgressStyle::default_bar()),
+            );
+            self.bar = Some(bar);
+        }
+
+        if let Some(ref bar) = self.bar {
+            bar.set_position(progress);
+
+            if progress >= self.length || !should_continue() {
+                bar.finish_and_clear();
+                self.bar.take();
+            }
+        }
+
+        should_continue()
+    }
+
+    /// Whether the bar has been created and not yet closed.
+    #[cfg(test)]
+    fn is_active(&self) -> bool {
+        self.bar.is_some()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Timestamp formatting
 // ---------------------------------------------------------------------------
 
@@ -374,4 +428,57 @@ mod tests {
 
     // Case 47 (singleton): In Rust, CONTINUE_OPERATION is a static AtomicBool.
     // There's no instantiation — it's inherently a single global value.
+
+    // -- ProgressBarManager --
+
+    #[test]
+    fn progress_bar_first_callback_creates_bar() {
+        reset_sigint_flag();
+        let mut mgr = ProgressBarManager::new(100, "test");
+        assert!(!mgr.is_active());
+        mgr.callback(0);
+        assert!(mgr.is_active());
+    }
+
+    #[test]
+    fn progress_bar_update_advances_position() {
+        reset_sigint_flag();
+        let mut mgr = ProgressBarManager::new(100, "test");
+        let cont = mgr.callback(50);
+        assert!(cont);
+        assert!(mgr.is_active());
+    }
+
+    #[test]
+    fn progress_bar_100_percent_closes_bar() {
+        reset_sigint_flag();
+        let mut mgr = ProgressBarManager::new(100, "test");
+        mgr.callback(50);
+        mgr.callback(100);
+        assert!(!mgr.is_active());
+    }
+
+    #[test]
+    fn progress_bar_sigint_closes_and_returns_false() {
+        reset_sigint_flag();
+        install_sigint_handler();
+        let mut mgr = ProgressBarManager::new(100, "test");
+        mgr.callback(10);
+
+        // Simulate SIGINT
+        CONTINUE_OPERATION.store(false, Ordering::SeqCst);
+        let cont = mgr.callback(20);
+        assert!(!cont);
+        assert!(!mgr.is_active());
+        reset_sigint_flag();
+    }
+
+    #[test]
+    fn progress_bar_callback_after_close_returns_continue() {
+        reset_sigint_flag();
+        let mut mgr = ProgressBarManager::new(100, "test");
+        mgr.callback(100); // closes
+        let cont = mgr.callback(100); // after close
+        assert!(cont); // should_continue is still true
+    }
 }
