@@ -20,17 +20,63 @@ The workflow for porting each feature from the Python CLI to Rust.
   say so and document it in the Progress table rather than building
   throwaway scaffolding.
 
+## Design Principles
+
+These apply at Step 0 when designing the Rust equivalent. The goal is
+identical observable behavior, not identical internal structure.
+
+1. **Don't replicate Python's module structure.** Python uses module-level
+   functions with global caches because that's idiomatic Python. Rust
+   should use structs that own their state. If Python has five free
+   functions sharing a module-level dict, Rust probably wants one struct
+   with five methods.
+
+2. **Globals are a code smell.** If the Python uses `@lru_cache` on
+   module-level functions or mutable module globals, the Rust design
+   should use owned state on a struct. Ask: "who owns this data?" If
+   the answer is "nobody, it's global" — that's the thing to fix.
+
+3. **Type the boundaries.** If Python passes a string like `"deadline"`
+   to select a service client, Rust should use an enum or generic. If
+   Python returns `dict[str, Any]`, Rust should return a concrete type.
+   Push validation to compile time wherever possible.
+
+4. **Preserve observable behavior exactly.** Same output, same errors,
+   same exit codes, same caching semantics (calls are cached, force
+   refresh clears cache). The test specs define the contract — internal
+   structure is free to diverge.
+
+5. **Don't over-abstract.** If the Python is a simple function that
+   doesn't need to become a trait, don't make it one. Only introduce
+   abstractions that solve a real problem (testability, extensibility
+   the code actually needs).
+
+6. **Ask "what would I design if the Python didn't exist?"** Read the
+   test spec and the Python source, then close the Python file and
+   design the Rust API from the behavioral requirements. Open the
+   Python again only to verify you haven't missed edge cases.
+
 ## Steps
 
 ### 0. Plan and get approval
 
-Check the Progress table in `README.md` to identify what's next. Read the
-Python source, the test specs, and the crate spec. Then present:
+Before planning, read these (in order). Skip none.
+
+- [ ] `migration_strategy.md` — goals and constraints
+- [ ] `../../ARCHITECTURE.md` — crate relationships
+- [ ] `../../TESTING.md` — test philosophy and levels
+- [ ] `../../specs/<crate>.md` for the target crate
+- [ ] Relevant `test_specs/` sections
+- [ ] Python source for the feature being ported
+
+Then apply the Design Principles above and present:
 
 - What you're implementing and which test spec cases it covers
 - How you'll batch the work
-- Where Rust can improve on the Python design (type-level guarantees,
-  idiomatic patterns) while preserving identical observable behavior
+- The Rust API design — not a function-by-function port, but the
+  struct/trait/module layout that satisfies the test spec behaviors.
+  Reference the Design Principles to justify structural divergences
+  from Python.
 - What's blocked or deferred and why
 
 **Wait for approval before proceeding to step 1.**

@@ -10,14 +10,8 @@ the full rationale, downstream dependency analysis, and phased rollout plan.
 
 ## Getting started
 
-1. Read `migration_strategy.md` — goals, architecture, what we're migrating,
-   and how we ship iteratively.
-2. Read `workflow.md` — the development cycle for porting each feature.
-3. Read `../../../AGENTS.md` — repo-wide conventions, build commands, doc-sync rules.
-4. Read `../../TESTING.md` — testing philosophy, TDD, test levels, no mocking.
-5. Check the **Progress** table below to find what's in progress or next.
-6. Read `../../specs/<crate>.md` for the crate you'll be working on.
-7. Read the relevant `test_specs/` section for behavioral test cases.
+Read `workflow.md` and follow it. Step 0 contains the full reading checklist
+and gates all planning and implementation work.
 
 ## Reference Material
 
