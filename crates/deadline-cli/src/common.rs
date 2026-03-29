@@ -633,14 +633,19 @@ mod tests {
     // — you cannot construct a DateTime<FixedOffset> without a timezone.
 
     // -- SigIntHandler --
+    // These tests share global CONTINUE_OPERATION state and must run serially.
+
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn sigint_continue_operation_defaults_to_true() {
         reset_sigint_flag();
         assert!(should_continue());
     }
 
     #[test]
+    #[serial]
     fn sigint_signal_sets_continue_to_false() {
         reset_sigint_flag();
         install_sigint_handler();
@@ -660,6 +665,7 @@ mod tests {
     // -- ProgressBarManager --
 
     #[test]
+    #[serial]
     fn progress_bar_first_callback_creates_bar() {
         reset_sigint_flag();
         let mut mgr = ProgressBarManager::new(100, "test");
@@ -669,6 +675,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn progress_bar_update_advances_position() {
         reset_sigint_flag();
         let mut mgr = ProgressBarManager::new(100, "test");
@@ -678,6 +685,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn progress_bar_100_percent_closes_bar() {
         reset_sigint_flag();
         let mut mgr = ProgressBarManager::new(100, "test");
@@ -687,6 +695,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn progress_bar_sigint_closes_and_returns_false() {
         reset_sigint_flag();
         install_sigint_handler();
@@ -702,6 +711,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn progress_bar_callback_after_close_returns_continue() {
         reset_sigint_flag();
         let mut mgr = ProgressBarManager::new(100, "test");
