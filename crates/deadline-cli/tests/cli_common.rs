@@ -1,35 +1,25 @@
 use deadline_test_server::TestHarness;
-use predicates::prelude::*;
+use insta_cmd::assert_cmd_snapshot;
 
 #[tokio::test]
 async fn version_prints_name_and_semver() {
     let harness = TestHarness::new().await;
 
-    harness
-        .cli(&["--version"])
-        .assert()
-        .success()
-        .stdout(predicate::str::is_match(r"^deadline \d+\.\d+\.\d+\n$").unwrap());
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"deadline \d+\.\d+\.\d+", "deadline [VERSION]");
+    let _guard = settings.bind_to_scope();
+
+    assert_cmd_snapshot!(harness.cmd(&["--version"]));
 }
 
 #[tokio::test]
 async fn help_long_flag_prints_usage() {
     let harness = TestHarness::new().await;
-
-    harness
-        .cli(&["--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Usage:"));
+    assert_cmd_snapshot!(harness.cmd(&["--help"]));
 }
 
 #[tokio::test]
 async fn help_short_flag_prints_usage() {
     let harness = TestHarness::new().await;
-
-    harness
-        .cli(&["-h"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Usage:"));
+    assert_cmd_snapshot!(harness.cmd(&["-h"]));
 }

@@ -1,0 +1,30 @@
+---
+source: crates/deadline-cli/tests/cli_config.rs
+info:
+  program: deadline
+  args:
+    - config
+    - get
+    - defaults.aws_profile_name
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51997"
+    AWS_ENDPOINT_URL_STS: "http://localhost:51997"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpb0PPYi/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpb0PPYi
+---
+success: true
+exit_code: 0
+----- stdout -----
+(default)
+
+----- stderr -----

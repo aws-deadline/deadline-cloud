@@ -42,12 +42,12 @@ and gates all planning and implementation work.
 | `deadline-client` | §4 (cases 1-3, 8, 10-11), §7 (cases 1-2, 4-6, 8-17, 22) | Session creation, profile resolution, `check_authentication_status`, `check_deadline_api_available`, DCM credential source detection, `list_farms`/`list_queues`/`list_fleets`/`list_jobs`/`search_jobs` (all via ResponseBodyCapture), `get_farm`/`get_queue`/`get_fleet`/`get_job`/`get_worker` (ResponseBodyCapture), `search_workers` (ResponseBodyCapture) |
 | `deadline-cli` | §39 (cases 4-7), §40-§44 (list/get cases) | `deadline auth status`, `deadline farm list/get`, `deadline fleet list/get`, `deadline queue list/get`, `deadline job list/get` (job list uses `search_jobs` with count header, field selection, `estimatedTimeRemaining`) |
 | `deadline-cli` | §37 (cases 48-53), §43 (cases 1-7) | `suggest_resources_on_client_error`, `deadline worker list/get`, SDK error formatting with error codes |
+| `deadline-cli` | — | All CLI test files converted to `insta-cmd` snapshots: `cli_auth`, `cli_config`, `cli_root`, `cli_suggest`, `cli_dcm`, `cli_common` |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-cli` | — | Convert remaining test files to insta-cmd snapshots (`cli_auth`, `cli_config`, `cli_root`, `cli_suggest`, `cli_dcm`) and verify against Python CLI |
 | `deadline-client` | §3-10 | Session caching/user-agent (§3), queue user creds (§5), login/logout (§6), queue params (§8), queue creds (§9), storage profile (§10) |
 
 ### Not Started
