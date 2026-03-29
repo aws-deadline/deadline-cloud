@@ -82,16 +82,26 @@ Returns bool.
 
 ## API (`api.rs`)
 
-- `list_farms`, `list_queues`, `list_fleets`, `list_jobs` — paginated, concatenates all pages via `nextToken`
-- `get_farm`, `get_queue`, `get_fleet`, `get_job` — single resource by ID
+List functions use the SDK's built-in paginators (e.g.
+`ListFarmsPaginator.items().send()`) instead of manual `nextToken` loops.
+The paginator flattens across pages, yielding individual items.
 
-All take `farm_id` (and `queue_id`/`fleet_id` where needed) as parameters.
-Returns `serde_json::Value` — the CLI formats and prints it directly.
+Get functions extract all fields from the typed SDK response into a
+`serde_json::Map` with `preserve_order` for correct YAML key ordering.
+SDK types don't implement `Serialize`, so fields are extracted manually
+using `put`/`put_opt`/`put_dt`/`put_dt_opt` helpers. Nested types
+(e.g. `JobAttachmentSettings`, `JobRunAsUser`) are converted inline.
+Optional fields are skipped when `None`, matching Python/boto3 behavior.
 
+See `docs/designs/rust-rewrite/workflow.md` § "AWS SDK for Rust Usage"
+for the full rationale and patterns.
+
+Functions:
+- `list_farms`, `list_queues`, `list_fleets`, `list_jobs` — paginated via SDK paginator
+- `get_farm`, `get_queue`, `get_fleet`, `get_job` — single resource, all fields
 - `search_workers(farm_id, fleet_ids, item_offset, page_size, config)` — calls
   `SearchWorkers` (POST). Returns `{"workers": [...], "totalResults": N}`.
-  Used by `deadline worker list` (Python uses SearchWorkers, not ListWorkers).
-- `get_worker(farm_id, fleet_id, worker_id, config)` — single worker by ID.
+- `get_worker(farm_id, fleet_id, worker_id, config)` — single worker, all fields.
 - `list_storage_profiles_for_queue(farm_id, queue_id, config)` — paginated,
   returns `{"storageProfiles": [...]}`. Does NOT inject `principalId`.
 

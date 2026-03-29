@@ -59,6 +59,68 @@ identical observable behavior, not identical internal structure.
    design the Rust API from the behavioral requirements. Open the
    Python again only to verify you haven't missed edge cases.
 
+## AWS SDK for Rust Usage
+
+The Rust SDK (`aws-sdk-deadline`) differs from Python's boto3 in ways
+that affect how we build API functions. Know these before writing code.
+
+### SDK types don't implement `Serialize`
+
+The SDK output types (`GetFarmOutput`, `GetQueueOutput`, etc.) and their
+nested types (`JobAttachmentSettings`, `FleetConfiguration`, etc.) do
+**not** implement `serde::Serialize`. You cannot call
+`serde_json::to_value(resp)` to get JSON.
+
+Python's boto3 returns raw dicts — `response.pop("ResponseMetadata")`
+and you're done. In Rust, you must manually extract every field from the
+typed response and build a `serde_json::Map` with the correct key names
+and insertion order (for YAML output parity).
+
+Use the `put`/`put_opt`/`put_dt`/`put_dt_opt` helpers in `api.rs` for
+flat fields. For nested types, build sub-maps inline. Skip `None` fields
+to match Python's behavior (boto3 omits keys with `None` values).
+
+### Use SDK paginators for list operations
+
+Every `List*` API has a built-in paginator. Use it instead of manual
+`next_token` loops:
+
+```rust
+let mut stream = client.list_farms()
+    .principal_id(uid)
+    .into_paginator()
+    .items()       // flattens across pages, yields FarmSummary
+    .send();       // returns PaginationStream
+
+while let Some(item) = stream.try_next().await.map_err(sdk_err)? {
+    // item is FarmSummary
+}
+```
+
+The paginator handles `nextToken` internally. `.items()` flattens across
+pages so you get individual items, not pages of items.
+
+### Field ordering matters
+
+Enable `serde_json`'s `preserve_order` feature (already done in
+`Cargo.toml`). Insert fields into `serde_json::Map` in the same order
+Python outputs them. Python dicts preserve insertion order, and boto3
+returns fields in the API's documented order. Match that order.
+
+### DateTime formatting
+
+The SDK uses `aws_smithy_types::DateTime`. Its `fmt(Format::DateTime)`
+produces `2024-12-18T00:37:38Z`. Python/boto3 produces
+`2024-12-18 00:37:38+00:00`. Use the `fmt_datetime` helper in `api.rs`
+which converts between these formats.
+
+### Error formatting
+
+The SDK's `SdkError` `Display` impl just says `"service error"`. Use
+the `sdk_err` helper in `api.rs` which extracts the error code and
+message: `"AccessDeniedException: User is not authorized..."`. This is
+needed for `suggest_resources_on_client_error` to detect error types.
+
 ## Steps
 
 ### 0. Plan, study Python, and get approval
