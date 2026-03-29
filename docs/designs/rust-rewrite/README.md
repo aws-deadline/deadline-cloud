@@ -18,7 +18,8 @@ and gates all planning and implementation work.
 - `migration_strategy.md` — Goals, GUI strategy, DCC plugin constraints,
   downstream dependency analysis, phased rollout, decision record
 - `workflow.md` — Development workflow: study Python → update spec → red →
-  green → refactor → update docs
+  green → verify against Python CLI → refactor → update docs.
+  Also documents AWS SDK for Rust usage patterns.
 - `data_flow.md` — Persistent data formats (INI config, job bundle layout,
   manifest JSON, cache schemas, checkpoint format)
 - `observations.md` — Behavioral notes and ambiguities discovered during
