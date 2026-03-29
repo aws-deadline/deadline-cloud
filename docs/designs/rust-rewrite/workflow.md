@@ -120,16 +120,7 @@ they fail. If a test passes before implementation, it's not testing anything
 new.
 
 **CLI output tests use `insta-cmd` snapshots** (see `docs/TESTING.md` for
-the generic framework). For migration work specifically:
-
-- After accepting a snapshot, **compare it against the Python CLI output**
-  for the same inputs. The Python CLI is the reference implementation —
-  the Rust output should match it.
-- Run the Python CLI with the same arguments and mock data (or real API)
-  and verify the snapshot captures identical output.
-- Key differences to watch for: YAML key ordering, field completeness in
-  `get` commands, header lines on `list` commands, boolean capitalization
-  (`True`/`False` vs `true`/`false`), error message format.
+the generic framework).
 
 Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
 test case inspiration. Do **not** reference section or case numbers in test
@@ -140,11 +131,31 @@ maintained after tests are written.
 
 Write the minimum code to make the tests pass.
 
-### 5. Refactor
+### 5. Verify snapshots against Python CLI
+
+Before accepting any snapshot, compare it against the Python CLI output.
+The Python CLI is the reference implementation — the Rust output must match.
+
+1. Run `cargo test` — new snapshots are written as `.snap.new` files
+2. For each snapshot, run the equivalent Python CLI command and capture
+   its output
+3. Compare the snapshot content against the Python output. Watch for:
+   - YAML key ordering (Python's dict insertion order vs Rust's serde)
+   - Field completeness in `get` commands (all API response fields present)
+   - Header lines on `list` commands (count/offset)
+   - Boolean capitalization (`True`/`False` vs `true`/`false`)
+   - Error message format
+4. If the Rust output differs from Python, fix the implementation first —
+   do not accept a snapshot that doesn't match
+5. Once verified, run `cargo insta review` to accept
+
+**Do not use `INSTA_UPDATE=always` without reviewing each snapshot.**
+
+### 6. Refactor
 
 Clean up the implementation. Tests must still pass. Commit.
 
-### 6. Update docs
+### 7. Update docs
 
 Update `docs/specs/<crate>.md` if the implementation diverged from the
 initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships

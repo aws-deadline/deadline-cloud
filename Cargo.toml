@@ -33,7 +33,7 @@ deadline-test-server = { path = "crates/deadline-test-server" }
 
 # Shared dependencies
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["full"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
