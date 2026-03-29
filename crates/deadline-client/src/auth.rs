@@ -129,10 +129,10 @@ pub async fn check_deadline_api_available(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> bool {
     let client = session::deadline_client(config).await;
-    client
-        .list_farms()
-        .max_results(1)
-        .send()
-        .await
-        .is_ok()
+    let mut req = client.list_farms().max_results(1);
+    let (user_id, _) = get_user_and_identity_store_id(config);
+    if let Some(uid) = user_id {
+        req = req.principal_id(uid);
+    }
+    req.send().await.is_ok()
 }

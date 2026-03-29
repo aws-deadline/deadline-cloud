@@ -51,7 +51,7 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
         println!("{:>w$} {profile_name}", "Profile Name:");
         println!("{:>w$} {creds_source}", "Source:");
         println!("{:>w$} {auth_status}", "Status:");
-        println!("{:>w$} {api_available}", "API Availability:");
+        println!("{:>w$} {}", "API Availability:", if api_available { "True" } else { "False" });
     }
     Ok(())
 }

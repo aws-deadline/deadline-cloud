@@ -138,7 +138,7 @@ async fn auth_status_api_available_shows_true() {
         .cli(&["auth", "status"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("API Availability:").and(predicate::str::contains("true")));
+        .stdout(predicate::str::contains("API Availability:").and(predicate::str::contains("True")));
 }
 
 // auth status shows API availability false when ListFarms fails
@@ -152,7 +152,7 @@ async fn auth_status_api_unavailable_shows_false() {
         .cli(&["auth", "status"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("API Availability:").and(predicate::str::contains("false")));
+        .stdout(predicate::str::contains("API Availability:").and(predicate::str::contains("False")));
 }
 
 // auth status JSON shows api_availability as boolean true
