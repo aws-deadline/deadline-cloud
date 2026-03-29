@@ -55,6 +55,31 @@ enum Commands {
         #[command(subcommand)]
         action: commands::config::ConfigAction,
     },
+    /// Manage authentication for Deadline Cloud
+    Auth {
+        #[command(subcommand)]
+        action: commands::auth::AuthAction,
+    },
+    /// List or get Deadline Cloud farms
+    Farm {
+        #[command(subcommand)]
+        action: commands::farm::FarmAction,
+    },
+    /// List or get Deadline Cloud fleets
+    Fleet {
+        #[command(subcommand)]
+        action: commands::fleet::FleetAction,
+    },
+    /// List or get Deadline Cloud queues
+    Queue {
+        #[command(subcommand)]
+        action: commands::queue::QueueAction,
+    },
+    /// List or get Deadline Cloud jobs
+    Job {
+        #[command(subcommand)]
+        action: commands::job::JobAction,
+    },
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -135,6 +160,11 @@ fn main() {
     if let Some(command) = cli.command {
         let result = match command {
             Commands::Config { action } => commands::config::run(action),
+            Commands::Auth { action } => commands::auth::run(action),
+            Commands::Farm { action } => commands::farm::run(action),
+            Commands::Fleet { action } => commands::fleet::run(action),
+            Commands::Queue { action } => commands::queue::run(action),
+            Commands::Job { action } => commands::job::run(action),
         };
         if let Err(e) = result {
             // Known operation/config errors: print message to stdout (matching Python CLI)

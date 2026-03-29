@@ -35,15 +35,18 @@ and gates all planning and implementation work.
 | `deadline-models` | §51, §52 | Error types, submitter info |
 | `deadline-common` | §36 | Path utilities |
 | `deadline-config` | §1, §2 | INI read/write, hierarchical settings, str2bool, get/set/clear, get_best_profile_for_farm |
-| `deadline-test-server` | — | TestHarness, wiremock stub server scaffolding |
+| `deadline-test-server` | — | TestHarness, wiremock stub server, STS/Deadline REST mocks (with pagination) |
 | `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
 | `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
+| `deadline-client` | §4 (cases 1-2, 8, 10-11), §7 (cases 1-2, 4, 22) | Session creation, profile resolution, `check_authentication_status`, `check_deadline_api_available`, `list_farms`/`list_queues`/`list_fleets`/`list_jobs` (with pagination), `get_farm`/`get_queue`/`get_fleet`/`get_job` |
+| `deadline-cli` | §39 (cases 4-7), §40-§44 (list/get cases) | `deadline auth status`, `deadline farm list/get`, `deadline fleet list/get`, `deadline queue list/get`, `deadline job list/get` |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-cli` | §37 (cases 48-53) | `suggest_resources_on_client_error` — blocked on `deadline-client` API layer |
+| `deadline-client` | §3-10 | Session caching/user-agent (§3), DCM credential source (§4 cases 3-7, 9), queue user creds (§5), login/logout (§6), remaining list APIs (§7), queue params (§8), queue creds (§9), storage profile (§10) |
+| `deadline-cli` | §37 (cases 48-53) | `suggest_resources_on_client_error` — blocked on `deadline-client` list APIs |
 
 ### Not Started
 

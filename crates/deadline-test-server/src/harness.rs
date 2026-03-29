@@ -4,9 +4,12 @@ use wiremock::MockServer;
 
 /// Test harness for CLI subprocess tests.
 ///
-/// Encapsulates a fake AWS server, an isolated config directory, and
-/// pre-configured environment variables. Each test gets a fresh harness
-/// so tests are fully independent.
+/// The Deadline Cloud SDK prepends `management.` or `scheduling.` to the
+/// endpoint hostname (Smithy `@endpoint(hostPrefix)`). To make this work
+/// with a local wiremock server, we set `endpoint_url` to
+/// `http://localhost:{port}`. The SDK then connects to
+/// `http://management.localhost:{port}`, which resolves to 127.0.0.1 on
+/// macOS and most Linux systems via the `.localhost` TLD (RFC 6761).
 ///
 /// # Example
 ///
@@ -56,23 +59,26 @@ impl TestHarness {
         harness
     }
 
+    /// The endpoint URL using `localhost` so that the SDK's host prefix
+    /// (e.g. `management.localhost`) resolves to 127.0.0.1.
+    fn endpoint_url(&self) -> String {
+        let port = self.server.address().port();
+        format!("http://localhost:{port}")
+    }
+
     /// Build a `Command` for the `deadline` CLI binary with all environment
     /// variables pre-configured to use the fake server and isolated config.
-    ///
-    /// The returned command has:
-    /// - `AWS_ENDPOINT_URL_DEADLINE` → fake server
-    /// - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` → dummy credentials
-    /// - `AWS_DEFAULT_REGION` → us-west-2
-    /// - `DEADLINE_CONFIG_FILE_PATH` → isolated temp config
-    /// - `HOME` → isolated temp dir (prevents leaking real user config)
-    /// - Common AWS env vars cleared to prevent interference
     pub fn cli(&self, args: &[&str]) -> Command {
         let mut cmd = Command::cargo_bin("deadline").expect(
             "deadline binary not found — run `cargo build` first",
         );
 
-        // Point at the fake server
-        cmd.env("AWS_ENDPOINT_URL_DEADLINE", self.server.uri());
+        let endpoint = self.endpoint_url();
+
+        // Point at the fake server using localhost so SDK host prefixes
+        // (management.localhost, scheduling.localhost) resolve correctly.
+        cmd.env("AWS_ENDPOINT_URL_DEADLINE", &endpoint);
+        cmd.env("AWS_ENDPOINT_URL_STS", &endpoint);
 
         // Dummy credentials (the fake server doesn't validate signatures)
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
@@ -93,6 +99,7 @@ impl TestHarness {
         cmd.env_remove("AWS_SHARED_CREDENTIALS_FILE");
         cmd.env_remove("AWS_SESSION_TOKEN");
         cmd.env_remove("AWS_SECURITY_TOKEN");
+        cmd.env_remove("AWS_ENDPOINT_URL");
 
         cmd.args(args);
         cmd

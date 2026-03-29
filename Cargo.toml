@@ -46,6 +46,11 @@ libc = "0.2"
 indicatif = "0.17"
 serde_yaml = "0.9"
 
+# AWS SDK
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-deadline = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-sts = "1"
+
 # Test dependencies
 test-case = "3"
 assert_cmd = "2"

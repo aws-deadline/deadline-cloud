@@ -1,25 +1,19 @@
 use serde_json::{Value, json};
-use wiremock::matchers::{header, method};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a ListQueues response.
-pub async fn mock_list_queues(server: &MockServer, queues: &[Value]) {
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", "Deadline.ListQueues"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "queues": queues,
-                "nextToken": null
-            })),
-        )
+pub async fn mock_list_queues(server: &MockServer, farm_id: &str, queues: &[Value]) {
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "queues": queues })))
         .mount(server)
         .await;
 }
 
-/// Mount a GetQueue response.
-pub async fn mock_get_queue(server: &MockServer, queue: Value) {
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", "Deadline.GetQueue"))
+pub async fn mock_get_queue(server: &MockServer, farm_id: &str, queue: Value) {
+    let queue_id = queue["queueId"].as_str().unwrap_or("queue-mock");
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(queue))
         .mount(server)
         .await;

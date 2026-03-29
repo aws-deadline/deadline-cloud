@@ -1,28 +1,14 @@
 use serde_json::json;
-use wiremock::matchers::{header, method};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a throttling (429) response for a specific API action.
-pub async fn mock_throttle(server: &MockServer, action: &str) {
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", format!("Deadline.{action}")))
+/// Mount an AccessDeniedException for ListFarms.
+pub async fn mock_list_farms_access_denied(server: &MockServer, message: &str) {
+    Mock::given(method("GET"))
+        .and(path("/2023-10-12/farms"))
         .respond_with(
-            ResponseTemplate::new(429).set_body_json(json!({
-                "__type": "ThrottlingException",
-                "message": "Rate exceeded"
-            })),
-        )
-        .mount(server)
-        .await;
-}
-
-/// Mount a ResourceNotFoundException for a specific API action.
-pub async fn mock_resource_not_found(server: &MockServer, action: &str, message: &str) {
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", format!("Deadline.{action}")))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_json(json!({
-                "__type": "ResourceNotFoundException",
+            ResponseTemplate::new(403).set_body_json(json!({
+                "__type": "AccessDeniedException",
                 "message": message
             })),
         )
@@ -30,13 +16,13 @@ pub async fn mock_resource_not_found(server: &MockServer, action: &str, message:
         .await;
 }
 
-/// Mount an AccessDeniedException for a specific API action.
-pub async fn mock_access_denied(server: &MockServer, action: &str, message: &str) {
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", format!("Deadline.{action}")))
+/// Mount a ResourceNotFoundException for GetFarm.
+pub async fn mock_get_farm_not_found(server: &MockServer, farm_id: &str, message: &str) {
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}")))
         .respond_with(
-            ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
+            ResponseTemplate::new(404).set_body_json(json!({
+                "__type": "ResourceNotFoundException",
                 "message": message
             })),
         )

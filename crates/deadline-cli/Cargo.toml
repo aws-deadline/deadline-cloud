@@ -27,6 +27,7 @@ libc = { workspace = true }
 thiserror = { workspace = true }
 indicatif = { workspace = true }
 serde_yaml = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 deadline-test-server = { workspace = true }
