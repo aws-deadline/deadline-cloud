@@ -112,12 +112,16 @@ while let Some(item) = stream.try_next().await.map_err(sdk_err)? {
 The paginator handles `nextToken` internally. `.items()` flattens across
 pages so you get individual items, not pages of items.
 
-### Field ordering matters
+### Field ordering
 
 Enable `serde_json`'s `preserve_order` feature (already done in
-`Cargo.toml`). Insert fields into `serde_json::Map` in the same order
-Python outputs them. Python dicts preserve insertion order, and boto3
-returns fields in the API's documented order. Match that order.
+`Cargo.toml`). For `list_*` commands, insert fields into
+`serde_json::Map` in the same order Python outputs them.
+
+For `get_*` commands using the `ResponseBodyCapture` interceptor, field
+order comes from the raw API response JSON. This may differ from
+Python/boto3's order (boto3 reorders based on its service model). This
+is an accepted difference per approach A — see the Progress table.
 
 ### DateTime formatting
 
@@ -218,9 +222,9 @@ Write the minimum code to make the tests pass.
 For CLI commands that call AWS APIs, follow the patterns in the
 "AWS SDK for Rust Usage" section above:
 - List functions: use the SDK paginator (`.into_paginator().items().send()`)
-- Get functions: extract ALL fields from the output struct into a
-  `serde_json::Map` in Python's field order, using the `put`/`put_opt`/
-  `put_dt`/`put_dt_opt` helpers. Convert nested types inline.
+  with typed field selection via `put`/`put_opt` helpers.
+- Get functions: use the `ResponseBodyCapture` interceptor to capture the
+  raw JSON response. No manual field extraction needed.
 - Mock responses: include all fields the real API returns, not just the
   minimum. Check the SDK output struct on docs.rs for the complete list.
 
