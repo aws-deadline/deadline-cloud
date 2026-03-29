@@ -86,12 +86,11 @@ List functions use the SDK's built-in paginators (e.g.
 `ListFarmsPaginator.items().send()`) instead of manual `nextToken` loops.
 The paginator flattens across pages, yielding individual items.
 
-Get functions extract all fields from the typed SDK response into a
-`serde_json::Map` with `preserve_order` for correct YAML key ordering.
-SDK types don't implement `Serialize`, so fields are extracted manually
-using `put`/`put_opt`/`put_dt`/`put_dt_opt` helpers. Nested types
-(e.g. `JobAttachmentSettings`, `JobRunAsUser`) are converted inline.
-Optional fields are skipped when `None`, matching Python/boto3 behavior.
+Get functions use a `ResponseBodyCapture` interceptor (`raw_response.rs`)
+to capture the raw HTTP response body as `serde_json::Value`. This
+matches Python/boto3 behavior where responses are raw dicts, and scales
+automatically when the API adds new fields. The interceptor post-processes
+datetime strings and removes null values.
 
 See `docs/designs/rust-rewrite/workflow.md` § "AWS SDK for Rust Usage"
 for the full rationale and patterns.

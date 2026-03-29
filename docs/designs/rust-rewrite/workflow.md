@@ -71,14 +71,26 @@ nested types (`JobAttachmentSettings`, `FleetConfiguration`, etc.) do
 **not** implement `serde::Serialize`. You cannot call
 `serde_json::to_value(resp)` to get JSON.
 
-Python's boto3 returns raw dicts — `response.pop("ResponseMetadata")`
-and you're done. In Rust, you must manually extract every field from the
-typed response and build a `serde_json::Map` with the correct key names
-and insertion order (for YAML output parity).
+For `get_*` commands that dump the full response, use the
+`ResponseBodyCapture` interceptor (`raw_response.rs`). This captures the
+raw HTTP response body after the SDK deserializes it, then parses it as
+`serde_json::Value` — the same raw dict that Python/boto3 returns.
 
-Use the `put`/`put_opt`/`put_dt`/`put_dt_opt` helpers in `api.rs` for
-flat fields. For nested types, build sub-maps inline. Skip `None` fields
-to match Python's behavior (boto3 omits keys with `None` values).
+```rust
+let capture = ResponseBodyCapture::new();
+client.get_farm().farm_id(id)
+    .customize().interceptor(capture.clone()).send().await?;
+let json = capture.json()?;  // full response as serde_json::Value
+```
+
+The interceptor post-processes the JSON to convert datetime strings to
+Python format and remove null values. New API fields appear automatically
+without code changes.
+
+For `list_*` commands where we select specific fields, use the typed SDK
+paginator items directly (e.g. `FarmSummary`) and build the display JSON
+manually with `put`/`put_opt` helpers. This gives type safety for the
+fields we care about.
 
 ### Use SDK paginators for list operations
 
