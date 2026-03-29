@@ -83,6 +83,13 @@ Returns bool.
 All take `farm_id` (and `queue_id`/`fleet_id` where needed) as parameters.
 Returns `serde_json::Value` — the CLI formats and prints it directly.
 
+- `search_workers(farm_id, fleet_ids, item_offset, page_size, config)` — calls
+  `SearchWorkers` (POST). Returns `{"workers": [...], "totalResults": N}`.
+  Used by `deadline worker list` (Python uses SearchWorkers, not ListWorkers).
+- `get_worker(farm_id, fleet_id, worker_id, config)` — single worker by ID.
+- `list_storage_profiles_for_queue(farm_id, queue_id, config)` — paginated,
+  returns `{"storageProfiles": [...]}`. Does NOT inject `principalId`.
+
 ## Not Yet Implemented
 
 - Session caching and user-agent construction (§3 cases 5-20)

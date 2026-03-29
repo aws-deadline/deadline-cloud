@@ -2,7 +2,7 @@ use clap::Subcommand;
 use deadline_client::api;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting};
+use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
 
 #[derive(Subcommand)]
 pub enum JobAction {
@@ -33,11 +33,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::list_jobs(&farm, &queue, config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}")))?;
+            let resp = api::list_jobs(&farm, &queue, config.as_ref()).await.map_err(|e| {
+                CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}"))
+            })?;
             let empty = vec![];
             let jobs = resp["jobs"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = jobs.iter()
+            let structured: Vec<serde_json::Value> = jobs
+                .iter()
                 .map(|j| serde_json::json!({"jobId": j["jobId"], "name": j["name"]}))
                 .collect();
             print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
@@ -48,10 +50,25 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::get_job(&farm, &queue, &job, config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Job from Deadline:\n{e}")))?;
-            print!("{}", crate::common::cli_object_repr(&resp));
-            Ok(())
+            match api::get_job(&farm, &queue, &job, config.as_ref()).await {
+                Ok(resp) => {
+                    print!("{}", crate::common::cli_object_repr(&resp));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(),
+                        Some(&farm),
+                        Some(&queue),
+                        None,
+                        config.as_ref(),
+                    )
+                    .await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Job from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
     }
 }

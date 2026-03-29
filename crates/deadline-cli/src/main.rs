@@ -80,6 +80,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::job::JobAction,
     },
+    /// List or get Deadline Cloud workers
+    Worker {
+        #[command(subcommand)]
+        action: commands::worker::WorkerAction,
+    },
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -165,6 +170,7 @@ fn main() {
             Commands::Fleet { action } => commands::fleet::run(action),
             Commands::Queue { action } => commands::queue::run(action),
             Commands::Job { action } => commands::job::run(action),
+            Commands::Worker { action } => commands::worker::run(action),
         };
         if let Err(e) = result {
             // Known operation/config errors: print message to stdout (matching Python CLI)

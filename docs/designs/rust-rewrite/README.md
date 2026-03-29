@@ -40,13 +40,14 @@ and gates all planning and implementation work.
 | `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
 | `deadline-client` | §4 (cases 1-2, 8, 10-11), §7 (cases 1-2, 4, 22) | Session creation, profile resolution, `check_authentication_status`, `check_deadline_api_available`, `list_farms`/`list_queues`/`list_fleets`/`list_jobs` (with pagination), `get_farm`/`get_queue`/`get_fleet`/`get_job` |
 | `deadline-cli` | §39 (cases 4-7), §40-§44 (list/get cases) | `deadline auth status`, `deadline farm list/get`, `deadline fleet list/get`, `deadline queue list/get`, `deadline job list/get` |
+| `deadline-client` | §7 (cases 22) | `search_workers`, `get_worker` |
+| `deadline-cli` | §37 (cases 48-53), §43 (cases 1-7) | `suggest_resources_on_client_error`, `deadline worker list/get`, SDK error formatting with error codes |
 
 ### In Progress
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
 | `deadline-client` | §3-10 | Session caching/user-agent (§3), DCM credential source (§4 cases 3-7, 9), queue user creds (§5), login/logout (§6), principalId injection for list APIs (§7 cases 5-17), queue params (§8), queue creds (§9), storage profile (§10) |
-| `deadline-cli` | §37 (cases 48-53), §43 | `suggest_resources_on_client_error` (now unblocked), worker list/get |
 
 ### Not Started
 

@@ -4,4 +4,5 @@ pub mod farm;
 pub mod fleet;
 pub mod queue;
 pub mod job;
+pub mod worker;
 pub mod helpers;

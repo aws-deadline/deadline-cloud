@@ -2,7 +2,7 @@ use clap::Subcommand;
 use deadline_client::api;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting};
+use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
 
 #[derive(Subcommand)]
 pub enum QueueAction {
@@ -30,11 +30,13 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::list_queues(&farm, config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Queues from Deadline:\n{e}")))?;
+            let resp = api::list_queues(&farm, config.as_ref()).await.map_err(|e| {
+                CliError::Operation(format!("Failed to get Queues from Deadline:\n{e}"))
+            })?;
             let empty = vec![];
             let queues = resp["queues"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = queues.iter()
+            let structured: Vec<serde_json::Value> = queues
+                .iter()
                 .map(|q| serde_json::json!({"queueId": q["queueId"], "displayName": q["displayName"]}))
                 .collect();
             print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
@@ -44,10 +46,25 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::get_queue(&farm, &queue, config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Queue from Deadline:\n{e}")))?;
-            print!("{}", crate::common::cli_object_repr(&resp));
-            Ok(())
+            match api::get_queue(&farm, &queue, config.as_ref()).await {
+                Ok(resp) => {
+                    print!("{}", crate::common::cli_object_repr(&resp));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(),
+                        Some(&farm),
+                        Some(&queue),
+                        None,
+                        config.as_ref(),
+                    )
+                    .await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Queue from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
     }
 }

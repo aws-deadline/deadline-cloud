@@ -119,11 +119,23 @@ Uses `Option<ProgressBar>` (from `indicatif`) instead of Python's explicit
 state enum. `None` = not created, `Some` = active, `.take()` = closed.
 `callback(progress)` returns `should_continue()`.
 
-### `suggest_resources_on_client_error` (not yet implemented)
+### `suggest_resources_on_client_error`
 
-Deferred until `deadline-client` API layer is functional. This function
-calls `list_farms`, `list_queues`, etc. to suggest alternatives when a
-command fails with AccessDenied or ResourceNotFound. See §37 cases 48-53.
+Free function in `commands/helpers.rs`. Called on API error paths to suggest
+alternative resources when a command fails with `AccessDeniedException`,
+`ResourceNotFoundException`, or `ValidationException`.
+
+Takes the error message string, an operation name hint (e.g. `"GetQueue"`),
+and optional resource IDs (`farm_id`, `queue_id`, `fleet_id`, `worker_id`).
+Returns a `String` to append to the error message (empty if no suggestions).
+
+Behavior:
+- Only fires for the three error codes above; other errors return `""`.
+- Uses a chain-of-fetchers: tries the most specific resource list first,
+  falls back to broader ones (e.g. queues → farms).
+- Workers use `search_workers` (not `list_workers`), with `totalResults`.
+- Shows at most 10 items; appends `"... and N more"` if more exist.
+- If all list calls also fail, returns a hint about missing List permissions.
 
 ## Subcommands
 
@@ -152,6 +164,17 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
 
 Spawns a Python process that loads the GUI widget package and
 `deadline-gui-ffi` shared library, then shows the job submission dialog.
+
+### `deadline worker`
+
+- `deadline worker list --fleet-id <id> [--farm-id] [--page-size 5] [--item-offset 0]`
+  Uses `SearchWorkers` API (not `ListWorkers`). Prints a count/offset header
+  line (`"Displaying N of T workers starting at O"`), then YAML list with
+  `workerId`, `status`, `createdAt` fields per worker.
+- `deadline worker get --fleet-id <id> --worker-id <id> [--farm-id]`
+  Calls `GetWorker`, prints full response as YAML (minus `ResponseMetadata`).
+
+Both commands use `suggest_resources_on_client_error` on API failure.
 
 ## Dependencies
 

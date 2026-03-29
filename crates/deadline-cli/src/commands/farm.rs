@@ -2,7 +2,7 @@ use clap::Subcommand;
 use deadline_client::api;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting};
+use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
 
 #[derive(Subcommand)]
 pub enum FarmAction {
@@ -27,11 +27,13 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
     match action {
         FarmAction::List { profile } => {
             let config = apply_profile(profile)?;
-            let resp = api::list_farms(config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Farms from Deadline:\n{e}")))?;
+            let resp = api::list_farms(config.as_ref()).await.map_err(|e| {
+                CliError::Operation(format!("Failed to get Farms from Deadline:\n{e}"))
+            })?;
             let empty = vec![];
             let farms = resp["farms"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = farms.iter()
+            let structured: Vec<serde_json::Value> = farms
+                .iter()
                 .map(|f| serde_json::json!({"farmId": f["farmId"], "displayName": f["displayName"]}))
                 .collect();
             print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
@@ -40,10 +42,25 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
         FarmAction::Get { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::get_farm(&farm, config.as_ref()).await
-                .map_err(|e| CliError::Operation(format!("Failed to get Farm from Deadline:\n{e}")))?;
-            print!("{}", crate::common::cli_object_repr(&resp));
-            Ok(())
+            match api::get_farm(&farm, config.as_ref()).await {
+                Ok(resp) => {
+                    print!("{}", crate::common::cli_object_repr(&resp));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(),
+                        Some(&farm),
+                        None,
+                        None,
+                        config.as_ref(),
+                    )
+                    .await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Farm from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
     }
 }
