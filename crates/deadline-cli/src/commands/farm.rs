@@ -36,7 +36,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                 .iter()
                 .map(|f| serde_json::json!({"farmId": f["farmId"], "displayName": f["displayName"]}))
                 .collect();
-            print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
             Ok(())
         }
         FarmAction::Get { profile, farm_id } => {
@@ -44,7 +44,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             match api::get_farm(&farm, config.as_ref()).await {
                 Ok(resp) => {
-                    print!("{}", crate::common::cli_object_repr(&resp));
+                    println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {

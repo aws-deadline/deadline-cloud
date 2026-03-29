@@ -39,7 +39,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 .iter()
                 .map(|q| serde_json::json!({"queueId": q["queueId"], "displayName": q["displayName"]}))
                 .collect();
-            print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
             Ok(())
         }
         QueueAction::Get { profile, farm_id, queue_id } => {
@@ -48,7 +48,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             match api::get_queue(&farm, &queue, config.as_ref()).await {
                 Ok(resp) => {
-                    print!("{}", crate::common::cli_object_repr(&resp));
+                    println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {

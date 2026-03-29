@@ -42,7 +42,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 .iter()
                 .map(|j| serde_json::json!({"jobId": j["jobId"], "name": j["name"]}))
                 .collect();
-            print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
             Ok(())
         }
         JobAction::Get { profile, farm_id, queue_id, job_id } => {
@@ -52,7 +52,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
             match api::get_job(&farm, &queue, &job, config.as_ref()).await {
                 Ok(resp) => {
-                    print!("{}", crate::common::cli_object_repr(&resp));
+                    println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {

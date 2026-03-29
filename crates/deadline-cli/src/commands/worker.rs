@@ -78,7 +78,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
                 item_offset
             );
             println!();
-            print!(
+            println!(
                 "{}",
                 crate::common::cli_object_repr(&serde_json::json!(structured))
             );
@@ -98,7 +98,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
                 .map_err(|e| {
                     CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}"))
                 })?;
-            print!("{}", crate::common::cli_object_repr(&resp));
+            println!("{}", crate::common::cli_object_repr(&resp));
             Ok(())
         }
     }

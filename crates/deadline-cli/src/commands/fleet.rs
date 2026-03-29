@@ -39,7 +39,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 .iter()
                 .map(|f| serde_json::json!({"fleetId": f["fleetId"], "displayName": f["displayName"]}))
                 .collect();
-            print!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
             Ok(())
         }
         FleetAction::Get { profile, farm_id, fleet_id } => {
@@ -48,7 +48,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let fleet = require_setting("fleet_id", fleet_id, "defaults.fleet_id", config.as_ref())?;
             match api::get_fleet(&farm, &fleet, config.as_ref()).await {
                 Ok(resp) => {
-                    print!("{}", crate::common::cli_object_repr(&resp));
+                    println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {

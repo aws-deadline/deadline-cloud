@@ -13,8 +13,18 @@ async fn farm_list_prints_farm_ids_and_names() {
     farms::mock_list_farms(
         &harness.server,
         &[
-            json!({"farmId": "farm-aaa", "displayName": "Alpha Farm"}),
-            json!({"farmId": "farm-bbb", "displayName": "Beta Farm"}),
+            json!({
+                "farmId": "farm-aaa",
+                "displayName": "Alpha Farm",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "createdBy": "arn:aws:sts::123456789012:user/test"
+            }),
+            json!({
+                "farmId": "farm-bbb",
+                "displayName": "Beta Farm",
+                "createdAt": "2024-01-02T00:00:00Z",
+                "createdBy": "arn:aws:sts::123456789012:user/test"
+            }),
         ],
     )
     .await;
@@ -43,12 +53,18 @@ async fn farm_list_api_failure_prints_error() {
 #[tokio::test]
 async fn farm_get_with_farm_id_prints_details() {
     let harness = TestHarness::new().await;
+    // All fields that GetFarm returns, matching real API response shape
     farms::mock_get_farm(
         &harness.server,
         json!({
             "farmId": "farm-abc",
             "displayName": "My Farm",
-            "kmsKeyArn": "arn:aws:kms:us-west-2:123456789012:key/abc"
+            "description": "A test farm for rendering.",
+            "kmsKeyArn": "arn:aws:kms:us-west-2:123456789012:key/abc",
+            "createdAt": "2024-06-15T10:30:00Z",
+            "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin/user",
+            "updatedAt": "2024-07-01T12:00:00Z",
+            "updatedBy": "arn:aws:sts::123456789012:assumed-role/Admin/user"
         }),
     )
     .await;
@@ -65,7 +81,12 @@ async fn farm_get_uses_default_farm_id_from_config() {
         .success();
     farms::mock_get_farm(
         &harness.server,
-        json!({"farmId": "farm-from-config", "displayName": "Config Farm"}),
+        json!({
+            "farmId": "farm-from-config",
+            "displayName": "Config Farm",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "createdBy": "arn:aws:sts::123456789012:user/test"
+        }),
     )
     .await;
 
@@ -75,7 +96,6 @@ async fn farm_get_uses_default_farm_id_from_config() {
 #[tokio::test]
 async fn farm_get_no_farm_id_exits_with_error() {
     let harness = TestHarness::new().await;
-
     assert_cmd_snapshot!(harness.cmd(&["farm", "get"]));
 }
 
@@ -83,7 +103,6 @@ async fn farm_get_no_farm_id_exits_with_error() {
 async fn farm_get_api_failure_prints_error() {
     let harness = TestHarness::new().await;
     errors::mock_get_farm_not_found(&harness.server, "farm-nonexistent", "Farm not found").await;
-
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-nonexistent"]));
 }
 
@@ -94,8 +113,18 @@ async fn farm_list_paginated_concatenates_all_pages() {
     let harness = TestHarness::new().await;
     farms::mock_list_farms_paginated(
         &harness.server,
-        &[json!({"farmId": "farm-page1", "displayName": "Page 1 Farm"})],
-        &[json!({"farmId": "farm-page2", "displayName": "Page 2 Farm"})],
+        &[json!({
+            "farmId": "farm-page1",
+            "displayName": "Page 1 Farm",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "createdBy": "arn:aws:sts::123456789012:user/test"
+        })],
+        &[json!({
+            "farmId": "farm-page2",
+            "displayName": "Page 2 Farm",
+            "createdAt": "2024-01-02T00:00:00Z",
+            "createdBy": "arn:aws:sts::123456789012:user/test"
+        })],
     )
     .await;
 
@@ -106,6 +135,5 @@ async fn farm_list_paginated_concatenates_all_pages() {
 async fn farm_list_empty_prints_empty_list() {
     let harness = TestHarness::new().await;
     farms::mock_list_farms(&harness.server, &[]).await;
-
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
