@@ -45,8 +45,8 @@ and gates all planning and implementation work.
 
 | Crate | Sections | What's next |
 |-------|----------|-------------|
-| `deadline-client` | §3-10 | Session caching/user-agent (§3), DCM credential source (§4 cases 3-7, 9), queue user creds (§5), login/logout (§6), remaining list APIs (§7), queue params (§8), queue creds (§9), storage profile (§10) |
-| `deadline-cli` | §37 (cases 48-53) | `suggest_resources_on_client_error` — blocked on `deadline-client` list APIs |
+| `deadline-client` | §3-10 | Session caching/user-agent (§3), DCM credential source (§4 cases 3-7, 9), queue user creds (§5), login/logout (§6), principalId injection for list APIs (§7 cases 5-17), queue params (§8), queue creds (§9), storage profile (§10) |
+| `deadline-cli` | §37 (cases 48-53), §43 | `suggest_resources_on_client_error` (now unblocked), worker list/get |
 
 ### Not Started
 

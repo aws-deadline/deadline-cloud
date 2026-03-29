@@ -34,7 +34,7 @@ src/
 ├── lib.rs       // pub mod session, auth, api
 ├── session.rs   // SDK config loading, client construction
 ├── auth.rs      // credential source, auth status, API availability
-└── api.rs       // list_farms, get_farm (more APIs to come)
+└── api.rs       // list/get for farms, queues, fleets, jobs
 ```
 
 ## Session (`session.rs`)
@@ -77,9 +77,10 @@ Returns bool.
 
 ## API (`api.rs`)
 
-- `list_farms(config)` — paginated, concatenates all pages via `nextToken`
-- `get_farm(farm_id, config)` — single farm by ID
+- `list_farms`, `list_queues`, `list_fleets`, `list_jobs` — paginated, concatenates all pages via `nextToken`
+- `get_farm`, `get_queue`, `get_fleet`, `get_job` — single resource by ID
 
+All take `farm_id` (and `queue_id`/`fleet_id` where needed) as parameters.
 Returns `serde_json::Value` — the CLI formats and prints it directly.
 
 ## Not Yet Implemented
