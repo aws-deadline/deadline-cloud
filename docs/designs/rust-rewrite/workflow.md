@@ -2,33 +2,38 @@
 
 The workflow for porting each feature from the Python CLI to Rust.
 
-## Collaboration rules
+## Rules
 
-When starting a new batch of work:
-
-1. **Present the plan before executing.** Explain what you're implementing,
-   which test spec cases it covers, what batches you'll group them into, and
-   how each batch will be implemented (Rust-specific design choices). Wait
-   for approval before writing code.
-2. **Cross-reference Python before implementing.** Read the Python source for
-   every feature being ported. Identify where Rust can do things better
-   (type-level guarantees, idiomatic patterns) while preserving identical
-   observable behavior.
-3. **Review existing implementation for improvements.** Before adding new
-   code, audit what's already written against the Python source. Flag
-   behavior gaps (e.g., stdout vs stderr for errors) and suggest cleanups.
-   Implement improvements first, then new features.
-4. **Commit-driven development.** Each logical batch gets its own commit
-   following red-green TDD: write failing tests → implement → full suite
-   check → commit. Keep commits small and focused.
-5. **Keep docs in sync.** After implementation, update `docs/specs/<crate>.md`
-   to reflect Rust-specific design decisions (not just "what" but "how" and
-   "why it differs from Python"). Update the Progress table in `README.md`.
-6. **Defer honestly.** If a feature is blocked on an unimplemented crate,
-   say so and document it in the Progress table rather than building
-   throwaway scaffolding.
+- **No code before approval.** Steps 0-3 are planning. Present the plan
+  and wait for the human to approve before writing any code.
+- **Cross-reference Python for every feature.** The Python code often does
+  things you wouldn't expect from the spec alone. Read it.
+- **Improvements before new code.** Before adding new features, audit
+  existing implementation against the Python source. Flag behavior gaps
+  and cleanups. Implement improvements first.
+- **Commit per batch.** Each logical batch gets its own commit following
+  red-green TDD. Keep commits small and focused.
+- **Docs stay in sync.** After implementation, update `docs/specs/<crate>.md`
+  with Rust-specific design decisions. Update the Progress table in
+  `README.md`. Do not let docs drift from code.
+- **Defer honestly.** If a feature is blocked on an unimplemented crate,
+  say so and document it in the Progress table rather than building
+  throwaway scaffolding.
 
 ## Steps
+
+### 0. Plan and get approval
+
+Check the Progress table in `README.md` to identify what's next. Read the
+Python source, the test specs, and the crate spec. Then present:
+
+- What you're implementing and which test spec cases it covers
+- How you'll batch the work
+- Where Rust can improve on the Python design (type-level guarantees,
+  idiomatic patterns) while preserving identical observable behavior
+- What's blocked or deferred and why
+
+**Wait for approval before proceeding to step 1.**
 
 ### 1. Study the Python implementation
 
@@ -42,22 +47,24 @@ This step exists because the Python code often does things you wouldn't
 think to do from the spec alone — quirky defaults, silent fallbacks,
 format-specific output details.
 
-### 2. Update the crate spec
+### 2. Review existing implementation for improvements
+
+Before writing new code, audit what's already implemented against the
+Python source. Look for:
+- Behavior gaps (e.g., stdout vs stderr for errors)
+- Missing edge cases
+- Opportunities to use idiomatic Rust (ValueEnum instead of manual
+  FromStr, concrete error types instead of Box<dyn Error>)
+
+Implement improvements first, commit, then proceed to new features.
+
+### 3. Update the crate spec
 
 Write up the feature's behavior and implementation approach in the relevant
 `docs/specs/<crate>.md`. Describe what it does and how it should work in
 Rust, but keep it at the design level — no code blocks unless they're
 needed to show a non-obvious interface or data format. This becomes the
 reference for both the tests and the implementation.
-
-### 3. Review test specs
-
-Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
-the feature being ported. These files document behavioral test cases
-organized by section number (matching the Progress table in `README.md`).
-Use them as inspiration for what scenarios to cover — happy paths, error
-handling, boundary values, output formats, etc. Not every case needs a
-1:1 test, but the specs ensure you don't miss important scenarios.
 
 ### 4. Red — Write failing tests
 
@@ -66,11 +73,10 @@ file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
 they fail. If a test passes before implementation, it's not testing anything
 new.
 
-Do **not** reference section or case numbers from the test specs in test
-names, comments, or file headers. The test specs are migration-era
-scaffolding for porting from Python to Rust — they are not maintained
-after the tests are written. Tests should be self-describing through
-their names and assertions alone.
+Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
+test case inspiration. Do **not** reference section or case numbers in test
+names or comments — the test specs are migration-era scaffolding, not
+maintained after tests are written.
 
 ### 5. Green — Implement
 
@@ -84,4 +90,4 @@ Clean up the implementation. Tests must still pass. Commit.
 
 Update `docs/specs/<crate>.md` if the implementation diverged from the
 initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships
-changed.
+changed. Update the Progress table in `README.md`.
