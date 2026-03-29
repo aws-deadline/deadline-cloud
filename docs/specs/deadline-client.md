@@ -90,6 +90,28 @@ Python/boto3 behavior where responses are raw dicts, and scales
 automatically when the API adds new fields. The interceptor
 post-processes datetime strings and removes null values.
 
+### Limitation: Extra fields vs boto3
+
+The raw HTTP response includes fields that boto3 strips (e.g. `arn`,
+`schedulingMode`). This happens because boto3 filters responses through
+its Smithy service model, only keeping fields defined in the operation's
+output shape. The Rust SDK output types would provide the same filtering,
+but they don't implement `serde::Serialize`
+([awslabs/aws-sdk-rust#269](https://github.com/awslabs/aws-sdk-rust/issues/269),
+open since Oct 2021), so we can't serialize them back to JSON/YAML.
+
+The extra fields are harmless (more data than Python, never less), and
+field ordering differences are cosmetic. See `workflow.md` § "Known
+differences from Python/boto3" for the full list.
+
+**Future option: Smithy model filtering.** The Smithy model JSON for
+each AWS service is bundled in the SDK crate source. A post-processing
+step could load the operation's output shape, build an allowlist of
+field names (recursively for nested types), and filter the captured JSON
+to match boto3's output exactly. This would be fully automated — new
+fields would only appear after the SDK updates its model. See the
+"Future improvements" section below.
+
 List functions use manual `nextToken` loops with `ResponseBodyCapture`
 on each page (SDK paginators don't support `.customize().interceptor()`).
 
@@ -129,3 +151,12 @@ Functions:
 - §14 (telemetry) — separate subsystem with background thread, retry
   logic, endpoint prefixing
 - §34 (AWS client helpers) — part of `deadline-job-attachments`
+
+## Future Improvements
+
+- **Smithy model response filtering** — Post-process `ResponseBodyCapture`
+  JSON through the Smithy service model to strip fields that boto3 would
+  not include, and reorder fields to match boto3's Smithy-defined ordering.
+  This would eliminate the field-order and extra-field differences from
+  Python without requiring manual typed extraction. Low priority — the
+  extra fields are harmless and the ordering is cosmetic.
