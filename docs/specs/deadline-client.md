@@ -82,22 +82,28 @@ Returns bool.
 
 ## API (`api.rs`)
 
-List functions use the SDK's built-in paginators (e.g.
-`ListFarmsPaginator.items().send()`) instead of manual `nextToken` loops.
-The paginator flattens across pages, yielding individual items.
+All API functions use the `ResponseBodyCapture` interceptor
+(`raw_response.rs`) to capture the raw HTTP response body as
+`serde_json::Value`. This is the single, consistent approach for every
+API call — `get_*`, `list_*`, and `search_*` alike. It matches
+Python/boto3 behavior where responses are raw dicts, and scales
+automatically when the API adds new fields. The interceptor
+post-processes datetime strings and removes null values.
 
-Get functions use a `ResponseBodyCapture` interceptor (`raw_response.rs`)
-to capture the raw HTTP response body as `serde_json::Value`. This
-matches Python/boto3 behavior where responses are raw dicts, and scales
-automatically when the API adds new fields. The interceptor post-processes
-datetime strings and removes null values.
+List functions use manual `nextToken` loops with `ResponseBodyCapture`
+on each page (SDK paginators don't support `.customize().interceptor()`).
 
 See `docs/designs/rust-rewrite/workflow.md` § "AWS SDK for Rust Usage"
 for the full rationale and patterns.
 
 Functions:
-- `list_farms`, `list_queues`, `list_fleets`, `list_jobs` — paginated via SDK paginator
+- `list_farms`, `list_queues`, `list_fleets` — paginated via manual
+  `nextToken` loop with `ResponseBodyCapture` per page
 - `get_farm`, `get_queue`, `get_fleet`, `get_job` — single resource, all fields
+- `search_jobs(farm_id, queue_ids, item_offset, page_size, config)` — calls
+  `SearchJobs` (POST), sorted by `CREATED_AT` descending. Returns
+  `{"jobs": [...], "totalResults": N}`. Each job contains raw API fields.
+  Replaces `list_jobs` (Python CLI uses `SearchJobs`, not `ListJobs`).
 - `search_workers(farm_id, fleet_ids, item_offset, page_size, config)` — calls
   `SearchWorkers` (POST). Returns `{"workers": [...], "totalResults": N}`.
 - `get_worker(farm_id, fleet_id, worker_id, config)` — single worker, all fields.

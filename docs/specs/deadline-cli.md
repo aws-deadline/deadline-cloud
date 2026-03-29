@@ -165,6 +165,22 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
 Spawns a Python process that loads the GUI widget package and
 `deadline-gui-ffi` shared library, then shows the job submission dialog.
 
+### `deadline job`
+
+- `deadline job list [--farm-id] [--queue-id] [--page-size 5] [--item-offset 0]`
+  Uses `SearchJobs` API (not `ListJobs`), sorted by `CREATED_AT` descending.
+  Prints a count/offset header line (`"Displaying N of T Jobs starting at O"`),
+  then a blank line, then a YAML list with these fields per job (in order):
+  `name` (falls back to `displayName` if `name` absent), `jobId`,
+  `taskRunStatus`, `startedAt`, `endedAt`, `createdBy`, `createdAt`,
+  `estimatedTimeRemaining`. The `estimatedTimeRemaining` field is computed
+  client-side from `taskRunStatusCounts` and `startedAt`; shows `"N/A"` if
+  not computable. DateTime fields are formatted as `YYYY-MM-DD HH:MM:SS+00:00`.
+- `deadline job get [--farm-id] [--queue-id] [--job-id]`
+  Calls `GetJob`, prints full response as YAML (minus `ResponseMetadata`).
+
+Both commands use `suggest_resources_on_client_error` on API failure.
+
 ### `deadline worker`
 
 - `deadline worker list --fleet-id <id> [--farm-id] [--page-size 5] [--item-offset 0]`

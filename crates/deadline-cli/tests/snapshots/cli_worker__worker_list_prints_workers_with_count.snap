@@ -13,15 +13,15 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:59725"
-    AWS_ENDPOINT_URL_STS: "http://localhost:59725"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58205"
+    AWS_ENDPOINT_URL_STS: "http://localhost:58205"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpEI5hUc/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpEI5hUc
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp8gemiT/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp8gemiT
 ---
 success: true
 exit_code: 0
@@ -30,10 +30,10 @@ Displaying 2 of 2 workers starting at 0
 
 - workerId: worker-aaa
   status: RUNNING
-  createdAt: 2024-01-01T00:00:00Z
+  createdAt: 2024-01-01 00:00:00+00:00
 - workerId: worker-bbb
   status: IDLE
-  createdAt: 2024-01-02T00:00:00Z
+  createdAt: 2024-01-02 00:00:00+00:00
 
 
 ----- stderr -----

@@ -136,6 +136,10 @@ ExtendScript (JSX)
   Rust errors to C-compatible error codes + message strings.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
   See `TESTING.md`.
+- **API responses:** All API functions in `deadline-client` use the
+  `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
+  The CLI layer never sees SDK types. See `workflow.md` § "AWS SDK for
+  Rust Usage".
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
   are not the primary API.

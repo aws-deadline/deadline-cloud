@@ -69,12 +69,17 @@ that affect how we build API functions. Know these before writing code.
 The SDK output types (`GetFarmOutput`, `GetQueueOutput`, etc.) and their
 nested types (`JobAttachmentSettings`, `FleetConfiguration`, etc.) do
 **not** implement `serde::Serialize`. You cannot call
-`serde_json::to_value(resp)` to get JSON.
+`serde_json::to_value(resp)` to get JSON. This is a known limitation
+of the AWS SDK for Rust (open since 2021, see
+[awslabs/aws-sdk-rust#269](https://github.com/awslabs/aws-sdk-rust/issues/269)).
+Other Rust cloud SDKs (Azure, Google via prost) do provide serde support.
 
-For `get_*` commands that dump the full response, use the
-`ResponseBodyCapture` interceptor (`raw_response.rs`). This captures the
-raw HTTP response body after the SDK deserializes it, then parses it as
-`serde_json::Value` — the same raw dict that Python/boto3 returns.
+### Standard pattern: `ResponseBodyCapture` for all API calls
+
+**All** API functions in `api.rs` use the `ResponseBodyCapture`
+interceptor to capture the raw HTTP response body as
+`serde_json::Value`. This is the single, consistent approach for every
+API call — `get_*`, `list_*`, and `search_*` alike.
 
 ```rust
 let capture = ResponseBodyCapture::new();
@@ -87,41 +92,56 @@ The interceptor post-processes the JSON to convert datetime strings to
 Python format and remove null values. New API fields appear automatically
 without code changes.
 
-For `list_*` commands where we select specific fields, use the typed SDK
-paginator items directly (e.g. `FarmSummary`) and build the display JSON
-manually with `put`/`put_opt` helpers. This gives type safety for the
-fields we care about.
+**Why not typed SDK output structs?** The SDK output types can't be
+serialized back to JSON/YAML. Using them requires manually extracting
+every field with accessor methods and rebuilding JSON — tedious for
+`get_*` commands with 20+ fields and nested structs, and inconsistent
+if some functions use typed extraction while others use raw JSON. The
+`ResponseBodyCapture` approach matches Python/boto3 behavior (responses
+are raw dicts) and scales uniformly across all API shapes.
 
-### Use SDK paginators for list operations
+### Pagination with `ResponseBodyCapture`
 
-Every `List*` API has a built-in paginator. Use it instead of manual
-`next_token` loops:
+The SDK's built-in paginators (`.into_paginator()`) don't support
+`.customize().interceptor()`, so paginated `list_*` functions use manual
+`nextToken` loops with the interceptor on each page:
 
 ```rust
-let mut stream = client.list_farms()
-    .principal_id(uid)
-    .into_paginator()
-    .items()       // flattens across pages, yields FarmSummary
-    .send();       // returns PaginationStream
-
-while let Some(item) = stream.try_next().await.map_err(sdk_err)? {
-    // item is FarmSummary
+let mut all_items = Vec::new();
+let mut next_token: Option<String> = None;
+loop {
+    let capture = ResponseBodyCapture::new();
+    let mut req = client.list_farms();
+    if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
+    if let Some(t) = next_token.take() { req = req.next_token(t); }
+    req.customize().interceptor(capture.clone()).send().await.map_err(sdk_err)?;
+    let page = capture.json()?;
+    if let Some(items) = page["farms"].as_array() {
+        all_items.extend(items.iter().cloned());
+    }
+    match page.get("nextToken").and_then(|t| t.as_str()) {
+        Some(t) => next_token = Some(t.to_string()),
+        None => break,
+    }
 }
 ```
 
-The paginator handles `nextToken` internally. `.items()` flattens across
-pages so you get individual items, not pages of items.
+This trades the paginator's convenience for consistency — every API
+function follows the same `ResponseBodyCapture` pattern, and the CLI
+layer only ever sees `serde_json::Value`.
+
+### Search APIs (no pagination token)
+
+`search_*` APIs use `itemOffset`/`pageSize` instead of `nextToken`.
+They return a single page, so no loop is needed — just a single
+`ResponseBodyCapture` call.
 
 ### Field ordering
 
 Enable `serde_json`'s `preserve_order` feature (already done in
-`Cargo.toml`). For `list_*` commands, insert fields into
-`serde_json::Map` in the same order Python outputs them.
-
-For `get_*` commands using the `ResponseBodyCapture` interceptor, field
-order comes from the raw API response JSON. This may differ from
-Python/boto3's order (boto3 reorders based on its service model). This
-is an accepted difference per approach A — see the Progress table.
+`Cargo.toml`). Field order comes from the raw API response JSON. This
+may differ from Python/boto3's order (boto3 reorders based on its
+service model). This is an accepted difference.
 
 ### DateTime formatting
 
@@ -221,10 +241,11 @@ Write the minimum code to make the tests pass.
 
 For CLI commands that call AWS APIs, follow the patterns in the
 "AWS SDK for Rust Usage" section above:
-- List functions: use the SDK paginator (`.into_paginator().items().send()`)
-  with typed field selection via `put`/`put_opt` helpers.
-- Get functions: use the `ResponseBodyCapture` interceptor to capture the
-  raw JSON response. No manual field extraction needed.
+- All API functions use `ResponseBodyCapture` to capture the raw JSON
+  response. This applies to `get_*`, `list_*`, and `search_*` alike.
+- List functions: manual `nextToken` loop with `ResponseBodyCapture` on
+  each page (SDK paginators don't support `.customize().interceptor()`).
+- Search functions: single `ResponseBodyCapture` call (no pagination token).
 - Mock responses: include all fields the real API returns, not just the
   minimum. Check the SDK output struct on docs.rs for the complete list.
 
