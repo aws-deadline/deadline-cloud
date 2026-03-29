@@ -162,6 +162,38 @@ pub async fn list_jobs(farm_id: &str, queue_id: &str, config: Option<&IniConfig>
     Ok(serde_json::json!({"jobs": all_items}))
 }
 
+pub async fn search_jobs(
+    farm_id: &str,
+    queue_ids: &[&str],
+    item_offset: i32,
+    page_size: i32,
+    config: Option<&IniConfig>,
+) -> Result<Value, DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let capture = ResponseBodyCapture::new();
+    client
+        .search_jobs()
+        .farm_id(farm_id)
+        .set_queue_ids(Some(queue_ids.iter().map(|s| s.to_string()).collect()))
+        .item_offset(item_offset)
+        .page_size(page_size)
+        .sort_expressions(
+            aws_sdk_deadline::types::SearchSortExpression::FieldSort(
+                aws_sdk_deadline::types::FieldSortExpression::builder()
+                    .name("CREATED_AT")
+                    .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
+                    .build()
+                    .map_err(|e| DeadlineError::OperationError(e.to_string()))?,
+            ),
+        )
+        .customize()
+        .interceptor(capture.clone())
+        .send()
+        .await
+        .map_err(sdk_err)?;
+    capture.json().map_err(capture_err)
+}
+
 pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
     let capture = ResponseBodyCapture::new();

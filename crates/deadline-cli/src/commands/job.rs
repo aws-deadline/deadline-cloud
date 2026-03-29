@@ -11,6 +11,10 @@ pub enum JobAction {
         #[arg(long)] profile: Option<String>,
         #[arg(long)] farm_id: Option<String>,
         #[arg(long)] queue_id: Option<String>,
+        #[arg(long, default_value = "5")]
+        page_size: i32,
+        #[arg(long, default_value = "0")]
+        item_offset: i32,
     },
     /// Get details of a specific job
     Get {
@@ -29,19 +33,45 @@ pub fn run(action: JobAction) -> Result<(), CliError> {
 
 async fn run_async(action: JobAction) -> Result<(), CliError> {
     match action {
-        JobAction::List { profile, farm_id, queue_id } => {
+        JobAction::List { profile, farm_id, queue_id, page_size, item_offset } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::list_jobs(&farm, &queue, config.as_ref()).await.map_err(|e| {
-                CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}"))
-            })?;
+            let resp = api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref())
+                .await
+                .map_err(|e| {
+                    CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}"))
+                })?;
+            let total = resp["totalResults"].as_i64().unwrap_or(0);
             let empty = vec![];
             let jobs = resp["jobs"].as_array().unwrap_or(&empty);
+
+            // Python uses "name" if present, falls back to "displayName"
+            let name_field = if jobs.first().map_or(false, |j| j.get("name").is_some()) {
+                "name"
+            } else {
+                "displayName"
+            };
+
             let structured: Vec<serde_json::Value> = jobs
                 .iter()
-                .map(|j| serde_json::json!({"jobId": j["jobId"], "name": j["name"]}))
+                .map(|j| {
+                    let mut m = serde_json::Map::new();
+                    for &field in &[name_field, "jobId", "taskRunStatus", "startedAt", "endedAt", "createdBy", "createdAt"] {
+                        let v = j.get(field).and_then(|v| v.as_str()).unwrap_or("");
+                        m.insert(field.into(), serde_json::Value::String(v.to_string()));
+                    }
+                    m.insert("estimatedTimeRemaining".into(),
+                        serde_json::Value::String("N/A".into()));
+                    serde_json::Value::Object(m)
+                })
                 .collect();
+
+            println!(
+                "Displaying {} of {} Jobs starting at {}",
+                structured.len(), total, item_offset
+            );
+            println!();
             println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
             Ok(())
         }
