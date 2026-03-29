@@ -65,9 +65,14 @@ to `127.0.0.1` via the `.localhost` TLD (RFC 6761).
 ## Auth (`auth.rs`)
 
 `AwsCredentialsSource` enum: `NotValid`, `HostProvided`,
-`DeadlineCloudMonitorLogin`. Currently only `HostProvided` is returned —
-DCM detection (checking `monitor_id` in AWS profile scoped config) is not
-yet implemented.
+`DeadlineCloudMonitorLogin`. Determined by parsing `~/.aws/config`
+(or `AWS_CONFIG_FILE`) for the active profile's `monitor_id` key.
+DCM-created profiles have `monitor_id`, `user_id`, and
+`identity_store_id` in their `[profile <name>]` section.
+
+`get_user_and_identity_store_id(config)`: returns `(Option<String>,
+Option<String>)` — the `user_id` and `identity_store_id` from the
+AWS profile if it's a DCM profile, otherwise `(None, None)`.
 
 `AwsAuthenticationStatus` enum: `ConfigurationError`, `Authenticated`,
 `NeedsLogin`. Determined by calling STS GetCallerIdentity.
@@ -93,11 +98,8 @@ Returns `serde_json::Value` — the CLI formats and prints it directly.
 ## Not Yet Implemented
 
 - Session caching and user-agent construction (§3 cases 5-20)
-- DCM credential source detection (§4 cases 3-7, 9)
 - Queue user credentials (§5)
 - Login/logout (§6)
-- Remaining list APIs: queues, jobs, fleets, storage profiles (§7)
-- principalId auto-injection for list APIs (§7 cases 5-17)
 - Queue parameters (§8)
 - Queue credentials — assume role (§9)
 - Storage profile (§10)

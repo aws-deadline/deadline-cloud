@@ -19,6 +19,12 @@ fn resolve_profile(config: Option<&IniConfig>) -> Option<String> {
     }
 }
 
+/// Returns the resolved profile name, or None for the default credential chain.
+/// Public so auth.rs can use it for DCM detection.
+pub fn resolve_profile_name(config: Option<&IniConfig>) -> Option<String> {
+    resolve_profile(config)
+}
+
 async fn load_sdk_config(config: Option<&IniConfig>) -> SdkConfig {
     let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
     if let Some(profile) = resolve_profile(config) {

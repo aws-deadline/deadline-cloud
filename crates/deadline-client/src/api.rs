@@ -1,4 +1,4 @@
-use crate::session;
+use crate::{auth, session};
 use deadline_config::ini::IniConfig;
 use deadline_models::errors::DeadlineError;
 use serde_json::Value;
@@ -30,10 +30,12 @@ fn sdk_err<E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata>
 
 pub async fn list_farms(config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
+    let (user_id, _) = auth::get_user_and_identity_store_id(config);
     let mut all = Vec::new();
     let mut next_token: Option<String> = None;
     loop {
         let mut req = client.list_farms();
+        if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
         if let Some(t) = next_token.take() { req = req.next_token(t); }
         let resp = req.send().await.map_err(sdk_err)?;
         for f in resp.farms() {
@@ -58,10 +60,12 @@ pub async fn get_farm(farm_id: &str, config: Option<&IniConfig>) -> Result<Value
 
 pub async fn list_queues(farm_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
+    let (user_id, _) = auth::get_user_and_identity_store_id(config);
     let mut all = Vec::new();
     let mut next_token: Option<String> = None;
     loop {
         let mut req = client.list_queues().farm_id(farm_id);
+        if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
         if let Some(t) = next_token.take() { req = req.next_token(t); }
         let resp = req.send().await.map_err(sdk_err)?;
         for q in resp.queues() {
@@ -84,10 +88,12 @@ pub async fn get_queue(farm_id: &str, queue_id: &str, config: Option<&IniConfig>
 
 pub async fn list_fleets(farm_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
+    let (user_id, _) = auth::get_user_and_identity_store_id(config);
     let mut all = Vec::new();
     let mut next_token: Option<String> = None;
     loop {
         let mut req = client.list_fleets().farm_id(farm_id);
+        if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
         if let Some(t) = next_token.take() { req = req.next_token(t); }
         let resp = req.send().await.map_err(sdk_err)?;
         for f in resp.fleets() {
@@ -110,10 +116,12 @@ pub async fn get_fleet(farm_id: &str, fleet_id: &str, config: Option<&IniConfig>
 
 pub async fn list_jobs(farm_id: &str, queue_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
+    let (user_id, _) = auth::get_user_and_identity_store_id(config);
     let mut all = Vec::new();
     let mut next_token: Option<String> = None;
     loop {
         let mut req = client.list_jobs().farm_id(farm_id).queue_id(queue_id);
+        if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
         if let Some(t) = next_token.take() { req = req.next_token(t); }
         let resp = req.send().await.map_err(sdk_err)?;
         for j in resp.jobs() {

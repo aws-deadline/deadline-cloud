@@ -59,3 +59,21 @@ pub async fn mock_get_farm(server: &MockServer, farm: Value) {
         .mount(server)
         .await;
 }
+
+/// Mount a ListFarms response that requires a specific principalId query param.
+pub async fn mock_list_farms_with_principal_id(
+    server: &MockServer,
+    principal_id: &str,
+    farms: &[Value],
+) {
+    Mock::given(method("GET"))
+        .and(path("/2023-10-12/farms"))
+        .and(query_param("principalId", principal_id))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "farms": farms
+            })),
+        )
+        .mount(server)
+        .await;
+}
