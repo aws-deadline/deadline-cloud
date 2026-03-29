@@ -17,23 +17,24 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58852"
-    AWS_ENDPOINT_URL_STS: "http://localhost:58852"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:59721"
+    AWS_ENDPOINT_URL_STS: "http://localhost:59721"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp3ntyTB/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp3ntyTB
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTySgjJ/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTySgjJ
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 Displaying 1 of 20 workers starting at 5
 
-- createdAt: 2024-01-03T00:00:00Z
+- workerId: worker-ccc
   status: IDLE
-  workerId: worker-ccc
+  createdAt: 2024-01-03T00:00:00Z
+
 
 ----- stderr -----

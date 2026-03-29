@@ -11,21 +11,22 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58825"
-    AWS_ENDPOINT_URL_STS: "http://localhost:58825"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:59640"
+    AWS_ENDPOINT_URL_STS: "http://localhost:59640"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpoys8E2/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpoys8E2
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYGkppg/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYGkppg
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 jobId: job-aaa
-lifecycleStatus: CREATE_COMPLETE
 name: Render Job
+lifecycleStatus: CREATE_COMPLETE
+
 
 ----- stderr -----
