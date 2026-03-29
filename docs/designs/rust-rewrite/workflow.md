@@ -141,6 +141,16 @@ wouldn't think to do from the spec alone (quirky defaults, silent
 fallbacks, format-specific output details). You need this understanding
 to design the Rust API correctly.
 
+For CLI commands that call AWS APIs, also check:
+- [ ] The SDK operation docs on docs.rs (e.g.
+  `aws_sdk_deadline::operation::get_farm`) for input/output types
+- [ ] The output struct fields — these are the fields you must extract
+- [ ] Whether a paginator exists (e.g. `ListFarmsPaginator`)
+- [ ] What fields the Python CLI selects for list output (e.g.
+  `["farmId", "displayName"]`) and what order
+- [ ] Run the Python CLI command and capture its exact output — this is
+  the target you must match
+
 Then apply the Design Principles above and present:
 
 - What you're implementing and which test spec cases it covers
@@ -193,6 +203,15 @@ maintained after tests are written.
 
 Write the minimum code to make the tests pass.
 
+For CLI commands that call AWS APIs, follow the patterns in the
+"AWS SDK for Rust Usage" section above:
+- List functions: use the SDK paginator (`.into_paginator().items().send()`)
+- Get functions: extract ALL fields from the output struct into a
+  `serde_json::Map` in Python's field order, using the `put`/`put_opt`/
+  `put_dt`/`put_dt_opt` helpers. Convert nested types inline.
+- Mock responses: include all fields the real API returns, not just the
+  minimum. Check the SDK output struct on docs.rs for the complete list.
+
 ### 5. Verify snapshots against Python CLI
 
 Before accepting any snapshot, compare it against the Python CLI output.
@@ -210,6 +229,13 @@ The Python CLI is the reference implementation — the Rust output must match.
 4. If the Rust output differs from Python, fix the implementation first —
    do not accept a snapshot that doesn't match
 5. Once verified, run `cargo insta review` to accept
+
+When possible, also verify against the real API:
+```bash
+diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
+```
+This catches issues that mock-based tests miss (e.g. fields the real API
+returns that the mock omits).
 
 **Do not use `INSTA_UPDATE=always` without reviewing each snapshot.**
 
