@@ -2,7 +2,7 @@
 
 use deadline_test_server::TestHarness;
 use deadline_test_server::deadline_api::jobs;
-use predicates::prelude::*;
+use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
 #[tokio::test]
@@ -14,10 +14,7 @@ async fn job_list_prints_job_ids_and_names() {
         json!({"jobId": "job-aaa", "name": "Render Job"}),
     ]).await;
 
-    harness.cli(&["job", "list"])
-        .assert().success()
-        .stdout(predicate::str::contains("job-aaa"))
-        .stdout(predicate::str::contains("Render Job"));
+    assert_cmd_snapshot!(harness.cmd(&["job", "list"]));
 }
 
 #[tokio::test]
@@ -30,10 +27,7 @@ async fn job_get_prints_details() {
         "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
     })).await;
 
-    harness.cli(&["job", "get"])
-        .assert().success()
-        .stdout(predicate::str::contains("job-aaa"))
-        .stdout(predicate::str::contains("Render Job"));
+    assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }
 
 #[tokio::test]
@@ -42,7 +36,5 @@ async fn job_get_no_job_id_exits_with_error() {
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
 
-    harness.cli(&["job", "get"])
-        .assert().code(1)
-        .stdout(predicate::str::contains("job"));
+    assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }

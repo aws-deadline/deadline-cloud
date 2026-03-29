@@ -173,41 +173,21 @@ stub server. Tests assert on stdout, stderr, and exit code.
 
 **Pattern:**
 ```rust
-use assert_cmd::Command;
-use predicates::prelude::*;
-use wiremock::{MockServer, Mock, ResponseTemplate};
-use wiremock::matchers::{method, header};
-use tempfile::TempDir;
+use deadline_test_server::TestHarness;
+use insta_cmd::assert_cmd_snapshot;
 
 #[tokio::test]
-async fn farm_list_shows_farms_in_table() {
-    let server = MockServer::start().await;
+async fn farm_list_shows_farms_in_yaml() {
+    let harness = TestHarness::new().await;
 
-    Mock::given(method("POST"))
-        .and(header("x-amz-target", "Deadline.ListFarms"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "farms": [{
-                "farmId": "farm-0123456789abcdef0123456789abcdef",
-                "displayName": "My Farm"
-            }]
-        })))
-        .mount(&server)
-        .await;
+    farms::mock_list_farms(&harness.server, &[
+        serde_json::json!({
+            "farmId": "farm-0123456789abcdef0123456789abcdef",
+            "displayName": "My Farm",
+        })
+    ]).await;
 
-    let config_dir = TempDir::new().unwrap();
-    let config_path = config_dir.path().join("config");
-    std::fs::write(&config_path, "").unwrap();
-
-    Command::cargo_bin("deadline").unwrap()
-        .env("AWS_ENDPOINT_URL_DEADLINE", server.uri())
-        .env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
-        .env("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-        .env("AWS_DEFAULT_REGION", "us-west-2")
-        .env("DEADLINE_CONFIG_FILE_PATH", config_path.to_str().unwrap())
-        .args(["farm", "list"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("My Farm"));
+    assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
 ```
 
@@ -239,17 +219,20 @@ async fn config_set_persists_value() {
         .assert()
         .success();
 
-    harness.cli(&["config", "get", "defaults.farm_id"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("farm-abc"));
+    let output = harness.cli(&["config", "get", "defaults.farm_id"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "farm-abc\n");
 }
 ```
 
 `TestHarness` encapsulates:
 - Starting the `wiremock` stub server
 - Creating an isolated temp directory for config files
-- Building `assert_cmd::Command` with all env vars pre-configured
+- `cli()` → `assert_cmd::Command` for `.assert()` chains and file side effects
+- `cmd()` → `std::process::Command` for `insta_cmd::assert_cmd_snapshot!`
 - Providing methods to mount API response stubs
 
 ---
@@ -306,10 +289,14 @@ tempfile = "3"
 wiremock = "0.6"
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
+insta = { version = "1", features = ["filters"] }
+insta-cmd = "0.6"
 
 # Internal test crate
 deadline-test-server = { path = "crates/deadline-test-server" }
 ```
+
+Install `cargo-insta` for the snapshot review TUI: `cargo install cargo-insta`
 
 ---
 
@@ -330,6 +317,12 @@ cargo test -p deadline-cli farm_list_with_valid_creds
 
 # With output visible
 cargo test -p deadline-cli -- --nocapture
+
+# Review new/changed CLI output snapshots
+cargo insta review
+
+# Auto-accept all new snapshots (use with caution)
+INSTA_UPDATE=always cargo test -p deadline-cli
 ```
 
 ---
@@ -338,8 +331,126 @@ cargo test -p deadline-cli -- --nocapture
 
 - [ ] CLI-reachable behavior is tested through the CLI subprocess (Level 2)
 - [ ] Level 1 tests exist only for code the CLI cannot reach
+- [ ] Happy-path CLI tests assert on **exact stdout** (not `contains`)
+- [ ] Error CLI tests assert on **exact stdout** including suggestion text
+- [ ] Mock responses include **all fields** the real API returns
 - [ ] Parametric tests cover all boundary values
 - [ ] Error cases assert on error message content, not just exit code
 - [ ] No test depends on execution order
 - [ ] `cargo test -p <crate>` passes with no warnings
 - [ ] Stub server responses match the real API response shape
+
+---
+
+## CLI Output Assertions: Exact Match, Not Substring
+
+Level 2 CLI tests must assert on the **exact stdout and stderr content**, not
+just that a substring is present. Substring checks (`contains`) miss:
+
+- Missing fields (test passes even if half the output is gone)
+- Wrong field ordering (YAML key order matters for readability parity)
+- Extra or missing whitespace, newlines, headers
+- Wrong capitalization (`true` vs `True`)
+- Missing count/offset headers on list commands
+
+We use **`insta` + `insta-cmd`** for snapshot testing CLI output. This is the
+industry standard for Rust CLI testing, used by `rye`, `uv`, `minijinja-cli`,
+and other major projects.
+
+### What uses snapshots vs what doesn't
+
+| Test type | Tool | Why |
+|-----------|------|-----|
+| CLI stdout/stderr/exit code (Level 2) | `insta-cmd` snapshot | Full output captured; any regression caught |
+| API request validation | wiremock request matchers | Verify CLI sends correct params (e.g. `principalId`) |
+| Config file side effects | `assert_eq!` on file content | Run command, read file, verify contents |
+| Unit test return values (Level 1) | `assert_eq!` | Simple value-in/value-out; snapshots are overkill |
+| Structured data assertions | `assert_eq!` on parsed JSON | Need typed comparison, not string |
+| Behavioral checks | `assert!` | Exit code, file existence |
+
+### How `insta-cmd` works
+
+The `assert_cmd_snapshot!` macro runs a `Command`, captures stdout, stderr,
+and exit code, then compares against a stored `.snap` file:
+
+```rust
+use insta_cmd::assert_cmd_snapshot;
+
+#[tokio::test]
+async fn farm_list_prints_farms_in_yaml() {
+    let harness = TestHarness::new().await;
+    farms::mock_list_farms(&harness.server, &[
+        json!({"farmId": "farm-aaa", "displayName": "Alpha Farm"}),
+    ]).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
+}
+```
+
+The snapshot file (`snapshots/cli_farm__farm_list_prints_farms_in_yaml.snap`) stores:
+
+```
+---
+source: crates/deadline-cli/tests/cli_farm.rs
+expression: "harness.cmd(&[\"farm\", \"list\"])"
+---
+success: true
+exit_code: 0
+----- stdout -----
+- farmId: farm-aaa
+  displayName: Alpha Farm
+
+----- stderr -----
+```
+
+### Workflow
+
+1. Write the test with `assert_cmd_snapshot!` — just setup + one macro call
+2. Run `cargo test` — test fails (no snapshot yet), writes `.snap.new` file
+3. Run `cargo insta review` — interactive TUI shows the captured output
+4. Review the output for correctness before accepting. insta doesn't know
+   what's correct; you do.
+5. Accept the snapshot → `.snap.new` becomes `.snap`
+6. Commit the `.snap` file to git alongside the test code
+7. Future runs diff against the snapshot — any output change is a test failure
+8. After intentional changes: `cargo insta review` to accept new output
+
+**Important:** `harness.cmd()` returns `std::process::Command` (for insta-cmd).
+`harness.cli()` returns `assert_cmd::Command` (for `assert!`/`assert_eq!`
+checks on file side effects, config round-trips, etc.). Use `cmd()` for
+snapshot tests, `cli()` for everything else.
+
+### Filters for non-deterministic content
+
+When output contains temp paths, timestamps, or generated IDs, use insta
+filters to redact them:
+
+```rust
+let mut settings = insta::Settings::clone_current();
+settings.add_filter(r"createdAt: .*", "createdAt: [TIMESTAMP]");
+let _guard = settings.bind_to_scope();
+
+assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-abc"]));
+```
+
+### Mock Response Completeness
+
+Stub server mock responses must include **all fields** that the real API
+returns, not just the minimum. If the real `GetFarm` response has 6 fields,
+the mock must have 6 fields. This ensures the Rust code extracts and formats
+every field.
+
+Use the [AWS Deadline Cloud API Reference](https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html)
+to verify response shapes. The `test_specs/compatibility_audit.md` documents
+known gaps.
+
+### Why Snapshots Over Substring Checks
+
+A test that only checks `contains("farm-abc")` will pass even if:
+- Half the fields are missing from the output
+- The YAML key order changed
+- A header line disappeared
+- Boolean values changed capitalization
+
+Snapshot tests catch all of these automatically because they assert on the
+full output.

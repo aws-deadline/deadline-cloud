@@ -119,6 +119,18 @@ file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
 they fail. If a test passes before implementation, it's not testing anything
 new.
 
+**CLI output tests use `insta-cmd` snapshots** (see `docs/TESTING.md` for
+the generic framework). For migration work specifically:
+
+- After accepting a snapshot, **compare it against the Python CLI output**
+  for the same inputs. The Python CLI is the reference implementation —
+  the Rust output should match it.
+- Run the Python CLI with the same arguments and mock data (or real API)
+  and verify the snapshot captures identical output.
+- Key differences to watch for: YAML key ordering, field completeness in
+  `get` commands, header lines on `list` commands, boolean capitalization
+  (`True`/`False` vs `true`/`false`), error message format.
+
 Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
 test case inspiration. Do **not** reference section or case numbers in test
 names or comments — the test specs are migration-era scaffolding, not
