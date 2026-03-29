@@ -4,7 +4,7 @@ The workflow for porting each feature from the Python CLI to Rust.
 
 ## Rules
 
-- **No code before approval.** Steps 0-3 are planning. Present the plan
+- **No code before approval.** Steps 0-2 are planning. Present the plan
   and wait for the human to approve before writing any code.
 - **Cross-reference Python for every feature.** The Python code often does
   things you wouldn't expect from the spec alone. Read it.
@@ -36,10 +36,13 @@ identical observable behavior, not identical internal structure.
    should use owned state on a struct. Ask: "who owns this data?" If
    the answer is "nobody, it's global" — that's the thing to fix.
 
-3. **Type the boundaries.** If Python passes a string like `"deadline"`
-   to select a service client, Rust should use an enum or generic. If
-   Python returns `dict[str, Any]`, Rust should return a concrete type.
-   Push validation to compile time wherever possible.
+3. **Every abstraction must earn its keep.** Before adding a type,
+   wrapper, conversion layer, or any indirection that the Python
+   doesn't have, ask: "what does this prevent or enable?" If the
+   answer is a concrete benefit (compile-time error catching, safety,
+   testability), add it. If the answer is "it's more Rust-like" or
+   "it feels cleaner," don't — that's complexity without value. The
+   simplest correct implementation wins.
 
 4. **Preserve observable behavior exactly.** Same output, same errors,
    same exit codes, same caching semantics (calls are cached, force
@@ -58,7 +61,7 @@ identical observable behavior, not identical internal structure.
 
 ## Steps
 
-### 0. Plan and get approval
+### 0. Plan, study Python, and get approval
 
 Before planning, read these (in order). Skip none.
 
@@ -69,6 +72,13 @@ Before planning, read these (in order). Skip none.
 - [ ] Relevant `test_specs/` sections
 - [ ] Python source for the feature being ported
 
+Read the Python source deeply — not just the happy path, but edge cases,
+surprising behaviors, error messages, and how it interacts with config,
+credentials, and other subsystems. The Python code often does things you
+wouldn't think to do from the spec alone (quirky defaults, silent
+fallbacks, format-specific output details). You need this understanding
+to design the Rust API correctly.
+
 Then apply the Design Principles above and present:
 
 - What you're implementing and which test spec cases it covers
@@ -77,23 +87,12 @@ Then apply the Design Principles above and present:
   struct/trait/module layout that satisfies the test spec behaviors.
   Reference the Design Principles to justify structural divergences
   from Python.
+- Edge cases and surprising Python behaviors that affect the design
 - What's blocked or deferred and why
 
 **Wait for approval before proceeding to step 1.**
 
-### 1. Study the Python implementation
-
-Read the Python source for the feature being ported. Understand:
-- What the function/command actually does (not just what you'd assume)
-- Edge cases and surprising behaviors
-- How it interacts with config, credentials, and other subsystems
-- Error messages and exit codes
-
-This step exists because the Python code often does things you wouldn't
-think to do from the spec alone — quirky defaults, silent fallbacks,
-format-specific output details.
-
-### 2. Review existing implementation for improvements
+### 1. Review existing implementation for improvements
 
 Before writing new code, audit what's already implemented against the
 Python source. Look for:
@@ -103,8 +102,9 @@ Python source. Look for:
   FromStr, concrete error types instead of Box<dyn Error>)
 
 Implement improvements first, commit, then proceed to new features.
+Skip this step if the crate is a stub with no existing implementation.
 
-### 3. Update the crate spec
+### 2. Update the crate spec
 
 Write up the feature's behavior and implementation approach in the relevant
 `docs/specs/<crate>.md`. Describe what it does and how it should work in
@@ -112,7 +112,7 @@ Rust, but keep it at the design level — no code blocks unless they're
 needed to show a non-obvious interface or data format. This becomes the
 reference for both the tests and the implementation.
 
-### 4. Red — Write failing tests
+### 3. Red — Write failing tests
 
 Write tests that assert on observable behavior: stdout, stderr, exit code,
 file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
@@ -124,15 +124,15 @@ test case inspiration. Do **not** reference section or case numbers in test
 names or comments — the test specs are migration-era scaffolding, not
 maintained after tests are written.
 
-### 5. Green — Implement
+### 4. Green — Implement
 
 Write the minimum code to make the tests pass.
 
-### 6. Refactor
+### 5. Refactor
 
 Clean up the implementation. Tests must still pass. Commit.
 
-### 7. Update docs
+### 6. Update docs
 
 Update `docs/specs/<crate>.md` if the implementation diverged from the
 initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships
