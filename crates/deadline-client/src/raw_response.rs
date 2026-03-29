@@ -1,13 +1,31 @@
 //! Capture raw JSON response body from AWS SDK operations.
 //!
-//! SDK output types don't implement Serialize, so for `get_*` commands
-//! that dump the full response, we intercept the raw HTTP response body
-//! after deserialization (when the SDK has buffered it) and parse it as
-//! serde_json::Value. This matches Python/boto3 behavior where responses
-//! are raw dicts.
+//! SDK output types don't implement Serialize, so for all API calls we
+//! intercept the raw HTTP response body after deserialization (when the
+//! SDK has buffered it) and parse it as serde_json::Value. This matches
+//! Python/boto3 behavior where responses are raw dicts.
 //!
 //! DateTime strings are converted from ISO 8601 (`2024-12-18T00:37:38Z`)
 //! to Python/boto3 format (`2024-12-18 00:37:38+00:00`).
+//!
+//! ## Known differences from Python/boto3
+//!
+//! - **Fractional second precision:** The API returns milliseconds (e.g.
+//!   `.624Z`). boto3 parses this into a Python `datetime` with microseconds
+//!   (`624000`), and `datetime.__str__()` always displays 6 fractional
+//!   digits (`.624000`). We preserve the API's original precision (`.624`).
+//!   The values are identical — the trailing zeros are a Python display
+//!   artifact, not additional precision from the API.
+//!
+//! - **Field order:** Raw API response order may differ from Python/boto3,
+//!   which reorders fields based on its Smithy service model.
+//!
+//! - **Extra fields:** The raw API response may include fields (e.g. `arn`)
+//!   that boto3 strips based on its service model.
+//!
+//! - **Float precision:** `serde_json` parses JSON `1.0` as integer `1`
+//!   when there is no fractional part. Python preserves `1.0`. This
+//!   affects fields like `costScaleFactor`.
 
 use aws_sdk_deadline::config::interceptors::AfterDeserializationInterceptorContextRef;
 use aws_sdk_deadline::config::{ConfigBag, Intercept, RuntimeComponents};
@@ -100,5 +118,53 @@ fn remove_nulls(val: &mut Value) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use test_case::test_case;
+
+    #[test_case("2024-12-18T00:37:38Z", "2024-12-18 00:37:38+00:00" ; "no fractional seconds")]
+    #[test_case("2023-01-27T07:37:53.624Z", "2023-01-27 07:37:53.624+00:00" ; "fractional seconds preserved")]
+    fn convert_datetime_string(input: &str, expected: &str) {
+        let mut val = json!(input);
+        convert_datetimes(&mut val);
+        assert_eq!(val.as_str().unwrap(), expected);
+    }
+
+    // Python/boto3 pads fractional seconds to 6 digits (e.g. .624000) because
+    // datetime objects always display microsecond precision. We preserve the
+    // API's original precision (.624) since the values are identical.
+    // This is an accepted cosmetic difference.
+
+    #[test_case("not-a-date" ; "plain string")]
+    #[test_case("2024-12-18" ; "date only")]
+    #[test_case("farm-abc123" ; "resource id")]
+    fn non_datetime_string_unchanged(input: &str) {
+        let mut val = json!(input);
+        convert_datetimes(&mut val);
+        assert_eq!(val.as_str().unwrap(), input);
+    }
+
+    #[test]
+    fn convert_datetimes_in_nested_object() {
+        let mut val = json!({
+            "farmId": "farm-abc",
+            "createdAt": "2024-12-18T00:37:38Z",
+            "jobs": [{"startedAt": "2023-01-27T07:37:53.624Z"}]
+        });
+        convert_datetimes(&mut val);
+        assert_eq!(val["createdAt"], "2024-12-18 00:37:38+00:00");
+        assert_eq!(val["jobs"][0]["startedAt"], "2023-01-27 07:37:53.624+00:00");
+    }
+
+    #[test]
+    fn remove_nulls_from_object() {
+        let mut val = json!({"a": "keep", "b": null, "c": {"d": null, "e": "keep"}});
+        remove_nulls(&mut val);
+        assert_eq!(val, json!({"a": "keep", "c": {"e": "keep"}}));
     }
 }

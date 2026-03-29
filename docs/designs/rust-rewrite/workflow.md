@@ -136,19 +136,34 @@ layer only ever sees `serde_json::Value`.
 They return a single page, so no loop is needed — just a single
 `ResponseBodyCapture` call.
 
-### Field ordering
+### Known differences from Python/boto3
 
-Enable `serde_json`'s `preserve_order` feature (already done in
-`Cargo.toml`). Field order comes from the raw API response JSON. This
-may differ from Python/boto3's order (boto3 reorders based on its
-service model). This is an accepted difference.
+The `ResponseBodyCapture` approach captures the raw HTTP JSON, which
+differs from Python/boto3 in several cosmetic ways. These are accepted
+differences, verified by comparing `deadline` (Python) vs
+`./target/debug/deadline` (Rust) against the real API using `ada`
+credentials.
+
+- **Field order:** Raw API response order may differ from boto3, which
+  reorders fields based on its Smithy service model.
+- **Extra fields:** The raw response may include fields (e.g. `arn`)
+  that boto3 strips based on its service model.
+- **Float precision:** `serde_json` parses JSON `1.0` as integer `1`
+  when there is no fractional part. Python preserves `1.0`. Affects
+  fields like `costScaleFactor`. **Action item:** investigate
+  `serde_json` float preservation or post-processing.
+- **Fractional second precision:** The API returns milliseconds (e.g.
+  `22:35:01.624Z`). boto3 parses into Python `datetime(microsecond=624000)`,
+  and `str()` always displays 6 digits (`.624000`). We preserve the
+  API's original precision (`.624`). The trailing zeros are a Python
+  display artifact — the API wire format was verified to send `.624Z`,
+  not `.624000Z`.
 
 ### DateTime formatting
 
-The SDK uses `aws_smithy_types::DateTime`. Its `fmt(Format::DateTime)`
-produces `2024-12-18T00:37:38Z`. Python/boto3 produces
-`2024-12-18 00:37:38+00:00`. Use the `fmt_datetime` helper in `api.rs`
-which converts between these formats.
+The `ResponseBodyCapture` interceptor converts ISO 8601 datetime strings
+to Python/boto3 format: `2024-12-18T00:37:38Z` → `2024-12-18 00:37:38+00:00`.
+Fractional seconds are preserved as-is from the API response.
 
 ### Error formatting
 
@@ -263,16 +278,23 @@ The Python CLI is the reference implementation — the Rust output must match.
    - Header lines on `list` commands (count/offset)
    - Boolean capitalization (`True`/`False` vs `true`/`false`)
    - Error message format
+   - Known accepted differences (see "Known differences from Python/boto3"
+     section above)
 4. If the Rust output differs from Python, fix the implementation first —
-   do not accept a snapshot that doesn't match
+   do not accept a snapshot that doesn't match (unless it's a documented
+   accepted difference)
 5. Once verified, run `cargo insta review` to accept
 
-When possible, also verify against the real API:
+When possible, also verify against the real API. Obtain AWS credentials
+for a test account via your credential management tool (e.g. AWS SSO,
+credential process, environment variables), then diff the outputs:
 ```bash
 diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
 ```
 This catches issues that mock-based tests miss (e.g. fields the real API
-returns that the mock omits).
+returns that the mock omits, datetime precision differences, extra fields
+that boto3 strips). Any differences should be either fixed or documented
+in the "Known differences" section.
 
 **Do not use `INSTA_UPDATE=always` without reviewing each snapshot.**
 

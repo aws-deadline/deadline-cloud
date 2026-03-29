@@ -2,7 +2,7 @@ use clap::Subcommand;
 use deadline_client::api;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
+use super::helpers::{apply_profile, require_setting};
 
 #[derive(Subcommand)]
 pub enum WorkerAction {
