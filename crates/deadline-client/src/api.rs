@@ -95,31 +95,70 @@ pub async fn get_farm(farm_id: &str, config: Option<&IniConfig>) -> Result<Value
     Ok(Value::Object(m))
 }
 
+// ---------------------------------------------------------------------------
+// Queue
+// ---------------------------------------------------------------------------
+
 pub async fn list_queues(farm_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
     let (user_id, _) = auth::get_user_and_identity_store_id(config);
+
+    let mut builder = client.list_queues().farm_id(farm_id);
+    if let Some(ref uid) = user_id { builder = builder.principal_id(uid.as_str()); }
+
+    let mut stream = builder.into_paginator().items().send();
     let mut all = Vec::new();
-    let mut next_token: Option<String> = None;
-    loop {
-        let mut req = client.list_queues().farm_id(farm_id);
-        if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
-        if let Some(t) = next_token.take() { req = req.next_token(t); }
-        let resp = req.send().await.map_err(sdk_err)?;
-        for q in resp.queues() {
-            all.push(serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}));
-        }
-        match resp.next_token() { Some(t) => next_token = Some(t.to_string()), None => break }
+    while let Some(item) = stream.try_next().await.map_err(sdk_err)? {
+        let mut m = serde_json::Map::new();
+        put(&mut m, "queueId", item.queue_id());
+        put(&mut m, "displayName", item.display_name());
+        all.push(Value::Object(m));
     }
     Ok(serde_json::json!({"queues": all}))
 }
 
 pub async fn get_queue(farm_id: &str, queue_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
-    let resp = client.get_queue().farm_id(farm_id).queue_id(queue_id).send().await
-        .map_err(sdk_err)?;
+    let resp = client.get_queue().farm_id(farm_id).queue_id(queue_id).send().await.map_err(sdk_err)?;
+
     let mut m = serde_json::Map::new();
-    m.insert("queueId".into(), Value::String(resp.queue_id().to_string()));
-    m.insert("displayName".into(), Value::String(resp.display_name().to_string()));
+    put(&mut m, "queueId", resp.queue_id());
+    put(&mut m, "displayName", resp.display_name());
+    put_opt(&mut m, "description", resp.description());
+    put(&mut m, "farmId", resp.farm_id());
+    put(&mut m, "status", resp.status().as_str());
+    if let Some(reason) = resp.blocked_reason() {
+        put(&mut m, "blockedReason", reason.as_str());
+    }
+    put_opt(&mut m, "defaultBudgetAction", Some(resp.default_budget_action().as_str()));
+    if let Some(jas) = resp.job_attachment_settings() {
+        m.insert("jobAttachmentSettings".into(), serde_json::json!({
+            "s3BucketName": jas.s3_bucket_name(),
+            "rootPrefix": jas.root_prefix(),
+        }));
+    }
+    put_opt(&mut m, "roleArn", resp.role_arn());
+    if let Some(jru) = resp.job_run_as_user() {
+        let mut jru_map = serde_json::Map::new();
+        if let Some(posix) = jru.posix() {
+            jru_map.insert("posix".into(), serde_json::json!({
+                "user": posix.user(),
+                "group": posix.group(),
+            }));
+        }
+        if let Some(win) = jru.windows() {
+            jru_map.insert("windows".into(), serde_json::json!({
+                "user": win.user(),
+                "passwordArn": win.password_arn(),
+            }));
+        }
+        jru_map.insert("runAs".into(), Value::String(jru.run_as().as_str().to_string()));
+        m.insert("jobRunAsUser".into(), Value::Object(jru_map));
+    }
+    put_dt(&mut m, "createdAt", resp.created_at());
+    put(&mut m, "createdBy", resp.created_by());
+    put_dt_opt(&mut m, "updatedAt", resp.updated_at());
+    put_opt(&mut m, "updatedBy", resp.updated_by());
     Ok(Value::Object(m))
 }
 
