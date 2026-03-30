@@ -37,7 +37,7 @@ and gates all planning and implementation work.
 | Crate | Sections | What's done |
 |-------|----------|-------------|
 | `deadline-models` | §51, §52 | Error types, submitter info |
-| `deadline-common` | §36 | Path utilities |
+| `deadline-common` | §36, §14 | Path utilities, `TelemetryClient` (background sender, opt-out, retry, identifier management) |
 | `deadline-config` | §1, §2 | INI read/write, hierarchical settings, str2bool, get/set/clear, get_best_profile_for_farm |
 | `deadline-test-server` | — | TestHarness, wiremock stub server, STS/Deadline REST mocks (with pagination) |
 | `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |

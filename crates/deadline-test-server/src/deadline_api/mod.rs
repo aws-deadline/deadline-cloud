@@ -5,5 +5,6 @@ pub mod jobs;
 pub mod workers;
 pub mod sessions;
 pub mod queue_resources;
+pub mod telemetry;
 pub mod errors;
 pub mod sts;

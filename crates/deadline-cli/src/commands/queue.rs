@@ -1,5 +1,6 @@
 use clap::Subcommand;
 use deadline_client::api;
+use deadline_common::telemetry::TelemetryClient;
 
 use super::config::CliError;
 use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
@@ -83,30 +84,56 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             }
         }
         QueueAction::ExportCredentials { profile, farm_id, queue_id, mode } => {
+            let start = std::time::Instant::now();
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = match mode.to_uppercase().as_str() {
+
+            let mut telemetry = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config.as_ref());
+            if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+                telemetry.initialize(&ep, config.as_ref());
+            }
+
+            let result = match mode.to_uppercase().as_str() {
                 "READ" => api::assume_queue_role_for_read(&farm, &queue, config.as_ref()).await,
                 _ => api::assume_queue_role_for_user(&farm, &queue, config.as_ref()).await,
+            };
+
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let mut details = std::collections::HashMap::new();
+            details.insert("mode".into(), serde_json::json!(mode.to_uppercase()));
+            details.insert("queue_id".into(), serde_json::json!(queue));
+            details.insert("duration_ms".into(), serde_json::json!(duration_ms));
+
+            match result {
+                Ok(resp) => {
+                    details.insert("is_success".into(), serde_json::json!(true));
+                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+
+                    let creds = &resp["credentials"];
+                    // credential_process spec requires RFC 3339 timestamps (T separator).
+                    // ResponseBodyCapture converts datetimes to Python display format
+                    // (space separator), so convert back for machine-readable output.
+                    // See: https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
+                    let expiration = creds["expiration"].as_str().unwrap_or("")
+                        .replacen(' ', "T", 1);
+                    let output = serde_json::json!({
+                        "Version": 1,
+                        "AccessKeyId": creds["accessKeyId"],
+                        "SecretAccessKey": creds["secretAccessKey"],
+                        "SessionToken": creds["sessionToken"],
+                        "Expiration": expiration,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    Ok(())
+                }
+                Err(e) => {
+                    details.insert("is_success".into(), serde_json::json!(false));
+                    details.insert("error_type".into(), serde_json::json!(e.to_string()));
+                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                    Err(CliError::Operation(format!("Failed to export credentials:\n{e}")))
+                }
             }
-            .map_err(|e| CliError::Operation(format!("Failed to export credentials:\n{e}")))?;
-            let creds = &resp["credentials"];
-            // credential_process spec requires RFC 3339 timestamps (T separator).
-            // ResponseBodyCapture converts datetimes to Python display format
-            // (space separator), so convert back for machine-readable output.
-            // See: https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
-            let expiration = creds["expiration"].as_str().unwrap_or("")
-                .replacen(' ', "T", 1);
-            let output = serde_json::json!({
-                "Version": 1,
-                "AccessKeyId": creds["accessKeyId"],
-                "SecretAccessKey": creds["secretAccessKey"],
-                "SessionToken": creds["sessionToken"],
-                "Expiration": expiration,
-            });
-            println!("{}", serde_json::to_string_pretty(&output).unwrap());
-            Ok(())
         }
         QueueAction::GetStorageProfile { profile, farm_id, queue_id, storage_profile_id } => {
             let config = apply_profile(profile)?;

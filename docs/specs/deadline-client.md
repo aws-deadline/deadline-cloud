@@ -193,8 +193,22 @@ existing patterns. List functions use the paginated helper.
 
 - Session caching and user-agent construction (§3 cases 5-20)
 - Queue user credentials — custom credential provider (§5)
-- Login/logout (§6)
-- Queue parameters (§8)
+- Queue parameters (§8) — blocked on `deadline-job-bundle` §16
+
+### Telemetry wiring (deferred)
+
+The `TelemetryClient` exists in `deadline-common` but is not yet wired
+into API calls or CLI commands. The following need telemetry recording:
+
+- All paginated list APIs (`list_farms`, etc.) — latency events
+- `login`/`logout` — latency events
+- `assume_queue_role_for_user/read` — latency events
+- `get_storage_profile_for_queue` — latency event
+- `get_queue_parameter_definitions` — latency event
+- `queue export-credentials` CLI — success/fail event with mode, duration
+- `bundle submit` CLI — submission events (blocked on §11)
+
+Wiring will be done incrementally as each command is touched.
 
 ## Deferred
 
