@@ -44,15 +44,11 @@ and gates all planning and implementation work.
 | `deadline-cli` | §37 (cases 48-53), §43 (cases 1-7) | `suggest_resources_on_client_error`, `deadline worker list/get`, SDK error formatting with error codes |
 | `deadline-cli` | — | All CLI test files converted to `insta-cmd` snapshots: `cli_auth`, `cli_config`, `cli_root`, `cli_suggest`, `cli_dcm`, `cli_common` |
 
-### In Progress
-
-| Crate | Sections | What's next |
-|-------|----------|-------------|
-| `deadline-client` | §3-10 | Session caching/user-agent (§3), queue user creds (§5), login/logout (§6), queue params (§8), queue creds (§9), storage profile (§10) |
-
 ### Risk Spikes (must pass before bulk implementation)
 
-See `migration_strategy.md` § "Fail-Fast Strategy" for full details.
+⚠️ **These block all other implementation work.** A fresh agent should
+start here, not at "In Progress." See `migration_strategy.md` §
+"Fail-Fast Strategy" for full details and pass/fail gates.
 
 | Spike | Status | Proves |
 |-------|--------|--------|
@@ -60,6 +56,12 @@ See `migration_strategy.md` § "Fail-Fast Strategy" for full details.
 | GUI FFI inside DCC (Blender) | Not started | Shared library loads in real DCC Python environment without conflicts |
 | S3 transfer performance | Not started | Rust S3 throughput ≥ Python boto3 transfer manager |
 | Job attachment hashing | Not started | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
+
+### In Progress
+
+| Crate | Sections | What's next |
+|-------|----------|-------------|
+| `deadline-client` | §3-10 | Session caching/user-agent (§3), queue user creds (§5), login/logout (§6), queue params (§8), queue creds (§9), storage profile (§10) |
 
 ### Not Started
 
