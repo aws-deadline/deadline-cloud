@@ -6,6 +6,10 @@ use super::helpers::apply_profile;
 
 #[derive(Subcommand)]
 pub enum AuthAction {
+    /// Log in via Deadline Cloud Monitor
+    Login,
+    /// Log out of Deadline Cloud Monitor
+    Logout,
     /// Check authentication status
     Status {
         /// The AWS profile to use
@@ -25,6 +29,20 @@ pub fn run(action: AuthAction) -> Result<(), CliError> {
 
 async fn run_async(action: AuthAction) -> Result<(), CliError> {
     match action {
+        AuthAction::Login => {
+            let profile_name = session::display_profile_name(None);
+            println!("Logging into AWS Profile {profile_name:?} for AWS Deadline Cloud");
+            let message = auth::login(None)
+                .map_err(CliError::Operation)?;
+            println!("\nSuccessfully logged in: {message}\n");
+            Ok(())
+        }
+        AuthAction::Logout => {
+            auth::logout(None)
+                .map_err(CliError::Operation)?;
+            println!("Successfully logged out of all Deadline Cloud monitor AWS profiles");
+            Ok(())
+        }
         AuthAction::Status { profile, output } => status(profile, &output).await,
     }
 }

@@ -71,3 +71,21 @@ async fn auth_status_json_api_unavailable() {
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--output", "json"]));
 }
+
+// --- auth login ---
+
+// Non-DCM profile → error (no monitor_id in profile)
+#[tokio::test]
+async fn auth_login_non_dcm_profile_prints_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["auth", "login"]));
+}
+
+// --- auth logout ---
+
+// Non-DCM profile → error
+#[tokio::test]
+async fn auth_logout_non_dcm_profile_prints_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["auth", "logout"]));
+}
