@@ -4,6 +4,10 @@ The workflow for porting each feature from the Python CLI to Rust.
 
 ## Rules
 
+- **Risk spikes before bulk implementation.** If the current work touches
+  a project-blocking risk (GUI FFI, S3 performance, DCC compatibility),
+  build the minimal spike first and prove it works before writing the
+  full implementation. See `migration_strategy.md` § "Fail-Fast Strategy".
 - **No code before approval.** Steps 0-2 are planning. Present the plan
   and wait for the human to approve before writing any code.
 - **Cross-reference Python for every feature.** The Python code often does

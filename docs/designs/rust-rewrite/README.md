@@ -50,6 +50,17 @@ and gates all planning and implementation work.
 |-------|----------|-------------|
 | `deadline-client` | §3-10 | Session caching/user-agent (§3), queue user creds (§5), login/logout (§6), queue params (§8), queue creds (§9), storage profile (§10) |
 
+### Risk Spikes (must pass before bulk implementation)
+
+See `migration_strategy.md` § "Fail-Fast Strategy" for full details.
+
+| Spike | Status | Proves |
+|-------|--------|--------|
+| GUI FFI round-trip (Python ↔ Rust ↔ Qt) | Not started | Core architecture works: ctypes loading, C ABI calls, callbacks, thread safety |
+| GUI FFI inside DCC (Blender) | Not started | Shared library loads in real DCC Python environment without conflicts |
+| S3 transfer performance | Not started | Rust S3 throughput ≥ Python boto3 transfer manager |
+| Job attachment hashing | Not started | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
+
 ### Not Started
 
 | Crate | Phase | Sections | Scope |

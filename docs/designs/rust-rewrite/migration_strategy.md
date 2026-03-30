@@ -157,9 +157,100 @@ introspection (~100-200 lines per plugin). Can be revisited per-DCC later.
 | After Effects | `deadline-cli` binary | No | N/A |
 | Worker Agent | Direct Rust crate deps (monorepo) | No | N/A |
 
+## Risk Assessment
+
+The migration's success depends on several technical bets that have not yet
+been proven. These are ordered by severity — if any "project-blocking" risk
+fails, the migration strategy must be revised or abandoned.
+
+### Project-blocking risks
+
+| Risk | Why it matters | What could go wrong |
+|------|---------------|---------------------|
+| **GUI FFI (Python ↔ Rust ↔ Qt)** | The entire architecture assumes Python QWidgets can call Rust via ctypes C ABI. Phases 3, 4, 6, and the DCC strategy all depend on this. | ctypes callbacks crash or deadlock with Qt's event loop. Memory ownership across the FFI boundary causes segfaults. Platform differences (`.so`/`.dylib`/`.dll`) cause loading failures. Thread safety between QThread worker and Qt main thread breaks. |
+| **Job attachments S3 performance** | "Speed" is goal #1. Job attachment hashing and S3 transfer are the hot paths. If Rust is not faster than Python here, the primary justification for the migration weakens. | Rust S3 SDK throughput doesn't match boto3's transfer manager. Multipart upload/download coordination is more complex than expected. Hash computation parallelism doesn't scale. |
+| **DCC plugin Qt version conflicts** | Each DCC ships its own Qt and Python version. The shared library must load cleanly in all of them. | Maya ships Qt 5.15, another DCC ships Qt 6. The Rust shared library links against system libraries that conflict with the DCC's bundled ones. Python version differences cause ctypes ABI issues. |
+
+### Significant risks (recoverable but costly)
+
+| Risk | Why it matters | What could go wrong |
+|------|---------------|---------------------|
+| **VFS (FUSE) on all platforms** | §28 has 89 test cases. VFS is Linux-only (FUSE). macOS and Windows need different approaches. | Rust FUSE libraries are immature. Platform-specific code paths multiply testing burden. May need to defer VFS and use COPIED mode only. |
+| **Worker agent correctness at scale** | Runs on every worker machine in production. A bug causes job failures across entire fleets. | Subtle behavioral differences from Python cause intermittent failures that only appear under production load. |
+| **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/specs/deadline-client.md` § "Future Improvements" for the Smithy model filtering approach. |
+
+### Low risks (just labor)
+
+Remaining CLI commands, config operations, telemetry, MCP server. These use
+proven patterns and well-understood APIs. The risk is schedule, not feasibility.
+
+## Fail-Fast Strategy
+
+The phased rollout below is ordered by **shipping value**, but development
+must prioritize **risk reduction**. Before investing months in bulk
+implementation, we must prove the high-risk technical bets work through
+minimal vertical spikes.
+
+### Required spikes (must pass before bulk Phase 1 work)
+
+Each spike is a minimal proof-of-concept — days of work, not weeks. The
+goal is to surface blockers early enough to change course.
+
+| Spike | Proves | Scope | Pass criteria |
+|-------|--------|-------|---------------|
+| **GUI FFI round-trip** | Python ↔ Rust ↔ Qt works | Build a minimal `deadline-gui-ffi` that exposes `get_auth_status()`. Load it from Python via ctypes. Display the result in a QDialog. Wire a callback (e.g. progress) from Rust back to Python. | Loads on Linux, macOS, Windows. Callback doesn't crash. Qt event loop stays responsive. |
+| **GUI FFI inside a DCC** | Shared library loads in a real DCC Python environment | Load the spike `.so`/`.dylib` from inside Blender's Python and call `get_auth_status()`. | Returns correct result. No symbol conflicts. No Qt version crash. |
+| **S3 transfer performance** | Rust S3 throughput ≥ Python | Implement minimal S3 multipart upload/download using `aws-sdk-s3`. Benchmark against Python `boto3.s3.transfer` with a 1 GB file. | Rust throughput ≥ Python throughput. |
+| **Job attachment hashing** | Parallel hashing is fast | Implement `xxh128` hashing of a directory tree with rayon parallelism. Benchmark against Python's single-threaded implementation. | Rust is measurably faster. Hashes match Python output byte-for-byte. |
+
+### Spike ordering and gates
+
+```
+Spike: GUI FFI round-trip
+  │
+  ├─ PASS → Spike: GUI FFI inside DCC (Blender)
+  │           │
+  │           ├─ PASS → Phase 3 is viable. Continue Phase 1 with confidence.
+  │           └─ FAIL → Investigate DCC-specific issues. If unsolvable,
+  │                     revise DCC strategy (keep Python for GUI entirely?).
+  │
+  └─ FAIL → STOP. The core architecture doesn't work.
+            Options: (a) debug and fix, (b) use PyO3 instead of ctypes,
+            (c) keep GUI in Python and only migrate CLI + worker agent.
+
+Spike: S3 transfer performance
+  │
+  ├─ PASS → Job attachments crate is viable. Proceed with §19-35.
+  └─ FAIL → Investigate. If Rust SDK is the bottleneck, consider
+            calling S3 via raw HTTP or using the CRT-based transfer
+            manager. If fundamentally slower, worker agent migration
+            (Phase 2) loses its primary justification.
+
+Spike: Job attachment hashing
+  │
+  ├─ PASS → Proceed with attachment data model (§19-20).
+  └─ FAIL → Unlikely (pure computation), but if hashes don't match,
+            investigate xxh128 implementation differences.
+```
+
+### Development order within Phase 1
+
+After spikes pass, Phase 1 implementation follows this order:
+
+1. **Library crates that the spikes already validated** — job attachment
+   models/hashing (§19-20), then S3 transfer (§21-22)
+2. **Remaining `deadline-client` APIs** — §3-14 (session, auth, queue
+   params, credentials, login/logout, telemetry)
+3. **`deadline-job-bundle`** — §15-18 (bundle loading, parameters)
+4. **Remaining CLI commands** — §37-49 (wired up as APIs become available)
+5. **Full `deadline-job-attachments`** — §23-35 (caches, manifests, VFS,
+   path mapping, progress tracking)
+
 ## Phased Rollout
 
-Each phase ships independently and delivers value on its own.
+Each phase ships independently and delivers value on its own. The phases
+are ordered by shipping sequence, but risk spikes (above) run first and
+may cause phases to be revised or reordered.
 
 ### Phase 1: Rust CLI Binary (in progress)
 
@@ -192,7 +283,8 @@ monorepo.
 - Session management and action execution
 - File permission management
 
-**Prerequisites:** Phase 1 library crates complete.
+**Prerequisites:** Phase 1 library crates complete. S3 transfer performance
+spike passed.
 
 **Ship criteria:**
 - Passes existing integration test suite
@@ -213,7 +305,8 @@ widgets to call Rust for all business logic.
 - `deadline config gui` and `deadline bundle gui-submit` work from Rust CLI
   (CLI spawns Python process that loads GUI widgets + shared library)
 
-**Prerequisites:** Phase 1 library crates complete.
+**Prerequisites:** Phase 1 library crates complete. GUI FFI spikes passed
+(both standalone and inside-DCC).
 
 **Ship criteria:**
 - Visual and behavioral parity with current Python GUI
@@ -237,6 +330,9 @@ instead of importing Python `deadline.client`.
 | 5 | Maya | More complex (multiple render layers, cameras) |
 | 6 | 3ds Max | Similar to Maya, plus render elements widget |
 | 7 | Houdini | Most complex (custom submission flow, direct S3 access) |
+
+**Prerequisites:** Phase 3 complete. GUI FFI inside-DCC spike passed for
+the target DCC.
 
 **Ship criteria per plugin:**
 - Submission produces identical job bundles
@@ -266,11 +362,6 @@ all API calls).
 - All MCP tools produce identical results to Python implementation
 - Server starts via `deadline mcp-server` and responds to MCP protocol
 - Telemetry events match Python implementation format
-
-### Phase 6: Migrate Unreal to Full Rust
-
-**Goal:** Rewrite Unreal submitter using `deadline-gui-ffi` C ABI directly.
-No Python.
 
 ### Phase 6: Migrate Unreal to Full Rust
 
