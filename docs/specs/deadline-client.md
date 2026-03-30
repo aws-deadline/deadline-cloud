@@ -132,22 +132,76 @@ Functions:
 - `list_storage_profiles_for_queue(farm_id, queue_id, config)` — paginated,
   returns `{"storageProfiles": [...]}`. Does NOT inject `principalId`.
 
+## Auth (`auth.rs`) — login/logout (§6)
+
+`login(on_cancellation_check, config)`: checks credential source is DCM,
+reads `deadline-cloud-monitor.path` from config, spawns the monitor
+process with `["login", "--profile", profile_name]`, polls
+`check_authentication_status` in a 0.5s loop until authenticated or
+process exits. Returns success message or error.
+
+`logout(config)`: checks credential source is DCM, runs the monitor
+with `["logout", "--profile", profile_name]` via `Command::output()`,
+returns stdout. Errors if not DCM profile or monitor not found.
+
+Both functions only support DCM-created profiles (those with
+`monitor_id` in the AWS config profile section).
+
+## Auth (`auth.rs`) — additional functions
+
+`get_monitor_id(config)`: returns `Option<String>` — the `monitor_id`
+from the AWS profile if it's a DCM profile, otherwise `None`.
+
+## API (`api.rs`) — paginated list helper
+
+All paginated list functions use a shared `paginated_list` helper that
+eliminates the duplicated `nextToken` loop. The helper takes a closure
+that builds each page request and the JSON key containing the items
+array. This replaces the copy-pasted loops in `list_farms`,
+`list_queues`, `list_fleets`, `list_jobs`.
+
+## API (`api.rs`) — queue credentials (§9)
+
+`assume_queue_role_for_user(farm_id, queue_id, config)` and
+`assume_queue_role_for_read(farm_id, queue_id, config)`: thin wrappers
+using `ResponseBodyCapture`. Return the full API response as
+`serde_json::Value`.
+
+### DateTime format for credential export
+
+The `export-credentials` CLI command outputs JSON consumed by the AWS
+SDK's `credential_process` feature. The `Expiration` field must be an
+RFC 3339 timestamp (requires `T` separator between date and time). The
+`ResponseBodyCapture` interceptor converts datetimes to Python display
+format (space separator: `2024-12-18 01:00:00+00:00`), so the CLI
+converts back to RFC 3339 (`2024-12-18T01:00:00+00:00`) for this
+specific output path. See
+https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
+
+## API (`api.rs`) — storage profile (§10)
+
+`get_storage_profile_for_queue(farm_id, queue_id, storage_profile_id, config)`:
+single `ResponseBodyCapture` call. Returns the full API response as
+`serde_json::Value`.
+
+## API (`api.rs`) — diagnostics (§13)
+
+`get_session`, `list_sessions`, `list_steps`, `list_tasks`: follow
+existing patterns. List functions use the paginated helper.
+
 ## Not Yet Implemented
 
 - Session caching and user-agent construction (§3 cases 5-20)
-- Queue user credentials (§5)
+- Queue user credentials — custom credential provider (§5)
 - Login/logout (§6)
 - Queue parameters (§8)
-- Queue credentials — assume role (§9)
-- Storage profile (§10)
 
 ## Deferred
 
 - §11 (submit job bundle) — blocked on `deadline-job-bundle` and
   `deadline-job-attachments`
 - §12 (job monitoring & logs) — depends on CloudWatch Logs SDK +
-  queue/fleet role credential flows
-- §13 (diagnostics) — thin wrappers, deferred to keep scope focused
+  queue/fleet role credential flows from §5/§9
 - §14 (telemetry) — separate subsystem with background thread, retry
   logic, endpoint prefixing
 - §34 (AWS client helpers) — part of `deadline-job-attachments`

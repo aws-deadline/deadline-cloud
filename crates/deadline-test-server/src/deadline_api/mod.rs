@@ -3,5 +3,7 @@ pub mod queues;
 pub mod fleets;
 pub mod jobs;
 pub mod workers;
+pub mod sessions;
+pub mod queue_resources;
 pub mod errors;
 pub mod sts;

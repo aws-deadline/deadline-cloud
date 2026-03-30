@@ -165,6 +165,25 @@ model filtering step could eliminate both — see
   when there is no fractional part. Python preserves `1.0`. Affects
   fields like `costScaleFactor`. **Action item:** investigate
   `serde_json` float preservation or post-processing.
+
+### DateTime format: display vs machine-readable
+
+The `ResponseBodyCapture` interceptor converts all datetime strings to
+Python display format (space separator: `2024-12-18 00:37:38+00:00`).
+This matches Python's `str(datetime)` and is correct for YAML/display
+output.
+
+However, some output paths require RFC 3339 format (T separator:
+`2024-12-18T00:37:38+00:00`). Notably, `credential_process` JSON
+requires RFC 3339 per the AWS SDK spec
+(https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html).
+Python uses `datetime.isoformat()` for these paths. In Rust, the CLI
+must convert the space back to `T` when producing machine-readable
+timestamps. Known paths requiring RFC 3339:
+
+- `queue export-credentials` → `Expiration` field
+- Queue credential provider `expiry_time` (§5, not yet implemented)
+- Job submission datetime fields (§11, not yet implemented)
 - **Fractional second precision:** The API returns milliseconds (e.g.
   `22:35:01.624Z`). boto3 parses into Python `datetime(microsecond=624000)`,
   and `str()` always displays 6 digits (`.624000`). We preserve the

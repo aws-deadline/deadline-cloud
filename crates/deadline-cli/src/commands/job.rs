@@ -23,6 +23,36 @@ pub enum JobAction {
         #[arg(long)] queue_id: Option<String>,
         #[arg(long)] job_id: Option<String>,
     },
+    /// Get details of a specific session
+    GetSession {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long)] session_id: String,
+    },
+    /// List sessions for a job
+    ListSessions {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+    },
+    /// List steps for a job
+    ListSteps {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+    },
+    /// List tasks for a step
+    ListTasks {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long)] step_id: String,
+    },
 }
 
 pub fn run(action: JobAction) -> Result<(), CliError> {
@@ -99,6 +129,50 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     )))
                 }
             }
+        }
+        JobAction::GetSession { profile, farm_id, queue_id, job_id, session_id } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let resp = api::get_session(&farm, &queue, &job, &session_id, config.as_ref())
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
+            println!("{}", crate::common::cli_object_repr(&resp));
+            Ok(())
+        }
+        JobAction::ListSessions { profile, farm_id, queue_id, job_id } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let resp = api::list_sessions(&farm, &queue, &job, config.as_ref())
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
+            println!("{}", crate::common::cli_object_repr(&resp["sessions"]));
+            Ok(())
+        }
+        JobAction::ListSteps { profile, farm_id, queue_id, job_id } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let resp = api::list_steps(&farm, &queue, &job, config.as_ref())
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
+            println!("{}", crate::common::cli_object_repr(&resp["steps"]));
+            Ok(())
+        }
+        JobAction::ListTasks { profile, farm_id, queue_id, job_id, step_id } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let resp = api::list_tasks(&farm, &queue, &job, &step_id, config.as_ref())
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
+            println!("{}", crate::common::cli_object_repr(&resp["tasks"]));
+            Ok(())
         }
     }
 }

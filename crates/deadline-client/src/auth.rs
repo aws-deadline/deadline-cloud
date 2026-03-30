@@ -105,6 +105,14 @@ pub fn get_user_and_identity_store_id(
     (user_id, identity_store_id)
 }
 
+/// Returns the monitor_id from the AWS profile if it's a DCM profile.
+pub fn get_monitor_id(
+    config: Option<&deadline_config::ini::IniConfig>,
+) -> Option<String> {
+    let profile_name = session::resolve_profile_name(config)?;
+    read_aws_profile_key(&profile_name, "monitor_id")
+}
+
 /// Check authentication by calling STS GetCallerIdentity.
 pub async fn check_authentication_status(
     config: Option<&deadline_config::ini::IniConfig>,
@@ -135,4 +143,104 @@ pub async fn check_deadline_api_available(
         req = req.principal_id(uid);
     }
     req.send().await.is_ok()
+}
+
+/// Log in via Deadline Cloud Monitor.
+/// Only supported for DCM-created profiles (those with `monitor_id`).
+pub fn login(
+    config: Option<&deadline_config::ini::IniConfig>,
+) -> Result<String, String> {
+    let source = get_credentials_source(config);
+    if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
+        return Err(
+            "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor."
+                .to_string(),
+        );
+    }
+
+    let monitor_path = match config {
+        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
+        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
+    };
+    let profile_name = session::display_profile_name(config);
+
+    let mut child = std::process::Command::new(&monitor_path)
+        .args(["login", "--profile", &profile_name])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .map_err(|_| {
+            format!(
+                "Could not find Deadline Cloud monitor at {monitor_path}. \
+                 Please ensure Deadline Cloud monitor is installed correctly \
+                 and set up the {profile_name} profile again."
+            )
+        })?;
+
+    // Poll authentication status until success or process exit
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    loop {
+        let status = rt.block_on(check_authentication_status(config));
+        if status == AwsAuthenticationStatus::Authenticated {
+            return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
+        }
+        if let Some(_exit) = child.try_wait().ok().flatten() {
+            let out = child
+                .stdout
+                .take()
+                .map(|mut s| {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut s, &mut buf).ok();
+                    buf
+                })
+                .unwrap_or_default();
+            return Err(format!(
+                "Deadline Cloud monitor was not able to log into the {profile_name} profile:\n{out}"
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
+/// Log out via Deadline Cloud Monitor.
+/// Only supported for DCM-created profiles (those with `monitor_id`).
+pub fn logout(
+    config: Option<&deadline_config::ini::IniConfig>,
+) -> Result<String, String> {
+    let source = get_credentials_source(config);
+    if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
+        return Err(
+            "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor."
+                .to_string(),
+        );
+    }
+
+    let monitor_path = match config {
+        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
+        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
+    };
+    let profile_name = session::display_profile_name(config);
+
+    let output = std::process::Command::new(&monitor_path)
+        .args(["logout", "--profile", &profile_name])
+        .output()
+        .map_err(|_| {
+            format!(
+                "Could not find Deadline Cloud monitor at {monitor_path}. \
+                 Please ensure Deadline Cloud monitor is installed correctly \
+                 and set up the {profile_name} profile again."
+            )
+        })?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Deadline Cloud monitor was unable to log out the profile {profile_name}.\
+             Return code {}: {}",
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stdout)
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
