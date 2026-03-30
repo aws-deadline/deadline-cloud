@@ -57,17 +57,10 @@ start here, not at "In Progress." See `migration_strategy.md` §
 | S3 transfer performance | Not started | Rust S3 throughput ≥ Python boto3 transfer manager |
 | Job attachment hashing | Not started | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
 
-### In Progress
-
-| Crate | Sections | What's next |
-|-------|----------|-------------|
-| `deadline-client` | §3-10 | Session caching/user-agent (§3), queue user creds (§5), login/logout (§6), queue params (§8), queue creds (§9), storage profile (§10) |
-
 ### Not Started
 
 | Crate | Phase | Sections | Scope |
 |-------|-------|----------|-------|
-| `deadline-cli` | 1 | §37-49 | All remaining CLI commands |
 | `deadline-client` | 1 | §3-14, §34 | Session, auth, API resource mgmt, job lifecycle, telemetry |
 | `deadline-job-bundle` | 1 | §15-18 | Bundle loading, parameters, history |
 | `deadline-job-attachments` | 1 | §19-35 | Models, hashing, upload, download, caches, manifests, VFS, path mapping |
