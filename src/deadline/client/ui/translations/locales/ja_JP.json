@@ -42,6 +42,7 @@
   "Description": "説明",
   "Dismiss": "閉じる",
   "Do not ask again": "今後表示しない",
+  "Don't remind me again": "今後通知しない",
   "Download installer": "インストーラーをダウンロード",
   "Edit...": "編集...",
   "Error: Timeout cannot be set to zero.": "エラー: タイムアウトをゼロに設定できません。",

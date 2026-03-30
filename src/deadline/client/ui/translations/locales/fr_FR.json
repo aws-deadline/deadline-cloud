@@ -42,6 +42,7 @@
   "Description": "Description",
   "Dismiss": "Ignorer",
   "Do not ask again": "Ne plus demander",
+  "Don't remind me again": "Ne plus me rappeler",
   "Download installer": "Télécharger l'installateur",
   "Edit...": "Modifier...",
   "Error: Timeout cannot be set to zero.": "Erreur : Le délai d'expiration ne peut pas être défini sur zéro.",

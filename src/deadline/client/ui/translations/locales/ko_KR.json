@@ -42,6 +42,7 @@
   "Description": "설명",
   "Dismiss": "닫기",
   "Do not ask again": "다시 묻지 않음",
+  "Don't remind me again": "다시 알리지 않음",
   "Download installer": "설치 프로그램 다운로드",
   "Edit...": "편집...",
   "Error: Timeout cannot be set to zero.": "오류: 제한 시간을 0으로 설정할 수 없습니다.",

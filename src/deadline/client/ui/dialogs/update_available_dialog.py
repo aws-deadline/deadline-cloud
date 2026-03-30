@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 from qtpy.QtCore import Qt  # pylint: disable=import-error
 
 from .._utils import tr
+from ...config import config_file
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,11 @@ class UpdateAvailableDialog(QDialog):
         self.dismiss_button.setText(tr("Dismiss"))
         self.dismiss_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
 
+        self.dont_remind_button = QPushButton(tr("Don't remind me again"))
+        self.dont_remind_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
+        self.button_box.addButton(self.dont_remind_button, QDialogButtonBox.DestructiveRole)
+        self.dont_remind_button.clicked.connect(self._on_dont_remind_clicked)
+
         self.download_button = QPushButton(tr("Download installer"))
         self.download_button.setStyleSheet(
             f"QPushButton {{ {_button_base} background-color: {_COLOR_ACCENT}; color: white; }}"
@@ -179,3 +185,12 @@ class UpdateAvailableDialog(QDialog):
                 logger.info(f"Opened release notes URL: {self.release_notes_url}")
             except Exception as e:
                 logger.error(f"Failed to open release notes URL: {e}")
+
+    def _on_dont_remind_clicked(self) -> None:
+        """Disable update notifications and close the dialog."""
+        try:
+            config_file.set_setting("settings.submitter_update_notification", "false")
+            logger.info("Update notifications disabled by user")
+        except Exception as e:
+            logger.error(f"Failed to save notification preference: {e}")
+        self.accept()

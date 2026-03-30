@@ -137,7 +137,7 @@ def _fetch_manifest() -> Dict[str, Any]:
 
     # macOS fallback: retry with botocore's bundled CA certificate bundle.
     logger.debug("Default SSL verification failed on macOS, retrying with botocore CA bundle")
-    ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_verify_locations(_get_botocore_ca_bundle())
     with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT_SECONDS, context=ctx) as resp:
