@@ -63,7 +63,7 @@ __all__ = [
     "list_tasks",
     "search_jobs",
     # Update checker
-    "check_for_updates",
+    "safe_check_for_updates",
     "UpdateCheckResult",
     "UpdateCheckStatus",
 ]
@@ -134,7 +134,7 @@ from ._mcp import (
     search_jobs,
 )
 from ._update_checker import (
-    check_for_updates,
+    safe_check_for_updates,
     UpdateCheckResult,
     UpdateCheckStatus,
 )

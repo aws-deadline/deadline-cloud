@@ -13,7 +13,7 @@ import pytest
 
 from deadline.client.api._update_checker import (
     UpdateCheckStatus,
-    check_for_updates,
+    safe_check_for_updates,
     get_current_platform,
     _fetch_manifest,
     DOWNLOAD_BASE_URL,
@@ -110,12 +110,19 @@ class TestFetchManifest:
         assert result == SAMPLE_MANIFEST
         assert mock_urlopen_fn.call_count == 1
 
+    @patch(
+        "deadline.client.api._update_checker._get_botocore_ca_bundle",
+        return_value="/fake/cacert.pem",
+    )
+    @patch("deadline.client.api._update_checker.ssl.create_default_context")
     @patch("deadline.client.api._update_checker.urllib.request.urlopen")
     @patch("deadline.client.api._update_checker.sys")
-    def test_macos_falls_back_to_bundled_ca(self, mock_sys, mock_urlopen_fn):
-        """On macOS, when default SSL fails, retries with bundled Amazon Root CA."""
+    def test_macos_falls_back_to_bundled_ca(
+        self, mock_sys, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle
+    ):
+        """On macOS, when default SSL fails, retries with botocore's CA bundle."""
         mock_sys.platform = "darwin"
-        # First call fails with SSL error, second succeeds with bundled cert
+        # First call fails with SSL error, second succeeds with botocore CA bundle
         mock_urlopen_fn.side_effect = [
             urllib.error.URLError("SSL: CERTIFICATE_VERIFY_FAILED"),
             _mock_urlopen(SAMPLE_MANIFEST),
@@ -129,6 +136,9 @@ class TestFetchManifest:
         second_call_kwargs = mock_urlopen_fn.call_args_list[1]
         ctx = second_call_kwargs.kwargs.get("context") or second_call_kwargs[1].get("context")
         assert ctx is not None
+        # Verify botocore CA bundle was used
+        mock_ca_bundle.assert_called_once()
+        mock_ssl_ctx.return_value.load_verify_locations.assert_called_once_with("/fake/cacert.pem")
 
     @patch("deadline.client.api._update_checker.urllib.request.urlopen")
     @patch("deadline.client.api._update_checker.sys")
@@ -142,9 +152,16 @@ class TestFetchManifest:
 
         assert mock_urlopen_fn.call_count == 1
 
+    @patch(
+        "deadline.client.api._update_checker._get_botocore_ca_bundle",
+        return_value="/fake/cacert.pem",
+    )
+    @patch("deadline.client.api._update_checker.ssl.create_default_context")
     @patch("deadline.client.api._update_checker.urllib.request.urlopen")
     @patch("deadline.client.api._update_checker.sys")
-    def test_macos_fallback_also_fails(self, mock_sys, mock_urlopen_fn):
+    def test_macos_fallback_also_fails(
+        self, mock_sys, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle
+    ):
         """On macOS, if both attempts fail, the error propagates."""
         mock_sys.platform = "darwin"
         mock_urlopen_fn.side_effect = urllib.error.URLError("SSL error")
@@ -156,7 +173,7 @@ class TestFetchManifest:
 
 
 class TestCheckForUpdates:
-    """Tests for check_for_updates()."""
+    """Tests for safe_check_for_updates()."""
 
     @pytest.mark.parametrize("platform", ["linux", "macos", "windows"])
     @patch("deadline.client.api._update_checker._fetch_manifest")
@@ -166,7 +183,7 @@ class TestCheckForUpdates:
         with patch(
             "deadline.client.api._update_checker.get_current_platform", return_value=platform
         ):
-            result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+            result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is True
@@ -182,7 +199,7 @@ class TestCheckForUpdates:
         with patch(
             "deadline.client.api._update_checker.get_current_platform", return_value=platform
         ):
-            result = check_for_updates("deadline-cloud-for-cinema-4d", "0.10.0")
+            result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.10.0")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is False
@@ -196,7 +213,7 @@ class TestCheckForUpdates:
         with patch(
             "deadline.client.api._update_checker.get_current_platform", return_value=platform
         ):
-            result = check_for_updates("deadline-cloud-for-cinema-4d", "1.0.0")
+            result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "1.0.0")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is False
@@ -205,7 +222,7 @@ class TestCheckForUpdates:
     def test_network_error(self, mock_fetch):
         mock_fetch.side_effect = urllib.error.URLError("Connection refused")
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.NETWORK_ERROR
         assert result.update_available is False
@@ -216,7 +233,7 @@ class TestCheckForUpdates:
     def test_timeout_error(self, mock_fetch):
         mock_fetch.side_effect = TimeoutError()
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.TIMEOUT_ERROR
         assert result.update_available is False
@@ -225,7 +242,7 @@ class TestCheckForUpdates:
     def test_socket_timeout_error(self, mock_fetch):
         mock_fetch.side_effect = socket.timeout("timed out")
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.TIMEOUT_ERROR
         assert result.update_available is False
@@ -234,10 +251,22 @@ class TestCheckForUpdates:
     def test_parse_error(self, mock_fetch):
         mock_fetch.side_effect = json.JSONDecodeError("bad json", "", 0)
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.PARSE_ERROR
         assert result.update_available is False
+
+    @patch("deadline.client.api._update_checker._fetch_manifest")
+    def test_unexpected_exception(self, mock_fetch):
+        """Unexpected exceptions are caught gracefully and don't crash the caller."""
+        mock_fetch.side_effect = RuntimeError("something totally unexpected")
+
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+
+        assert result.status == UpdateCheckStatus.UNEXPECTED_ERROR
+        assert result.update_available is False
+        assert result.error_message is not None
+        assert "Unexpected error" in result.error_message
 
     @pytest.mark.parametrize("platform", ["linux", "macos", "windows"])
     @patch("deadline.client.api._update_checker._fetch_manifest")
@@ -247,7 +276,7 @@ class TestCheckForUpdates:
         with patch(
             "deadline.client.api._update_checker.get_current_platform", return_value=platform
         ):
-            result = check_for_updates("deadline-cloud-for-houdini", "1.0.0")
+            result = safe_check_for_updates("deadline-cloud-for-houdini", "1.0.0")
 
         assert result.status == UpdateCheckStatus.INTEGRATION_NOT_FOUND
         assert result.update_available is False
@@ -259,7 +288,7 @@ class TestCheckForUpdates:
     def test_platform_not_in_manifest(self, mock_fetch, mock_platform):
         mock_fetch.return_value = SAMPLE_MANIFEST
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.PARSE_ERROR
         assert result.error_message is not None
@@ -283,7 +312,7 @@ class TestCheckForUpdates:
         }
         mock_fetch.return_value = bad_manifest
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.INVALID_VERSION
         assert result.update_available is False
@@ -306,7 +335,7 @@ class TestCheckForUpdates:
         }
         mock_fetch.return_value = manifest_without_installer
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is False
@@ -320,7 +349,7 @@ class TestCheckForUpdates:
         with patch(
             "deadline.client.api._update_checker.get_current_platform", return_value=platform
         ):
-            result = check_for_updates("deadline-cloud-for-cinema-4d", "bad-version")
+            result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "bad-version")
 
         assert result.status == UpdateCheckStatus.INVALID_VERSION
         assert result.current_version == "bad-version"
@@ -358,7 +387,7 @@ class TestUncommonVersionFormats:
         """DCC integrations may report unusual but valid PEP 440 versions."""
         mock_fetch.return_value = SAMPLE_MANIFEST
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", current_version)
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", current_version)
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is expect_update
@@ -378,7 +407,7 @@ class TestUncommonVersionFormats:
         """Malformed version strings from DCCs should return INVALID_VERSION, not crash."""
         mock_fetch.return_value = SAMPLE_MANIFEST
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", malformed_version)
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", malformed_version)
 
         assert result.status == UpdateCheckStatus.INVALID_VERSION
         assert result.update_available is False
@@ -396,7 +425,7 @@ class TestConfigOptOut:
 
         set_setting("settings.submitter_update_notification", "false")
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is False
@@ -410,7 +439,7 @@ class TestConfigOptOut:
         """When submitter_update_notification is default (true), check proceeds."""
         mock_fetch.return_value = SAMPLE_MANIFEST
 
-        result = check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
+        result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1")
 
         assert result.status == UpdateCheckStatus.SUCCESS
         assert result.update_available is True
