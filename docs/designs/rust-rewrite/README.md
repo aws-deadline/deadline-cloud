@@ -20,6 +20,9 @@ and gates all planning and implementation work.
 - `workflow.md` — Development workflow: study Python → update spec → red →
   green → verify against Python CLI → refactor → update docs.
   Also documents AWS SDK for Rust usage patterns.
+- `gui_ffi_architecture.md` — Detailed diagrams of the FFI layer: threading
+  model, callback flow, memory ownership, data flow for auth status and
+  progress reporting, risk table for the spike.
 - `data_flow.md` — Persistent data formats (INI config, job bundle layout,
   manifest JSON, cache schemas, checkpoint format)
 - `observations.md` — Behavioral notes and ambiguities discovered during
@@ -43,6 +46,7 @@ and gates all planning and implementation work.
 | `deadline-cli` | §39 (cases 4-7), §40-§44 (list/get cases) | `deadline auth status`, `deadline farm list/get`, `deadline fleet list/get`, `deadline queue list/get`, `deadline job list/get` (job list uses `search_jobs` with count header, field selection, `estimatedTimeRemaining`) |
 | `deadline-cli` | §37 (cases 48-53), §43 (cases 1-7) | `suggest_resources_on_client_error`, `deadline worker list/get`, SDK error formatting with error codes |
 | `deadline-cli` | — | All CLI test files converted to `insta-cmd` snapshots: `cli_auth`, `cli_config`, `cli_root`, `cli_suggest`, `cli_dcm`, `cli_common` |
+| `deadline-gui-ffi` | — | Initial FFI layer: `deadline_get_credentials_source`, `deadline_check_auth_status`, `deadline_check_auth_status_with_progress`, `deadline_free_string`. C ABI, JSON exchange, callback pattern validated. Rust unit tests + Python integration tests. |
 
 ### Risk Spikes (must pass before bulk implementation)
 
@@ -52,7 +56,7 @@ start here, not at "In Progress." See `migration_strategy.md` §
 
 | Spike | Status | Proves |
 |-------|--------|--------|
-| GUI FFI round-trip (Python ↔ Rust ↔ Qt) | Not started | Core architecture works: ctypes loading, C ABI calls, callbacks, thread safety |
+| GUI FFI round-trip (Python ↔ Rust ↔ Qt) | ✅ Passed | Core architecture works: ctypes loading, C ABI calls, callbacks, thread safety |
 | GUI FFI inside DCC (Blender) | Not started | Shared library loads in real DCC Python environment without conflicts |
 | S3 transfer performance | Not started | Rust S3 throughput ≥ Python boto3 transfer manager |
 | Job attachment hashing | Not started | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
@@ -66,6 +70,6 @@ start here, not at "In Progress." See `migration_strategy.md` §
 | `deadline-job-attachments` | 1 | §19-35 | Models, hashing, upload, download, caches, manifests, VFS, path mapping |
 | `deadline-common` | 1 | §50 | MCP server (deferred) |
 | `deadline-worker-agent` | 2 | — | Session mgmt, attachment sync, progress reporting |
-| `deadline-gui-ffi` | 3 | — | C ABI shared library for GUI + DCC plugins |
+| `deadline-gui-ffi` | 3 | — | Remaining FFI functions: config, login/logout, list APIs, submit_job, telemetry |
 | `gui/` (Python) | 3 | — | Refactored QWidgets layout calling Rust FFI |
 | `deadline-mcp` | 5 | §49, §50 | MCP server binary (rmcp SDK) |

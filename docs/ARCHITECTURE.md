@@ -94,6 +94,9 @@ deadline-cli
   → Python displays results
 ```
 
+For detailed diagrams of the FFI threading model, callback flow, and
+memory ownership, see `docs/designs/rust-rewrite/gui_ffi_architecture.md`.
+
 ### Worker Agent
 
 ```

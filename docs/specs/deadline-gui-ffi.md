@@ -4,7 +4,59 @@ Shared library crate with C ABI. Exposes Deadline Cloud business logic to
 external callers — the Python GUI widgets, DCC submitter plugins, and the
 Unreal Engine plugin.
 
-## Status: Not started (Phase 3)
+## Status: Risk spike passed
+
+The GUI FFI round-trip spike validated the core architecture on macOS:
+- ctypes loads the `.dylib` and calls `extern "C"` functions
+- JSON string passing works across the C ABI boundary
+- Tokio async runtime runs on a Python worker thread without deadlock
+- C function pointer callbacks from Rust to Python work
+- Callbacks from a worker thread (simulating QThread) work
+
+See `tests/python/gui_ffi_test.py` for the Python integration tests and
+`src/lib.rs` for the Rust FFI functions.
+
+## Architecture
+
+See `docs/designs/rust-rewrite/gui_ffi_architecture.md` for detailed
+diagrams of how the FFI layer connects Python, Rust, and Qt.
+
+### How it works (summary)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Python Process (Qt main thread)                                │
+│                                                                 │
+│  ┌──────────────┐    Qt signal     ┌──────────────────────┐    │
+│  │  QDialog     │◄────────────────│  QThread (worker)     │    │
+│  │  (main       │  (queued conn)  │                       │    │
+│  │   thread)    │                 │  ctypes.CDLL(...)     │    │
+│  │              │                 │    ↓                   │    │
+│  │  Updates     │                 │  lib.deadline_fn()    │    │
+│  │  widgets     │                 │    ↓                   │    │
+│  └──────────────┘                 │  ┌─────────────────┐  │    │
+│                                   │  │ Rust C ABI fn   │  │    │
+│                                   │  │ (extern "C")    │  │    │
+│                                   │  │                 │  │    │
+│                                   │  │ → config read   │  │    │
+│                                   │  │ → AWS API call  │  │    │
+│                                   │  │ → callback(msg) │──┤    │
+│                                   │  │ → return JSON   │  │    │
+│                                   │  └─────────────────┘  │    │
+│                                   └───────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Key points:
+- All Rust FFI calls happen on the Python worker thread, never the Qt
+  main thread (which would freeze the UI).
+- Callbacks from Rust to Python are synchronous on the worker thread.
+  The Python callback emits a Qt signal with `QueuedConnection` to
+  safely deliver updates to the main thread.
+- JSON strings cross the FFI boundary for complex data. Simple values
+  use C types directly.
+- Rust owns all allocated strings. Python must call `deadline_free_string`
+  to release them.
 
 ## C ABI Surface
 
@@ -29,6 +81,20 @@ Planned functions (refined during Phase 3 implementation):
 
 Complex data crosses the FFI boundary as JSON strings. Callbacks (progress
 reporting, confirmation prompts) cross as C function pointers.
+
+## Memory Management
+
+Rust allocates strings with `CString::into_raw()`. The caller must free
+them by calling `deadline_free_string()`:
+
+```c
+const char* result = deadline_get_credentials_source(NULL);
+// ... use result ...
+deadline_free_string((char*)result);
+```
+
+This is the standard C FFI ownership pattern. Python's ctypes handles
+this via a wrapper that calls `deadline_free_string` automatically.
 
 ## Error Handling
 
@@ -110,6 +176,60 @@ callback implementations emit Qt signals with `QueuedConnection` to safely
 deliver updates to the main Qt thread. No cross-thread Rust/Python
 interaction occurs — all FFI calls happen on the worker thread.
 
+## Risk Spike: GUI FFI Round-Trip
+
+### Goal
+
+Prove the core FFI architecture works before investing in full Phase 3
+implementation. This is the highest-risk technical bet in the migration —
+if it fails, the GUI strategy must be revised.
+
+### Sub-tasks
+
+**Sub-task 1: Basic C ABI call (sync, no callback)**
+- Expose `deadline_get_credentials_source()` as `extern "C"` returning
+  a JSON C string
+- Python loads `.dylib` via `ctypes.CDLL` and calls it
+- Proves: ctypes loading, C ABI string passing, no symbol conflicts
+
+**Sub-task 2: Async call from Python worker thread**
+- Expose `deadline_check_auth_status()` — creates internal tokio runtime,
+  blocks on async auth check
+- Python calls from a `QThread`, emits Qt signal with result to main thread
+- Proves: Rust async runtime inside Python worker thread, Qt event loop
+  stays responsive
+
+**Sub-task 3: Callback from Rust to Python**
+- Expose `deadline_check_auth_status_with_progress()` — takes a C function
+  pointer callback, calls it during operation
+- Python provides `@ctypes.CFUNCTYPE` callback that emits Qt signal
+- Proves: C function pointer callbacks work, no crash, no deadlock
+
+### Pass criteria (from migration_strategy.md)
+
+1. Loads on macOS (development platform)
+2. Callback doesn't crash
+3. Qt event loop stays responsive
+
+### Spike FFI surface
+
+```c
+// Sub-task 1
+const char* deadline_get_credentials_source(const char* config_json);
+void deadline_free_string(char* ptr);
+
+// Sub-task 2
+const char* deadline_check_auth_status(const char* config_json);
+
+// Sub-task 3
+typedef void (*deadline_status_callback_t)(const char* message, void* user_data);
+const char* deadline_check_auth_status_with_progress(
+    const char* config_json,
+    deadline_status_callback_t on_progress,
+    void* user_data
+);
+```
+
 ## Consumers
 
 - `gui/` Python widgets — loads via `ctypes.CDLL("libdeadline_gui_ffi.so")`
@@ -127,3 +247,6 @@ interaction occurs — all FFI calls happen on the worker thread.
 | `deadline-job-attachments` | Attachment upload/download |
 | `deadline-models` | Shared types |
 | `deadline-common` | Utilities |
+
+Note: During the spike, only `deadline-config` and `deadline-client` are
+needed. The full dependency set is for Phase 3.

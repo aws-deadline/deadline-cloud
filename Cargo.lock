@@ -787,6 +787,7 @@ dependencies = [
  "deadline-job-bundle",
  "deadline-models",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
