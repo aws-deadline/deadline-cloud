@@ -2,14 +2,15 @@
 """
 Stack trace sanitizer for Deadline Cloud client telemetry.
 
-Strips customer-specific file paths from Python stack traces while preserving
-diagnostic value (module names, line numbers, function names, error messages).
+Uses an allowlist approach: only explicitly chosen fields (sanitized filename,
+line number, function name, exception type) are emitted. Source code context
+and exception messages are intentionally omitted as they could contain
+customer data.
 
 Conforms to ADR 2024-02-19: "No customer content or other information provided
 by the customer can be submitted, such as bucket names, file names, or similar."
 """
 
-import re
 import traceback
 from typing import FrozenSet, List
 
@@ -22,8 +23,6 @@ _KNOWN_PACKAGES: FrozenSet[str] = frozenset(
         "botocore",
     }
 )
-
-_FRAME_RE = re.compile(r'^( {0,10}File )"([^"]+)",( +line \d+, in .*)$')
 
 
 def _sanitize_path(filepath: str) -> str:
@@ -45,36 +44,33 @@ def _sanitize_path(filepath: str) -> str:
     return parts[-1]
 
 
-# Matches file paths in exception messages — paths are typically quoted with ' or "
-_MSG_PATH_RE = re.compile(r"'([^'/\\]*[/\\][^']*)'|\"([^\"/\\]*[/\\][^\"]*)\"")
+def _sanitize_traceback(te: traceback.TracebackException) -> List[str]:
+    """Recursively format a TracebackException chain using only allowlisted fields."""
+    lines: List[str] = []
 
+    # Handle chained exceptions (cause or context)
+    if te.__cause__ is not None:
+        lines.extend(_sanitize_traceback(te.__cause__))
+        lines.append("\nThe above exception was the direct cause of the following exception:\n")
+    elif te.__context__ is not None and not te.__suppress_context__:
+        lines.extend(_sanitize_traceback(te.__context__))
+        lines.append("\nDuring handling of the above exception, another exception occurred:\n")
 
-def sanitize_message(message: str) -> str:
-    """Sanitize an exception message by replacing file paths with safe versions."""
+    lines.append("Traceback (most recent call last):")
+    for frame in te.stack:
+        safe_path = _sanitize_path(frame.filename)
+        lines.append(f'  File "{safe_path}", line {frame.lineno}, in {frame.name}')
+        # Intentionally omit frame.line — source code context could
+        # contain credentials, customer data, or other sensitive values
 
-    def _replace(m: re.Match) -> str:
-        if m.group(1) is not None:
-            return f"'{_sanitize_path(m.group(1))}'"
-        return f'"{_sanitize_path(m.group(2))}"'
+    # Only emit the exception type, not the message
+    exc_name = te.exc_type.__qualname__ if te.exc_type else "UnknownException"
+    lines.append(exc_name)
 
-    return _MSG_PATH_RE.sub(_replace, message)
-
-
-def sanitize_traceback_string(tb_string: str) -> str:
-    """Sanitize a formatted traceback string, stripping customer paths."""
-    lines = tb_string.splitlines()
-    sanitized: List[str] = []
-    for line in lines:
-        m = _FRAME_RE.match(line)
-        if m:
-            prefix, filepath, suffix = m.groups()
-            sanitized.append(f'{prefix}"{_sanitize_path(filepath)}",{suffix}')
-        else:
-            sanitized.append(line)
-    return "\n".join(sanitized)
+    return lines
 
 
 def sanitize_exception(exc: BaseException) -> str:
-    """Format and sanitize a live exception's full traceback."""
-    raw = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    return sanitize_traceback_string(raw)
+    """Format and sanitize a live exception using only allowlisted fields."""
+    te = traceback.TracebackException.from_exception(exc)
+    return "\n".join(_sanitize_traceback(te))

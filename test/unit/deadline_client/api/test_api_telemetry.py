@@ -22,8 +22,6 @@ from deadline.client.api._telemetry import (
 )
 from deadline.client.api._stack_trace_sanitizer import (
     _sanitize_path,
-    sanitize_message,
-    sanitize_traceback_string,
     sanitize_exception,
 )
 from deadline.job_attachments.progress_tracker import SummaryStatistics
@@ -68,10 +66,7 @@ def test_opt_out_config(fresh_deadline_config):
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
     client.record_error({}, str(type(Exception)))
-    try:
-        raise RuntimeError("opt-out test")
-    except RuntimeError as exc:
-        client.record_error_with_trace(exc, "test")
+    client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
 
 @pytest.mark.parametrize(
@@ -104,10 +99,7 @@ def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
     client.record_error({}, str(type(Exception)))
-    try:
-        raise RuntimeError("opt-out test")
-    except RuntimeError as exc:
-        client.record_error_with_trace(exc, "test")
+    client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
 
 def test_initialize_failure_then_success(fresh_deadline_config):
@@ -319,8 +311,8 @@ def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
     assert event.event_type == "com.amazon.rum.deadline.error"
     assert event.event_details["exception_type"] == "ValueError"
     assert event.event_details["exception_scope"] == "test_scope"
-    assert event.event_details["message"] == "something broke"
-    assert "ValueError: something broke" in event.event_details["stack_trace"]
+    assert "ValueError" in event.event_details["stack_trace"]
+    assert "message" not in event.event_details
     assert event.event_details["usage_mode"] == "CLI"
     assert event.event_details["accountId"] == "111122223333"
 
@@ -346,30 +338,6 @@ def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telem
     event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
     assert event.event_details["command"] == "bundle submit"
     assert event.event_details["exception_type"] == "RuntimeError"
-
-
-def test_record_error_with_trace_sanitizes_message(fresh_deadline_config, mock_telemetry_client):
-    """Test that customer paths in exception messages are sanitized"""
-    # GIVEN
-    queue_mock = MagicMock()
-    mock_telemetry_client.event_queue = queue_mock
-
-    try:
-        raise FileNotFoundError(
-            "[Errno 2] No such file or directory: '/home/customer/secret/render.py'"
-        )
-    except FileNotFoundError as exc:
-        with patch.object(
-            mock_telemetry_client, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
-            # WHEN
-            mock_telemetry_client.record_error_with_trace(exc, "test")
-
-    # THEN
-    event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
-    assert "customer" not in event.event_details["message"]
-    assert "secret" not in event.event_details["message"]
-    assert "render.py" in event.event_details["message"]
 
 
 def test_record_error_with_trace_sanitizes_paths(fresh_deadline_config, mock_telemetry_client):
@@ -706,49 +674,14 @@ class TestSanitizePath:
         assert _sanitize_path("<string>") == "<string>"
 
 
-SAMPLE_TB = """Traceback (most recent call last):
- File "/home/jsmith/renders/s3-bucket-acme/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py", line 42, in record_event
-   self._send(event)
- File "/home/jsmith/renders/s3-bucket-acme/custom_scripts/submit.py", line 10, in main
-   client.submit_job()
- File "/home/jsmith/renders/s3-bucket-acme/venv/lib/python3.11/site-packages/botocore/client.py", line 530, in _api_call
-   return self._make_api_call(operation_name, kwargs)
-ValueError: something went wrong"""
-
-
-class TestSanitizeTracebackString:
-    def test_known_packages_preserved(self):
-        result = sanitize_traceback_string(SAMPLE_TB)
-        assert '"deadline/client/api/_telemetry.py", line 42, in record_event' in result
-        assert '"botocore/client.py", line 530, in _api_call' in result
-
-    def test_customer_path_stripped(self):
-        result = sanitize_traceback_string(SAMPLE_TB)
-        assert '"submit.py", line 10, in main' in result
-
-    def test_no_customer_data_leaked(self):
-        result = sanitize_traceback_string(SAMPLE_TB)
-        assert "jsmith" not in result
-        assert "s3-bucket-acme" not in result
-        assert "/home/" not in result
-
-    def test_error_message_preserved(self):
-        result = sanitize_traceback_string(SAMPLE_TB)
-        assert "ValueError: something went wrong" in result
-
-    def test_structure_preserved(self):
-        result = sanitize_traceback_string(SAMPLE_TB)
-        assert "Traceback (most recent call last):" in result
-        assert "   self._send(event)" in result
-
-
 class TestSanitizeException:
     def test_live_exception(self):
         try:
             raise RuntimeError("test error")
         except RuntimeError as e:
             result = sanitize_exception(e)
-            assert "RuntimeError: test error" in result
+            assert "RuntimeError" in result
+            assert "Traceback (most recent call last):" in result
 
     def test_no_absolute_paths(self):
         try:
@@ -760,39 +693,46 @@ class TestSanitizeException:
                     path = line.split('"')[1]
                     assert not path.startswith("/"), f"Absolute path leaked: {path}"
 
+    def test_no_source_code_context(self):
+        """Source code lines are omitted to avoid leaking customer data."""
+        try:
+            customer_secret = "sensitive"  # noqa: F841
+            raise ValueError("fail")
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "customer_secret" not in result
+            assert "sensitive" not in result
 
-class TestSanitizeMessage:
-    def test_single_quoted_unix_path(self):
-        msg = "[Errno 2] No such file or directory: '/home/customer/secret/render.py'"
-        result = sanitize_message(msg)
-        assert "customer" not in result
-        assert "secret" not in result
-        assert "'render.py'" in result
+    def test_message_omitted(self):
+        """Exception messages are not included — only the type."""
+        try:
+            raise FileNotFoundError("/home/customer/secret/file.txt")
+        except FileNotFoundError as e:
+            result = sanitize_exception(e)
+            assert "customer" not in result
+            assert "secret" not in result
+            assert "FileNotFoundError" in result
 
-    def test_double_quoted_unix_path(self):
-        msg = 'Permission denied: "/mnt/customer-bucket/output.exr"'
-        result = sanitize_message(msg)
-        assert "customer-bucket" not in result
-        assert '"output.exr"' in result
+    def test_chained_exception_cause(self):
+        try:
+            try:
+                raise KeyError("original")
+            except KeyError as e:
+                raise ValueError("wrapper") from e
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "KeyError" in result
+            assert "ValueError" in result
+            assert "direct cause" in result
 
-    def test_windows_path(self):
-        msg = "Cannot open 'C:\\Users\\customer\\Documents\\scene.blend'"
-        result = sanitize_message(msg)
-        assert "customer" not in result
-        assert "'scene.blend'" in result
-
-    def test_known_package_preserved(self):
-        msg = "Error in '/home/user/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py'"
-        result = sanitize_message(msg)
-        assert "user" not in result
-        assert "deadline/client/api/_telemetry.py" in result
-
-    def test_no_path_unchanged(self):
-        msg = "ValueError: something went wrong"
-        assert sanitize_message(msg) == msg
-
-    def test_unquoted_unix_path(self):
-        msg = "Failed to process /home/user/job/input.txt"
-        result = sanitize_message(msg)
-        # Unquoted paths are not sanitized — Python exceptions typically quote paths
-        assert result == msg
+    def test_chained_exception_context(self):
+        try:
+            try:
+                raise KeyError("original")
+            except KeyError:
+                raise ValueError("during handling")
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "KeyError" in result
+            assert "ValueError" in result
+            assert "During handling" in result

@@ -28,6 +28,7 @@ from ._session import (
     get_boto3_client,
     get_boto3_session,
 )
+from ._stack_trace_sanitizer import sanitize_exception
 from ..config import config_file
 from .. import version
 
@@ -194,12 +195,9 @@ class TelemetryClient:
         extra_details: Optional[dict] = None,
         from_gui: bool = False,
     ) -> None:
-        from ._stack_trace_sanitizer import sanitize_exception, sanitize_message
-
         event_details: dict = {
             "exception_type": type(exc).__qualname__,
             "exception_scope": exception_scope,
-            "message": sanitize_message(str(exc)),
             "stack_trace": sanitize_exception(exc),
         }
         if extra_details:
