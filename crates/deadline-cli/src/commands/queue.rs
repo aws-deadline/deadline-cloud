@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use deadline_client::api;
-use deadline_common::telemetry::TelemetryClient;
+use deadline_common::telemetry::create_telemetry;
 
 use super::config::CliError;
 use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
@@ -47,7 +47,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::list_queues(&farm, config.as_ref()).await.map_err(|e| {
+            let resp = api::list_queues(&farm, config.as_ref(), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Queues from Deadline:\n{e}"))
             })?;
             let empty = vec![];
@@ -63,7 +63,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            match api::get_queue(&farm, &queue, config.as_ref()).await {
+            match api::get_queue(&farm, &queue, config.as_ref(), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
@@ -89,14 +89,11 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
 
-            let mut telemetry = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config.as_ref());
-            if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
-                telemetry.initialize(&ep, config.as_ref());
-            }
+            let telemetry = create_telemetry(config.as_ref());
 
             let result = match mode.to_uppercase().as_str() {
-                "READ" => api::assume_queue_role_for_read(&farm, &queue, config.as_ref()).await,
-                _ => api::assume_queue_role_for_user(&farm, &queue, config.as_ref()).await,
+                "READ" => api::assume_queue_role_for_read(&farm, &queue, config.as_ref(), Some(&telemetry)).await,
+                _ => api::assume_queue_role_for_user(&farm, &queue, config.as_ref(), Some(&telemetry)).await,
             };
 
             let duration_ms = start.elapsed().as_millis() as u64;
@@ -139,7 +136,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, config.as_ref())
+            let resp = api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, config.as_ref(), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get storage profile:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));

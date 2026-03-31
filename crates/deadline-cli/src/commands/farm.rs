@@ -27,7 +27,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
     match action {
         FarmAction::List { profile } => {
             let config = apply_profile(profile)?;
-            let resp = api::list_farms(config.as_ref()).await.map_err(|e| {
+            let resp = api::list_farms(config.as_ref(), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Farms from Deadline:\n{e}"))
             })?;
             let empty = vec![];
@@ -42,7 +42,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
         FarmAction::Get { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            match api::get_farm(&farm, config.as_ref()).await {
+            match api::get_farm(&farm, config.as_ref(), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())

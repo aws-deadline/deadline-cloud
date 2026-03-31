@@ -21,6 +21,7 @@ APIs, queue parameters, queue credentials, storage profile.
 |-------|---------|
 | `deadline-config` | Config for endpoint/credential resolution |
 | `deadline-models` | Shared types and errors |
+| `deadline-common` | `TelemetryClient`, `with_telemetry_latency`, `with_telemetry_latency_async`, `create_telemetry` for API-layer latency events |
 
 External:
 - `aws-sdk-deadline` — Deadline Cloud service SDK
@@ -195,20 +196,51 @@ existing patterns. List functions use the paginated helper.
 - Queue user credentials — custom credential provider (§5)
 - Queue parameters (§8) — blocked on `deadline-job-bundle` §16
 
-### Telemetry wiring (deferred)
+### Telemetry — API-layer latency events
 
-The `TelemetryClient` exists in `deadline-common` but is not yet wired
-into API calls or CLI commands. The following need telemetry recording:
+Every public API function in `api.rs` and `login`/`logout` in `auth.rs`
+accept an optional `telemetry: Option<&TelemetryClient>` parameter. If
+`None`, the function creates an ephemeral `TelemetryClient` internally
+(initialized from `AWS_ENDPOINT_URL_DEADLINE`). If `Some`, it reuses the
+caller's client (for long-lived processes like the worker agent that
+want a single background thread).
 
-- All paginated list APIs (`list_farms`, etc.) — latency events
-- `login`/`logout` — latency events
-- `assume_queue_role_for_user/read` — latency events
-- `get_storage_profile_for_queue` — latency event
-- `get_queue_parameter_definitions` — latency event
-- `queue export-credentials` CLI — success/fail event with mode, duration
-- `bundle submit` CLI — submission events (blocked on §11)
+Each function records a `com.amazon.rum.deadline.latency` event with
+`{latency: <nanoseconds>, function_call: "<function_name>"}`, matching
+Python's `@record_function_latency_telemetry_event()` decorator.
 
-Wiring will be done incrementally as each command is touched.
+Telemetry is best-effort fire-and-forget. The `TelemetryClient` silently
+swallows all errors (network failures, HTTP errors, full queue). A
+telemetry failure never affects the API call result or CLI exit code.
+
+The telemetry helpers live in `deadline-common::telemetry`:
+- `with_telemetry_latency_async` — used by async API functions in `api.rs`
+- `with_telemetry_latency` — used by sync functions in `auth.rs`
+  (`login`/`logout`)
+- `create_telemetry` — used by `queue.rs` export-credentials for its
+  CLI-level success/fail event (not a latency event)
+- `record_latency` — low-level primitive for callers managing timing
+  themselves
+
+Functions with latency telemetry:
+- `list_farms`, `list_queues`, `list_fleets`, `list_jobs`
+- `get_farm`, `get_queue`, `get_fleet`, `get_job`
+- `search_jobs`, `search_workers`, `get_worker`
+- `get_session`, `list_sessions`, `list_steps`, `list_tasks`
+- `get_storage_profile_for_queue`
+- `assume_queue_role_for_user`, `assume_queue_role_for_read`
+- `login`, `logout`
+
+CLI-level success/fail events (separate from API-layer latency):
+- `queue export-credentials` — records
+  `com.amazon.rum.deadline.queue_export_credentials` with `is_success`,
+  `duration_ms`, `mode`, `queue_id`, `error_type`. This stays in the
+  CLI layer (`queue.rs`) because it includes CLI-specific context.
+
+Telemetry for blocked features (`get_queue_parameter_definitions` §8,
+`create_job_from_job_bundle` §11, job monitoring §12) will follow the
+same pattern when those API functions are implemented — add the
+`telemetry` parameter and record latency internally.
 
 ## Deferred
 
@@ -216,8 +248,6 @@ Wiring will be done incrementally as each command is touched.
   `deadline-job-attachments`
 - §12 (job monitoring & logs) — depends on CloudWatch Logs SDK +
   queue/fleet role credential flows from §5/§9
-- §14 (telemetry) — separate subsystem with background thread, retry
-  logic, endpoint prefixing
 - §34 (AWS client helpers) — part of `deadline-job-attachments`
 
 ## Future Improvements

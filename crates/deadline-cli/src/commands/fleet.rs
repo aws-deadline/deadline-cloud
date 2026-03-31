@@ -30,7 +30,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
         FleetAction::List { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::list_fleets(&farm, config.as_ref()).await.map_err(|e| {
+            let resp = api::list_fleets(&farm, config.as_ref(), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Fleets from Deadline:\n{e}"))
             })?;
             let empty = vec![];
@@ -46,7 +46,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let fleet = require_setting("fleet_id", fleet_id, "defaults.fleet_id", config.as_ref())?;
-            match api::get_fleet(&farm, &fleet, config.as_ref()).await {
+            match api::get_fleet(&farm, &fleet, config.as_ref(), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())

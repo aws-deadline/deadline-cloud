@@ -1,6 +1,6 @@
 //! Level 2 tests for `deadline worker` subcommands (§43 cases 1-7).
 
-use deadline_test_server::deadline_api::{errors, workers};
+use deadline_test_server::deadline_api::{errors, telemetry, workers};
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
@@ -86,4 +86,37 @@ async fn worker_get_api_failure_prints_error() {
     assert_cmd_snapshot!(harness.cmd(&[
         "worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-bad",
     ]));
+}
+
+// --- telemetry ---
+// Telemetry tests are separate from functional tests. Telemetry is best-effort
+// fire-and-forget — the TelemetryClient silently swallows errors, so functional
+// tests pass without telemetry mocks. These tests verify latency events are sent
+// when the endpoint is reachable.
+
+#[tokio::test]
+async fn worker_list_sends_latency_telemetry() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    workers::mock_search_workers(
+        &harness.server, "farm-abc",
+        &[json!({"workerId": "worker-aaa", "status": "RUNNING", "createdAt": "2024-01-01T00:00:00Z"})],
+        1,
+    ).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    harness.cli(&["worker", "list", "--fleet-id", "fleet-abc"]).assert().success();
+}
+
+#[tokio::test]
+async fn worker_get_sends_latency_telemetry() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    workers::mock_get_worker(
+        &harness.server, "farm-abc", "fleet-abc",
+        json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING"}),
+    ).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    harness.cli(&["worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-aaa"]).assert().success();
 }

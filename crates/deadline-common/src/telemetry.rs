@@ -2,6 +2,27 @@
 //!
 //! Matches Python's `_telemetry.py`: std::thread + std::sync::mpsc + ureq.
 //! No async, no tokio — just a background OS thread doing blocking HTTP.
+//!
+//! ## Convenience helpers
+//!
+//! - [`create_telemetry`] — create an initialized `TelemetryClient` from
+//!   `AWS_ENDPOINT_URL_DEADLINE`. Use when you need a raw client for
+//!   non-latency events (e.g. success/fail events in `queue export-credentials`).
+//! - [`record_latency`] — record a single latency event on an existing client.
+//!   Use when you manage timing yourself.
+//! - [`with_telemetry_latency`] — wrap a **sync** function with latency telemetry.
+//!   Resolves the client, times the call, records the event.
+//! - [`with_telemetry_latency_async`] — wrap an **async** function with latency telemetry.
+//!   Same as `with_telemetry_latency` but `.await`s the future. Required because Rust's
+//!   type system distinguishes sync and async at compile time — a sync closure
+//!   cannot `.await`.
+//!
+//! All helpers match Python's `@record_function_latency_telemetry_event()`
+//! decorator: event type `com.amazon.rum.deadline.latency`, details
+//! `{latency: <nanoseconds>, function_call: "<name>"}`.
+//!
+//! Telemetry is best-effort fire-and-forget. All errors are silently swallowed.
+//! A telemetry failure never affects the caller's return value or exit code.
 
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
@@ -331,4 +352,77 @@ mod tests {
         let result = validate_or_generate_identifier(None);
         Uuid::parse_str(&result).expect("should be valid UUID");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Convenience helpers for API-layer telemetry
+// ---------------------------------------------------------------------------
+
+/// Create a TelemetryClient initialized from AWS_ENDPOINT_URL_DEADLINE.
+/// Used by API functions to create an ephemeral client when none is provided.
+pub fn create_telemetry(config: Option<&deadline_config::ini::IniConfig>) -> TelemetryClient {
+    let mut client = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
+    if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+        client.initialize(&ep, config);
+    }
+    client
+}
+
+/// Record a latency event matching Python's @record_function_latency_telemetry_event.
+pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std::time::Instant) {
+    let mut details = std::collections::HashMap::new();
+    details.insert("latency".into(), serde_json::json!(start.elapsed().as_nanos() as u64));
+    details.insert("function_call".into(), serde_json::json!(function_call));
+    client.record_event("com.amazon.rum.deadline.latency", details, false);
+}
+
+/// Run a sync function with latency telemetry. Uses the provided TelemetryClient
+/// or creates an ephemeral one. Matches Python's @record_function_latency_telemetry_event.
+///
+/// Use for sync functions like `login`/`logout`.
+/// For async functions, use [`with_telemetry_latency_async`].
+pub fn with_telemetry_latency<F, T>(
+    function_call: &str,
+    config: Option<&deadline_config::ini::IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+    f: F,
+) -> T
+where
+    F: FnOnce() -> T,
+{
+    let ephemeral;
+    let tc = match telemetry {
+        Some(t) => t,
+        None => { ephemeral = create_telemetry(config); &ephemeral }
+    };
+    let start = std::time::Instant::now();
+    let result = f();
+    record_latency(tc, function_call, start);
+    result
+}
+
+/// Run an async function with latency telemetry. Uses the provided TelemetryClient
+/// or creates an ephemeral one. Matches Python's @record_function_latency_telemetry_event.
+///
+/// Use for async API functions like `list_farms`, `get_job`, etc.
+/// For sync functions, use [`with_telemetry_latency`].
+pub async fn with_telemetry_latency_async<F, Fut, T>(
+    function_call: &str,
+    config: Option<&deadline_config::ini::IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+    f: F,
+) -> T
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let ephemeral;
+    let tc = match telemetry {
+        Some(t) => t,
+        None => { ephemeral = create_telemetry(config); &ephemeral }
+    };
+    let start = std::time::Instant::now();
+    let result = f().await;
+    record_latency(tc, function_call, start);
+    result
 }

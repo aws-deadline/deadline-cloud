@@ -67,7 +67,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref())
+            let resp = api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref(), None)
                 .await
                 .map_err(|e| {
                     CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}"))
@@ -110,7 +110,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            match api::get_job(&farm, &queue, &job, config.as_ref()).await {
+            match api::get_job(&farm, &queue, &job, config.as_ref(), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
@@ -135,7 +135,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::get_session(&farm, &queue, &job, &session_id, config.as_ref())
+            let resp = api::get_session(&farm, &queue, &job, &session_id, config.as_ref(), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));
@@ -146,7 +146,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_sessions(&farm, &queue, &job, config.as_ref())
+            let resp = api::list_sessions(&farm, &queue, &job, config.as_ref(), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["sessions"]));
@@ -157,7 +157,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_steps(&farm, &queue, &job, config.as_ref())
+            let resp = api::list_steps(&farm, &queue, &job, config.as_ref(), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["steps"]));
@@ -168,7 +168,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
             let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_tasks(&farm, &queue, &job, &step_id, config.as_ref())
+            let resp = api::list_tasks(&farm, &queue, &job, &step_id, config.as_ref(), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["tasks"]));

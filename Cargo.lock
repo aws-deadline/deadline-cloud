@@ -765,6 +765,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-deadline",
  "aws-sdk-sts",
+ "deadline-common",
  "deadline-config",
  "deadline-models",
  "log",

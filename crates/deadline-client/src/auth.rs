@@ -1,4 +1,5 @@
 use crate::session;
+use deadline_common::telemetry::{TelemetryClient, with_telemetry_latency};
 
 /// Where the AWS credentials come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,6 +150,13 @@ pub async fn check_deadline_api_available(
 /// Only supported for DCM-created profiles (those with `monitor_id`).
 pub fn login(
     config: Option<&deadline_config::ini::IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<String, String> {
+    with_telemetry_latency("login", config, telemetry, || login_inner(config))
+}
+
+fn login_inner(
+    config: Option<&deadline_config::ini::IniConfig>,
 ) -> Result<String, String> {
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
@@ -206,6 +214,13 @@ pub fn login(
 /// Log out via Deadline Cloud Monitor.
 /// Only supported for DCM-created profiles (those with `monitor_id`).
 pub fn logout(
+    config: Option<&deadline_config::ini::IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<String, String> {
+    with_telemetry_latency("logout", config, telemetry, || logout_inner(config))
+}
+
+fn logout_inner(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> Result<String, String> {
     let source = get_credentials_source(config);

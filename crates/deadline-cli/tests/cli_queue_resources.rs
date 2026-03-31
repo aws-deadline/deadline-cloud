@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline queue` subcommands — export-credentials and diagnostics.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::queue_resources;
+use deadline_test_server::deadline_api::{queue_resources, telemetry};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -103,4 +103,27 @@ async fn queue_get_storage_profile_prints_details() {
         "queue", "get-storage-profile",
         "--storage-profile-id", "sp-001"
     ]));
+}
+
+// --- telemetry ---
+// Telemetry tests are separate from functional tests. Telemetry is best-effort
+// fire-and-forget — the TelemetryClient silently swallows errors, so functional
+// tests pass without telemetry mocks. These tests verify latency events are sent
+// when the endpoint is reachable.
+
+#[tokio::test]
+async fn queue_get_storage_profile_sends_latency_telemetry() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    queue_resources::mock_get_storage_profile_for_queue(
+        &harness.server, "farm-abc", "queue-aaa", "sp-001",
+        json!({
+            "storageProfileId": "sp-001", "displayName": "Linux Profile",
+            "osFamily": "LINUX", "fileSystemLocations": [],
+        }),
+    ).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    harness.cli(&["queue", "get-storage-profile", "--storage-profile-id", "sp-001"]).assert().success();
 }

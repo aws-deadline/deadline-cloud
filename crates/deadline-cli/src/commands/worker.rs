@@ -51,7 +51,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             let farm =
                 require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let resp =
-                api::search_workers(&farm, &[&fleet_id], item_offset, page_size, config.as_ref())
+                api::search_workers(&farm, &[&fleet_id], item_offset, page_size, config.as_ref(), None)
                     .await
                     .map_err(|e| {
                         CliError::Operation(format!("Failed to get Workers from Deadline:\n{e}"))
@@ -93,7 +93,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm =
                 require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::get_worker(&farm, &fleet_id, &worker_id, config.as_ref())
+            let resp = api::get_worker(&farm, &fleet_id, &worker_id, config.as_ref(), None)
                 .await
                 .map_err(|e| {
                     CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}"))

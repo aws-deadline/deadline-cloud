@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline job` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::jobs;
+use deadline_test_server::deadline_api::{jobs, telemetry};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -72,4 +72,35 @@ async fn job_get_no_job_id_exits_with_error() {
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
+}
+
+// --- telemetry ---
+// Telemetry tests are separate from functional tests. Telemetry is best-effort
+// fire-and-forget — the TelemetryClient silently swallows errors, so functional
+// tests pass without telemetry mocks. These tests verify latency events are sent
+// when the endpoint is reachable.
+
+#[tokio::test]
+async fn job_list_sends_latency_telemetry() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &mock_jobs(), 12).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    harness.cli(&["job", "list"]).assert().success();
+}
+
+#[tokio::test]
+async fn job_get_sends_latency_telemetry() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+    })).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    harness.cli(&["job", "get"]).assert().success();
 }
