@@ -397,6 +397,12 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.force_s3_check = self._init_checkbox_setting(
             group, layout, "settings.force_s3_check", tr("Always check S3 job attachments")
         )
+        self.submitter_update_notification = self._init_checkbox_setting(
+            group,
+            layout,
+            "settings.submitter_update_notification",
+            tr("Show submitter update notifications"),
+        )
 
         self._conflict_resolution_options = [option.name for option in FileConflictResolution]
         self.conflict_resolution_box = self._init_combobox_setting(

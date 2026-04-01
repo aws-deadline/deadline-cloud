@@ -502,6 +502,8 @@ def test_create_job_from_job_bundle_job_attachments(
             total_input_bytes=35,
             print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
+            hash_cache_dir=config.config_file.get_cache_directory(),
+            telemetry_callback=api._submit_job_bundle.hashing_telemetry_callback,
         )
         mock.get_boto3_client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,
@@ -886,6 +888,8 @@ def test_create_job_from_job_bundle_with_single_asset_file(
             total_input_bytes=15,
             print_function_callback=print,
             hashing_progress_callback=fake_hashing_callback,
+            hash_cache_dir=config.config_file.get_cache_directory(),
+            telemetry_callback=api._submit_job_bundle.hashing_telemetry_callback,
         )
 
         assert mock.get_boto3_client().create_job.mock_calls == [

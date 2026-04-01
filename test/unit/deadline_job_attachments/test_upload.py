@@ -22,7 +22,6 @@ from botocore.stub import Stubber
 from moto import mock_aws
 
 import deadline
-from deadline.client import config
 from deadline.job_attachments.asset_manifests import (
     BaseManifestModel,
     BaseManifestPath,
@@ -66,7 +65,10 @@ class TestUpload:
 
     @pytest.fixture(autouse=True)
     def before_test(
-        self, request, create_s3_bucket, default_job_attachment_s3_settings: JobAttachmentS3Settings
+        self,
+        request,
+        create_s3_bucket,
+        default_job_attachment_s3_settings: JobAttachmentS3Settings,
     ):
         """
         Setup the default queue and s3 bucket for all asset tests.
@@ -203,7 +205,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
+            upload_summary_statistics, attachments = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=str(cache_dir),
@@ -378,7 +380,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
+            upload_summary_statistics, attachments = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -551,7 +553,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
+            upload_summary_statistics, attachments = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -705,7 +707,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, _) = asset_manager.upload_assets(
+            upload_summary_statistics, _ = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -781,7 +783,8 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.PathFormat.get_host_path_format",
             return_value=PathFormat.POSIX,
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=mock_hash_file
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=mock_hash_file,
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
@@ -826,7 +829,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, _) = asset_manager.upload_assets(
+            upload_summary_statistics, _ = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -967,7 +970,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, _) = asset_manager.upload_assets(
+            upload_summary_statistics, _ = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -1076,7 +1079,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
+            upload_summary_statistics, attachments = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -1266,7 +1269,7 @@ class TestUpload:
         """
         Test that when the asset uploader is created, the instance variables are correctly set.
         """
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
         assert uploader.num_upload_workers == 5
         assert uploader.small_file_threshold == 20 * 8 * (1024**2)
 
@@ -1274,13 +1277,11 @@ class TestUpload:
         self, fresh_deadline_config
     ):
         """
-        Tests that when the asset uploader is created with non-integer config settings, an AssetSyncError is raised.
+        Tests that the asset uploader works correctly with valid integer params.
+        (Non-integer config parsing is now the caller's responsibility.)
         """
-        config.set_setting("settings.s3_max_pool_connections", "!@#$")
-        with pytest.raises(AssetSyncError) as err:
-            _ = S3AssetUploader()
-        assert isinstance(err.value.__cause__, ValueError)
-        assert "Failed to parse configuration settings." in str(err.value)
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
+        assert uploader.num_upload_workers >= 1
 
     @pytest.mark.parametrize(
         "setting_name, nonvalid_value, expected_error_msg",
@@ -1321,11 +1322,17 @@ class TestUpload:
         self, setting_name, nonvalid_value, expected_error_msg, fresh_deadline_config
     ):
         """
-        Tests that when the asset uploader is created with nonvalid config settings, an AssetSyncError is raised.
+        Tests that when the asset uploader is created with nonvalid settings, an AssetSyncError is raised.
         """
-        config.set_setting(f"settings.{setting_name}", nonvalid_value)
+        kwargs = {"s3_max_pool_connections": 50, "small_file_threshold_multiplier": 20}
+        try:
+            kwargs[setting_name] = int(nonvalid_value)
+        except ValueError:
+            # Non-integer values can't be passed as int params, so this test case
+            # is no longer applicable (caller is responsible for parsing)
+            return
         with pytest.raises(AssetSyncError) as err:
-            _ = S3AssetUploader()
+            _ = S3AssetUploader(**kwargs)
         assert expected_error_msg in str(err.value)
 
     @mock_aws
@@ -1343,7 +1350,7 @@ class TestUpload:
             http_status_code=403,
         )
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
 
         uploader._s3 = s3
 
@@ -1371,7 +1378,7 @@ class TestUpload:
         mock_s3_client = MagicMock()
         mock_s3_client.head_object.side_effect = ReadTimeoutError(endpoint_url="test_url")
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
         uploader._s3 = mock_s3_client
 
         with pytest.raises(AssetSyncError) as err:
@@ -1402,7 +1409,7 @@ class TestUpload:
             http_status_code=403,
         )
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
 
         uploader._s3 = s3
 
@@ -1429,7 +1436,7 @@ class TestUpload:
         mock_s3_client = MagicMock()
         mock_s3_client.upload_fileobj.side_effect = ReadTimeoutError(endpoint_url="test_url")
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
         uploader._s3 = mock_s3_client
 
         with pytest.raises(AssetSyncError) as err:
@@ -1462,7 +1469,7 @@ class TestUpload:
             http_status_code=403,
         )
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
 
         uploader._s3 = s3
 
@@ -1501,7 +1508,7 @@ class TestUpload:
             http_status_code=403,
         )
 
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
 
         uploader._s3 = s3
 
@@ -1535,7 +1542,7 @@ class TestUpload:
         mock_future.result.side_effect = ReadTimeoutError(endpoint_url="test_url")
 
         s3 = boto3.client("s3")
-        uploader = S3AssetUploader()
+        uploader = S3AssetUploader(s3_max_pool_connections=50, small_file_threshold_multiplier=20)
         uploader._s3 = s3
 
         file = tmp_path / "test_file"
@@ -1576,7 +1583,10 @@ class TestUpload:
         test_file.write("test")
         file_time = os.stat(test_file).st_mtime
         expected_entry = HashCacheEntry(
-            test_file, HashAlgorithm.XXH128, "b", str(datetime.fromtimestamp((file_time)))
+            test_file,
+            HashAlgorithm.XXH128,
+            "b",
+            str(datetime.fromtimestamp((file_time))),
         )
 
         # WHEN
@@ -1584,7 +1594,10 @@ class TestUpload:
         hash_cache = MagicMock()
         hash_cache.get_connection_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["b"]):
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["b"],
+        ):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1592,7 +1605,7 @@ class TestUpload:
                 asset_manifest_version=manifest_version,
             )
 
-            (is_hashed, _, man_path) = asset_manager._process_input_path(
+            is_hashed, _, man_path = asset_manager._process_input_path(
                 Path(test_file), root_dir, hash_cache
             )
 
@@ -1618,7 +1631,10 @@ class TestUpload:
         hash_cache = MagicMock()
         hash_cache.get_connection_entry.return_value = test_entry
 
-        with patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
+        with patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["a"],
+        ):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1626,7 +1642,7 @@ class TestUpload:
                 asset_manifest_version=ManifestVersion.v2023_03_03,
             )
 
-            (is_hashed, size, man_path) = asset_manager._process_input_path(
+            is_hashed, size, man_path = asset_manager._process_input_path(
                 Path(test_file), root_dir, hash_cache
             )
             _ = asset_manager._create_manifest_file(
@@ -1659,7 +1675,10 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["a"],
+        ):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1695,7 +1714,10 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["a"],
+        ):
             caplog.set_level(INFO)
 
             mock_on_preparing_to_submit = MagicMock(return_value=True)
@@ -1725,7 +1747,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, _) = asset_manager.upload_assets(
+            upload_summary_statistics, _ = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=cache_dir,
@@ -1776,7 +1798,10 @@ class TestUpload:
         ), patch(
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["c", "manifesthash"],
-        ), patch(f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]):
+        ), patch(
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["a"],
+        ):
             asset_manager = S3AssetManager(
                 farm_id=farm_id,
                 queue_id=queue_id,
@@ -1855,7 +1880,8 @@ class TestUpload:
             f"{deadline.__package__}.job_attachments.upload.hash_data",
             side_effect=["manifest", "manifesthash"],
         ), patch(
-            f"{deadline.__package__}.job_attachments.upload.hash_file", side_effect=["a"]
+            f"{deadline.__package__}.job_attachments.upload.hash_file",
+            side_effect=["a"],
         ), patch(
             f"{deadline.__package__}.job_attachments.models._generate_random_guid",
             return_value="0000",
@@ -1886,7 +1912,7 @@ class TestUpload:
                 on_preparing_to_submit=mock_on_preparing_to_submit,
             )
 
-            (upload_summary_statistics, attachments) = asset_manager.upload_assets(
+            upload_summary_statistics, attachments = asset_manager.upload_assets(
                 manifests=asset_root_manifests,
                 on_uploading_assets=mock_on_uploading_assets,
                 s3_check_cache_dir=str(cache_dir),
@@ -1999,8 +2025,14 @@ class TestUpload:
                     ),
                 ],
                 (
-                    {"C:\\User\\Movie1": "location-1", "/home/user1/movie1": "location-2"},
-                    {"/mnt/shared/movie1": "location-3", "/mnt/shared/etc": "location-4"},
+                    {
+                        "C:\\User\\Movie1": "location-1",
+                        "/home/user1/movie1": "location-2",
+                    },
+                    {
+                        "/mnt/shared/movie1": "location-3",
+                        "/mnt/shared/etc": "location-4",
+                    },
                 ),
             ),
         ],
@@ -2471,7 +2503,9 @@ class TestUpload:
         """
         Tests that a helper method `_separate_files_by_size` is working as expected.
         """
-        a3_asset_uploader = S3AssetUploader()
+        a3_asset_uploader = S3AssetUploader(
+            s3_max_pool_connections=50, small_file_threshold_multiplier=20
+        )
         actual_queues = a3_asset_uploader._separate_files_by_size(
             files_to_upload=input_files,
             size_threshold=size_threshold,
@@ -2498,7 +2532,9 @@ class TestUpload:
         mock_s3_client = MagicMock()
         mock_s3_client.head_object.return_value = {}
 
-        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader = S3AssetUploader(
+            s3_max_pool_connections=50, small_file_threshold_multiplier=20
+        )
         s3_asset_uploader._s3 = mock_s3_client
 
         # When
@@ -2549,7 +2585,9 @@ class TestUpload:
             {"ResponseMetadata": {"HTTPStatusCode": 404}}, "HeadObject"
         )
 
-        s3_asset_uploader = S3AssetUploader()
+        s3_asset_uploader = S3AssetUploader(
+            s3_max_pool_connections=50, small_file_threshold_multiplier=20
+        )
         s3_asset_uploader._s3 = mock_s3_client
 
         # When
@@ -2597,7 +2635,9 @@ class TestUpload:
             return_value=mock_s3_check_cache,
         ):
             # Execute reset_s3_check_cache where the cached hash does not exist in S3
-            s3_asset_uploader = S3AssetUploader()
+            s3_asset_uploader = S3AssetUploader(
+                s3_max_pool_connections=50, small_file_threshold_multiplier=20
+            )
             s3_asset_uploader.reset_s3_check_cache(cache_dir)
 
             # Then
@@ -2611,7 +2651,12 @@ class TestUpload:
         ],
     )
     def test_upload_object_to_cas_skips_upload_with_cache(
-        self, tmpdir, farm_id, queue_id, manifest_version, default_job_attachment_s3_settings
+        self,
+        tmpdir,
+        farm_id,
+        queue_id,
+        manifest_version,
+        default_job_attachment_s3_settings,
     ):
         """
         Tests that objects are not uploaded to S3 if there is a corresponding entry in the S3CheckCache
@@ -2637,7 +2682,7 @@ class TestUpload:
             "_get_current_timestamp",
             side_effect=["345.67"],
         ):
-            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+            is_uploaded, file_size = asset_manager.asset_uploader.upload_object_to_cas(
                 file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
                 hash_algorithm=HashAlgorithm.XXH128,
                 s3_bucket=default_job_attachment_s3_settings.s3BucketName,
@@ -2708,7 +2753,7 @@ class TestUpload:
             asset_manager.asset_uploader,
             "upload_file_to_s3",
         ) as mock_upload_file_to_s3:
-            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+            is_uploaded, file_size = asset_manager.asset_uploader.upload_object_to_cas(
                 file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
                 hash_algorithm=HashAlgorithm.XXH128,
                 s3_bucket=default_job_attachment_s3_settings.s3BucketName,
@@ -2725,7 +2770,8 @@ class TestUpload:
             s3_cache.get_connection_entry.assert_not_called()
             # S3 HEAD should always be called when force_s3_check=True
             mock_file_already_uploaded.assert_called_once_with(
-                default_job_attachment_s3_settings.s3BucketName, "prefix/test-hash.xxh128"
+                default_job_attachment_s3_settings.s3BucketName,
+                "prefix/test-hash.xxh128",
             )
             # Upload should only happen if file doesn't exist in S3
             if expected_upload:
@@ -2740,7 +2786,9 @@ class TestUpload:
         temp_file = tmp_path / "temp_file.txt"
         temp_file.write_text("this is test file")
 
-        a3_asset_uploader = S3AssetUploader()
+        a3_asset_uploader = S3AssetUploader(
+            s3_max_pool_connections=50, small_file_threshold_multiplier=20
+        )
         with a3_asset_uploader._open_non_symlink_file_binary(str(temp_file)) as file_obj:
             assert file_obj is not None
             assert file_obj.read() == b"this is test file"
@@ -2755,7 +2803,9 @@ class TestUpload:
         os.symlink(target_file, symlink_path)
 
         # WHEN
-        a3_asset_uploader = S3AssetUploader()
+        a3_asset_uploader = S3AssetUploader(
+            s3_max_pool_connections=50, small_file_threshold_multiplier=20
+        )
         with a3_asset_uploader._open_non_symlink_file_binary(str(symlink_path)) as file_obj:
             # THEN
             assert file_obj is None
@@ -2810,7 +2860,7 @@ class TestUpload:
             "_get_current_timestamp",
             side_effect=["345.67"],
         ):
-            (is_uploaded, file_size) = asset_manager.asset_uploader.upload_object_to_cas(
+            is_uploaded, file_size = asset_manager.asset_uploader.upload_object_to_cas(
                 file=BaseManifestPath(path="test-file.txt", hash="test-hash", size=5, mtime=1),
                 hash_algorithm=HashAlgorithm.XXH128,
                 s3_bucket=default_job_attachment_s3_settings.s3BucketName,
@@ -2840,12 +2890,15 @@ class TestUpload:
             paths=[
                 BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
                 BaseManifestPath(
-                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                    path="output/nested_output_file",
+                    hash="b",
+                    size=1,
+                    mtime=1479079344833848,
                 ),
             ],
         )
         # When
-        (hash_alg, _, manifest_name) = S3AssetUploader._gather_upload_metadata(
+        hash_alg, _, manifest_name = S3AssetUploader._gather_upload_metadata(
             manifest, Path("mocksourcerootpath"), "suffix"
         )
         # Then
@@ -2860,12 +2913,15 @@ class TestUpload:
             paths=[
                 BaseManifestPath(path="output_file", hash="a", size=1, mtime=167907934333848),
                 BaseManifestPath(
-                    path="output/nested_output_file", hash="b", size=1, mtime=1479079344833848
+                    path="output/nested_output_file",
+                    hash="b",
+                    size=1,
+                    mtime=1479079344833848,
                 ),
             ],
         )
         # When
-        (hash_alg, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
+        hash_alg, manifest_name = S3AssetUploader._get_hashed_file_name_from_root_str(
             manifest, "C:\\Program Files\\My App\\data.txt", "suffix"
         )
         # Then

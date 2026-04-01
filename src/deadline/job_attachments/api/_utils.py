@@ -5,7 +5,7 @@ import os
 from contextlib import ExitStack
 from typing import List, Dict
 
-from ...client.exceptions import NonValidInputError
+from ..exceptions import NonValidInputError
 from ..asset_manifests.base_manifest import BaseAssetManifest
 from ..asset_manifests.decode import decode_manifest
 

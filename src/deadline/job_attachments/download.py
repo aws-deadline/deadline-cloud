@@ -22,7 +22,10 @@ from boto3.s3.transfer import ProgressCallbackInvoker
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .asset_manifests.base_manifest import BaseAssetManifest, BaseManifestPath as RelativeFilePath
+from .asset_manifests.base_manifest import (
+    BaseAssetManifest,
+    BaseManifestPath as RelativeFilePath,
+)
 from .asset_manifests.hash_algorithms import HashAlgorithm
 from .asset_manifests.decode import decode_manifest
 from .exceptions import (
@@ -58,7 +61,6 @@ from .progress_tracker import (
 from ._aws.aws_clients import (
     get_account_id,
     get_s3_client,
-    get_s3_max_pool_connections,
     get_s3_transfer_manager,
 )
 from .os_file_permission import (
@@ -298,7 +300,8 @@ def _get_tasks_manifests_keys_from_s3(
         # Should use S3 LastModified instead.
         for task_folder, files in task_prefixes.items():
             last_subfolder = sorted(
-                set(f.split("/")[len(task_folder.split("/"))] for f in files), reverse=True
+                set(f.split("/")[len(task_folder.split("/"))] for f in files),
+                reverse=True,
             )[0]
             manifests_keys += [f for f in files if f.startswith(f"{task_folder}/{last_subfolder}/")]
     else:
@@ -674,7 +677,7 @@ def _download_files_parallel(
         }
         # surfaces any exceptions in the thread
         for future in concurrent.futures.as_completed(futures):
-            (file_bytes, local_file_name) = future.result()
+            file_bytes, local_file_name = future.result()
             if local_file_name:
                 downloaded_file_names.append(str(local_file_name.resolve()))
                 if progress_tracker:
@@ -741,7 +744,14 @@ def get_job_output_paths_by_asset_root(
     Returns a dict of ManifestPathGroups, with the root path as the key.
     """
     output_manifests_by_root = get_output_manifests_by_asset_root(
-        s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id, session=session
+        s3_settings,
+        farm_id,
+        queue_id,
+        job_id,
+        step_id,
+        task_id,
+        session_action_id,
+        session=session,
     )
 
     outputs: dict[str, ManifestPathGroup] = {}
@@ -782,7 +792,14 @@ def get_output_manifests_by_asset_root(
                 "Session Action ID specified, but missing Step ID or Task ID. Job, Step, and Task ID are required to retrieve session action outputs."
             )
         return _get_manifests_by_session_action_id(
-            s3_settings, farm_id, queue_id, job_id, step_id, task_id, session_action_id, session
+            s3_settings,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            task_id,
+            session_action_id,
+            session,
         )
 
     outputs: DefaultDict[str, list[BaseAssetManifest]] = DefaultDict(list)
@@ -945,15 +962,14 @@ def download_files_from_manifests(
     return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
 
 
-def _get_num_download_workers() -> int:
+def _get_num_download_workers(s3_max_pool_connections: int = 50) -> int:
     """
     Determines the max number of thread workers for downloading multiple files in parallel,
     based on the allowed S3 max pool connections size. If the max worker count is calculated
     to be 0 due to a small pool connections size limit, it returns 1.
     """
-    num_download_workers = int(get_s3_max_pool_connections() / S3_DOWNLOAD_MAX_CONCURRENCY)
+    num_download_workers = int(s3_max_pool_connections / S3_DOWNLOAD_MAX_CONCURRENCY)
     if num_download_workers <= 0:
-        # This can result in triggering "Connection pool is full" warning messages during downloads.
         num_download_workers = 1
     return num_download_workers
 
@@ -991,7 +1007,9 @@ def _set_fs_group(
         )
 
 
-def merge_asset_manifests(manifests: list[BaseAssetManifest]) -> BaseAssetManifest | None:
+def merge_asset_manifests(
+    manifests: list[BaseAssetManifest],
+) -> BaseAssetManifest | None:
     """Merge files from multiple manifests into a single list, ensuring that each filename
     is unique by keeping the one from the last encountered manifest. (Thus, the steps'
     outputs are downloaded over the input job attachments.)
@@ -1075,7 +1093,11 @@ def _merge_asset_manifests_sorted_asc_by_last_modified(
 
 def _write_manifest_to_temp_file(manifest: BaseAssetManifest, dir: Path) -> str:
     with NamedTemporaryFile(
-        suffix=".json", prefix="deadline-merged-manifest-", delete=False, mode="w", dir=dir
+        suffix=".json",
+        prefix="deadline-merged-manifest-",
+        delete=False,
+        mode="w",
+        dir=dir,
     ) as file:
         file.write(manifest.encode())
         return file.name
@@ -1140,6 +1162,7 @@ def mount_vfs_from_manifests(
     os_env_vars: dict[str, str],
     fs_permission_settings: FileSystemPermissionSettings,
     cas_prefix: Optional[str] = None,
+    on_mount_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
     """
     Given manifests, downloads all files from a CAS in those manifests.
@@ -1151,6 +1174,8 @@ def mount_vfs_from_manifests(
         session_dir: the directory that the session is going to use.
         os_env_vars: environment variables to set for launched subprocesses
         cas_prefix: The CAS prefix of the files.
+        on_mount_complete: optional callback invoked with a bool indicating whether
+            each VFS mount succeeded. Callers can use this for telemetry or logging.
 
     Returns:
         None
@@ -1206,6 +1231,7 @@ def mount_vfs_from_manifests(
             getattr(fs_permission_settings, "os_group", ""),
             cas_prefix,
             str(vfs_cache_dir),
+            on_mount_complete=on_mount_complete,
         )
         vfs_manager.start(session_dir=session_dir)
 
@@ -1437,7 +1463,10 @@ def _get_manifests_by_session_action_id(
     with concurrent.futures.ThreadPoolExecutor(max_workers=S3_DOWNLOAD_MAX_CONCURRENCY) as executor:
         futures = [
             executor.submit(
-                get_asset_root_and_manifest_from_s3, key, s3_settings.s3BucketName, session
+                get_asset_root_and_manifest_from_s3,
+                key,
+                s3_settings.s3BucketName,
+                session,
             )
             for key in manifests_keys
         ]

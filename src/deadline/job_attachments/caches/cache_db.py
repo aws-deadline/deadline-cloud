@@ -158,10 +158,10 @@ class CacheDB(ABC):
         Gets the expected directory for the cache database file based on OS environment variables.
         If a directory cannot be found, defaults to the working directory.
         """
-        default_path = os.environ.get("HOME")
-        if default_path:
-            default_path = os.path.join(default_path, CONFIG_ROOT, COMPONENT_NAME)
-        return default_path
+        default_path = os.path.expanduser("~")
+        if default_path and default_path != "~":
+            return os.path.join(default_path, CONFIG_ROOT, COMPONENT_NAME)
+        return None
 
     def remove_cache(self) -> None:
         """

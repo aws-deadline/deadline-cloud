@@ -55,10 +55,19 @@ from ...job_attachments.models import (
 from ...job_attachments.progress_tracker import ProgressReportMetadata, ProgressStatus
 from ...job_attachments.upload import S3AssetManager
 from ._session import session_context
-from ._job_attachment import _hash_attachments  # type: ignore[import]
-from ...job_attachments._path_summarization import human_readable_file_size, summarize_path_list
+from ...job_attachments._path_summarization import (
+    human_readable_file_size,
+    summarize_path_list,
+)
+from ...job_attachments.api._hashing import _hash_attachments
+from ...job_attachments.upload import SummaryStatistics
 
 logger = logging.getLogger(__name__)
+
+
+def hashing_telemetry_callback(hashing_summary: SummaryStatistics):
+    """Records hashing summary statistics to the Deadline Cloud telemetry client."""
+    api.get_deadline_cloud_library_telemetry_client().record_hashing_summary(hashing_summary)
 
 
 def _summarize_asset_paths(
@@ -166,7 +175,9 @@ def _upload_attachments(
     Returns the attachment settings from the upload.
     """
 
-    def _default_update_upload_progress(upload_metadata: ProgressReportMetadata) -> bool:
+    def _default_update_upload_progress(
+        upload_metadata: ProgressReportMetadata,
+    ) -> bool:
         return True
 
     if not upload_progress_callback:
@@ -216,7 +227,9 @@ def _snapshot_attachments(
     Returns the attachment settings from the upload.
     """
 
-    def _default_update_snapshot_progress(upload_metadata: ProgressReportMetadata) -> bool:
+    def _default_update_snapshot_progress(
+        upload_metadata: ProgressReportMetadata,
+    ) -> bool:
         return True
 
     if not snapshot_progress_callback:
@@ -612,6 +625,8 @@ def create_job_from_job_bundle(
     # to users.
     known_asset_paths = _filter_redundant_known_paths(known_asset_paths)
 
+    telemetry_client = api.get_deadline_cloud_library_telemetry_client()
+
     # Hash and upload job attachments if there are any
     files_processed = False
     if asset_references and "jobAttachmentSettings" in queue:
@@ -661,11 +676,18 @@ def create_job_from_job_bundle(
             queue_display_name=queue["displayName"],
         )
 
+        s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+        small_file_threshold_multiplier = int(
+            config_file.get_setting("settings.small_file_threshold_multiplier")
+        )
+
         asset_manager = S3AssetManager(
             farm_id=farm_id,
             queue_id=queue_id,
             job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
             session=queue_role_session,
+            s3_max_pool_connections=s3_max_pool_connections,
+            small_file_threshold_multiplier=small_file_threshold_multiplier,
         )
 
         upload_group = asset_manager.prepare_paths_for_upload(
@@ -694,7 +716,8 @@ def create_job_from_job_bundle(
                     if from_gui:
                         # In the from_gui case, we present a prompt even though settings.auto_accept is enabled.
                         if not interactive_confirmation_callback(
-                            asset_path_message + "Do you wish to proceed?", default_prompt_response
+                            asset_path_message + "Do you wish to proceed?",
+                            default_prompt_response,
                         ):
                             print_function_callback("Job submission canceled (user input).")
                             raise UserInitiatedCancel()
@@ -709,10 +732,13 @@ def create_job_from_job_bundle(
                     print_function_callback(asset_path_message)
             else:
                 if not interactive_confirmation_callback(
-                    asset_path_message + "\nDo you wish to proceed?", default_prompt_response
+                    asset_path_message + "\nDo you wish to proceed?",
+                    default_prompt_response,
                 ):
                     print_function_callback("Job submission canceled (user input).")
                     raise UserInitiatedCancel()
+
+            hash_cache_dir = config_file.get_cache_directory()
 
             _, asset_manifests = _hash_attachments(
                 asset_manager=asset_manager,
@@ -721,6 +747,8 @@ def create_job_from_job_bundle(
                 total_input_bytes=upload_group.total_input_bytes,
                 print_function_callback=print_function_callback,
                 hashing_progress_callback=hashing_progress_callback,
+                hash_cache_dir=hash_cache_dir,
+                telemetry_callback=hashing_telemetry_callback,
             )
 
             if not debug_snapshot_dir:
@@ -793,7 +821,7 @@ def create_job_from_job_bundle(
     if logging.DEBUG >= logger.getEffectiveLevel():
         logger.debug(json.dumps(create_job_args, indent=1))
 
-    api.get_deadline_cloud_library_telemetry_client().record_event(
+    telemetry_client.record_event(
         event_type="com.amazon.rum.deadline.submission",
         event_details={"submitter_name": submitter_name},
         from_gui=from_gui,
@@ -835,7 +863,7 @@ def create_job_from_job_bundle(
             create_job_result_callback,
         )
 
-        api.get_deadline_cloud_library_telemetry_client().record_event(
+        telemetry_client.record_event(
             event_type="com.amazon.rum.deadline.create_job",
             event_details={"is_success": success},
             from_gui=from_gui,

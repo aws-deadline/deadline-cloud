@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 import threading
-from typing import Dict, Union, Optional
+from typing import Callable, Dict, Union, Optional
 
 from .exceptions import (
     VFSExecutableMissingError,
@@ -17,10 +17,6 @@ from .exceptions import (
 )
 
 from .os_file_permission import PosixFileSystemPermissionSettings
-
-from deadline.client.api import (
-    get_deadline_cloud_library_telemetry_client as _get_deadline_cloud_library_telemetry_client,
-)
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +72,7 @@ class VFSProcessManager(object):
         os_group: Optional[str] = None,
         cas_prefix: Optional[str] = None,
         asset_cache_path: Optional[str] = None,
+        on_mount_complete: Optional[Callable[[bool], None]] = None,
     ):
         self._mount_point = mount_point
         self._vfs_proc = None
@@ -90,6 +87,7 @@ class VFSProcessManager(object):
         self._os_env_vars = os_env_vars
         self._cas_prefix = cas_prefix
         self._asset_cache_path = asset_cache_path
+        self._on_mount_complete = on_mount_complete
 
     @classmethod
     def kill_all_processes(cls, session_dir: Path, os_user: str) -> None:
@@ -503,9 +501,8 @@ class VFSProcessManager(object):
         log.info(f"Launched VFS as pid {self._vfs_proc.pid}")
 
         is_mounted = VFSProcessManager.wait_for_mount(self.get_mount_point(), session_dir)
-        _get_deadline_cloud_library_telemetry_client().record_vfs_mounting(
-            successfully_mounted=is_mounted
-        )
+        if self._on_mount_complete is not None:
+            self._on_mount_complete(is_mounted)
 
         if not is_mounted:
             log.error("Failed to mount, shutting down")

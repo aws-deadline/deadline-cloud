@@ -62,6 +62,10 @@ __all__ = [
     "list_steps",
     "list_tasks",
     "search_jobs",
+    # Update checker
+    "safe_check_for_updates",
+    "UpdateCheckResult",
+    "UpdateCheckStatus",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -128,6 +132,11 @@ from ._mcp import (
     list_steps,
     list_tasks,
     search_jobs,
+)
+from ._update_checker import (
+    safe_check_for_updates,
+    UpdateCheckResult,
+    UpdateCheckStatus,
 )
 
 logger = getLogger(__name__)
