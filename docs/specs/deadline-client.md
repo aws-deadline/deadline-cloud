@@ -102,7 +102,7 @@ but they don't implement `serde::Serialize`
 open since Oct 2021), so we can't serialize them back to JSON/YAML.
 
 The extra fields are harmless (more data than Python, never less), and
-field ordering differences are cosmetic. See `workflow.md` § "Known
+field ordering differences are cosmetic. See `../designs/rust-rewrite/workflow.md` § "Known
 differences from Python/boto3" for the full list.
 
 **Future option: Smithy model filtering.** The Smithy model JSON for
@@ -116,7 +116,7 @@ fields would only appear after the SDK updates its model. See the
 List functions use manual `nextToken` loops with `ResponseBodyCapture`
 on each page (SDK paginators don't support `.customize().interceptor()`).
 
-See `docs/designs/rust-rewrite/workflow.md` § "AWS SDK for Rust Usage"
+See `../designs/rust-rewrite/workflow.md` § "AWS SDK for Rust Usage"
 for the full rationale and patterns.
 
 Functions:

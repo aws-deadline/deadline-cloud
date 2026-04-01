@@ -274,7 +274,7 @@ file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
 they fail. If a test passes before implementation, it's not testing anything
 new.
 
-**CLI output tests use `insta-cmd` snapshots** (see `docs/TESTING.md` for
+**CLI output tests use `insta-cmd` snapshots** (see `../../TESTING.md` for
 the generic framework).
 
 Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for

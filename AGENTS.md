@@ -4,16 +4,9 @@ This is the Rust implementation of the AWS Deadline Cloud client software:
 CLI, worker agent, GUI FFI layer, and shared library crates. The Python GUI
 widget files also live in this repo under `gui/`.
 
-See `docs/designs/rust-rewrite/migration_strategy.md` for the full migration
-plan, goals, and phased rollout.
-
 ## Before you start
 
-1. Read `docs/designs/rust-rewrite/migration_strategy.md` — goals, what we're
-   migrating, architecture, and phased rollout.
-2. Read `docs/ARCHITECTURE.md` — crate dependency graph and shared conventions.
-3. Read `docs/specs/<crate>.md` for whichever crate you're working on.
-4. Read `docs/TESTING.md` for how tests are structured (Level 1 vs Level 2, no mocking).
+Read `docs/README.md` for the documentation reading order and layout.
 
 ## Keeping docs in sync with code
 

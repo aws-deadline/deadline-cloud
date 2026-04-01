@@ -16,7 +16,7 @@ Not yet implemented.
 
 Proved that `aws-sdk-s3` matches Python/boto3 throughput for multipart
 upload and download of large files. This was a required risk spike before
-bulk implementation (see `migration_strategy.md` § "Fail-Fast Strategy").
+bulk implementation (see `../designs/rust-rewrite/migration_strategy.md` § "Fail-Fast Strategy").
 
 ### Results
 

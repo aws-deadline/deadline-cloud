@@ -95,7 +95,7 @@ deadline-cli
 ```
 
 For detailed diagrams of the FFI threading model, callback flow, and
-memory ownership, see `docs/designs/rust-rewrite/gui_ffi_architecture.md`.
+memory ownership, see `designs/rust-rewrite/gui_ffi_architecture.md`.
 
 ### Worker Agent
 
@@ -138,10 +138,10 @@ ExtendScript (JSX)
   catches errors at the top level and prints them. The FFI layer converts
   Rust errors to C-compatible error codes + message strings.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
-  See `TESTING.md`.
+  See [`TESTING.md`](TESTING.md).
 - **API responses:** All API functions in `deadline-client` use the
   `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
-  The CLI layer never sees SDK types. See `workflow.md` § "AWS SDK for
+  The CLI layer never sees SDK types. See [`designs/rust-rewrite/workflow.md`](designs/rust-rewrite/workflow.md) § "AWS SDK for
   Rust Usage".
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
