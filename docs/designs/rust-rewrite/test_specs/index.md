@@ -55,7 +55,7 @@
 | 41 | CLI: deadline fleet | ✅ Complete (8 cases) | [cli.md](cli.md) |
 | 42 | CLI: deadline queue | ✅ Complete (26 cases) | [cli.md](cli.md) |
 | 43 | CLI: deadline worker | ✅ Complete (7 cases) | [cli.md](cli.md) |
-| 44 | CLI: deadline job | ✅ Complete (28 cases) | [cli.md](cli.md) |
+| 44 | CLI: deadline job | ✅ Complete (42 cases) | [cli.md](cli.md) |
 | 45 | CLI: deadline bundle | ✅ Complete (14 cases) | [cli.md](cli.md) |
 | 46 | CLI: deadline attachment | ✅ Complete (15 cases) | [cli.md](cli.md) |
 | 47 | CLI: deadline manifest | ✅ Complete (26 cases) | [cli.md](cli.md) |

@@ -332,10 +332,11 @@ in the "Known differences" section.
 
 ### 6. Refactor
 
-Clean up the implementation. Tests must still pass. Commit.
+Clean up the implementation by ensuring it follows proper code quality and code standards with minimal redundancy or code smells. Tests must still pas once refactors are complete.
 
 ### 7. Update docs
 
 Update `docs/specs/<crate>.md` if the implementation diverged from the
 initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships
-changed. Update the Progress table in `README.md`.
+changed. Update the Progress table in `README.md`. Commit all changes after
+getting developer approval.

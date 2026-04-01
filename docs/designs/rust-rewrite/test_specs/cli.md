@@ -435,7 +435,32 @@
 | 27 | Happy path | Job with steps and tasks | Prints schedule trace showing task execution timeline | |
 | 28 | Output formats | `--json` flag | Schedule printed as JSON | |
 
-> ✅ Complete (28 cases)
+### `deadline job requeue-tasks`
+
+> **Logic under test:** Requeues tasks of a job by setting their target run status
+> to `PENDING`. Calls `GetJob` for a summary, `ListSteps` to enumerate steps,
+> `ListTasks` per step to find matching tasks, and `UpdateTask` per task to requeue.
+> Uses an adaptive retry client config for the `UpdateTask` calls. Default statuses
+> are `FAILED`, `CANCELED`, `SUSPENDED`.
+
+| # | Category | Test Case | Expected Behavior | Notes |
+|---|----------|-----------|-------------------|-------|
+| 29 | Happy path | Job with FAILED tasks, default `--run-status` | Prints job summary, step-by-step requeue progress, and total count; calls `UpdateTask` with `targetRunStatus=PENDING` for each matching task | Default statuses: FAILED, CANCELED, SUSPENDED |
+| 30 | Happy path | `--run-status FAILED --run-status SUCCEEDED` | Only tasks with those two statuses are requeued | `--run-status` is repeatable |
+| 31 | Happy path | Task has parameters | Output shows `param=value (taskId)` format per task | |
+| 32 | Happy path | Task has no parameters | Output shows just `taskId` per task | |
+| 33 | Happy path | Job has multiple steps | Each step printed with its own requeue summary; tasks listed per step | |
+| 34 | Boundary values | No tasks match the requested statuses | Prints "No tasks to requeue." and exits 0 | |
+| 35 | Boundary values | Step has no tasks matching status | Prints "Step has no tasks to requeue." for that step; continues to next | |
+| 36 | Interactive vs scripted | `--yes` flag | Skips confirmation prompt; prints estimated count | |
+| 37 | Interactive vs scripted | No `--yes`, user confirms | Prints "This action will requeue..." prompt; proceeds on confirmation | |
+| 38 | Interactive vs scripted | No `--yes`, user declines | Prints "No tasks were requeued."; exits 1 | |
+| 39 | Interactive vs scripted | `settings.auto_accept` is `true` in config | Behaves like `--yes`; skips prompt | |
+| 40 | Missing/invalid args | No job ID available | Returns usage error | Required via `_apply_cli_options_to_config` |
+| 41 | Error handling | `GetJob` API call fails | Prints error with suggestions; exits 1 | |
+| 42 | Error handling | `UpdateTask` API call fails | Error propagated; partial requeue may have occurred | Adaptive retry handles transient failures |
+
+> ✅ Complete (42 cases)
 
 ---
 

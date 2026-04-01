@@ -32,29 +32,9 @@ and gates all planning and implementation work.
 
 ## Progress
 
-### Implemented
-
-| Crate | Sections | What's done |
-|-------|----------|-------------|
-| `deadline-models` | §51, §52 | Error types, submitter info |
-| `deadline-common` | §36, §14 | Path utilities, `TelemetryClient` (background sender, opt-out, retry, identifier management) |
-| `deadline-config` | §1, §2 | INI read/write, hierarchical settings, str2bool, get/set/clear, get_best_profile_for_farm |
-| `deadline-test-server` | — | TestHarness, wiremock stub server, STS/Deadline REST mocks (with pagination) |
-| `deadline-cli` | §37 (cases 1-2), §38 (cases 1-8) | `--version`, `--help`, config subcommands (show, get, set, clear), Level 2 tests |
-| `deadline-cli` | §37 (cases 3-47, 54-58) | `--log-level`, `--redirect-output`, markdown stripping, error handling, `apply_cli_options_to_config`, `cli_object_repr`, `parse_file_parameter`, `parse_multi_format_parameters`, `TimestampFormat`, SIGINT handler, `ProgressBarManager` |
-| `deadline-client` | §4 (cases 1-3, 8, 10-11), §7 (cases 1-2, 4-6, 8-17, 22) | Session creation, profile resolution, `check_authentication_status`, `check_deadline_api_available`, DCM credential source detection, `list_farms`/`list_queues`/`list_fleets`/`list_jobs`/`search_jobs` (all via ResponseBodyCapture), `get_farm`/`get_queue`/`get_fleet`/`get_job`/`get_worker` (ResponseBodyCapture), `search_workers` (ResponseBodyCapture) |
-| `deadline-cli` | §39 (cases 4-7), §40-§44 (list/get cases) | `deadline auth status`, `deadline farm list/get`, `deadline fleet list/get`, `deadline queue list/get`, `deadline job list/get` (job list uses `search_jobs` with count header, field selection, `estimatedTimeRemaining`) |
-| `deadline-cli` | §37 (cases 48-53), §43 (cases 1-7) | `suggest_resources_on_client_error`, `deadline worker list/get`, SDK error formatting with error codes |
-| `deadline-cli` | — | All CLI test files converted to `insta-cmd` snapshots: `cli_auth`, `cli_config`, `cli_root`, `cli_suggest`, `cli_dcm`, `cli_common` |
-| `deadline-client` | §9, §10, §13 (partial) | `assume_queue_role_for_user`, `assume_queue_role_for_read`, `get_storage_profile_for_queue`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`. Paginated list helper extracted. `get_monitor_id` added. |
-| `deadline-cli` | §42 (cases 8-10), §44 (diagnostics) | `deadline queue export-credentials` (USER/READ modes, AccessDenied error), `deadline queue get-storage-profile`, `deadline job get-session/list-sessions/list-steps/list-tasks` |
-| `deadline-gui-ffi` | — | Initial FFI layer: `deadline_get_credentials_source`, `deadline_check_auth_status`, `deadline_check_auth_status_with_progress`, `deadline_free_string`. C ABI, JSON exchange, callback pattern validated. Rust unit tests + Python integration tests. |
-
 ### Risk Spikes (must pass before bulk implementation)
 
-⚠️ **These block all other implementation work.** A fresh agent should
-start here, not at "In Progress." See `migration_strategy.md` §
-"Fail-Fast Strategy" for full details and pass/fail gates.
+All passed. See `migration_strategy.md` § "Fail-Fast Strategy" for details.
 
 | Spike | Status | Proves |
 |-------|--------|--------|
@@ -63,15 +43,46 @@ start here, not at "In Progress." See `migration_strategy.md` §
 | S3 transfer performance | ✅ Passed | Rust S3 throughput ≥ Python boto3 transfer manager (see `docs/specs/deadline-job-attachments.md` § "S3 Transfer Spike") |
 | Job attachment hashing | ✅ Passed | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
 
-### Not Started
+### Work Items
 
-| Crate | Phase | Sections | Scope |
-|-------|-------|----------|-------|
-| `deadline-client` | 1 | §3-14, §34 | Session caching/user-agent (§3), queue user credentials (§5), login/logout (§6), queue parameters (§8), job monitoring & logs (§12), telemetry (§14) |
-| `deadline-job-bundle` | 1 | §15-18 | Bundle loading, parameters, history |
-| `deadline-job-attachments` | 1 | §19-35 | Models, hashing, upload, download, caches, manifests, VFS, path mapping |
-| `deadline-common` | 1 | §50 | MCP server (deferred) |
-| `deadline-worker-agent` | 2 | — | Session mgmt, attachment sync, progress reporting |
-| `deadline-gui-ffi` | 3 | — | Remaining FFI functions: config, login/logout, list APIs, submit_job, telemetry |
-| `gui/` (Python) | 3 | — | Refactored QWidgets layout calling Rust FFI |
-| `deadline-mcp` | 5 | §49, §50 | MCP server binary (rmcp SDK) |
+Each row is a self-contained unit of work. A fresh agent picks the first
+row with status **Not started** whose dependencies are all **✅ Done**, then
+follows `workflow.md` for that item.
+
+| # | Work Item | Status | Library §§ | CLI §§ | Test Spec Files | Depends On |
+|---|-----------|--------|-----------|--------|-----------------|------------|
+| 0a | Error types, submitter info | ✅ Done | §51, §52 | — | `common.md` | — |
+| 0b | Path utilities | ✅ Done | §36 | — | `common.md` | — |
+| 0c | TelemetryClient (common) | ✅ Done | §14 (partial) | — | `api_job_lifecycle.md` | — |
+| 0d | Config read/write | ✅ Done | §1, §2 | §38 cases 1-8 | `config.md`, `cli.md` | — |
+| 0e | Test server infrastructure | ✅ Done | — | — | — | — |
+| 0f | CLI root & common utilities | ✅ Done | — | §37 | `cli.md` | 0d |
+| 0g | Session creation & auth status | ✅ Done | §4, §7 | §39 cases 4-7, §40-44 list/get | `session.md`, `api_resource_management.md`, `cli.md` | 0d |
+| 0h | Queue/job credentials & diagnostics | ✅ Done | §9, §10, §13 | §42 cases 8-10, §44 diagnostics | `api_resource_management.md`, `api_job_lifecycle.md`, `cli.md` | 0g |
+| 0i | GUI FFI spike | ✅ Done | — | — | — | 0g |
+| 1 | Session caching & user-agent | Not started | §3 (28 cases) | — | `session.md` | 0g |
+| 2 | Login/logout | Not started | §6 (18 cases) | §39 cases 1-3 | `api_resource_management.md`, `cli.md` | 1 |
+| 3 | Queue user credentials | Not started | §5 (20 cases) | — | `session.md` | 1 |
+| 4 | Queue parameters | Not started | §8 (10 cases) | §42 cases 6-7 | `api_resource_management.md`, `cli.md` | 1 |
+| 5 | Telemetry API integration | Not started | §14 (24 cases) | §42 cases 11-13 | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 6 | Job monitoring & logs | Not started | §12 (35 cases) | §44 cases 17-24 | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 7 | Job bundle | Not started | §15-18 (174 cases) | §45 case 14 | `job_bundle.md`, `cli.md` | 1, 4 |
+| 8 | Job attachments: core | Not started | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
+| 9 | Job attachments: transfer | Not started | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
+| 10 | Job attachments: orchestration | Not started | §23, §26-29, §32, §35 (325 cases) | §47 (26 cases) | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
+| 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
+| 12 | Job action commands | Not started | — | §44 cases 6-9, 25-28 | `cli.md` | 6 |
+| 13 | Job download & sync-output | Not started | — | §44 cases 10-16, §42 cases 14-26 | `cli.md` | 10 |
+| 14 | Handle web URL | Not started | — | §48 (14 cases) | `cli.md` | 13 |
+| 15 | Job requeue-tasks | Not started | — | §44 cases 29-42 | `cli.md` | 6 |
+| 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
+| 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
+| 18 | Worker agent | Deferred | §53+ | — | — | 1-17 |
+
+**Status key:** ✅ Done · Not started · Deferred (blocked on CLI completion)
+
+**Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
+after the core CLI commands are complete. #18 (worker agent) is deferred until
+the entire CLI — including GUI FFI and MCP — is done. The CLI exercises all
+the same library crates, so completing it first means battle-tested foundations
+for the worker agent.
