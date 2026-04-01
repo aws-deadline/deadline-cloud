@@ -134,7 +134,8 @@ section of the AWS Deadline Cloud Developer Guide for detailed information on jo
 At a minimum, a job bundle is a folder that contains an [OpenJD][openjd] template as a file named `template.json` or `template.yaml`. However, it can optionally include:
 1. An `asset_references.yaml` file - lists file inputs and outputs.
 2. A `parameter_values.yaml` file - contains the selected values for the job template's parameters.
-3. Any number of additional files required for the job.
+3. A `hooks.yaml` file - defines pre/post-submission hooks (see [Submission Hooks](#submission-hooks)).
+4. Any number of additional files required for the job.
 
 For example job bundles, visit the [samples repository][deadline-cloud-samples].
 
@@ -149,6 +150,30 @@ $ deadline bundle gui-submit --browse
 ```
 
 On submission, a job bundle will be created in the job history directory (default: `~/.deadline/job_history`).
+
+### Submission Hooks
+
+You can run custom scripts during job submission by adding a `hooks.yaml` file to your job bundle:
+
+```yaml
+preSubmission:
+  - command: python3
+    args: [validate_assets.py]
+    timeout: 30
+
+postSubmission:
+  - command: python3
+    args: [notify_team.py]
+```
+
+**Pre-submission hooks** run before files are uploaded and can:
+- Validate job configuration
+- Discover and add additional input files
+- Modify submission parameters
+
+**Post-submission hooks** run after job creation for notifications and integrations.
+
+Hooks receive job metadata via environment variables (`DEADLINE_JOB_NAME`, `DEADLINE_FARM_ID`, etc.) and JSON on stdin. See [docs/submission-hooks.md](docs/submission-hooks.md) for full documentation.
 
 ## Configuration
 

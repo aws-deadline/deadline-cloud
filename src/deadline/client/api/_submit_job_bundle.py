@@ -36,6 +36,7 @@ from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     validate_directory_symlink_containment,
 )
+from ..job_bundle._hooks import HookManager, HookMetadata, _generate_hooks_confirmation_message
 from ..job_bundle.parameters import (
     apply_job_parameters,
     merge_queue_job_parameters,
@@ -496,6 +497,82 @@ def create_job_from_job_bundle(
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(job_bundle_dir)
 
+    # Load hooks from environment variable and/or bundle
+    env_hooks_dir = os.environ.get("DEADLINE_HOOKS_DIR")
+    allow_env_hooks = config_file.str2bool(
+        get_setting("settings.allow_environment_hooks", config=config)
+    )
+    allow_bundle_hooks = config_file.str2bool(
+        get_setting("settings.allow_bundle_hooks", config=config)
+    )
+
+    hook_manager = HookManager(job_bundle_dir, print_function_callback)
+    all_hooks_sources: list[tuple[str, str]] = []  # (source_description, hooks_dir)
+
+    # Check environment hooks
+    if env_hooks_dir:
+        if allow_env_hooks:
+            if os.path.isdir(env_hooks_dir):
+                all_hooks_sources.append(("environment (DEADLINE_HOOKS_DIR)", env_hooks_dir))
+            else:
+                print_function_callback(
+                    f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory"
+                )
+        else:
+            print_function_callback(
+                "Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\n"
+                "Enable with: deadline config set settings.allow_environment_hooks true"
+            )
+
+    # Check bundle hooks
+    bundle_has_hooks = hook_manager.load_hooks()
+    if bundle_has_hooks and (bundle_has_hooks.pre_submission or bundle_has_hooks.post_submission):
+        if allow_bundle_hooks:
+            all_hooks_sources.append(("bundle", job_bundle_dir))
+        else:
+            print_function_callback(
+                "Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\n"
+                "Enable with: deadline config set settings.allow_bundle_hooks true"
+            )
+            hook_manager.hooks = None  # Clear bundle hooks
+
+    # Load hooks from all allowed sources
+    hooks = None
+    for source_desc, hooks_dir in all_hooks_sources:
+        if hooks_dir == job_bundle_dir:
+            # Already loaded
+            hooks = bundle_has_hooks
+        else:
+            # Load from environment hooks dir
+            env_hook_manager = HookManager(hooks_dir, print_function_callback)
+            env_hooks = env_hook_manager.load_hooks()
+            if env_hooks:
+                if hooks is None:
+                    hooks = env_hooks
+                    hook_manager = env_hook_manager
+                else:
+                    # Merge hooks - env hooks run first, then bundle hooks
+                    hooks.pre_submission = env_hooks.pre_submission + hooks.pre_submission
+                    hooks.post_submission = env_hooks.post_submission + hooks.post_submission
+
+    # Show confirmation if any hooks will run
+    if hooks and (hooks.pre_submission or hooks.post_submission):
+        if not config_file.str2bool(get_setting("settings.auto_accept", config=config)):
+            hooks_message = _generate_hooks_confirmation_message(
+                hooks, hook_manager._original_bundle_dir
+            )
+            if interactive_confirmation_callback is None:
+                print_function_callback(hooks_message)
+                print_function_callback(
+                    "Job submission canceled (hooks present but user confirmation not available)."
+                )
+                raise DeadlineOperationCanceled()
+            elif not interactive_confirmation_callback(
+                hooks_message + "Do you want to run these hooks?", True
+            ):
+                print_function_callback("Job submission canceled (user declined hooks).")
+                raise UserInitiatedCancel()
+
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
 
@@ -624,6 +701,37 @@ def create_job_from_job_bundle(
     # reduce the amount of processing needed later, and produces a shorter warning message when presenting
     # to users.
     known_asset_paths = _filter_redundant_known_paths(known_asset_paths)
+
+    # Execute pre-submission hooks before hashing/uploading
+    if hooks and hooks.pre_submission:
+        template_obj = parse_yaml_or_json_content(
+            file_contents, file_type, job_bundle_dir, "template"
+        )
+        hook_metadata = HookMetadata(
+            job_name=template_obj.get("name", ""),
+            priority=priority if priority is not None else 50,
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_bundle_dir=os.path.abspath(job_bundle_dir),
+            parameters={p["name"]: p.get("value") for p in parameters if "name" in p},
+            submitter_name=submitter_name,
+            asset_references=asset_references_obj or {},
+            submission_payload={},  # Not yet built
+            storage_profile_id=storage_profile_id if storage_profile_id else None,
+        )
+        hook_result = hook_manager.execute_pre_submission_hooks(hook_metadata, {})
+
+        # Merge any asset references from hooks into asset_references
+        if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:
+            hook_refs = hook_result["attachments"]["assetReferences"]
+            for f in hook_refs.get("inputFilenames", []):
+                asset_references.input_filenames.add(f)
+            for d in hook_refs.get("inputDirectories", []):
+                asset_references.input_directories.add(d)
+            for d in hook_refs.get("outputDirectories", []):
+                asset_references.output_directories.add(d)
+            for p in hook_refs.get("referencedPaths", []):
+                asset_references.referenced_paths.add(p)
 
     telemetry_client = api.get_deadline_cloud_library_telemetry_client()
 
@@ -875,6 +983,26 @@ def create_job_from_job_bundle(
         print_function_callback("Submitted job bundle:")
         print_function_callback(f"   {job_bundle_dir}")
         print_function_callback(status_message + f"\n{job_id}")
+
+        # Execute post-submission hooks
+        if hooks and hooks.post_submission:
+            template_obj = parse_yaml_or_json_content(
+                file_contents, file_type, job_bundle_dir, "template"
+            )
+            hook_metadata = HookMetadata(
+                job_name=template_obj.get("name", ""),
+                priority=create_job_args.get("priority", 50),
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_bundle_dir=os.path.abspath(job_bundle_dir),
+                parameters={p["name"]: p.get("value") for p in parameters if "name" in p},
+                submitter_name=submitter_name,
+                asset_references=asset_references_obj or {},
+                submission_payload=create_job_args,
+                storage_profile_id=storage_profile_id if storage_profile_id else None,
+                job_id=job_id,
+            )
+            hook_manager.execute_post_submission_hooks(hook_metadata)
 
         return job_id
     else:
