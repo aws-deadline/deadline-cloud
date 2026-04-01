@@ -210,7 +210,10 @@ needed for `suggest_resources_on_client_error` to detect error types.
 
 Before planning, read these (in order). Skip none.
 
+- [ ] `../../AGENTS.md` — repo conventions, build/test commands
 - [ ] `migration_strategy.md` — goals and constraints
+- [ ] `data_flow.md` — persistent data formats
+- [ ] `observations.md` — behavioral notes and ambiguities
 - [ ] `../../ARCHITECTURE.md` — crate relationships
 - [ ] `../../TESTING.md` — test philosophy and levels
 - [ ] `../../specs/<crate>.md` for the target crate
