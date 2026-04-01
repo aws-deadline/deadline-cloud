@@ -100,76 +100,41 @@ PLATFORM_INSTALLER_URLS = {
 class TestFetchManifest:
     """Tests for _fetch_manifest() SSL context behavior."""
 
+    @patch(
+        "deadline.client.api._update_checker._get_botocore_ca_bundle",
+        return_value="/fake/cacert.pem",
+    )
+    @patch("deadline.client.api._update_checker.ssl.create_default_context")
     @patch("deadline.client.api._update_checker.urllib.request.urlopen")
-    def test_success_default_ssl(self, mock_urlopen_fn):
-        """When default SSL works, no fallback is needed."""
+    def test_success_with_bundled_ca(self, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle):
+        """Always uses botocore's bundled CA bundle for SSL verification."""
         mock_urlopen_fn.return_value = _mock_urlopen(SAMPLE_MANIFEST)
 
         result = _fetch_manifest()
 
         assert result == SAMPLE_MANIFEST
         assert mock_urlopen_fn.call_count == 1
-
-    @patch(
-        "deadline.client.api._update_checker._get_botocore_ca_bundle",
-        return_value="/fake/cacert.pem",
-    )
-    @patch("deadline.client.api._update_checker.ssl.create_default_context")
-    @patch("deadline.client.api._update_checker.urllib.request.urlopen")
-    @patch("deadline.client.api._update_checker.sys")
-    def test_macos_falls_back_to_bundled_ca(
-        self, mock_sys, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle
-    ):
-        """On macOS, when default SSL fails, retries with botocore's CA bundle."""
-        mock_sys.platform = "darwin"
-        # First call fails with SSL error, second succeeds with botocore CA bundle
-        mock_urlopen_fn.side_effect = [
-            urllib.error.URLError("SSL: CERTIFICATE_VERIFY_FAILED"),
-            _mock_urlopen(SAMPLE_MANIFEST),
-        ]
-
-        result = _fetch_manifest()
-
-        assert result == SAMPLE_MANIFEST
-        assert mock_urlopen_fn.call_count == 2
-        # Second call should have an explicit SSL context
-        second_call_kwargs = mock_urlopen_fn.call_args_list[1]
-        ctx = second_call_kwargs.kwargs.get("context") or second_call_kwargs[1].get("context")
+        # Should always use an explicit SSL context with botocore CA bundle
+        call_kwargs = mock_urlopen_fn.call_args
+        ctx = call_kwargs.kwargs.get("context") or call_kwargs[1].get("context")
         assert ctx is not None
-        # Verify botocore CA bundle was used
         mock_ca_bundle.assert_called_once()
         mock_ssl_ctx.return_value.load_verify_locations.assert_called_once_with("/fake/cacert.pem")
 
-    @patch("deadline.client.api._update_checker.urllib.request.urlopen")
-    @patch("deadline.client.api._update_checker.sys")
-    def test_non_macos_does_not_fallback(self, mock_sys, mock_urlopen_fn):
-        """On non-macOS, SSL errors are raised without fallback."""
-        mock_sys.platform = "linux"
-        mock_urlopen_fn.side_effect = urllib.error.URLError("SSL: CERTIFICATE_VERIFY_FAILED")
-
-        with pytest.raises(urllib.error.URLError):
-            _fetch_manifest()
-
-        assert mock_urlopen_fn.call_count == 1
-
     @patch(
         "deadline.client.api._update_checker._get_botocore_ca_bundle",
         return_value="/fake/cacert.pem",
     )
     @patch("deadline.client.api._update_checker.ssl.create_default_context")
     @patch("deadline.client.api._update_checker.urllib.request.urlopen")
-    @patch("deadline.client.api._update_checker.sys")
-    def test_macos_fallback_also_fails(
-        self, mock_sys, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle
-    ):
-        """On macOS, if both attempts fail, the error propagates."""
-        mock_sys.platform = "darwin"
+    def test_ssl_error_propagates(self, mock_urlopen_fn, mock_ssl_ctx, mock_ca_bundle):
+        """If the request fails, the error propagates."""
         mock_urlopen_fn.side_effect = urllib.error.URLError("SSL error")
 
         with pytest.raises(urllib.error.URLError):
             _fetch_manifest()
 
-        assert mock_urlopen_fn.call_count == 2
+        assert mock_urlopen_fn.call_count == 1
 
 
 class TestCheckForUpdates:
