@@ -37,7 +37,8 @@ def mock_prepare_paths_for_upload():
 @pytest.fixture
 def mock_hash_attachments():
     with patch(
-        "deadline.job_attachments.api.manifest._hash_attachments", return_value=(Mock(), [])
+        "deadline.job_attachments.asset_manifests._create_manifest._hash_attachments",
+        return_value=(Mock(), []),
     ) as mock:
         yield mock
 

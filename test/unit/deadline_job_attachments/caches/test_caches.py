@@ -30,20 +30,19 @@ class TestCacheDB:
         """
         Tests that when an environment variable exists, it uses that path for the hash cache
         """
-        expected_path = tmpdir.join(".deadline").join("job_attachments")
-        with patch("os.environ.get", side_effect=[tmpdir]):
+        expected_path = os.path.join(str(tmpdir), ".deadline", "job_attachments")
+        with patch(
+            "deadline.job_attachments.caches.cache_db.os.path.expanduser", return_value=str(tmpdir)
+        ):
             assert CacheDB.get_default_cache_db_file_dir() == expected_path
 
     def test_init_empty_path_no_default_throws_error(self):
         """
-        Tests that when no cache file path is given, the default is used.
+        Tests that when no cache file path is given and home dir cannot be resolved, an error is raised.
         """
-        os.environ.pop("APPDATA", None)
-        os.environ.pop("HOME", None)
-        os.environ.pop("XDG_CONFIG_HOME", None)
-
-        with pytest.raises(JobAttachmentsError):
-            CacheDB("name", "table", "query")
+        with patch("deadline.job_attachments.caches.cache_db.os.path.expanduser", return_value="~"):
+            with pytest.raises(JobAttachmentsError):
+                CacheDB("name", "table", "query")
 
     def test_enter_bad_cache_path_throws_error(self, tmpdir):
         """

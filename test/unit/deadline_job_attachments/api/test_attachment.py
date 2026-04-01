@@ -15,8 +15,7 @@ import json
 import deadline
 
 from deadline.client import api
-from deadline.client.config import config_file
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 from deadline.job_attachments.api.attachment import (
     _attachment_download,
     _attachment_upload,
@@ -155,7 +154,11 @@ class TestAttachmentDownload:
         ],
     )
     def test_download_conflict_resolution(
-        self, temp_assets_dir, session_mock, mock_download_files_from_manifests, conflict_resolution
+        self,
+        temp_assets_dir,
+        session_mock,
+        mock_download_files_from_manifests,
+        conflict_resolution,
     ):
         with open(
             os.path.join(temp_assets_dir, PATH_MAPPING_HASH),
@@ -195,14 +198,18 @@ class TestAttachmentDownload:
             },
             cas_prefix="assetRoot/Data",
             session=session_mock,
-            conflict_resolution=conflict_resolution
-            if conflict_resolution
-            else FileConflictResolution.CREATE_COPY,
+            conflict_resolution=(
+                conflict_resolution if conflict_resolution else FileConflictResolution.CREATE_COPY
+            ),
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
     def test_download_single_to_current(
-        self, temp_assets_dir, session_mock, mock_download_files_from_manifests, manifest_case_key
+        self,
+        temp_assets_dir,
+        session_mock,
+        mock_download_files_from_manifests,
+        manifest_case_key,
     ):
         with open(
             os.path.join(temp_assets_dir, manifest_case_key),
@@ -406,7 +413,7 @@ class TestAttachmentUpload:
             },
             source_root=Path(PATH_MAPPING["source_path"]),
             asset_root=Path(PATH_MAPPING["destination_path"]),
-            s3_check_cache_dir=config_file.get_cache_directory(),
+            s3_check_cache_dir=None,
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())
@@ -439,7 +446,7 @@ class TestAttachmentUpload:
             manifest_metadata={"Metadata": {"asset-root": temp_assets_dir}},
             source_root=Path(temp_assets_dir),
             asset_root=Path(temp_assets_dir),
-            s3_check_cache_dir=config_file.get_cache_directory(),
+            s3_check_cache_dir=None,
         )
 
     @pytest.mark.parametrize("manifest_case_key", MOCK_MANIFEST_CASE.keys())

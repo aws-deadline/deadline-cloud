@@ -22,12 +22,14 @@ jobs:
           echo "Tag validation successful"
                 
   UnitTests:
+    needs: ValidateTag
     name: Unit Tests
     uses: ./.github/workflows/code_quality.yml
     with:
       tag: ${{ inputs.tag }}
       
   PublishToPyPI:
+    needs: UnitTests
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -49,10 +51,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          python-version: '3.13'
       - name: Install dependencies
         run: |
-          pip install --upgrade hatch "click<8.3"
+          pip install --upgrade hatch
       - name: Build
         run: hatch -v build
       # # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-pypi

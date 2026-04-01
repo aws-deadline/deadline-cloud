@@ -18,7 +18,12 @@ from typing import List, Optional
 import boto3
 import click
 
+from deadline.client.api._submit_job_bundle import hashing_telemetry_callback
 from deadline.client import api
+from deadline.client.api._session import (
+    _get_queue_user_boto3_session,
+    get_default_client_config,
+)
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
 from deadline.job_attachments._utils import (
@@ -40,7 +45,11 @@ from deadline.job_attachments.models import (
 )
 
 from ...exceptions import NonValidInputError
-from .._common import _apply_cli_options_to_config, _handle_error
+from .._common import (
+    _apply_cli_options_to_config,
+    _handle_error,
+    _ProgressBarCallbackManager,
+)
 from .._main import deadline as main
 from .click_logger import ClickLogger
 
@@ -49,9 +58,11 @@ from .click_logger import ClickLogger
 @_handle_error
 def cli_manifest():
     """
-    BETA - Commands to work with [Deadline Cloud job attachments].
+    BETA - Create, compare, download, and upload job attachment manifests
+    that track the files associated with a job.
 
-    [Deadline Cloud job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -97,7 +108,12 @@ def cli_manifest():
     help="Rehash all files to compare using file hashes.",
 )
 @click.option("--diff", default=None, help="File Path to Asset Manifest to diff against.")
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_snapshot(
     root: str,
@@ -112,9 +128,11 @@ def manifest_snapshot(
     **args,
 ):
     """
-    BETA - Generates a snapshot of files in a directory root as a [job attachments] Manifest.
+    BETA - Generates a snapshot of files in a directory root as a job
+    attachment manifest.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(root):
@@ -126,6 +144,8 @@ def manifest_snapshot(
         destination = root
         logger.echo(f"Manifest creation path defaulted to {root} \n")
 
+    hash_cache_dir = config_file.get_cache_directory()
+
     manifest_out = _manifest_snapshot(
         root=root,
         destination=destination,
@@ -136,6 +156,11 @@ def manifest_snapshot(
         diff=diff,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
+        hashing_progress_callback=_ProgressBarCallbackManager(
+            length=100, label="Hashing Attachments"
+        ).callback,
+        telemetry_callback=hashing_telemetry_callback,
+        hash_cache_dir=hash_cache_dir,
     )
     if manifest_out:
         if (
@@ -152,7 +177,10 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
                 )
             )
             logger.json(
-                dict(dataclasses.asdict(manifest_out), **{"warning": long_manifest_path_warning})
+                dict(
+                    dataclasses.asdict(manifest_out),
+                    **{"warning": long_manifest_path_warning},
+                )
             )
         else:
             logger.json(dataclasses.asdict(manifest_out))
@@ -191,7 +219,12 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
     is_flag=True,
     help="Rehash all files to compare using file hashes.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_diff(
     root: str,
@@ -205,9 +238,10 @@ def manifest_diff(
 ):
     """
     BETA - Compute the file difference of a root directory against an existing
-    [job attachments] manifest for new, modified or deleted files.
+    job attachment manifest for new, modified or deleted files.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isfile(manifest):
@@ -225,6 +259,7 @@ def manifest_diff(
         include_exclude_config=include_exclude_config,
         force_rehash=force_rehash,
         print_function_callback=logger.echo,
+        cache_dir=config_file.get_cache_directory(),
     )
 
     # Print results to console.
@@ -261,7 +296,10 @@ def manifest_diff(
     ),
 )
 @click.option(
-    "--json", default=None, is_flag=True, help="Output is printed as JSON for scripting. "
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting. ",
 )
 @_handle_error
 def manifest_download(
@@ -273,9 +311,11 @@ def manifest_download(
     **args,
 ):
     """
-    BETA - Download [job attachments] Manifests for a Job, or Step including dependencies.
+    BETA - Download job attachment manifests for a job, or step including
+    dependencies.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
     if not os.path.isdir(download_dir):
@@ -289,15 +329,34 @@ def manifest_download(
     farm_id: str = config_file.get_setting("defaults.farm_id", config=config)
 
     boto3_session: boto3.Session = api.get_boto3_session(config=config)
+    # Deadline Client and get the Queue to download.
+    deadline_client = boto3_session.client("deadline", config=get_default_client_config())
+    queue: dict = deadline_client.get_queue(
+        farmId=farm_id,
+        queueId=queue_id,
+    )
+    # Queue's Job Attachment settings.
+    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+
+    # assume queue role - session permissions
+    queue_role_session: boto3.Session = _get_queue_user_boto3_session(
+        deadline=deadline_client,
+        base_session=boto3_session,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
 
     output = _manifest_download(
         download_dir=download_dir,
         farm_id=farm_id,
         queue_id=queue_id,
+        queue_s3_settings=queue_s3_settings,
         job_id=job_id,
         step_id=step_id,
         asset_type=AssetType(asset_type),
-        boto3_session=boto3_session,
+        deadline_client=deadline_client,
+        queue_role_session=queue_role_session,
         print_function_callback=logger.echo,
     )
     logger.json(dataclasses.asdict(output))
@@ -306,17 +365,28 @@ def manifest_download(
 @cli_manifest.command(name="upload")
 @click.argument("manifest_file")
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--s3-cas-uri", help="The URI to the Content Addressable Storage S3 bucket and root.")
 @click.option(
-    "--s3-manifest-prefix", help="Prefix subpath in the manifest folder to upload the manifest."
+    "--s3-cas-uri",
+    help="The URI to the Content Addressable Storage S3 bucket and root.",
 )
 @click.option(
-    "--farm-id", help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri."
+    "--s3-manifest-prefix",
+    help="Prefix subpath in the manifest folder to upload the manifest.",
 )
 @click.option(
-    "--queue-id", help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri."
+    "--farm-id",
+    help="The AWS Deadline Cloud Farm to use. Alternative to using --s3-cas-uri.",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--queue-id",
+    help="The AWS Deadline Cloud Queue to use. Alternative to using --s3-cas-uri.",
+)
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def manifest_upload(
     manifest_file: str,
@@ -326,11 +396,12 @@ def manifest_upload(
     **args,
 ):
     """
-    BETA - Uploads a [job attachments] manifest file to a Content Addressable Storage's Manifest store.
-    If calling via --s3-cas-path, it is recommended to use with --profile for a specific AWS profile
-    with CAS S3 bucket access. Check exit code for success or failure.
+    BETA - Upload a job attachment manifest file to a Content Addressable
+    Storage manifest store. When using --s3-cas-uri, it is recommended to
+    also use --profile to specify an AWS profile with S3 bucket access.
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     # Input checking.
     if not manifest_file or not os.path.isfile(manifest_file):

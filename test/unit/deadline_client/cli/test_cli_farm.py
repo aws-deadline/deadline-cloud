@@ -4,7 +4,7 @@
 Tests for the CLI farm commands.
 """
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 import os
 
 import boto3  # type: ignore[import]
@@ -71,7 +71,7 @@ def test_cli_farm_list_override_profile(fresh_deadline_config):
         result = runner.invoke(main, ["farm", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
-        session_mock.assert_called_with(profile_name="NonDefaultProfileName")
+        session_mock.assert_called_with(profile_name="NonDefaultProfileName", botocore_session=ANY)
         session_mock().client().list_farms.assert_called_once_with()
 
 
@@ -132,7 +132,9 @@ def test_cli_farm_get_override_profile(fresh_deadline_config):
         result = runner.invoke(main, ["farm", "get", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
-        session_mock.assert_called_once_with(profile_name="NonDefaultProfileName")
+        session_mock.assert_called_once_with(
+            profile_name="NonDefaultProfileName", botocore_session=ANY
+        )
         session_mock().client().get_farm.assert_called_once_with(farmId="farm-overriddenid")
 
 

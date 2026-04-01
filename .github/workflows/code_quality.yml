@@ -2,7 +2,7 @@ name: Code Quality
 
 on:
   pull_request:
-    branches: [ mainline, release, feature_assets_cli, 'patch_*' ]
+    branches: [ mainline, release, feature_assets_cli, 'patch_*' , "feature_*"]
   workflow_call:
     inputs:
       branch:
@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     uses: aws-deadline/.github/.github/workflows/reusable_python_build.yml@mainline
     with:
       os: ${{ matrix.os }}
@@ -38,3 +38,16 @@ jobs:
       ref: ${{inputs.tag}}
       # The incremental output download and mcp feature doesn't run on Python 3.8, so test coverage is lower
       cov-fail-under: "74"
+
+  Attributions:
+    name: Attributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{inputs.tag}}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install hatch
+      - run: hatch run attributions:check

@@ -23,9 +23,10 @@ from .._main import deadline as main
 @_handle_error
 def cli_fleet():
     """
-    Commands to work with [Deadline Cloud fleets].
+    List available Deadline Cloud fleets or get details of a specific fleet.
 
-    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    \b
+    Learn more about [fleets and workers](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html)
     """
 
 
@@ -35,12 +36,9 @@ def cli_fleet():
 @_handle_error
 def fleet_list(**args):
     """
-    Lists the available [Deadline Cloud fleets] in the farm. If the AWS profile is created
-    from a [Deadline Cloud monitor] login, it will list the fleets you have permission to access,
-    otherwise it will list all fleets.
-
-    [Deadline Cloud fleets]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
-    [Deadline Cloud monitor]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/working-with-deadline-monitor.html
+    Lists the available Deadline Cloud fleets in the farm. If the AWS profile
+    is created from a Deadline Cloud monitor login, it will list only the
+    fleets you have permission to access.
     """
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(required_options={"farm_id"}, **args)
@@ -74,10 +72,8 @@ def fleet_list(**args):
 @_handle_error
 def fleet_get(fleet_id, queue_id, **args):
     """
-    Get the details of a [Deadline Cloud fleet] in the farm. If no fleet id is provided, it gets
-    the details of all the fleets associated with the queue.
-
-    [Deadline Cloud fleet]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/manage-fleets.html
+    Get the details of a Deadline Cloud fleet in the farm. If no fleet ID is
+    provided, it gets the details of all fleets associated with the queue.
     """
     if fleet_id and queue_id:
         raise DeadlineOperationError(

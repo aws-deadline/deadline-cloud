@@ -14,6 +14,7 @@ from deadline.client.api._telemetry import (
     TelemetryClient,
     TelemetryEvent,
     get_deadline_cloud_library_telemetry_client,
+    get_telemetry_client,
     record_success_fail_telemetry_event,
     record_function_latency_telemetry_event,
 )
@@ -415,3 +416,28 @@ def test_latency_decorator(fresh_deadline_config):
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):
+    """
+    Verify that get_telemetry_client returns different clients for different package names.
+    """
+    import deadline.client.api._telemetry as telemetry_mod
+
+    telemetry_mod.__cached_telemetry_clients = {}
+
+    def fake_init(self, **kwargs):
+        self._initialized = True
+        self.package_name = kwargs["package_name"]
+
+    with patch.object(TelemetryClient, "__init__", fake_init):
+        client_a = get_telemetry_client("package-a", "1.0.0")
+        client_b = get_telemetry_client("package-b", "2.0.0")
+        client_a_again = get_telemetry_client("package-a", "1.0.0")
+
+        assert client_a is not client_b
+        assert client_a is client_a_again
+        assert client_a.package_name == "package-a"
+        assert client_b.package_name == "package-b"
+
+    telemetry_mod.__cached_telemetry_clients = {}

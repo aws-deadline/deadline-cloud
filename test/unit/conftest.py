@@ -12,6 +12,12 @@ from pathlib import Path
 from deadline.client.config import config_file
 
 
+def pytest_xdist_auto_num_workers(config):
+    # Disable xdist on Windows + Python 3.14+ due to module import race conditions in workers
+    if sys.platform == "win32" and sys.version_info >= (3, 14):
+        return 1
+
+
 @pytest.fixture(scope="function")
 def fresh_deadline_config(monkeypatch):
     """

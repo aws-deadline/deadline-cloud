@@ -65,7 +65,7 @@ def test_cli_redirect_output(fresh_deadline_config, tmp_path):
     with open(out_file, encoding="utf-8") as fh:
         file_output = fh.read()
     assert file_output.startswith("Usage: ")
-    assert "Commands to show and update Deadline's workstation configuration." in file_output
+    assert "View and update Deadline's workstation configuration" in file_output
 
 
 @pytest.mark.parametrize("redirect_mode", ("append", "replace"))
@@ -110,9 +110,7 @@ def test_cli_redirect_output_with_mode(fresh_deadline_config, tmp_path, redirect
     else:
         # The starting file contents should be replaced
         assert file_output.startswith("Usage: "), file_output
-    assert "Commands to show and update Deadline's workstation configuration." in file_output, (
-        file_output
-    )
+    assert "View and update Deadline's workstation configuration" in file_output, file_output
 
 
 def test_cli_unfamiliar_exception(fresh_deadline_config):
@@ -213,3 +211,37 @@ def test_context_tracking_command_sets_boto_user_agent_extra():
     config = get_default_client_config()
 
     assert "cli-command/main.subcommand.command" in config.user_agent_extra
+
+
+def test_submitter_version_in_user_agent():
+    """
+    Verifies that the submitter version is included in the user_agent_extra when set.
+    """
+    from deadline.client.api._session import session_context
+
+    # Save original state
+    original_context = session_context.copy()
+
+    try:
+        # Test: submitter name + version
+        session_context["submitter-name"] = "Blender"
+        session_context["submitter-version"] = "0.5.0"
+        session_context["cli-command-name"] = None
+        config = get_default_client_config()
+        assert "submitter/Blender#0.5.0" in config.user_agent_extra
+
+        # Test: submitter name only (no version)
+        session_context["submitter-name"] = "Blender"
+        session_context["submitter-version"] = None
+        config = get_default_client_config()
+        assert "submitter/Blender" in config.user_agent_extra
+        assert "submitter/Blender#" not in config.user_agent_extra
+
+        # Test: no submitter
+        session_context["submitter-name"] = None
+        session_context["submitter-version"] = None
+        config = get_default_client_config()
+        assert "submitter/" not in config.user_agent_extra
+    finally:
+        # Restore original state
+        session_context.update(original_context)

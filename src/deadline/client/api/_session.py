@@ -26,7 +26,7 @@ from botocore.exceptions import (  # type: ignore[import]
 from botocore.session import get_session as get_botocore_session
 
 from .. import version
-from ..config import get_setting
+from ..config import get_setting, config_file
 from ..exceptions import DeadlineOperationError
 from ...job_attachments._aws.aws_clients import get_s3_client
 
@@ -46,6 +46,7 @@ class AwsAuthenticationStatus(Enum):
 # Place for stashing context to be attached to boto clients.
 session_context: dict[str, Optional[str]] = {
     "submitter-name": None,
+    "submitter-version": None,
     "cli-command-name": None,
 }
 
@@ -81,7 +82,10 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str):
-    session = boto3.Session(profile_name=profile_name)
+    # Use regional STS endpoint to avoid cross-region calls to the global endpoint.
+    botocore_session = get_botocore_session()
+    botocore_session.set_config_variable("sts_regional_endpoints", "regional")
+    session = boto3.Session(profile_name=profile_name, botocore_session=botocore_session)
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
@@ -118,7 +122,10 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
     """
     user_agent_extra = f"app/deadline-client#{version}"
     if session_context.get("submitter-name"):
-        user_agent_extra += f" submitter/{session_context['submitter-name']}"
+        submitter_extra = f" submitter/{session_context['submitter-name']}"
+        if session_context.get("submitter-version"):
+            submitter_extra += f"#{session_context['submitter-version']}"
+        user_agent_extra += submitter_extra
     if session_context.get("cli-command-name"):
         user_agent_extra += f" cli-command/{session_context['cli-command-name']}"
     client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)
@@ -157,7 +164,9 @@ def get_boto3_client(service_name: str, config: Optional[ConfigParser] = None) -
     return get_session_client(session=session, service_name=service_name)
 
 
-def get_credentials_source(config: Optional[ConfigParser] = None) -> AwsCredentialsSource:
+def get_credentials_source(
+    config: Optional[ConfigParser] = None,
+) -> AwsCredentialsSource:
     """
     Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials, HOST_PROVIDED otherwise.
 
@@ -277,7 +286,9 @@ def _modified_logging_level(logger, level):
         logger.setLevel(old_level)
 
 
-def check_authentication_status(config: Optional[ConfigParser] = None) -> AwsAuthenticationStatus:
+def check_authentication_status(
+    config: Optional[ConfigParser] = None,
+) -> AwsAuthenticationStatus:
     """
     Checks the status of the provided session, by
     calling the sts::GetCallerIdentity API.
@@ -364,7 +375,10 @@ def precache_clients(
         queue_display_name=queue_display_name,
     )
     # Initialize the S3 client to populate the cache
-    return deadline, get_s3_client(queue_role_session)
+    s3_max_pool_connections = int(config_file.get_setting("settings.s3_max_pool_connections"))
+    return deadline, get_s3_client(
+        queue_role_session, s3_max_pool_connections=s3_max_pool_connections
+    )
 
 
 class QueueUserCredentialProvider(CredentialProvider):

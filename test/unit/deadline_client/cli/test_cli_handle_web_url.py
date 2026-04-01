@@ -5,7 +5,10 @@ Tests for the CLI handle-web-url command.
 """
 
 import os
+import shutil
+import subprocess
 import sys
+from pathlib import Path
 from typing import Dict, List
 from unittest.mock import ANY, MagicMock, call, patch
 
@@ -489,6 +492,58 @@ def test_handle_web_url_require_url_or_install_option(fresh_deadline_config):
     assert result.exit_code != 0
 
 
+def test_cli_handle_web_url_install_frozen_exe(fresh_deadline_config, monkeypatch):
+    """
+    When running as a PyInstaller frozen binary, sys.argv[0] is already
+    "deadline.exe". with_suffix(".exe") should be a no-op.
+    """
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+
+    exe_path = r"C:\Program Files\DeadlineClient\deadline.exe"
+
+    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [exe_path]), patch(
+        "deadline.client.cli._deadline_web_url.Path.resolve",
+        return_value=Path(exe_path),
+    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+        winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+        winreg_mock.REG_SZ = "REG_SZ"
+        winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+        # with_suffix(".exe") is a no-op when already .exe
+        isfile_mock.assert_called_once_with(exe_path)
+
+
+def test_cli_handle_web_url_install_pip_console_script(fresh_deadline_config, monkeypatch):
+    """
+    When running from a pip/uv-installed console_script, sys.argv[0] is
+    extensionless (e.g. "deadline"). The handler should append .exe.
+    """
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+
+    script_path = r"C:\Scripts\deadline"
+
+    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [script_path]), patch(
+        "deadline.client.cli._deadline_web_url.Path.resolve",
+        return_value=Path(script_path),
+    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+        winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+        winreg_mock.REG_SZ = "REG_SZ"
+        winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
+
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+        # Should append .exe to the extensionless console_script path
+        isfile_mock.assert_called_once_with(script_path + ".exe")
+
+
 @pytest.mark.parametrize("install_command", ["install", "uninstall"])
 @pytest.mark.parametrize("all_users", [True, False])
 def test_cli_handle_web_url_install(fresh_deadline_config, install_command, all_users):
@@ -506,6 +561,38 @@ def test_cli_handle_web_url_install(fresh_deadline_config, install_command, all_
 
         mock_install.assert_called_once_with(all_users=all_users)
         assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("all_users", [True, False])
+def test_cli_handle_web_url_install_prints_success_message(fresh_deadline_config, all_users):
+    """
+    Confirm that --install prints a success message on completion.
+    """
+    with patch.object(handle_web_url_command, "install_deadline_web_url_handler"):
+        runner = CliRunner()
+        cli_options = ["handle-web-url", "--install"]
+        if all_users:
+            cli_options.append("--all-users")
+        result = runner.invoke(main, cli_options)
+
+        assert result.exit_code == 0
+        assert "Web URL handler installed successfully." in result.output
+
+
+@pytest.mark.parametrize("all_users", [True, False])
+def test_cli_handle_web_url_uninstall_prints_success_message(fresh_deadline_config, all_users):
+    """
+    Confirm that --uninstall prints a success message on completion.
+    """
+    with patch.object(handle_web_url_command, "uninstall_deadline_web_url_handler"):
+        runner = CliRunner()
+        cli_options = ["handle-web-url", "--uninstall"]
+        if all_users:
+            cli_options.append("--all-users")
+        result = runner.invoke(main, cli_options)
+
+        assert result.exit_code == 0
+        assert "Web URL handler uninstalled successfully." in result.output
 
 
 def test_cli_handle_web_url_install_current_user_monkeypatched_windows(
@@ -553,7 +640,7 @@ def test_cli_handle_web_url_install_current_user_monkeypatched_windows(
                 call.CloseKey("FIRST_CREATED_KEY"),
             ]
         )
-        assert result.output.strip() == ""
+        assert "Web URL handler installed successfully." in result.output
 
 
 def test_cli_handle_web_url_install_all_users_monkeypatched_windows(
@@ -601,7 +688,7 @@ def test_cli_handle_web_url_install_all_users_monkeypatched_windows(
                 call.CloseKey("FIRST_CREATED_KEY"),
             ]
         )
-        assert result.output.strip() == ""
+        assert "Web URL handler installed successfully." in result.output
 
 
 def test_cli_handle_web_url_uninstall_current_user_monkeypatched_windows(
@@ -640,7 +727,7 @@ def test_cli_handle_web_url_uninstall_current_user_monkeypatched_windows(
                 call.CloseKey("FIRST_OPENED_KEY"),
             ]
         )
-        assert result.output.strip() == ""
+        assert "Web URL handler uninstalled successfully." in result.output
 
 
 def test_cli_handle_web_url_uninstall_all_users_monkeypatched_windows(
@@ -677,4 +764,93 @@ def test_cli_handle_web_url_uninstall_all_users_monkeypatched_windows(
                 call.DeleteKeyEx("HKEY_CLASSES_ROOT", "deadline"),
             ]
         )
-        assert result.output.strip() == ""
+        assert "Web URL handler uninstalled successfully." in result.output
+
+
+def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_path):
+    """
+    Tests that the generated .desktop file on Linux has the expected contents.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    desktop_file_path = str(entry_dir / "deadline.desktop")
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["/usr/bin/deadline"]
+    ), patch.object(shutil, "which", return_value="/usr/bin/deadline"), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+            "~/.config", str(config_dir)
+        ),
+    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    with open(desktop_file_path) as f:
+        desktop_content = f.read()
+    assert desktop_content == (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=deadline\n"
+        "Exec=/usr/bin/deadline handle-web-url %u\n"
+        "Terminal=true\n"
+        "MimeType=x-scheme-handler/deadline\n"
+    )
+
+
+def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):
+    """
+    Tests that on Linux, when sys.argv[0] is a bare command name (e.g. 'deadline'),
+    the install resolves the full path using shutil.which.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    desktop_file_path = str(entry_dir / "deadline.desktop")
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["deadline"]
+    ), patch.object(
+        shutil,
+        "which",
+        side_effect=lambda cmd: (
+            "/opt/deadline/bin/deadline" if cmd == "deadline" else "/usr/bin/" + cmd
+        ),
+    ), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+            "~/.config", str(config_dir)
+        ),
+    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    with open(desktop_file_path) as f:
+        desktop_content = f.read()
+    assert "Exec=/opt/deadline/bin/deadline handle-web-url %u" in desktop_content
+
+
+def test_linux_install_raises_when_command_not_found(fresh_deadline_config, tmp_path):
+    """
+    Tests that on Linux, when shutil.which cannot find the command,
+    the install raises a DeadlineOperationError.
+    """
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["deadline"]
+    ), patch.object(
+        shutil, "which", side_effect=lambda cmd: None if cmd == "deadline" else "/usr/bin/" + cmd
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+        from deadline.client.exceptions import DeadlineOperationError
+
+        with pytest.raises(DeadlineOperationError, match="could not find 'deadline' on PATH"):
+            install_deadline_web_url_handler(all_users=False)

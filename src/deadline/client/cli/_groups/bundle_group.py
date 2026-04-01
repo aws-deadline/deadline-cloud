@@ -50,10 +50,13 @@ sigint_handler = SigIntHandler()
 @_handle_error
 def cli_bundle():
     """
-    Commands to work with Open Job Description [job bundles]. Use these commands to
-    submit jobs to run on a Deadline Cloud queue.
+    Submit Open Job Description job bundles to a Deadline Cloud queue.
 
-    [job bundles]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
+    Use `submit` for headless/scripted submission, or `gui-submit` to
+    review and edit parameters in a GUI before submitting.
+
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
 
@@ -244,12 +247,12 @@ def bundle_submit(
     **args,
 ):
     """
-    Submits an Open Job Description [job bundle] to a
-    [Deadline Cloud queue]. You can provide options
-    to set parameter values, the job name, priority, and more.
+    Submits an Open Job Description job bundle to a Deadline Cloud queue.
+    You can provide options to set parameter values, the job name, priority,
+    and more.
 
-    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
-    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
     # Apply the CLI args to the config
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
@@ -428,12 +431,12 @@ def bundle_gui_submit(
     **args,
 ):
     """
-    Opens a GUI to submit an Open Job Description [job bundle] to a
-    [Deadline Cloud queue]. You can provide options
-    to set the initial parameter values shown in the GUI.
+    Opens a GUI to submit an Open Job Description job bundle to a Deadline
+    Cloud queue. You can provide options to set the initial parameter values
+    shown in the GUI.
 
-    [job bundle]: https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html
-    [Deadline Cloud queue]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html
+    \b
+    Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
     if submitter_name:

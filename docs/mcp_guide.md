@@ -61,8 +61,8 @@ With the AWS Deadline Cloud MCP Server, you can use natural language for various
 - "Submit the render job in /path/to/my-job-bundle"
 - "Submit a job with priority 80 to my render queue"
 - "Show me the status of job job-3a907bac684841f69fc344867ee166de"
+- "Troubleshoot job job-3a907bac684841f69fc344867ee166de - why did it fail?"
 - "Get the logs for session session-abc123 to see why my task failed"
-- "Show me the CloudWatch logs for session session-xyz789"
 - "Download output from job job-3a907bac684841f69fc344867ee166de"
 - "Download output from step step-render in job job-3a907bac684841f69fc344867ee166de"
 ```
@@ -76,11 +76,21 @@ The MCP server provides access to all allowlisted/configured Deadline Cloud API 
 - `deadline_list_jobs()`: List jobs in a queue
 - `deadline_list_fleets()`: List fleets in a farm
 - `deadline_list_storage_profiles_for_queue()`: List storage profiles for a queue
-
 - `deadline_check_authentication_status()`: Check current authentication status
-- `deadline_get_session_logs()`: Get CloudWatch logs for a specific session
 - `deadline_submit_job()`: Submit an Open Job Description job bundle to AWS Deadline Cloud
 - `deadline_download_job_output()`: Download job output files from AWS Deadline Cloud
+
+**Diagnostics:**
+- `deadline_get_job()`: Get detailed job information
+- `deadline_search_jobs()`: Search jobs with filters (status, name)
+- `deadline_list_steps()`: List steps for a job
+- `deadline_list_tasks()`: List tasks for a step
+- `deadline_list_sessions()`: List sessions for a job
+- `deadline_get_session()`: Get session details including worker and fleet info
+
+**Logs:**
+- `deadline_get_session_and_worker_logs()`: Get both session logs (task stdout/stderr) and worker logs (infrastructure events like spot interruptions) for a session in one call
+- `deadline_get_session_logs()`: Get session logs only (fallback for users without fleet permissions)
 
 
 ## Developer Guide
@@ -90,12 +100,13 @@ The MCP server exposes public Deadline Cloud operations as tools that AI assista
 ## Project Structure
 
 ```
-src/deadline/mcp/
+src/deadline/_mcp/
 ├── server.py                # Main server with FastMCP setup and auto-registration
-├── config.py                # Tool configuration definitions
+├── registry.py              # Tool registry definitions
 ├── utils.py                 # Auto-registration utilities
 └── tools/                   # Tool modules
-    └── job.py               # Job management tools (submit, download)
+    ├── job.py               # Job management tools (submit, download)
+    └── logs.py              # Log retrieval tools (session + worker logs)
 ```
 
 ### Adding New MCP Tools

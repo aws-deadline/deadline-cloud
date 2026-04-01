@@ -819,10 +819,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
     invalid_params = []
     for param in parameters:
         if param.get("userInterface", {}).get("control") == "HIDDEN":
-            parameter_value = param.get("value")
-            if parameter_value is None or parameter_value == "":
-                parameter_value = param.get("default")
-            if parameter_value is None or parameter_value == "":
+            if "value" not in param and "default" not in param:
                 invalid_params.append(param["name"])
 
     if invalid_params:

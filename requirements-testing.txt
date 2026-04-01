@@ -1,5 +1,4 @@
-coverage[toml] == 7.*; python_version > '3.7'
-coverage[toml] ~= 7.6; python_version == '3.7'
+coverage[toml] == 7.*
 coverage-conditional-plugin == 0.9.*
 pytest == 9.*; python_version > '3.9'
 pytest == 8.*; python_version <= '3.9'
@@ -9,11 +8,10 @@ pytest-timeout == 2.*
 pytest-xdist == 3.*
 freezegun == 1.*
 types-pyyaml == 6.*
-twine == 4.*; python_version == '3.7'
-twine == 6.*; python_version > '3.7'
-mypy == 1.13.*; python_version == '3.7'
-mypy == 1.*; python_version > '3.7'
-ruff == 0.14.*
+twine == 6.*
+mypy == 1.*
+ruff == 0.15.*
+import-linter == 2.*
 moto == 5.*
 jsondiff == 2.*
 pyinstrument == 5.*
@@ -21,3 +19,7 @@ pyinstrument == 5.*
 mcp >= 1.13.0; python_version >= '3.10'
 # OpenJD model library for job template parsing in mock backend
 openjd-model >= 0.8.0; python_version >= '3.9'
+
+# GUI testing dependencies
+pytest-qt == 4.*; platform_system in "Windows Darwin" and python_version >= "3.9"
+PySide6-essentials >= 6.6,< 6.11; platform_system in "Windows Darwin" and python_version >= "3.9"

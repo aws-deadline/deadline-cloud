@@ -24,7 +24,9 @@ from ....job_attachments.api.attachment import (
     _attachment_upload,
 )
 from ....job_attachments._aws.deadline import get_queue
-from ....job_attachments.exceptions import MissingJobAttachmentSettingsError
+from ....job_attachments.exceptions import (
+    MissingJobAttachmentSettingsError,
+)
 from ....job_attachments.models import FileConflictResolution, JobAttachmentS3Settings
 from ....job_attachments.progress_tracker import DownloadSummaryStatistics
 
@@ -33,9 +35,11 @@ from ....job_attachments.progress_tracker import DownloadSummaryStatistics
 @_handle_error
 def cli_attachment():
     """
-    BETA - Commands to work with [Deadline Cloud job attachments].
+    BETA - Upload or download Deadline Cloud job attachment data files
+    using manifest files.
 
-    [Deadline Cloud job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
 
 
@@ -48,13 +52,15 @@ def cli_attachment():
     help="File path(s) to manifest formatted file(s). File name has to contain the hash of corresponding source path.",
 )
 @click.option(
-    "--s3-root-uri", help="Job Attachments S3 root uri including bucket name and root prefix."
+    "--s3-root-uri",
+    help="Job Attachments S3 root uri including bucket name and root prefix.",
 )
 @click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
-    "--profile", help="The AWS profile to use for interacting with Job Attachments S3 bucket."
+    "--profile",
+    help="The AWS profile to use for interacting with Job Attachments S3 bucket.",
 )
 @click.option(
     "--conflict-resolution",
@@ -71,7 +77,12 @@ def cli_attachment():
     "SKIP: Do not download the file\n"
     "OVERWRITE: Download and replace the existing file",
 )
-@click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting.")
+@click.option(
+    "--json",
+    default=None,
+    is_flag=True,
+    help="Output is printed as JSON for scripting.",
+)
 @_handle_error
 def attachment_download(
     manifests: list[str],
@@ -81,9 +92,11 @@ def attachment_download(
     **args,
 ):
     """
-    BETA - Download Job Attachment data files for given [job attachments] manifest(s).
+    BETA - Download Job Attachment data files for given job attachment
+    manifest(s).
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 
@@ -155,15 +168,19 @@ def attachment_download(
 )
 @click.option("--path-mapping-rules", help="Path to a file with the path mapping rules to use.")
 @click.option(
-    "--s3-root-uri", help="Job Attachments S3 root uri including bucket name and root prefix."
+    "--s3-root-uri",
+    help="Job Attachments S3 root uri including bucket name and root prefix.",
 )
 @click.option(
-    "--upload-manifest-path", default=None, help="File path for uploading the manifests to CAS."
+    "--upload-manifest-path",
+    default=None,
+    help="File path for uploading the manifests to CAS.",
 )
 @click.option("--farm-id", help="The AWS Deadline Cloud Farm to use. ")
 @click.option("--queue-id", help="The AWS Deadline Cloud Queue to use. ")
 @click.option(
-    "--profile", help="The AWS profile to use for interacting with Job Attachments S3 bucket."
+    "--profile",
+    help="The AWS profile to use for interacting with Job Attachments S3 bucket.",
 )
 @click.option("--json", default=None, is_flag=True, help="Output is printed as JSON for scripting")
 @_handle_error
@@ -177,9 +194,11 @@ def attachment_upload(
     **args,
 ):
     """
-    BETA - Upload Job Attachment data files for given [job attachments] manifest(s).
+    BETA - Upload Job Attachment data files for given job attachment
+    manifest(s).
 
-    [job attachments]: https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
     """
     logger: ClickLogger = ClickLogger(is_json=json)
 
@@ -211,6 +230,13 @@ def attachment_upload(
     if not s3_root_uri:
         raise MissingJobAttachmentSettingsError("No valid s3 root path available")
 
+    s3_max_pool_connections = int(
+        config_file.get_setting("settings.s3_max_pool_connections", config=config)
+    )
+    small_file_threshold_multiplier = int(
+        config_file.get_setting("settings.small_file_threshold_multiplier", config=config)
+    )
+
     _attachment_upload(
         root_dirs=root_dirs,
         manifests=manifests,
@@ -219,4 +245,7 @@ def attachment_upload(
         path_mapping_rules=path_mapping_rules,
         upload_manifest_path=upload_manifest_path,
         print_function_callback=logger.echo,
+        s3_check_cache_dir=config_file.get_cache_directory(),
+        s3_max_pool_connections=s3_max_pool_connections,
+        small_file_threshold_multiplier=small_file_threshold_multiplier,
     )

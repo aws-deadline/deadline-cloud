@@ -5,23 +5,20 @@
 
 """Unit tests for MCP server"""
 
-import sys
 from unittest.mock import MagicMock
 
 import pytest
 
-from deadline.client import api
+pytest.importorskip("mcp", reason="MCP dependencies not available")
 
-if sys.version_info >= (3, 10):
-    from deadline._mcp.registry import TOOL_REGISTRY, ToolDefinition
-    from deadline._mcp.utils import (
-        _create_wrapper,
-        _default_error_handler,
-        _default_serializer,
-        register_api_tools,
-    )
-else:
-    pytest.skip("MCP dependencies not available on Python before 3.10", allow_module_level=True)
+from deadline.client import api
+from deadline._mcp.registry import TOOL_REGISTRY, ToolDefinition  # noqa: E402
+from deadline._mcp.utils import (  # noqa: E402
+    _create_wrapper,
+    _default_error_handler,
+    _default_serializer,
+    register_api_tools,
+)
 
 
 class TestToolRegistry:
@@ -42,6 +39,24 @@ class TestToolRegistry:
         expected = ["list_farms", "submit_job", "download_job_output", "get_session_logs"]
         for func_name in expected:
             assert func_name in TOOL_REGISTRY
+
+    def test_auto_paginating_tools_do_not_expose_maxResults(self):
+        """Auto-paginating list tools should not expose maxResults since they
+        always return all results regardless of the parameter value."""
+        auto_paginating_tools = [
+            "list_farms",
+            "list_queues",
+            "list_jobs",
+            "list_fleets",
+            "list_storage_profiles_for_queue",
+            "list_sessions",
+            "list_steps",
+            "list_tasks",
+        ]
+        for tool_name in auto_paginating_tools:
+            params = TOOL_REGISTRY[tool_name]["param_names"]
+            assert "maxResults" not in params, f"{tool_name} should not expose maxResults"
+            assert "max_results" not in params, f"{tool_name} should not expose max_results"
 
 
 class TestUtilityFunctions:

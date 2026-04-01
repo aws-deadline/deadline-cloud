@@ -31,7 +31,7 @@ from ._session import (
 from ..config import config_file
 from .. import version
 
-__cached_telemetry_client = None
+__cached_telemetry_clients: Dict[str, "TelemetryClient"] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -371,17 +371,19 @@ def get_telemetry_client(
     :param config: Optional configuration to use for the client. Loads defaults if not given.
     :return: Telemetry client to make requests with.
     """
-    global __cached_telemetry_client
-    if not __cached_telemetry_client:
-        __cached_telemetry_client = TelemetryClient(
+    global __cached_telemetry_clients
+    cached = __cached_telemetry_clients.get(package_name)
+    if not cached:
+        cached = TelemetryClient(
             package_name=package_name,
             package_ver=package_ver,
             config=config,
         )
-    elif not __cached_telemetry_client.is_initialized:
-        __cached_telemetry_client.initialize(config=config)
+        __cached_telemetry_clients[package_name] = cached
+    elif not cached.is_initialized:
+        cached.initialize(config=config)
 
-    return __cached_telemetry_client
+    return cached
 
 
 def get_deadline_cloud_library_telemetry_client(

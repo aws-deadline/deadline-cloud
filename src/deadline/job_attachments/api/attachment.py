@@ -19,8 +19,7 @@ from deadline.job_attachments.models import (
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
 from deadline.job_attachments.upload import S3AssetUploader
 
-from deadline.client.config import config_file
-from deadline.client.exceptions import NonValidInputError
+from deadline.job_attachments.exceptions import NonValidInputError
 
 
 def _attachment_download(
@@ -97,6 +96,9 @@ def _attachment_upload(
     manifest_path_mapping: Optional[Dict[str, str]] = None,
     upload_manifest_path: Optional[str] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
+    s3_check_cache_dir: Optional[str] = None,
+    s3_max_pool_connections: int = 50,
+    small_file_threshold_multiplier: int = 20,
 ) -> List[UploadManifestInfo]:
     """
     BETA API - This API is still evolving.
@@ -136,7 +138,11 @@ def _attachment_upload(
     manifest_info_list = []
 
     s3_settings: JobAttachmentS3Settings = JobAttachmentS3Settings.from_s3_root_uri(s3_root_uri)
-    asset_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
+    asset_uploader: S3AssetUploader = S3AssetUploader(
+        session=boto3_session,
+        s3_max_pool_connections=s3_max_pool_connections,
+        small_file_threshold_multiplier=small_file_threshold_multiplier,
+    )
 
     # Iterate over original manifests in the order they were provided
     for manifest_path in manifests:
@@ -182,7 +188,7 @@ def _attachment_upload(
             manifest_metadata=metadata,
             source_root=Path(rule.source_path),
             asset_root=Path(rule.destination_path),
-            s3_check_cache_dir=config_file.get_cache_directory(),
+            s3_check_cache_dir=s3_check_cache_dir,
         )
         print_function_callback(
             f"Uploaded assets from {rule.destination_path}, to {s3_settings.to_s3_root_uri()}/Manifests/{key}, hashed data {data}"

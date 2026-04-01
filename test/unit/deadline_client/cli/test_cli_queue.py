@@ -4,7 +4,7 @@
 Tests for the CLI queue commands.
 """
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -81,7 +81,7 @@ def test_cli_queue_list_override_profile(fresh_deadline_config):
         result = runner.invoke(main, ["queue", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
-        session_mock.assert_called_with(profile_name="NonDefaultProfileName")
+        session_mock.assert_called_with(profile_name="NonDefaultProfileName", botocore_session=ANY)
         session_mock().client().list_queues.assert_called_once_with(farmId="farm-overriddenid")
 
 

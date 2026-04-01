@@ -11,8 +11,10 @@ import pytest
 from deadline.client.api._job_monitoring import (
     wait_for_job_completion,
     get_session_logs,
+    get_worker_logs,
     JobCompletionResult,
     SessionLogResult,
+    WorkerLogResult,
 )
 from deadline.client.exceptions import DeadlineOperationError
 
@@ -668,3 +670,169 @@ def test_get_session_logs_invalid_datetime():
             assert False, "Expected DeadlineOperationError was not raised"
         except DeadlineOperationError as e:
             assert "Invalid start time" in str(e)
+
+
+# Tests for get_worker_logs
+
+MOCK_FLEET_ID = "fleet-0123456789abcdefabcdefabcdefabcd"
+MOCK_WORKER_ID = "worker-0123456789abcdefabcdefabcdefabcd"
+
+
+def test_get_worker_logs_basic():
+    """
+    Test that get_worker_logs works correctly with basic parameters.
+    """
+    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user:
+        mock_get_user.return_value = (None, None)
+
+        logs_client_mock = MagicMock()
+        logs_client_mock.get_log_events.return_value = MOCK_GET_LOG_EVENTS_RESPONSE
+        mock_get_client.return_value = logs_client_mock
+
+        result = get_worker_logs(
+            farm_id=MOCK_FARM_ID,
+            fleet_id=MOCK_FLEET_ID,
+            worker_id=MOCK_WORKER_ID,
+            limit=100,
+        )
+
+        assert isinstance(result, WorkerLogResult)
+        assert len(result.events) == 2
+        assert result.events[0].message == "Log message 1"
+        assert result.next_token == "next-token"
+        assert result.log_group == f"/aws/deadline/{MOCK_FARM_ID}/{MOCK_FLEET_ID}"
+        assert result.log_stream == MOCK_WORKER_ID
+        assert result.worker_id == MOCK_WORKER_ID
+        assert result.fleet_id == MOCK_FLEET_ID
+        assert result.count == 2
+
+        logs_client_mock.get_log_events.assert_called_once_with(
+            logGroupName=f"/aws/deadline/{MOCK_FARM_ID}/{MOCK_FLEET_ID}",
+            logStreamName=MOCK_WORKER_ID,
+            limit=100,
+            startFromHead=False,
+        )
+
+
+def test_get_worker_logs_with_time_params():
+    """
+    Test that get_worker_logs works correctly with time parameters.
+    """
+    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user:
+        mock_get_user.return_value = (None, None)
+
+        logs_client_mock = MagicMock()
+        logs_client_mock.get_log_events.return_value = MOCK_GET_LOG_EVENTS_RESPONSE
+        mock_get_client.return_value = logs_client_mock
+
+        start_time = datetime.datetime(2023, 1, 1, 12, 0, 0)
+        end_time = datetime.datetime(2023, 1, 1, 13, 0, 0)
+
+        result = get_worker_logs(
+            farm_id=MOCK_FARM_ID,
+            fleet_id=MOCK_FLEET_ID,
+            worker_id=MOCK_WORKER_ID,
+            limit=50,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        assert isinstance(result, WorkerLogResult)
+        logs_client_mock.get_log_events.assert_called_once_with(
+            logGroupName=f"/aws/deadline/{MOCK_FARM_ID}/{MOCK_FLEET_ID}",
+            logStreamName=MOCK_WORKER_ID,
+            limit=50,
+            startFromHead=False,
+            startTime=int(start_time.timestamp() * 1000),
+            endTime=int(end_time.timestamp() * 1000),
+        )
+
+
+def test_get_worker_logs_with_monitor_credentials():
+    """
+    Test that get_worker_logs uses AssumeFleetRoleForRead with monitor credentials.
+    """
+    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user, patch(
+        "deadline.client.api._job_monitoring.get_boto3_session"
+    ) as mock_get_session, patch("deadline.client.api._job_monitoring.boto3") as mock_boto3:
+        mock_get_user.return_value = ("user-123", "identity-store-456")
+
+        # Mock the deadline client for assume_fleet_role_for_read
+        deadline_mock = MagicMock()
+        deadline_mock.assume_fleet_role_for_read.return_value = {
+            "credentials": {
+                "accessKeyId": "AKIA...",
+                "secretAccessKey": "secret",
+                "sessionToken": "token",
+            }
+        }
+        mock_get_client.return_value = deadline_mock
+
+        # Mock the base session for region
+        base_session_mock = MagicMock()
+        base_session_mock.region_name = "us-west-2"
+        mock_get_session.return_value = base_session_mock
+
+        # Mock the fleet session and logs client
+        logs_client_mock = MagicMock()
+        logs_client_mock.get_log_events.return_value = MOCK_GET_LOG_EVENTS_RESPONSE
+        fleet_session_mock = MagicMock()
+        fleet_session_mock.client.return_value = logs_client_mock
+        mock_boto3.Session.return_value = fleet_session_mock
+
+        result = get_worker_logs(
+            farm_id=MOCK_FARM_ID,
+            fleet_id=MOCK_FLEET_ID,
+            worker_id=MOCK_WORKER_ID,
+        )
+
+        assert isinstance(result, WorkerLogResult)
+        assert result.count == 2
+
+        deadline_mock.assume_fleet_role_for_read.assert_called_once_with(
+            farmId=MOCK_FARM_ID, fleetId=MOCK_FLEET_ID
+        )
+        mock_boto3.Session.assert_called_once_with(
+            aws_access_key_id="AKIA...",
+            aws_secret_access_key="secret",
+            aws_session_token="token",
+        )
+        fleet_session_mock.client.assert_called_once_with("logs", region_name="us-west-2")
+
+
+def test_get_worker_logs_resource_not_found():
+    """
+    Test that get_worker_logs handles ResourceNotFoundException correctly.
+    """
+    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
+        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+    ) as mock_get_user:
+        mock_get_user.return_value = (None, None)
+
+        logs_client_mock = MagicMock()
+        logs_client_mock.exceptions.ResourceNotFoundException = type(
+            "ResourceNotFoundException", (Exception,), {}
+        )
+        logs_client_mock.get_log_events.side_effect = (
+            logs_client_mock.exceptions.ResourceNotFoundException()
+        )
+        mock_get_client.return_value = logs_client_mock
+
+        result = get_worker_logs(
+            farm_id=MOCK_FARM_ID,
+            fleet_id=MOCK_FLEET_ID,
+            worker_id=MOCK_WORKER_ID,
+        )
+
+        assert isinstance(result, WorkerLogResult)
+        assert len(result.events) == 0
+        assert result.next_token is None
+        assert result.count == 0
+        assert result.worker_id == MOCK_WORKER_ID
+        assert result.fleet_id == MOCK_FLEET_ID

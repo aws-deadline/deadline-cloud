@@ -9,6 +9,7 @@ import shutil
 import sys
 import time
 import json
+import warnings as _warnings
 from io import BytesIO
 from logging import Logger, LoggerAdapter, getLogger
 from math import trunc
@@ -61,7 +62,10 @@ from .models import (
     PathMappingRule,
 )
 from .upload import S3AssetUploader
-from .os_file_permission import FileSystemPermissionSettings, PosixFileSystemPermissionSettings
+from .os_file_permission import (
+    FileSystemPermissionSettings,
+    PosixFileSystemPermissionSettings,
+)
 from ._path_summarization import human_readable_file_size
 from ._utils import (
     _float_to_iso_datetime_string,
@@ -84,6 +88,8 @@ class AssetSync:
         manifest_version: ManifestVersion = ManifestVersion.v2023_03_03,
         deadline_endpoint_url: Optional[str] = None,
         session_id: Optional[str] = None,
+        s3_max_pool_connections: int = 50,
+        small_file_threshold_multiplier: int = 20,
     ) -> None:
         self.farm_id = farm_id
 
@@ -98,7 +104,11 @@ class AssetSync:
             self.session = boto3_session
 
         self.deadline_endpoint_url = deadline_endpoint_url
-        self.s3_uploader: S3AssetUploader = S3AssetUploader(session=boto3_session)
+        self.s3_uploader: S3AssetUploader = S3AssetUploader(
+            session=boto3_session,
+            s3_max_pool_connections=s3_max_pool_connections,
+            small_file_threshold_multiplier=small_file_threshold_multiplier,
+        )
         self.manifest_model: Type[BaseManifestModel] = ManifestModelRegistry.get_manifest_model(
             version=manifest_version
         )
@@ -252,6 +262,7 @@ class AssetSync:
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
         os_env_vars: dict[str, str] | None = None,
+        on_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> bool:
         """
         Args:
@@ -274,6 +285,7 @@ class AssetSync:
                 fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                 os_env_vars=os_env_vars,  # type: ignore[arg-type]
                 cas_prefix=s3_settings.full_cas_prefix(),
+                on_mount_complete=on_mount_complete,
             )
             return True
         except VFSExecutableMissingError:
@@ -356,7 +368,7 @@ class AssetSync:
         manifest_paths_by_root: dict[str, str] = dict()
 
         for root, manifest in merged_manifests_by_root.items():
-            (_, manifest_name) = S3AssetUploader._get_hashed_file_name_from_root_str(
+            _, manifest_name = S3AssetUploader._get_hashed_file_name_from_root_str(
                 manifest=manifest,
                 source_root=self._local_root_to_src_map[root],
                 manifest_name_suffix=manifest_name_suffix,
@@ -386,6 +398,7 @@ class AssetSync:
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         os_env_vars: Dict[str, str] | None = None,
+        on_vfs_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -393,6 +406,10 @@ class AssetSync:
             COPIED / None : downloads a manifest file and corresponding input files, if found.
             VIRTUAL: downloads a manifest file and mounts a Virtual File System at the
                        specified asset root corresponding to the manifest contents
+
+        .. deprecated::
+            attachment_sync_inputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
 
         Args:
             s3_settings: S3-specific Job Attachment settings.
@@ -411,6 +428,8 @@ class AssetSync:
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
             os_env_vars: environment variables to set for launched subprocesses
+            on_vfs_mount_complete: optional callback invoked with a bool indicating whether
+                each VFS mount succeeded. Callers can use this for telemetry or logging.
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -419,6 +438,12 @@ class AssetSync:
             VIRTUAL: same as COPIED, but the summary statistics will be empty since the
                        download hasn't started yet.
         """
+        _warnings.warn(
+            "attachment_sync_inputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         if not s3_settings:
             self.logger.info(
@@ -467,6 +492,7 @@ class AssetSync:
                 fs_permission_settings=fs_permission_settings,
                 merged_manifests_by_root=merged_manifests_by_root,
                 os_env_vars=os_env_vars,
+                on_mount_complete=on_vfs_mount_complete,
             )
         else:
             # Copied Download flow
@@ -739,7 +765,6 @@ class AssetSync:
                 f"Total file size required for download ({input_size_readable}) is larger than available disk space ({disk_free_readable})"
             )
 
-    # This is on deprecation path, please use attachment_sync_inputs instead.
     def sync_inputs(
         self,
         s3_settings: Optional[JobAttachmentS3Settings],
@@ -752,6 +777,7 @@ class AssetSync:
         step_dependencies: Optional[list[str]] = None,
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         os_env_vars: Dict[str, str] | None = None,
+        on_vfs_mount_complete: Optional[Callable[[bool], None]] = None,
     ) -> Tuple[SummaryStatistics, List[Dict[str, str]]]:
         """
         Depending on the fileSystem in the Attachments this will perform two
@@ -777,6 +803,8 @@ class AssetSync:
                 for each file being downloaded. If the function returns False, the download will be
                 cancelled. If it returns True, the download will continue.
             os_env_vars: environment variables to set for launched subprocesses
+            on_vfs_mount_complete: optional callback invoked with a bool indicating whether
+                each VFS mount succeeded. Callers can use this for telemetry or logging.
 
         Returns:
             COPIED / None : a tuple of (1) final summary statistics for file downloads,
@@ -784,7 +812,18 @@ class AssetSync:
                              path mapping.
             VIRTUAL: same as COPIED, but the summary statistics will be empty since the
                        download hasn't started yet.
+
+        .. deprecated::
+            sync_inputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
         """
+        _warnings.warn(
+            "sync_inputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         if not s3_settings:
             self.logger.info(
                 f"No Job Attachment settings configured for Queue {queue_id}, no inputs to sync."
@@ -878,6 +917,7 @@ class AssetSync:
                     fs_permission_settings=fs_permission_settings,  # type: ignore[arg-type]
                     os_env_vars=os_env_vars,  # type: ignore[arg-type]
                     cas_prefix=s3_settings.full_cas_prefix(),
+                    on_mount_complete=on_vfs_mount_complete,
                 )
                 summary_statistics = SummaryStatistics()
                 self._record_attachment_mtimes(merged_manifests_by_root)
@@ -936,7 +976,19 @@ class AssetSync:
         storage_profiles_path_mapping_rules: dict[str, str] = {},
         on_uploading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     ) -> SummaryStatistics:
-        """Uploads any output files specified in the manifest, if found."""
+        """
+        Uploads any output files specified in the manifest, if found.
+
+        .. deprecated::
+            sync_outputs is deprecated and will be removed in a future version.
+            Use other public APIs under job attachments instead.
+        """
+        _warnings.warn(
+            "sync_outputs is deprecated and will be removed in a future version. "
+            "Use other public APIs under job attachments instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not s3_settings:
             self.logger.info(
                 f"No Job Attachment settings configured for Queue {queue_id}, no outputs to sync."

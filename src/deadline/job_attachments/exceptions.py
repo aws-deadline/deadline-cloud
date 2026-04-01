@@ -6,7 +6,6 @@ Exceptions that the Deadline Job Attachments library can raise.
 
 from typing import Optional
 
-
 COMMON_ERROR_GUIDANCE_FOR_S3 = {
     408: "Request timeout. Please consider retrying later, or ensure your network connection is stable.",
     500: "Internal server error. It might be an issue on AWS's side; please consider retrying later or contacting AWS support.",
@@ -182,4 +181,10 @@ class UnsupportedHashingAlgorithmError(JobAttachmentsError):
 class VFSRunPathNotSetError(JobAttachmentsError):
     """
     Exception for when the run path hasn't been set for the vfs
+    """
+
+
+class NonValidInputError(JobAttachmentsError):
+    """
+    Exception for when user input to a Job Attachments function is not valid.
     """

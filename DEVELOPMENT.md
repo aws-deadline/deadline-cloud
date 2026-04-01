@@ -3,20 +3,35 @@
 This documentation provides guidance on developer workflows for working with the code in this repository.
 
 Table of Contents:
-* [Development Environment Setup](#development-environment-setup)
-* [The Development Loop](#the-development-loop)
-* [Documentation](#documentation)
-   * [Code Organization](#code-organization)
-* [Testing](#testing)
-   * [Writing tests](#writing-tests)
-   * [Unit tests](#unit-tests)
-   * [Integration tests](#integration-tests)
-   * [Squish GUI Submitter tests](#squish-tests)
-* [Changelog Guidelines](#changelog-guidelines)
-* [Things to Know](#things-to-know)
-   * [Public contracts](#public-contracts)
-   * [Library Dependencies](#dependencies)
-   * [Qt and Calling AWS APIs](#qt-and-calling-aws-including-aws-deadline-cloud-apis)
+- [Development documentation](#development-documentation)
+  - [Development Environment Setup](#development-environment-setup)
+  - [The Development Loop](#the-development-loop)
+  - [Documentation](#documentation)
+    - [Code Organization](#code-organization)
+  - [Testing](#testing)
+    - [Writing Tests](#writing-tests)
+    - [Unit Tests](#unit-tests)
+      - [Running Unit Tests](#running-unit-tests)
+      - [Running Docker-based Unit Tests](#running-docker-based-unit-tests)
+    - [Integration Tests](#integration-tests)
+      - [Running Integration Tests](#running-integration-tests)
+    - [Squish GUI Submitter Tests](#squish-gui-submitter-tests)
+      - [Running Squish GUI Submitter Tests](#running-squish-gui-submitter-tests)
+  - [Changelog Guidelines](#changelog-guidelines)
+  - [Things to Know](#things-to-know)
+    - [Public Contracts](#public-contracts)
+      - [Private Modules](#private-modules)
+      - [Public Modules](#public-modules)
+      - [On `import os as _os`](#on-import-os-as-_os)
+    - [Library Dependencies](#library-dependencies)
+      - [Why is a new dependency needed?](#why-is-a-new-dependency-needed)
+      - [Quality of the dependency](#quality-of-the-dependency)
+      - [Version Pinning](#version-pinning)
+      - [Licensing](#licensing)
+    - [Qt and Calling AWS (including AWS Deadline Cloud) APIs](#qt-and-calling-aws-including-aws-deadline-cloud-apis)
+    - [Pattern 1: Simple Async Operations (Recommended)](#pattern-1-simple-async-operations-recommended)
+    - [Pattern 2: Long-Running Operations with Progress](#pattern-2-long-running-operations-with-progress)
+- [Profiling in Deadline Cloud](#profiling-in-deadline-cloud)
 
 ## Development Environment Setup
 
@@ -378,66 +393,89 @@ for a signal from the application.
 If interacting with the GUI can start multiple background threads, you should also track which
 is the latest, so the code only applies the result of the newest operation.
 
-See `deadline_config_dialog.py` for some examples that do all of the above. Here's some
-code that was edited to show how it fits together:
+See `deadline_config_dialog.py` for some examples that do all of the above.
+
+### Pattern 1: Simple Async Operations (Recommended)
+
+For simple fetch-and-display operations, use `AsyncTaskRunner`:
 
 ```python
+from deadline.client.ui.controllers import AsyncTaskRunner
+
 class MyCustomWidget(QWidget):
-   # Signals for the widget to receive from the thread
-   background_exception = Signal(str, BaseException)
-   update = Signal(int, BackgroundResult)
-
-   def __init__(self, ...):
-      # Save information about the thread
-      self.__refresh_thread = None
-      self.__refresh_id = 0
-
-      # Use the CancelationFlag object to decouple the cancelation value
-      # from the window lifetime.
-      self.canceled = CancelationFlag()
-      self.destroyed.connect(self.canceled.set_canceled)
-
-      # Connect the Signals to handler functions that run on the main thread
-      self.update.connect(self.handle_update)
-      self.background_exception.connect(self.handle_background_exception)
-
-   def handle_background_exception(self, e: BaseException):
-      # Handle the error
-      QMessageBox.warning(...)
-
-   def handle_update(self, refresh_id: int, result: BackgroundResult):
-      # Apply the refresh if it's still for the latest call
-      if refresh_id == self.__refresh_id:
-         # Do something with result
-         self.result_widget.set_message(result)
+    def __init__(self, ...):
+        self._runner = AsyncTaskRunner(self)
+        self._runner.task_error.connect(self._on_error, Qt.QueuedConnection)
 
     def start_the_refresh(self):
-        # This function starts the thread to run in the background
-
-        # Update the GUI state to reflect the update
         self.result_widget.set_refreshing_status(True)
-
-        self.__refresh_id += 1
-        self.__refresh_thread = threading.Thread(
-            target=self._refresh_thread_function,
-            name=f"AWS Deadline Cloud Refresh Thread",
-            args=(self.__refresh_id,),
+        self._runner.run(
+            operation_key="my_refresh",
+            fn=self._fetch_data,
+            on_success=self._handle_result,
+            on_error=self._handle_error,
         )
-        self.__refresh_thread.start()
 
-   def _refresh_thread_function(self, refresh_id: int):
-      # This function is for the background thread
-      try:
-         # Call the slow operations
-         result = boto3_client.potentially_expensive_api(...)
-         # Only emit the result if it isn't canceled
-         if not self.canceled:
-            self.update.emit(refresh_id, result)
-      except BaseException as e:
-         # Use multiple signals for different meanings, such as handling errors.
-         if not self.canceled:
-            self.background_exception.emit(f"Background thread error", e)
+    def _fetch_data(self):
+        # This runs in background thread
+        return boto3_client.potentially_expensive_api(...)
 
+    def _handle_result(self, result):
+        self.result_widget.set_refreshing_status(False)
+        self.result_widget.set_message(result)
+
+    def _handle_error(self, error):
+        self.result_widget.set_refreshing_status(False)
+        QMessageBox.warning(self, "Error", str(error))
+```
+
+### Pattern 2: Long-Running Operations with Progress
+
+For complex operations with progress callbacks, use a `QThread` subclass:
+
+```python
+from qtpy.QtCore import QThread, Signal, Qt
+
+class MyWorker(QThread):
+    progress = Signal(int, str)  # percent, message
+    succeeded = Signal(object)
+    failed = Signal(BaseException)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._canceled = False
+
+    def cancel(self):
+        self._canceled = True
+
+    def run(self):
+        try:
+            for i, item in enumerate(items):
+                if self._canceled:
+                    return
+                self.progress.emit(i * 100 // len(items), f"Processing {item}")
+                process(item)
+            self.succeeded.emit(result)
+        except Exception as e:
+            if not self._canceled:
+                self.failed.emit(e)
+
+
+class MyCustomWidget(QWidget):
+    def __init__(self, ...):
+        self._worker = MyWorker(self)
+        self._worker.progress.connect(self._on_progress, Qt.QueuedConnection)
+        self._worker.succeeded.connect(self._on_success, Qt.QueuedConnection)
+        self._worker.failed.connect(self._on_error, Qt.QueuedConnection)
+
+    def start_the_operation(self):
+        self._worker.start()
+
+    def closeEvent(self, event):
+        if self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.wait()
+        super().closeEvent(event)
 ```
 
 # Profiling in Deadline Cloud
