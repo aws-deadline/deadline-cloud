@@ -1,3 +1,10 @@
+## 0.55.1 (2026-04-02)
+
+
+### Features
+* Add newer submitter available dialog. (#1070) ([`a93b553`](https://github.com/aws-deadline/deadline-cloud/commit/a93b553c662e1e703da0503545b4f5f9538551cf))
+
+
 ## 0.55.0 (2026-03-26)
 
 ### BREAKING CHANGES
