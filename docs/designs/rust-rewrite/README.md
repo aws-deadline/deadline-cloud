@@ -79,7 +79,15 @@ follows `workflow.md` for that item.
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 | 18 | Worker agent | Deferred | §53+ | — | — | 1-17 |
 
-**Status key:** ✅ Done · Not started · Deferred (blocked on CLI completion)
+**Status key:** ✅ Done · In progress · Not started · Deferred (blocked on CLI completion)
+
+**In-progress notes:**
+- **#6**: `wait_for_job_completion` and `deadline job wait` CLI are done
+  (§12 cases 1-15, §44 cases 22-24). Remaining: `get_session_logs`,
+  `get_worker_logs` (§12 cases 16-35), and CLI commands `deadline job logs`
+  (§44 cases 17-21), `deadline job trace-schedule` (§44 cases 27-28).
+  Next batch requires `aws-sdk-cloudwatchlogs`, `assume_fleet_role_for_read`,
+  `list_session_actions`, `get_session_action` API functions.
 
 **Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
 after the core CLI commands are complete. #18 (worker agent) is deferred until
