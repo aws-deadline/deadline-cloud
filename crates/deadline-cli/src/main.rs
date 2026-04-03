@@ -124,6 +124,90 @@ fn init_logging(level: &str) {
         .init();
 }
 
+/// Map parsed command to its dot-separated path for user-agent tracking.
+/// E.g. Commands::Farm { List { .. } } → "deadline.farm.list"
+fn command_name(cmd: &Commands) -> String {
+    let (group, action) = match cmd {
+        Commands::Config { action } => ("config", match action {
+            commands::config::ConfigAction::Show { .. } => "show",
+            commands::config::ConfigAction::Get { .. } => "get",
+            commands::config::ConfigAction::Set { .. } => "set",
+            commands::config::ConfigAction::Clear { .. } => "clear",
+        }),
+        Commands::Auth { action } => ("auth", match action {
+            commands::auth::AuthAction::Login => "login",
+            commands::auth::AuthAction::Logout => "logout",
+            commands::auth::AuthAction::Status { .. } => "status",
+        }),
+        Commands::Farm { action } => ("farm", match action {
+            commands::farm::FarmAction::List { .. } => "list",
+            commands::farm::FarmAction::Get { .. } => "get",
+        }),
+        Commands::Fleet { action } => ("fleet", match action {
+            commands::fleet::FleetAction::List { .. } => "list",
+            commands::fleet::FleetAction::Get { .. } => "get",
+        }),
+        Commands::Queue { action } => ("queue", match action {
+            commands::queue::QueueAction::List { .. } => "list",
+            commands::queue::QueueAction::Get { .. } => "get",
+            commands::queue::QueueAction::ExportCredentials { .. } => "export-credentials",
+            commands::queue::QueueAction::GetStorageProfile { .. } => "get-storage-profile",
+        }),
+        Commands::Job { action } => ("job", match action {
+            commands::job::JobAction::List { .. } => "list",
+            commands::job::JobAction::Get { .. } => "get",
+            commands::job::JobAction::GetSession { .. } => "get-session",
+            commands::job::JobAction::ListSessions { .. } => "list-sessions",
+            commands::job::JobAction::ListSteps { .. } => "list-steps",
+            commands::job::JobAction::ListTasks { .. } => "list-tasks",
+        }),
+        Commands::Worker { action } => ("worker", match action {
+            commands::worker::WorkerAction::List { .. } => "list",
+            commands::worker::WorkerAction::Get { .. } => "get",
+        }),
+    };
+    format!("deadline.{group}.{action}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Commands with positional args must still produce only the command path,
+    // not include arg values. This is the case the argv-based approach got wrong.
+    #[test]
+    fn command_name_config_set_excludes_positional_args() {
+        let cmd = Commands::Config {
+            action: commands::config::ConfigAction::Set {
+                setting_name: "defaults.farm_id".into(),
+                value: "farm-abc".into(),
+            },
+        };
+        assert_eq!(command_name(&cmd), "deadline.config.set");
+    }
+
+    #[test]
+    fn command_name_farm_list_simple() {
+        let cmd = Commands::Farm {
+            action: commands::farm::FarmAction::List { profile: None },
+        };
+        assert_eq!(command_name(&cmd), "deadline.farm.list");
+    }
+
+    #[test]
+    fn command_name_queue_export_credentials_uses_kebab_case() {
+        let cmd = Commands::Queue {
+            action: commands::queue::QueueAction::ExportCredentials {
+                profile: None,
+                farm_id: None,
+                queue_id: None,
+                mode: "USER".into(),
+            },
+        };
+        assert_eq!(command_name(&cmd), "deadline.queue.export-credentials");
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -163,6 +247,12 @@ fn main() {
     }
 
     if let Some(command) = cli.command {
+        // Set CLI command name for user-agent tracking.
+        // Python equivalent: ContextTrackingCommand sets
+        // session_context["cli-command-name"] = ctx.command_path.replace(" ", ".")
+        let cmd_name = command_name(&command);
+        deadline_client::session::set_cli_command_name(&cmd_name);
+
         let result = match command {
             Commands::Config { action } => commands::config::run(action),
             Commands::Auth { action } => commands::auth::run(action),

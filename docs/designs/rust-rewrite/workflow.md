@@ -37,10 +37,14 @@ identical observable behavior, not identical internal structure.
    functions sharing a module-level dict, Rust probably wants one struct
    with five methods.
 
-2. **Globals are a code smell.** If the Python uses `@lru_cache` on
-   module-level functions or mutable module globals, the Rust design
-   should use owned state on a struct. Ask: "who owns this data?" If
-   the answer is "nobody, it's global" — that's the thing to fix.
+2. **Globals must earn their keep.** Prefer owned state on a struct
+   when the state needs different configurations per consumer or must
+   be isolated for testing. However, process-wide singletons (caches,
+   connection pools, configuration) are legitimate when the alternative
+   is threading a parameter through every function call. Use
+   `std::sync::Mutex<T>` with `std::sync::LazyLock` (Rust 1.80+) for
+   mutable globals. The underlying struct should still be usable
+   independently for cases that need a separate instance.
 
 3. **Every abstraction must earn its keep.** Before adding a type,
    wrapper, conversion layer, or any indirection that the Python

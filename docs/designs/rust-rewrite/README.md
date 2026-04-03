@@ -60,7 +60,7 @@ follows `workflow.md` for that item.
 | 0g | Session creation & auth status | ✅ Done | §4, §7 | §39 cases 4-7, §40-44 list/get | `session.md`, `api_resource_management.md`, `cli.md` | 0d |
 | 0h | Queue/job credentials & diagnostics | ✅ Done | §9, §10, §13 | §42 cases 8-10, §44 diagnostics | `api_resource_management.md`, `api_job_lifecycle.md`, `cli.md` | 0g |
 | 0i | GUI FFI spike | ✅ Done | — | — | — | 0g |
-| 1 | Session caching & user-agent | Not started | §3 (28 cases) | — | `session.md` | 0g |
+| 1 | Session caching & user-agent | ✅ Done | §3 (28 cases) | — | `session.md` | 0g |
 | 2 | Login/logout | Not started | §6 (18 cases) | §39 cases 1-3 | `api_resource_management.md`, `cli.md` | 1 |
 | 3 | Queue user credentials | Not started | §5 (20 cases) | — | `session.md` | 1 |
 | 4 | Queue parameters | Not started | §8 (10 cases) | §42 cases 6-7 | `api_resource_management.md`, `cli.md` | 1 |
@@ -86,3 +86,23 @@ after the core CLI commands are complete. #18 (worker agent) is deferred until
 the entire CLI — including GUI FFI and MCP — is done. The CLI exercises all
 the same library crates, so completing it first means battle-tested foundations
 for the worker agent.
+
+### Notes on AWS client caching
+
+Python has two independent `@lru_cache` hierarchies for AWS clients:
+
+1. **`client.api._session`** — session, service client, and queue user
+   session caches. `invalidate_boto3_session_cache()` clears these.
+   Covered by work items #1 and #3.
+2. **`job_attachments._aws.aws_clients`** — separate S3 client (with
+   its own config: `s3v4` signature, custom timeouts, pool size,
+   `ExpectedBucketOwner` injection), transfer manager, STS client, and
+   Deadline client caches. **Not** cleared by
+   `invalidate_boto3_session_cache()`. Covered by work items #8 and #9.
+
+The two hierarchies don't share state. This means credential changes
+(e.g., after login) don't propagate to job_attachments clients until
+the process restarts. This is acceptable because job_attachments
+operations run within a single submission flow where credentials don't
+change. Replicate this separation in Rust; unifying them is a future
+improvement.

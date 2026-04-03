@@ -5,9 +5,8 @@ service and STS.
 
 ## Status: In Progress (§3-10)
 
-Session creation, auth status, farm list/get implemented. Remaining: DCM
-credential source, queue user credentials, login/logout, remaining list
-APIs, queue parameters, queue credentials, storage profile.
+Session creation, auth status, session caching, user-agent, farm list/get
+implemented. Remaining: queue user credentials, queue parameters.
 
 ## Consumers
 
@@ -40,13 +39,40 @@ src/
 
 ## Session (`session.rs`)
 
-Free functions that construct AWS SDK clients. No struct — the SDK clients
-are stateless and cheap to construct per-call. Caching may be added later
-if profiling shows it's needed (Design Principle 3: earn its keep).
+`SessionCache` struct owns cached `SdkConfig` and user-agent context.
+Replaces Python's module-level `@lru_cache` functions and `session_context`
+global dict (Design Principles 1 and 2: structs over globals).
 
-- `deadline_client(config)` — builds `aws_sdk_deadline::Client`
-- `sts_client(config)` — builds `aws_sdk_sts::Client`
-- `display_profile_name(config)` — returns the profile name for display
+### `SessionContext`
+
+Tracks caller identity for the User-Agent header on all AWS API calls.
+Python uses a module-level `session_context` dict; Rust owns it on the
+struct.
+
+- `submitter_name: Option<String>` — set by GUI/DCC plugins (e.g. "Blender")
+- `submitter_version: Option<String>` — set alongside submitter_name
+- `cli_command_name: Option<String>` — set by CLI before each command
+- `build_user_agent() -> String` — produces
+  `app/deadline-client#<version> submitter/<name>#<ver> cli-command/<cmd>`
+
+Applied via `user_agent_extra` on the service config builder.
+
+### `SessionCache`
+
+Caches one `SdkConfig` for the current profile. Building service clients
+from a cached `SdkConfig` is cheap (no credential re-resolution), so
+per-service client caching is unnecessary.
+
+- `new() -> Self` — empty cache
+- `get_config(config) -> &SdkConfig` — loads once, returns cached
+- `deadline_client(config) -> DeadlineClient` — from cached config + user-agent
+- `sts_client(config) -> StsClient` — from cached config
+- `invalidate()` — clears cached config; next call re-resolves credentials
+- `display_profile_name(config) -> String` — returns profile name for display
+
+### Free functions (kept for backward compatibility during migration)
+
+- `resolve_profile_name(config)` — public, used by `auth.rs` for DCM detection
 
 Profile resolution: `"(default)"`, `"default"`, and `""` all map to the
 default credential chain (no named profile).
@@ -192,7 +218,6 @@ existing patterns. List functions use the paginated helper.
 
 ## Not Yet Implemented
 
-- Session caching and user-agent construction (§3 cases 5-20)
 - Queue user credentials — custom credential provider (§5)
 - Queue parameters (§8) — blocked on `deadline-job-bundle` §16
 
