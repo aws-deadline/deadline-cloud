@@ -37,6 +37,20 @@ Background telemetry client matching Python's `_telemetry.py`. Uses
 - Package version truncated to first 3 components
 - Endpoint: Deadline service URL with `management.` prefix after `https://`
 
+### Metadata enrichment
+
+`initialize()` accepts optional `user_id` and `monitor_id` parameters.
+These are added to `system_metadata` if present. `account_id` is added
+to `common_details` (included in every event). The caller (which has
+access to `deadline-client::auth` and STS) provides all three —
+`deadline-common` cannot depend on `deadline-client` (would create a
+circular dependency).
+
+`create_telemetry()` accepts optional `user_id`, `monitor_id`, and
+`account_id` for the same reason. Callers in `deadline-client` pass
+values from `auth::get_user_and_identity_store_id()`,
+`auth::get_monitor_id()`, and STS `GetCallerIdentity`.
+
 ### Consumers
 
 Every crate that calls Deadline APIs or performs user-facing operations

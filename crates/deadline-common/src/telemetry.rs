@@ -47,11 +47,14 @@ pub struct TelemetryClient {
     sender: Option<SyncSender<TelemetryEvent>>,
     thread_handle: Option<thread::JoinHandle<()>>,
     initialized: bool,
-    opted_out: bool,
+    /// Visible within crate for test isolation (override disk config).
+    pub(crate) opted_out: bool,
     session_id: String,
     telemetry_id: String,
-    common_details: HashMap<String, Value>,
-    system_metadata: HashMap<String, Value>,
+    /// Visible within crate for testing accountId enrichment.
+    pub(crate) common_details: HashMap<String, Value>,
+    /// Visible within crate for testing metadata enrichment.
+    pub(crate) system_metadata: HashMap<String, Value>,
 }
 
 impl TelemetryClient {
@@ -85,7 +88,21 @@ impl TelemetryClient {
     }
 
     /// Start the background sender thread. Call after AWS config is available.
-    pub fn initialize(&mut self, endpoint_url: &str, config: Option<&IniConfig>) {
+    pub fn initialize(&mut self, endpoint_url: &str, _config: Option<&IniConfig>) {
+        self.initialize_with_metadata(endpoint_url, None, None, None);
+    }
+
+    /// Start the background sender thread with optional DCM metadata.
+    /// `user_id`, `monitor_id`, and `account_id` come from the caller
+    /// (via `deadline-client::auth` and STS). The caller provides them
+    /// because `deadline-common` cannot depend on `deadline-client`.
+    pub fn initialize_with_metadata(
+        &mut self,
+        endpoint_url: &str,
+        user_id: Option<&str>,
+        monitor_id: Option<&str>,
+        account_id: Option<&str>,
+    ) {
         if self.opted_out {
             return;
         }
@@ -95,13 +112,14 @@ impl TelemetryClient {
             ENDPOINT_PREFIX,
         );
 
-        // Add user_id and monitor_id if available
-        if let Some(c) = config {
-            if let Ok(uid) = config_file::get_setting_with_config("defaults.user_id", c) {
-                if !uid.is_empty() {
-                    self.system_metadata.insert("user_id".into(), Value::String(uid));
-                }
-            }
+        if let Some(uid) = user_id {
+            self.system_metadata.insert("user_id".into(), Value::String(uid.to_string()));
+        }
+        if let Some(mid) = monitor_id {
+            self.system_metadata.insert("monitor_id".into(), Value::String(mid.to_string()));
+        }
+        if let Some(aid) = account_id {
+            self.common_details.insert("accountId".into(), Value::String(aid.to_string()));
         }
 
         let (tx, rx) = mpsc::sync_channel::<TelemetryEvent>(MAX_QUEUE_SIZE);
@@ -352,6 +370,90 @@ mod tests {
         let result = validate_or_generate_identifier(None);
         Uuid::parse_str(&result).expect("should be valid UUID");
     }
+
+    // --- initialize metadata enrichment (§14 cases 14-15) ---
+
+    // §14 case 14: user_id from DCM is added to system metadata
+    #[test]
+    fn initialize_with_user_id_adds_to_system_metadata() {
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false; // override disk config for test isolation
+        client.initialize_with_metadata(
+            "http://localhost:9999",
+            Some("user-abc-123"),
+            None,
+            None,
+        );
+        assert_eq!(
+            client.system_metadata.get("user_id"),
+            Some(&Value::String("user-abc-123".into()))
+        );
+    }
+
+    // §14 case 15: monitor_id from DCM is added to system metadata
+    #[test]
+    fn initialize_with_monitor_id_adds_to_system_metadata() {
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(
+            "http://localhost:9999",
+            None,
+            Some("monitor-xyz-789"),
+            None,
+        );
+        assert_eq!(
+            client.system_metadata.get("monitor_id"),
+            Some(&Value::String("monitor-xyz-789".into()))
+        );
+    }
+
+    // §14 case 14+15 combined: both present
+    #[test]
+    fn initialize_with_both_user_and_monitor_id() {
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(
+            "http://localhost:9999",
+            Some("user-abc"),
+            Some("monitor-xyz"),
+            None,
+        );
+        assert_eq!(
+            client.system_metadata.get("user_id"),
+            Some(&Value::String("user-abc".into()))
+        );
+        assert_eq!(
+            client.system_metadata.get("monitor_id"),
+            Some(&Value::String("monitor-xyz".into()))
+        );
+    }
+
+    // Neither present — no metadata added
+    #[test]
+    fn initialize_without_metadata_leaves_system_metadata_unchanged() {
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        let before = client.system_metadata.len();
+        client.initialize_with_metadata("http://localhost:9999", None, None, None);
+        assert_eq!(client.system_metadata.len(), before);
+    }
+
+    // accountId is added to common_details (not system_metadata)
+    #[test]
+    fn initialize_with_account_id_adds_to_common_details() {
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(
+            "http://localhost:9999",
+            None,
+            None,
+            Some("123456789012"),
+        );
+        assert_eq!(
+            client.common_details.get("accountId"),
+            Some(&Value::String("123456789012".into()))
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -361,9 +463,22 @@ mod tests {
 /// Create a TelemetryClient initialized from AWS_ENDPOINT_URL_DEADLINE.
 /// Used by API functions to create an ephemeral client when none is provided.
 pub fn create_telemetry(config: Option<&deadline_config::ini::IniConfig>) -> TelemetryClient {
+    create_telemetry_with_metadata(config, None, None, None)
+}
+
+/// Create a TelemetryClient with optional DCM metadata and account ID.
+/// Callers in `deadline-client` pass `user_id` and `monitor_id` from
+/// `auth::get_user_and_identity_store_id()` and `auth::get_monitor_id()`,
+/// and `account_id` from STS `GetCallerIdentity`.
+pub fn create_telemetry_with_metadata(
+    config: Option<&deadline_config::ini::IniConfig>,
+    user_id: Option<&str>,
+    monitor_id: Option<&str>,
+    account_id: Option<&str>,
+) -> TelemetryClient {
     let mut client = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
     if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
-        client.initialize(&ep, config);
+        client.initialize_with_metadata(&ep, user_id, monitor_id, account_id);
     }
     client
 }
