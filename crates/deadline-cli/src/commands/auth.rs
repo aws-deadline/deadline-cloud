@@ -31,8 +31,11 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
     match action {
         AuthAction::Login => {
             let profile_name = session::display_profile_name(None);
-            println!("Logging into AWS Profile {profile_name:?} for AWS Deadline Cloud");
-            let message = auth::login(None, None)
+            println!("Logging into AWS Profile '{profile_name}' for AWS Deadline Cloud");
+            let on_pending = |_source: auth::AwsCredentialsSource| {
+                println!("Opening Deadline Cloud monitor. Please log in and then return here.");
+            };
+            let message = auth::login(Some(&on_pending), None, None, None).await
                 .map_err(CliError::Operation)?;
             println!("\nSuccessfully logged in: {message}\n");
             Ok(())

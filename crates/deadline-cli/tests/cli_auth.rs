@@ -4,6 +4,46 @@ use deadline_test_server::TestHarness;
 use deadline_test_server::deadline_api::{farms, sts};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
+use std::os::unix::fs::PermissionsExt;
+
+/// Set up a fake DCM environment in the harness temp dir:
+/// - AWS config with a DCM profile (has monitor_id)
+/// - Deadline config pointing to the DCM profile and fake monitor binary
+/// - A fake monitor shell script at the given path
+fn setup_dcm_env(harness: &TestHarness, monitor_script: &str) {
+    let dir = harness.config_dir.path();
+
+    // Fake AWS config with DCM profile
+    let aws_config_path = dir.join("aws_config");
+    std::fs::write(&aws_config_path, "\
+[profile test-dcm]
+monitor_id = mon-fake123
+user_id = user-fake456
+identity_store_id = d-fake789
+").unwrap();
+
+    // Fake monitor binary
+    let monitor_path = dir.join("fake-monitor");
+    std::fs::write(&monitor_path, monitor_script).unwrap();
+    std::fs::set_permissions(&monitor_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    // Deadline config pointing to DCM profile and fake monitor
+    std::fs::write(&harness.config_path, format!("\
+[defaults]
+aws_profile_name = test-dcm
+
+[deadline-cloud-monitor]
+path = {}
+", monitor_path.display())).unwrap();
+}
+
+/// Build a command with the fake AWS config file set.
+fn dcm_cmd(harness: &TestHarness, args: &[&str]) -> std::process::Command {
+    let mut cmd = harness.cmd(args);
+    let aws_config_path = harness.config_dir.path().join("aws_config");
+    cmd.env("AWS_CONFIG_FILE", aws_config_path);
+    cmd
+}
 
 // --- auth status (verbose) ---
 
@@ -88,4 +128,78 @@ async fn auth_login_non_dcm_profile_prints_error() {
 async fn auth_logout_non_dcm_profile_prints_error() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&["auth", "logout"]));
+}
+
+// --- auth login (DCM profile) ---
+
+// §6 case 1 + §39 case 1: DCM login happy path — monitor starts, STS succeeds
+#[tokio::test]
+async fn auth_login_dcm_profile_succeeds() {
+    let harness = TestHarness::new().await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Fake monitor that exits immediately (login is non-blocking, polling handles auth)
+    setup_dcm_env(&harness, "#!/bin/bash\nexit 0\n");
+
+    assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
+}
+
+// §6 case 5: monitor exits before auth succeeds
+#[tokio::test]
+async fn auth_login_dcm_monitor_exits_with_error() {
+    let harness = TestHarness::new().await;
+    sts::mock_get_caller_identity_failure(&harness.server).await;
+
+    // Fake monitor that prints an error and exits non-zero
+    setup_dcm_env(&harness, "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n");
+
+    assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
+}
+
+// §6 case 4: monitor executable not found
+#[tokio::test]
+async fn auth_login_dcm_monitor_not_found() {
+    let harness = TestHarness::new().await;
+
+    // Set up DCM env but with a nonexistent monitor path
+    let dir = harness.config_dir.path();
+    let aws_config_path = dir.join("aws_config");
+    std::fs::write(&aws_config_path, "\
+[profile test-dcm]
+monitor_id = mon-fake123
+").unwrap();
+    std::fs::write(&harness.config_path, "\
+[defaults]
+aws_profile_name = test-dcm
+
+[deadline-cloud-monitor]
+path = /nonexistent/path/to/monitor
+").unwrap();
+
+    let mut cmd = harness.cmd(&["auth", "login"]);
+    cmd.env("AWS_CONFIG_FILE", aws_config_path);
+    assert_cmd_snapshot!(cmd);
+}
+
+// --- auth logout (DCM profile) ---
+
+// §6 case 13 + §39 case 3: DCM logout happy path
+#[tokio::test]
+async fn auth_logout_dcm_profile_succeeds() {
+    let harness = TestHarness::new().await;
+
+    // Fake monitor that prints success and exits 0
+    setup_dcm_env(&harness, "#!/bin/bash\necho 'Logged out'\nexit 0\n");
+
+    assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
+}
+
+// §6 case 16: logout subprocess returns non-zero
+#[tokio::test]
+async fn auth_logout_dcm_monitor_fails() {
+    let harness = TestHarness::new().await;
+
+    setup_dcm_env(&harness, "#!/bin/bash\necho 'Logout error'\nexit 1\n");
+
+    assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }

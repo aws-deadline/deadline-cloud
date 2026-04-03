@@ -161,15 +161,20 @@ Functions:
 
 ## Auth (`auth.rs`) — login/logout (§6)
 
-`login(on_cancellation_check, config)`: checks credential source is DCM,
-reads `deadline-cloud-monitor.path` from config, spawns the monitor
-process with `["login", "--profile", profile_name]`, polls
-`check_authentication_status` in a 0.5s loop until authenticated or
-process exits. Returns success message or error.
+`login(on_pending_authorization, on_cancellation_check, config, telemetry)`:
+checks credential source is DCM, reads `deadline-cloud-monitor.path`
+from config, spawns the monitor process with
+`["login", "--profile", profile_name]`. Calls `on_pending_authorization`
+(if provided) with the credential source after spawning. Polls
+`check_authentication_status` in a 0.5s loop. Each iteration checks
+`on_cancellation_check` (if provided) — if it returns true, kills the
+child process and returns an error. Returns success message or error.
 
-`logout(config)`: checks credential source is DCM, runs the monitor
-with `["logout", "--profile", profile_name]` via `Command::output()`,
-returns stdout. Errors if not DCM profile or monitor not found.
+`logout(config, telemetry)`: checks credential source is DCM, runs the
+monitor with `["logout", "--profile", profile_name]` via
+`Command::output()`, returns stdout. Calls
+`invalidate_session_cache()` after successful logout to clear cached
+credentials. Errors if not DCM profile or monitor not found.
 
 Both functions only support DCM-created profiles (those with
 `monitor_id` in the AWS config profile section).

@@ -9,7 +9,8 @@ use std::sync::{LazyLock, Mutex};
 // Global session cache
 // ---------------------------------------------------------------------------
 
-static SESSION: LazyLock<Mutex<SessionCache>> =
+/// Global session cache — accessible within the crate for testing.
+pub(crate) static SESSION: LazyLock<Mutex<SessionCache>> =
     LazyLock::new(|| Mutex::new(SessionCache::new()));
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,11 @@ impl SessionCache {
     pub fn invalidate(&mut self) {
         self.cached_config = None;
         self.cached_profile = None;
+    }
+
+    /// Whether a config is currently cached.
+    pub fn is_cached(&self) -> bool {
+        self.cached_config.is_some()
     }
 
     /// Get or load the SDK config for the current profile.

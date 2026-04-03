@@ -148,14 +148,26 @@ pub async fn check_deadline_api_available(
 
 /// Log in via Deadline Cloud Monitor.
 /// Only supported for DCM-created profiles (those with `monitor_id`).
-pub fn login(
+pub async fn login(
+    on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
+    on_cancellation_check: Option<&dyn Fn() -> bool>,
     config: Option<&deadline_config::ini::IniConfig>,
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
-    with_telemetry_latency("login", config, telemetry, || login_inner(config))
+    let ephemeral;
+    let tc = match telemetry {
+        Some(t) => t,
+        None => { ephemeral = deadline_common::telemetry::create_telemetry(config); &ephemeral }
+    };
+    let start = std::time::Instant::now();
+    let result = login_inner(on_pending_authorization, on_cancellation_check, config).await;
+    deadline_common::telemetry::record_latency(tc, "login", start);
+    result
 }
 
-fn login_inner(
+async fn login_inner(
+    on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
+    on_cancellation_check: Option<&dyn Fn() -> bool>,
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> Result<String, String> {
     let source = get_credentials_source(config);
@@ -166,10 +178,7 @@ fn login_inner(
         );
     }
 
-    let monitor_path = match config {
-        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
-        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
-    };
+    let monitor_path = get_monitor_path(config);
     let profile_name = session::display_profile_name(config);
 
     let mut child = std::process::Command::new(&monitor_path)
@@ -186,12 +195,21 @@ fn login_inner(
             )
         })?;
 
+    if let Some(cb) = on_pending_authorization {
+        cb(AwsCredentialsSource::DeadlineCloudMonitorLogin);
+    }
+
     // Poll authentication status until success or process exit
-    let rt = tokio::runtime::Runtime::new().unwrap();
     loop {
-        let status = rt.block_on(check_authentication_status(config));
+        let status = check_authentication_status(config).await;
         if status == AwsAuthenticationStatus::Authenticated {
             return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
+        }
+        if let Some(cb) = on_cancellation_check {
+            if cb() {
+                let _ = child.kill();
+                return Err("Login canceled".to_string());
+            }
         }
         if let Some(_exit) = child.try_wait().ok().flatten() {
             let out = child
@@ -207,7 +225,7 @@ fn login_inner(
                 "Deadline Cloud monitor was not able to log into the {profile_name} profile:\n{out}"
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
 
@@ -231,10 +249,7 @@ fn logout_inner(
         );
     }
 
-    let monitor_path = match config {
-        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
-        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
-    };
+    let monitor_path = get_monitor_path(config);
     let profile_name = session::display_profile_name(config);
 
     let output = std::process::Command::new(&monitor_path)
@@ -257,5 +272,16 @@ fn logout_inner(
         ));
     }
 
+    session::invalidate_session_cache();
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
+
+fn get_monitor_path(config: Option<&deadline_config::ini::IniConfig>) -> String {
+    match config {
+        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
+        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
+    }
+}
+
+// No Level 1 tests — login/logout are CLI-reachable and require
+// environment isolation. Tested at Level 2 in cli_auth.rs.
