@@ -371,9 +371,9 @@ mod tests {
         Uuid::parse_str(&result).expect("should be valid UUID");
     }
 
-    // --- initialize metadata enrichment (§14 cases 14-15) ---
+    // --- initialize metadata enrichment ---
 
-    // §14 case 14: user_id from DCM is added to system metadata
+    // user_id from DCM is added to system metadata
     #[test]
     fn initialize_with_user_id_adds_to_system_metadata() {
         let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
@@ -390,7 +390,7 @@ mod tests {
         );
     }
 
-    // §14 case 15: monitor_id from DCM is added to system metadata
+    // monitor_id from DCM is added to system metadata
     #[test]
     fn initialize_with_monitor_id_adds_to_system_metadata() {
         let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
@@ -407,7 +407,7 @@ mod tests {
         );
     }
 
-    // §14 case 14+15 combined: both present
+    // user ID and monitor ID both present
     #[test]
     fn initialize_with_both_user_and_monitor_id() {
         let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);

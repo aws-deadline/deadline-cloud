@@ -1,4 +1,4 @@
-//! Level 2 tests for `deadline worker` subcommands (§43 cases 1-7).
+//! Level 2 tests for `deadline worker` subcommands.
 
 use deadline_test_server::deadline_api::{errors, telemetry, workers};
 use deadline_test_server::TestHarness;

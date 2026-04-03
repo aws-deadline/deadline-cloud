@@ -1,4 +1,4 @@
-//! Level 2 tests for `suggest_resources_on_client_error` (§37 cases 48-53).
+//! Level 2 tests for `suggest_resources_on_client_error`.
 //!
 //! These test that CLI commands include resource suggestions in error output
 //! when API calls fail with AccessDenied or ResourceNotFound.

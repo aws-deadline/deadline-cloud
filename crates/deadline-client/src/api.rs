@@ -296,7 +296,7 @@ pub async fn get_worker(
 }
 
 // ---------------------------------------------------------------------------
-// Session / Step / Task (§13 diagnostics)
+// Session / Step / Task
 // ---------------------------------------------------------------------------
 
 pub async fn get_session(
@@ -404,7 +404,7 @@ pub async fn list_tasks(
 }
 
 // ---------------------------------------------------------------------------
-// Queue credentials (§9)
+// Queue credentials
 // ---------------------------------------------------------------------------
 
 pub async fn assume_queue_role_for_user(
@@ -438,7 +438,7 @@ pub async fn assume_queue_role_for_read(
 }
 
 // ---------------------------------------------------------------------------
-// Storage profile (§10)
+// Storage profile
 // ---------------------------------------------------------------------------
 
 pub async fn get_storage_profile_for_queue(

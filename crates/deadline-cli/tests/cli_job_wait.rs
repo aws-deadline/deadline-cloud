@@ -1,6 +1,6 @@
 //! Level 2 tests for `deadline job wait` subcommand.
 //!
-//! Covers §12 cases 1-15 (wait_for_job_completion) and §44 cases 22-24 (CLI).
+//! Covers wait_for_job_completion (cases 1-15) and CLI job wait (cases 22-24).
 //! Cases 9-10 (callbacks) are partially covered via verbose/json output behavior.
 //! Case 6 (exponential backoff timing) is not directly testable at Level 2.
 
@@ -10,7 +10,7 @@ use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
-// §12 case 1 / §44 case 22: Job completes with SUCCEEDED, exits 0
+// Job completes with SUCCEEDED, exits 0
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -38,7 +38,7 @@ async fn job_wait_succeeded_exits_0() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 2 / §44 case 23: Job completes with FAILED, exits 2, has failed_tasks
+// Job completes with FAILED, exits 2, has failed_tasks
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -88,7 +88,7 @@ async fn job_wait_failed_exits_2_with_failed_tasks() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 3: Job completes with CANCELED
+// Job completes with CANCELED
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -115,7 +115,7 @@ async fn job_wait_canceled_exits_3() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 4: Job completes with SUSPENDED
+// Job completes with SUSPENDED
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -142,7 +142,7 @@ async fn job_wait_suspended_exits_4() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 5: Job completes with NOT_COMPATIBLE
+// Job completes with NOT_COMPATIBLE
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -169,7 +169,7 @@ async fn job_wait_not_compatible_exits_5() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 7 / §44 case 24: Timeout exceeded
+// Timeout exceeded
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -196,7 +196,7 @@ async fn job_wait_timeout_exits_1() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 10: job_callback drives verbose status line on stderr
+// job_callback drives verbose status line on stderr
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -224,7 +224,7 @@ async fn job_wait_verbose_shows_status_line() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 11: get_job API error propagated
+// get_job API error propagated
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -245,7 +245,7 @@ async fn job_wait_api_error_exits_1() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 cases 12-13: Failed tasks with full details + session_id extraction
+// Failed tasks with full details + session_id extraction
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -296,7 +296,7 @@ async fn job_wait_json_failed_tasks_have_full_details() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 14: latestSessionActionId absent — session_id is null
+// latestSessionActionId absent — session_id is null
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -343,7 +343,7 @@ async fn job_wait_json_failed_task_no_session_action_id() {
 }
 
 // ---------------------------------------------------------------------------
-// §12 case 15: Step with FAILED=0 is skipped (tasks not queried)
+// Step with FAILED=0 is skipped (tasks not queried)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -396,7 +396,7 @@ async fn job_wait_skips_steps_with_no_failed_tasks() {
 }
 
 // ---------------------------------------------------------------------------
-// §44 case 22: JSON output for succeeded job
+// JSON output for succeeded job
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -441,7 +441,7 @@ async fn job_wait_no_job_id_exits_with_error() {
 }
 
 // ---------------------------------------------------------------------------
-// §44 case 24: Timeout with JSON output
+// Timeout with JSON output
 // ---------------------------------------------------------------------------
 
 #[tokio::test]

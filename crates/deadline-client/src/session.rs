@@ -374,7 +374,7 @@ pub fn display_profile_name(config: Option<&IniConfig>) -> String {
 mod tests {
     use super::*;
 
-    // ── User-agent tests (§3 cases 15-20) ───────────────────────
+    // ── User-agent tests ───────────────────────
 
     #[test]
     fn build_user_agent_no_context_has_app_only() {
@@ -444,9 +444,9 @@ mod tests {
         assert_eq!(ua, format!("app/deadline-client#{version}"));
     }
 
-    // ── Caching tests (§3 cases 5-6, 13-14) ────────────────────
+    // ── Caching tests ────────────────────
 
-    // §3 case 5: calling twice with same profile returns cached config
+    // calling twice with same profile returns cached config
     #[tokio::test]
     async fn get_config_twice_returns_cached() {
         let mut cache = SessionCache::new();
@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(ptr1, ptr2, "second call should return cached config");
     }
 
-    // §3 case 6: invalidate clears cache
+    // invalidate clears cache
     #[tokio::test]
     async fn invalidate_clears_cached_config() {
         let mut cache = SessionCache::new();
@@ -467,7 +467,7 @@ mod tests {
         assert!(cache.cached_config.is_none());
     }
 
-    // §3 case 13: invalidate after caching clears everything
+    // invalidate after caching clears everything
     #[tokio::test]
     async fn invalidate_after_caching_clears_all() {
         let mut cache = SessionCache::new();
@@ -477,7 +477,7 @@ mod tests {
         assert!(cache.cached_profile.is_none());
     }
 
-    // §3 case 14: invalidate on empty cache is a no-op
+    // invalidate on empty cache is a no-op
     #[test]
     fn invalidate_empty_cache_no_error() {
         let mut cache = SessionCache::new();
@@ -499,7 +499,7 @@ mod tests {
         assert!(ua.contains("cli-command/deadline.farm.list"));
     }
 
-    // ── Queue user credential provider tests (§5) ──────────────
+    // ── Queue user credential provider tests ──────────────
 
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -518,7 +518,7 @@ mod tests {
         DeadlineClient::from_conf(config)
     }
 
-    // §5 case 11: credential fetch succeeds — returns access_key, secret_key, token, expiry
+    // credential fetch succeeds — returns access_key, secret_key, token, expiry
     #[tokio::test]
     async fn queue_credential_provider_success_returns_credentials() {
         let server = MockServer::start().await;
@@ -559,7 +559,7 @@ mod tests {
         last_msg
     }
 
-    // §5 case 12: queue_display_name is provided — error messages use it
+    // queue_display_name is provided — error messages use it
     #[tokio::test]
     async fn queue_credential_provider_error_uses_display_name() {
         let server = MockServer::start().await;
@@ -581,7 +581,7 @@ mod tests {
         assert!(msg.contains("My Queue"), "error should use display name, got: {msg}");
     }
 
-    // §5 case 13: queue_display_name is not provided — error messages use queue_id
+    // queue_display_name is not provided — error messages use queue_id
     #[tokio::test]
     async fn queue_credential_provider_error_falls_back_to_queue_id() {
         let server = MockServer::start().await;
@@ -603,7 +603,7 @@ mod tests {
         assert!(msg.contains("queue-123"), "error should use queue_id, got: {msg}");
     }
 
-    // §5 case 14: ThrottlingException — returns error with retry guidance
+    // ThrottlingException — returns error with retry guidance
     #[tokio::test]
     async fn queue_credential_provider_throttling_returns_retry_message() {
         let server = MockServer::start().await;
@@ -626,7 +626,7 @@ mod tests {
         assert!(msg.contains("retry"), "should mention retry, got: {msg}");
     }
 
-    // §5 case 15: InternalServerException — returns error with internal server error message
+    // InternalServerException — returns error with internal server error message
     #[tokio::test]
     async fn queue_credential_provider_internal_error_returns_message() {
         let server = MockServer::start().await;
@@ -648,7 +648,7 @@ mod tests {
         assert!(msg.contains("internal server error"), "should mention internal error, got: {msg}");
     }
 
-    // §5 case 16: other AWS error (AccessDeniedException) — returns admin contact guidance
+    // other AWS error (AccessDeniedException) — returns admin contact guidance
     #[tokio::test]
     async fn queue_credential_provider_access_denied_returns_admin_guidance() {
         let server = MockServer::start().await;
@@ -671,7 +671,7 @@ mod tests {
         assert!(msg.contains("administrator"), "should mention admin, got: {msg}");
     }
 
-    // §5 case 17: empty credentials (None) — returns empty credentials error
+    // empty credentials (None) — returns empty credentials error
     #[tokio::test]
     async fn queue_credential_provider_empty_credentials_returns_error() {
         let server = MockServer::start().await;
@@ -692,7 +692,7 @@ mod tests {
         assert!(msg.contains("Empty credentials received"), "got: {msg}");
     }
 
-    // §5 case 18: response with no "credentials" key — returns empty credentials error
+    // response with no "credentials" key — returns empty credentials error
     #[tokio::test]
     async fn queue_credential_provider_missing_credentials_key_returns_error() {
         let server = MockServer::start().await;
@@ -711,7 +711,7 @@ mod tests {
         assert!(msg.contains("Empty credentials received"), "got: {msg}");
     }
 
-    // §5 case 5: caching — calling get_queue_user_config twice returns cached config
+    // caching — calling get_queue_user_config twice returns cached config
     #[tokio::test]
     async fn get_queue_user_config_caches_by_farm_and_queue() {
         let mut cache = SessionCache::new();
@@ -724,7 +724,7 @@ mod tests {
         assert!(cache.cached_queue_configs.contains_key(&("farm-abc".to_string(), "queue-123".to_string())));
     }
 
-    // §5 case 6: force_refresh clears base session and queue configs
+    // force_refresh clears base session and queue configs
     #[tokio::test]
     async fn invalidate_clears_queue_config_cache() {
         let mut cache = SessionCache::new();

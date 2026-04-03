@@ -1,5 +1,5 @@
 //! Level 2 tests for DCM credential detection and principalId injection
-//! (§4 cases 1, 3; §7 cases 5-6; §39 cases 4-5).
+//! (auth status, list farms with/without DCM, auth CLI commands).
 
 use deadline_test_server::deadline_api::farms;
 use deadline_test_server::TestHarness;

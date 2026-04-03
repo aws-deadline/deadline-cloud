@@ -132,7 +132,7 @@ async fn auth_logout_non_dcm_profile_prints_error() {
 
 // --- auth login (DCM profile) ---
 
-// §6 case 1 + §39 case 1: DCM login happy path — monitor starts, STS succeeds
+// DCM login happy path — monitor starts, STS succeeds
 #[tokio::test]
 async fn auth_login_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
@@ -144,7 +144,7 @@ async fn auth_login_dcm_profile_succeeds() {
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
 }
 
-// §6 case 5: monitor exits before auth succeeds
+// monitor exits before auth succeeds
 #[tokio::test]
 async fn auth_login_dcm_monitor_exits_with_error() {
     let harness = TestHarness::new().await;
@@ -156,7 +156,7 @@ async fn auth_login_dcm_monitor_exits_with_error() {
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
 }
 
-// §6 case 4: monitor executable not found
+// monitor executable not found
 #[tokio::test]
 async fn auth_login_dcm_monitor_not_found() {
     let harness = TestHarness::new().await;
@@ -183,7 +183,7 @@ path = /nonexistent/path/to/monitor
 
 // --- auth logout (DCM profile) ---
 
-// §6 case 13 + §39 case 3: DCM logout happy path
+// DCM logout happy path
 #[tokio::test]
 async fn auth_logout_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
@@ -194,7 +194,7 @@ async fn auth_logout_dcm_profile_succeeds() {
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
 
-// §6 case 16: logout subprocess returns non-zero
+// logout subprocess returns non-zero
 #[tokio::test]
 async fn auth_logout_dcm_monitor_fails() {
     let harness = TestHarness::new().await;
