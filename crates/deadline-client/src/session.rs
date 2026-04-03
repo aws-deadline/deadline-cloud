@@ -1,8 +1,11 @@
 use aws_config::SdkConfig;
+use aws_credential_types::provider::{self, future, ProvideCredentials, SharedCredentialsProvider};
+use aws_credential_types::Credentials;
 use aws_sdk_deadline::Client as DeadlineClient;
 use aws_sdk_sts::Client as StsClient;
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 // ---------------------------------------------------------------------------
@@ -54,6 +57,9 @@ impl SessionContext {
 pub struct SessionCache {
     cached_config: Option<SdkConfig>,
     cached_profile: Option<Option<String>>,
+    /// Queue user configs cached by (farm_id, queue_id).
+    /// Python equivalent: `@lru_cache` on `_get_queue_user_boto3_session`.
+    cached_queue_configs: HashMap<(String, String), SdkConfig>,
     pub context: SessionContext,
 }
 
@@ -62,6 +68,7 @@ impl SessionCache {
         Self {
             cached_config: None,
             cached_profile: None,
+            cached_queue_configs: HashMap::new(),
             context: SessionContext::default(),
         }
     }
@@ -70,6 +77,7 @@ impl SessionCache {
     pub fn invalidate(&mut self) {
         self.cached_config = None;
         self.cached_profile = None;
+        self.cached_queue_configs.clear();
     }
 
     /// Whether a config is currently cached.
@@ -119,6 +127,165 @@ impl SessionCache {
         }
         StsClient::from_conf(builder.build())
     }
+
+    /// Build an SdkConfig with queue user credentials for the given farm/queue.
+    /// Cached by (farm_id, queue_id). The credential provider calls
+    /// AssumeQueueRoleForUser and auto-refreshes when credentials expire.
+    pub async fn get_queue_user_config(
+        &mut self,
+        farm_id: &str,
+        queue_id: &str,
+        queue_display_name: Option<String>,
+        config: Option<&IniConfig>,
+    ) -> Result<SdkConfig, deadline_models::errors::DeadlineError> {
+        let key = (farm_id.to_string(), queue_id.to_string());
+        if let Some(cached) = self.cached_queue_configs.get(&key) {
+            return Ok(cached.clone());
+        }
+
+        let base_config = self.get_config(config).await;
+        let region = base_config.region().cloned();
+
+        // Build a deadline client for the credential provider to call AssumeQueueRoleForUser
+        let mut dl_builder = aws_sdk_deadline::config::Builder::from(base_config);
+        if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+            dl_builder = dl_builder.endpoint_url(url);
+        }
+        let dl_client = DeadlineClient::from_conf(dl_builder.build());
+
+        let provider = QueueUserCredentialProvider::new(
+            dl_client,
+            farm_id.to_string(),
+            queue_id.to_string(),
+            queue_display_name,
+        );
+
+        let mut builder = aws_config::SdkConfig::builder()
+            .credentials_provider(SharedCredentialsProvider::new(provider));
+        if let Some(r) = region {
+            builder = builder.region(r);
+        }
+        let sdk_config = builder.build();
+        self.cached_queue_configs.insert(key, sdk_config.clone());
+        Ok(sdk_config)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// QueueUserCredentialProvider — calls AssumeQueueRoleForUser
+// ---------------------------------------------------------------------------
+
+/// Custom credential provider that calls AssumeQueueRoleForUser to obtain
+/// temporary credentials scoped to a specific queue. The SDK automatically
+/// calls `provide_credentials()` when credentials expire.
+///
+/// Python equivalent: `QueueUserCredentialProvider` in `api/_session.py`.
+#[derive(Debug)]
+pub struct QueueUserCredentialProvider {
+    client: DeadlineClient,
+    farm_id: String,
+    queue_id: String,
+    queue_display_name_or_id: String,
+}
+
+impl QueueUserCredentialProvider {
+    pub fn new(
+        client: DeadlineClient,
+        farm_id: String,
+        queue_id: String,
+        queue_display_name: Option<String>,
+    ) -> Self {
+        let queue_display_name_or_id = queue_display_name.unwrap_or_else(|| queue_id.clone());
+        Self { client, farm_id, queue_id, queue_display_name_or_id }
+    }
+
+    async fn load_credentials(&self) -> provider::Result {
+        use crate::raw_response::ResponseBodyCapture;
+
+        let capture = ResponseBodyCapture::new();
+        let result = self.client
+            .assume_queue_role_for_user()
+            .farm_id(&self.farm_id)
+            .queue_id(&self.queue_id)
+            .customize()
+            .interceptor(capture.clone())
+            .send()
+            .await;
+
+        if let Err(ref sdk_err) = result {
+            let (code, message) = match sdk_err {
+                aws_sdk_deadline::error::SdkError::ServiceError(e) => {
+                    let inner = e.err();
+                    use aws_sdk_deadline::error::ProvideErrorMetadata;
+                    (
+                        ProvideErrorMetadata::code(inner).unwrap_or("Unknown").to_string(),
+                        format!("{inner}"),
+                    )
+                }
+                other => ("Unknown".to_string(), format!("{other}")),
+            };
+
+            let display = &self.queue_display_name_or_id;
+            let err_msg = match code.as_str() {
+                "ThrottlingException" => format!(
+                    "Throttled while attempting to assume Queue role for user on Queue '{display}': {message}\n\
+                     Please retry the operation later, or contact your administrator to increase the API's rate limit."
+                ),
+                "InternalServerException" => format!(
+                    "An internal server error occurred while attempting to assume Queue role for user on \
+                     Queue '{display}': {message}\n"
+                ),
+                _ => format!(
+                    "Failed to assume Queue role for user on Queue '{display}': {message}\nPlease contact your \
+                     administrator to ensure a Queue role exists and that you have permissions to access this Queue."
+                ),
+            };
+            return Err(aws_credential_types::provider::error::CredentialsError::provider_error(err_msg));
+        }
+
+        let json = capture.json().map_err(|e|
+            aws_credential_types::provider::error::CredentialsError::provider_error(e.to_string())
+        )?;
+
+        let creds = &json["credentials"];
+        if creds.is_null() || !creds.is_object() {
+            let display = &self.queue_display_name_or_id;
+            return Err(aws_credential_types::provider::error::CredentialsError::provider_error(
+                format!("Failed to get credentials for '{display}': Empty credentials received.")
+            ));
+        }
+
+        let access_key = creds["accessKeyId"].as_str().unwrap_or_default();
+        let secret_key = creds["secretAccessKey"].as_str().unwrap_or_default();
+        let session_token = creds["sessionToken"].as_str().map(String::from);
+        let expiration = creds["expiration"].as_str().and_then(|s| {
+            // Parse ISO 8601 datetime to SystemTime.
+            // ResponseBodyCapture converts to "2024-12-18 01:30:45+00:00" format,
+            // so handle both T-separator and space-separator.
+            let normalized = s.replace(' ', "T");
+            chrono::DateTime::parse_from_rfc3339(&normalized)
+                .or_else(|_| chrono::DateTime::parse_from_str(&normalized, "%Y-%m-%dT%H:%M:%S%.f%:z"))
+                .ok()
+                .map(|dt| std::time::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64))
+        });
+
+        Ok(Credentials::new(
+            access_key,
+            secret_key,
+            session_token,
+            expiration,
+            "queue-credential-provider",
+        ))
+    }
+}
+
+impl ProvideCredentials for QueueUserCredentialProvider {
+    fn provide_credentials<'a>(&'a self) -> future::ProvideCredentials<'a>
+    where
+        Self: 'a,
+    {
+        future::ProvideCredentials::new(self.load_credentials())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +320,24 @@ pub async fn deadline_client(config: Option<&IniConfig>) -> DeadlineClient {
 /// Build an STS client using the cached SDK config.
 pub async fn sts_client(config: Option<&IniConfig>) -> StsClient {
     SESSION.lock().unwrap().build_sts_client(config).await
+}
+
+/// Get an SdkConfig with queue user credentials.
+/// Falls back to config defaults for farm_id and queue_id.
+/// Python equivalent: `get_queue_user_boto3_session()`.
+pub async fn get_queue_user_config(
+    farm_id: Option<&str>,
+    queue_id: Option<&str>,
+    queue_display_name: Option<String>,
+    force_refresh: bool,
+    config: Option<&IniConfig>,
+) -> Result<SdkConfig, deadline_models::errors::DeadlineError> {
+    if force_refresh {
+        invalidate_session_cache();
+    }
+    let farm = farm_id.map(String::from).unwrap_or_else(|| get_setting("defaults.farm_id", config));
+    let queue = queue_id.map(String::from).unwrap_or_else(|| get_setting("defaults.queue_id", config));
+    SESSION.lock().unwrap().get_queue_user_config(&farm, &queue, queue_display_name, config).await
 }
 
 // ---------------------------------------------------------------------------
@@ -312,5 +497,242 @@ mod tests {
         set_cli_command_name("deadline.farm.list");
         let ua = SESSION.lock().unwrap().context.build_user_agent();
         assert!(ua.contains("cli-command/deadline.farm.list"));
+    }
+
+    // ── Queue user credential provider tests (§5) ──────────────
+
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Build a DeadlineClient pointed at the given wiremock server.
+    fn test_deadline_client(server: &MockServer) -> DeadlineClient {
+        let port = server.address().port();
+        let config = aws_sdk_deadline::Config::builder()
+            .endpoint_url(format!("http://localhost:{port}"))
+            .credentials_provider(aws_sdk_deadline::config::Credentials::new(
+                "AKID", "SECRET", Some("TOKEN".into()), None, "test",
+            ))
+            .region(aws_sdk_deadline::config::Region::new("us-west-2"))
+            .behavior_version_latest()
+            .build();
+        DeadlineClient::from_conf(config)
+    }
+
+    // §5 case 11: credential fetch succeeds — returns access_key, secret_key, token, expiry
+    #[tokio::test]
+    async fn queue_credential_provider_success_returns_credentials() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "credentials": {
+                    "accessKeyId": "ASIAQUEUEUSER",
+                    "secretAccessKey": "secretqueue",
+                    "sessionToken": "tokenqueue",
+                    "expiration": "2099-12-18T01:30:45Z"
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let creds = provider.load_credentials().await.expect("should succeed");
+        assert_eq!(creds.access_key_id(), "ASIAQUEUEUSER");
+        assert_eq!(creds.secret_access_key(), "secretqueue");
+        assert_eq!(creds.session_token(), Some("tokenqueue"));
+        assert!(creds.expiry().is_some());
+    }
+
+    /// Extract the source error message from a CredentialsError.
+    /// CredentialsError::ProviderError wraps our message in source().
+    fn credential_error_message(err: &dyn std::error::Error) -> String {
+        // Walk the error chain to find our message
+        let mut current: Option<&dyn std::error::Error> = Some(err);
+        let mut last_msg = err.to_string();
+        while let Some(e) = current {
+            last_msg = e.to_string();
+            current = e.source();
+        }
+        last_msg
+    }
+
+    // §5 case 12: queue_display_name is provided — error messages use it
+    #[tokio::test]
+    async fn queue_credential_provider_error_uses_display_name() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "__type": "AccessDeniedException",
+                "message": "Not authorized"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), Some("My Queue".into()),
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("My Queue"), "error should use display name, got: {msg}");
+    }
+
+    // §5 case 13: queue_display_name is not provided — error messages use queue_id
+    #[tokio::test]
+    async fn queue_credential_provider_error_falls_back_to_queue_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "__type": "AccessDeniedException",
+                "message": "Not authorized"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("queue-123"), "error should use queue_id, got: {msg}");
+    }
+
+    // §5 case 14: ThrottlingException — returns error with retry guidance
+    #[tokio::test]
+    async fn queue_credential_provider_throttling_returns_retry_message() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(429).set_body_json(serde_json::json!({
+                "__type": "ThrottlingException",
+                "message": "Rate exceeded"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("Throttled"), "should mention throttling, got: {msg}");
+        assert!(msg.contains("retry"), "should mention retry, got: {msg}");
+    }
+
+    // §5 case 15: InternalServerException — returns error with internal server error message
+    #[tokio::test]
+    async fn queue_credential_provider_internal_error_returns_message() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "__type": "InternalServerException",
+                "message": "Something broke"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("internal server error"), "should mention internal error, got: {msg}");
+    }
+
+    // §5 case 16: other AWS error (AccessDeniedException) — returns admin contact guidance
+    #[tokio::test]
+    async fn queue_credential_provider_access_denied_returns_admin_guidance() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "__type": "AccessDeniedException",
+                "message": "User is not authorized"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("Failed to assume Queue role"), "got: {msg}");
+        assert!(msg.contains("administrator"), "should mention admin, got: {msg}");
+    }
+
+    // §5 case 17: empty credentials (None) — returns empty credentials error
+    #[tokio::test]
+    async fn queue_credential_provider_empty_credentials_returns_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "credentials": null
+            })))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("Empty credentials received"), "got: {msg}");
+    }
+
+    // §5 case 18: response with no "credentials" key — returns empty credentials error
+    #[tokio::test]
+    async fn queue_credential_provider_missing_credentials_key_returns_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&server)
+            .await;
+
+        let client = test_deadline_client(&server);
+        let provider = QueueUserCredentialProvider::new(
+            client, "farm-abc".into(), "queue-123".into(), None,
+        );
+        let err = provider.load_credentials().await.unwrap_err();
+        let msg = credential_error_message(&err);
+        assert!(msg.contains("Empty credentials received"), "got: {msg}");
+    }
+
+    // §5 case 5: caching — calling get_queue_user_config twice returns cached config
+    #[tokio::test]
+    async fn get_queue_user_config_caches_by_farm_and_queue() {
+        let mut cache = SessionCache::new();
+        // First call creates a config
+        let cfg1 = cache.get_queue_user_config(
+            "farm-abc", "queue-123", None, None,
+        ).await;
+        assert!(cfg1.is_ok());
+        // Second call should return cached (same key)
+        assert!(cache.cached_queue_configs.contains_key(&("farm-abc".to_string(), "queue-123".to_string())));
+    }
+
+    // §5 case 6: force_refresh clears base session and queue configs
+    #[tokio::test]
+    async fn invalidate_clears_queue_config_cache() {
+        let mut cache = SessionCache::new();
+        let _ = cache.get_queue_user_config(
+            "farm-abc", "queue-123", None, None,
+        ).await;
+        assert!(!cache.cached_queue_configs.is_empty());
+        cache.invalidate();
+        assert!(cache.cached_queue_configs.is_empty());
     }
 }

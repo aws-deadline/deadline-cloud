@@ -5,8 +5,8 @@ service and STS.
 
 ## Status: In Progress (§3-10)
 
-Session creation, auth status, session caching, user-agent, farm list/get
-implemented. Remaining: queue user credentials, queue parameters.
+Session creation, auth status, session caching, user-agent, farm list/get,
+queue user credentials implemented. Remaining: queue parameters.
 
 ## Consumers
 
@@ -221,9 +221,45 @@ single `ResponseBodyCapture` call. Returns the full API response as
 `get_session`, `list_sessions`, `list_steps`, `list_tasks`: follow
 existing patterns. List functions use the paginated helper.
 
+## Session (`session.rs`) — queue user credentials (§5)
+
+`QueueUserCredentialProvider` implements the AWS SDK's `ProvideCredentials`
+trait. It calls `AssumeQueueRoleForUser` via the Deadline SDK and returns
+temporary credentials with an expiry time. The SDK automatically calls
+`provide_credentials()` when credentials expire, providing the same
+auto-refresh behavior as Python's `RefreshableCredentials`.
+
+Error handling in `provide_credentials()` inspects the AWS error code:
+- `ThrottlingException` → "Throttled..." with retry guidance
+- `InternalServerException` → "An internal server error occurred..."
+- Other errors → "Failed to assume Queue role..." with admin contact guidance
+- Empty/missing credentials → "Empty credentials received"
+
+If `queue_display_name` is provided, error messages use it; otherwise
+they fall back to `queue_id`.
+
+`get_queue_user_config(farm_id?, queue_id?, queue_display_name?,
+force_refresh?, config?) -> SdkConfig`: builds an `SdkConfig` with
+`QueueUserCredentialProvider` as the credential source. Falls back to
+config defaults for `farm_id` and `queue_id`. Inherits region from the
+base session. Cached on `SessionCache` keyed by `(farm_id, queue_id)`.
+`force_refresh` clears the base session cache (causing a new base config
+to be loaded), and since the queue config cache keys against the base
+config identity, a new queue config is also created.
+
+`invalidate_session_cache()` clears both the base session cache and all
+queue user config entries, matching Python's `invalidate_boto3_session_cache()`.
+
+`precache_clients(deadline_client?, config?, farm_id?, queue_id?,
+queue_display_name?)`: creates a deadline client (or uses provided one),
+reads farm/queue from settings if not provided, calls `GetQueue` for
+display name if not provided, then calls `get_queue_user_config()` to
+trigger credential resolution and caching. Returns `(DeadlineClient, SdkConfig)`.
+The S3 client return is deferred to work item #8 (`deadline-job-attachments`
+AWS client infrastructure) — revisit when implementing that item.
+
 ## Not Yet Implemented
 
-- Queue user credentials — custom credential provider (§5)
 - Queue parameters (§8) — blocked on `deadline-job-bundle` §16
 
 ### Telemetry — API-layer latency events

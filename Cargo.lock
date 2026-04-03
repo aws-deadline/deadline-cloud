@@ -763,8 +763,10 @@ name = "deadline-client"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-deadline",
  "aws-sdk-sts",
+ "chrono",
  "deadline-common",
  "deadline-config",
  "deadline-models",
@@ -772,6 +774,7 @@ dependencies = [
  "serde_json",
  "test-case",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]

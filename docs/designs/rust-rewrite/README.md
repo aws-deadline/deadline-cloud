@@ -62,7 +62,7 @@ follows `workflow.md` for that item.
 | 0i | GUI FFI spike | ✅ Done | — | — | — | 0g |
 | 1 | Session caching & user-agent | ✅ Done | §3 (28 cases) | — | `session.md` | 0g |
 | 2 | Login/logout | ✅ Done | §6 (18 cases) | §39 cases 1-3 | `api_resource_management.md`, `cli.md` | 1 |
-| 3 | Queue user credentials | Not started | §5 (20 cases) | — | `session.md` | 1 |
+| 3 | Queue user credentials | ✅ Done | §5 (20 cases) | — | `session.md` | 1 |
 | 4 | Queue parameters | Not started | §8 (10 cases) | §42 cases 6-7 | `api_resource_management.md`, `cli.md` | 1 |
 | 5 | Telemetry API integration | Not started | §14 (24 cases) | §42 cases 11-13 | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 6 | Job monitoring & logs | Not started | §12 (35 cases) | §44 cases 17-24 | `api_job_lifecycle.md`, `cli.md` | 1 |
