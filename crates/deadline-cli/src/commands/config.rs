@@ -10,6 +10,10 @@ pub enum CliError {
     Operation(String),
     #[error("{0}")]
     Config(#[from] deadline_config::config_file::ConfigError),
+    /// Exit with a specific code after printing output normally.
+    /// The message (if any) has already been printed by the command.
+    #[error("{message}")]
+    ExitCode { code: i32, message: String },
 }
 
 #[derive(clap::Subcommand)]

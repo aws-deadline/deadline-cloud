@@ -178,6 +178,13 @@ Spawns a Python process that loads the GUI widget package and
   not computable. DateTime fields are formatted as `YYYY-MM-DD HH:MM:SS+00:00`.
 - `deadline job get [--farm-id] [--queue-id] [--job-id]`
   Calls `GetJob`, prints full response as YAML (minus `ResponseMetadata`).
+- `deadline job wait [--farm-id] [--queue-id] [--job-id] [--max-poll-interval 120] [--timeout 0] [--output verbose|json]`
+  Polls `GetJob` until terminal state (SUCCEEDED, FAILED, CANCELED,
+  SUSPENDED, NOT_COMPATIBLE). Verbose mode prints status updates to stderr
+  via `\r` overwrite; JSON mode prints a single JSON object to stdout.
+  On non-SUCCEEDED, collects failed tasks from steps/tasks. Exit codes:
+  0=SUCCEEDED, 1=timeout, 2=FAILED, 3=CANCELED, 4=SUSPENDED/ARCHIVED,
+  5=NOT_COMPATIBLE. Uses `CliError::ExitCode` for non-zero exits.
 
 Both commands use `suggest_resources_on_client_error` on API failure.
 

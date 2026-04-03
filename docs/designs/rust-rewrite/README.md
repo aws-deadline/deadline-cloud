@@ -65,7 +65,7 @@ follows `workflow.md` for that item.
 | 3 | Queue user credentials | ✅ Done | §5 (20 cases) | — | `session.md` | 1 |
 | 4 | Queue parameters | Not started | §8 (10 cases) | §42 cases 6-7 | `api_resource_management.md`, `cli.md` | 1 |
 | 5 | Telemetry API integration | ✅ Done | §14 (24 cases) | §42 cases 11-13 | `api_job_lifecycle.md`, `cli.md` | 1 |
-| 6 | Job monitoring & logs | Not started | §12 (35 cases) | §44 cases 17-24 | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 6 | Job monitoring & logs | In progress | §12 (35 cases) | §44 cases 17-24 | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 7 | Job bundle | Not started | §15-18 (174 cases) | §45 case 14 | `job_bundle.md`, `cli.md` | 1, 4 |
 | 8 | Job attachments: core | Not started | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
 | 9 | Job attachments: transfer | Not started | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |

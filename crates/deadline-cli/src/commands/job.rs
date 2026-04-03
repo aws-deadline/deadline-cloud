@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_client::api;
+use deadline_client::{api, job_monitoring};
 
 use super::config::CliError;
 use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
@@ -52,6 +52,19 @@ pub enum JobAction {
         #[arg(long)] queue_id: Option<String>,
         #[arg(long)] job_id: Option<String>,
         #[arg(long)] step_id: String,
+    },
+    /// Wait for a job to complete
+    Wait {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long, default_value = "120")]
+        max_poll_interval: u64,
+        #[arg(long, default_value = "0")]
+        timeout: u64,
+        #[arg(long, default_value = "verbose")]
+        output: String,
     },
 }
 
@@ -173,6 +186,101 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["tasks"]));
             Ok(())
+        }
+        JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let is_json = output.eq_ignore_ascii_case("json");
+
+            let job_resp = api::get_job(&farm, &queue, &job, config.as_ref(), None).await
+                .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {e}")))?;
+            let job_name = job_resp["name"].as_str().unwrap_or("");
+
+            let job_cb: Box<dyn Fn(&serde_json::Value, f64, u64)> = if is_json {
+                Box::new(|_, _, _| {})
+            } else {
+                Box::new(|j: &serde_json::Value, elapsed: f64, t: u64| {
+                    let c = &j["taskRunStatusCounts"];
+                    let running = c.get("RUNNING").and_then(|v| v.as_i64()).unwrap_or(0)
+                        + c.get("ASSIGNED").and_then(|v| v.as_i64()).unwrap_or(0)
+                        + c.get("STARTING").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let ok = c.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let total: i64 = c.as_object().map_or(0, |m| m.values().filter_map(|v| v.as_i64()).sum());
+                    let s = j.get("taskRunStatus").and_then(|v| v.as_str()).unwrap_or("");
+                    let ti = if t > 0 {
+                        let r = (t as f64 - elapsed).max(0.0);
+                        format!(" [{elapsed:.1}s elapsed, {r:.1}s remaining]")
+                    } else {
+                        format!(" [{elapsed:.1}s elapsed]")
+                    };
+                    eprint!("\rCurrent status: {s} ({ok}/{total} tasks succeeded, {running} workers running).{ti}");
+                })
+            };
+
+            if !is_json {
+                eprintln!("Waiting for job {job} to complete...");
+                eprintln!("Job Name: {job_name}");
+            }
+
+            match job_monitoring::wait_for_job_completion(
+                &farm, &queue, &job, max_poll_interval, timeout,
+                config.as_ref(), None, None, Some(&*job_cb),
+            ).await {
+                Ok(result) => {
+                    let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
+                        serde_json::json!({
+                            "stepId": t.step_id, "taskId": t.task_id,
+                            "stepName": t.step_name, "sessionId": t.session_id,
+                        })
+                    }).collect();
+
+                    if is_json {
+                        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                            "jobId": job, "jobName": job_name,
+                            "status": result.status, "elapsedTime": result.elapsed_time,
+                            "failedTasks": failed_json,
+                        })).unwrap());
+                    } else {
+                        eprintln!();
+                        println!("Job ID: {job}");
+                        println!("Job completed with status: {}", result.status);
+                        println!("Elapsed time: {:.1} seconds", result.elapsed_time);
+                        if result.failed_tasks.is_empty() {
+                            println!("No failed tasks found.");
+                        } else {
+                            println!("Found {} failed tasks:", result.failed_tasks.len());
+                            println!("{}", crate::common::cli_object_repr(&serde_json::json!(failed_json)));
+                        }
+                    }
+
+                    let exit_code = match result.status.as_str() {
+                        "SUCCEEDED" if result.failed_tasks.is_empty() => 0,
+                        "CANCELED" => 3,
+                        "SUSPENDED" | "ARCHIVED" => 4,
+                        "NOT_COMPATIBLE" => 5,
+                        _ => 2,
+                    };
+                    if exit_code == 0 { Ok(()) } else {
+                        Err(CliError::ExitCode { code: exit_code, message: String::new() })
+                    }
+                }
+                Err(e) => {
+                    let is_timeout = matches!(e, deadline_models::errors::DeadlineError::OperationTimedOut(_));
+                    if is_json {
+                        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                            "error": e.to_string(), "timeout": is_timeout,
+                            "jobId": job, "jobName": job_name,
+                        })).unwrap());
+                    } else {
+                        println!("Job ID: {job}");
+                        println!("Job Name: {job_name}");
+                        println!("Error waiting for job completion: {e}");
+                    }
+                    Err(CliError::ExitCode { code: if is_timeout { 1 } else { 2 }, message: String::new() })
+                }
+            }
         }
     }
 }

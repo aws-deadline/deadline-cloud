@@ -3,10 +3,11 @@
 AWS API interaction layer. Owns the SDK/HTTP calls to the Deadline Cloud
 service and STS.
 
-## Status: In Progress (§3-10)
+## Status: In Progress (§3-10, §12 partial)
 
 Session creation, auth status, session caching, user-agent, farm list/get,
-queue user credentials implemented. Remaining: queue parameters.
+queue user credentials, job wait implemented. Remaining: queue parameters,
+session/worker logs.
 
 ## Consumers
 
@@ -31,10 +32,11 @@ External:
 
 ```
 src/
-├── lib.rs       // pub mod session, auth, api
-├── session.rs   // SDK config loading, client construction
-├── auth.rs      // credential source, auth status, API availability
-└── api.rs       // list/get for farms, queues, fleets, jobs
+├── lib.rs              // pub mod session, auth, api, job_monitoring
+├── session.rs          // SDK config loading, client construction
+├── auth.rs             // credential source, auth status, API availability
+├── api.rs              // list/get for farms, queues, fleets, jobs
+└── job_monitoring.rs   // wait_for_job_completion, collect_failed_tasks
 ```
 
 ## Session (`session.rs`)
@@ -257,6 +259,31 @@ display name if not provided, then calls `get_queue_user_config()` to
 trigger credential resolution and caching. Returns `(DeadlineClient, SdkConfig)`.
 The S3 client return is deferred to work item #8 (`deadline-job-attachments`
 AWS client infrastructure) — revisit when implementing that item.
+
+## Job Monitoring (`job_monitoring.rs`) — §12
+
+### `wait_for_job_completion`
+
+Polls `GetJob` with exponential backoff until the job reaches a terminal
+state. Returns a `JobCompletionResult` with status, failed tasks, and
+elapsed time.
+
+- Terminal states: `SUCCEEDED`, `FAILED`, `CANCELED`, `SUSPENDED`,
+  `NOT_COMPATIBLE`
+- Backoff: starts at 0.5s, doubles each iteration, capped at
+  `max_poll_interval` (default 120s)
+- Timeout: 0 means no timeout; positive value raises
+  `DeadlineOperationTimedOut` when exceeded
+- Callbacks: `status_callback(status, elapsed, timeout)` and
+  `job_callback(job, elapsed, timeout)` called each poll iteration
+- Failed task collection: on non-SUCCEEDED status, iterates steps and
+  tasks to find FAILED tasks. Skips steps with
+  `taskRunStatusCounts.FAILED == 0`. Extracts `session_id` from
+  `latestSessionActionId` format `sessionaction-{uuid}-{number}`.
+
+Result types live in `deadline-models::job_monitoring`:
+- `FailedTask { step_id, task_id, step_name, parameters, session_id? }`
+- `JobCompletionResult { status, failed_tasks, elapsed_time }`
 
 ## Not Yet Implemented
 

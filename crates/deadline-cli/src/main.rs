@@ -160,6 +160,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::job::JobAction::ListSessions { .. } => "list-sessions",
             commands::job::JobAction::ListSteps { .. } => "list-steps",
             commands::job::JobAction::ListTasks { .. } => "list-tasks",
+            commands::job::JobAction::Wait { .. } => "wait",
         }),
         Commands::Worker { action } => ("worker", match action {
             commands::worker::WorkerAction::List { .. } => "list",
@@ -246,6 +247,8 @@ fn main() {
         debug!("Debug logging is on");
     }
 
+    let mut exit_code: i32 = 0;
+
     if let Some(command) = cli.command {
         // Set CLI command name for user-agent tracking.
         // Python equivalent: ContextTrackingCommand sets
@@ -263,9 +266,26 @@ fn main() {
             Commands::Worker { action } => commands::worker::run(action),
         };
         if let Err(e) = result {
-            // Known operation/config errors: print message to stdout (matching Python CLI)
-            println!("{e}");
-            std::process::exit(1);
+            match e {
+                commands::config::CliError::ExitCode { code, ref message } => {
+                    if !message.is_empty() {
+                        println!("{message}");
+                    }
+                    exit_code = code;
+                }
+                _ => {
+                    // Known operation/config errors: print message to stdout (matching Python CLI)
+                    println!("{e}");
+                    exit_code = 1;
+                }
+            }
         }
+    }
+
+    // All output is complete. println! uses LineWriter which flushes on
+    // each newline, so output is already written. For non-zero exit codes
+    // we must call process::exit since main() returns ().
+    if exit_code != 0 {
+        std::process::exit(exit_code);
     }
 }

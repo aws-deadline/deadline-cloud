@@ -433,16 +433,40 @@ let _guard = settings.bind_to_scope();
 assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-abc"]));
 ```
 
-### Mock Response Completeness
+### Mock Response Data Rules
 
-Stub server mock responses must include **all fields** that the real API
-returns, not just the minimum. If the real `GetFarm` response has 6 fields,
-the mock must have 6 fields. This ensures the Rust code extracts and formats
-every field.
+Our `api.rs` functions use a `ResponseBodyCapture` interceptor to extract
+raw JSON from AWS SDK responses. However, the SDK deserializes the HTTP
+response into its typed output struct *before* the interceptor runs. If
+deserialization fails, the SDK returns `SdkError::ServiceError` with
+"Unknown: No message" and our code never sees the raw bytes. This means
+mock response bodies must be valid enough for the SDK's deserializer.
 
-Use the [AWS Deadline Cloud API Reference](https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html)
-to verify response shapes. The `test_specs/compatibility_audit.md` documents
-known gaps.
+**Safe to omit** — the SDK auto-fills defaults for missing required scalars:
+- `String` → `""`, `i32` → `0`, `DateTime` → epoch, enums → `Unknown`
+- Any `Option<T>` field is always safe to omit
+
+**Must be structurally correct** — wrong shapes break deserialization:
+- **Union types** must use the tagged object format. For example,
+  `TaskParameterValue` is a union with variants `int`, `float`, `string`,
+  `path`. Write `{ "Frame": { "int": "1" } }`, NOT `{ "Frame": "1" }`.
+  A bare string where the SDK expects a union object causes deserialization
+  to fail silently with "Unknown: No message".
+- **Struct-typed fields** must be JSON objects, not scalars.
+- **Primitive types** must match (don't pass a string where a number is expected).
+
+Extra/unknown fields are silently skipped — adding new fields to the real
+API won't break existing mocks.
+
+When in doubt, look up the operation in the
+[AWS Deadline Cloud API Reference](https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/Welcome.html)
+and check whether a response field is a "structure" or "union" type — those
+need the correct nested object shape. You can also check the generated SDK
+types in `~/.cargo/registry/src/*/aws-sdk-deadline-*/src/types/` to see
+which fields are `Option<T>` (safe to omit) vs bare `T` (required but
+auto-defaulted).
+
+See also: `crates/deadline-test-server/src/deadline_api/mod.rs` doc comment.
 
 ### Why Snapshots Over Substring Checks
 

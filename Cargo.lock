@@ -851,6 +851,7 @@ dependencies = [
 name = "deadline-models"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "test-case",
 ]
 

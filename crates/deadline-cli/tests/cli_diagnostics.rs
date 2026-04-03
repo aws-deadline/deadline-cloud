@@ -118,12 +118,14 @@ async fn job_list_tasks_prints_tasks() {
             json!({
                 "taskId": "task-001",
                 "runStatus": "SUCCEEDED",
-                "createdAt": "2024-12-18T00:00:00Z"
+                "createdAt": "2024-12-18T00:00:00Z",
+                "createdBy": "user:test"
             }),
             json!({
                 "taskId": "task-002",
                 "runStatus": "FAILED",
-                "createdAt": "2024-12-18T00:01:00Z"
+                "createdAt": "2024-12-18T00:01:00Z",
+                "createdBy": "user:test"
             }),
         ],
     )
@@ -194,7 +196,7 @@ async fn job_list_tasks_sends_latency_telemetry() {
     harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
     sessions::mock_list_tasks(
         &harness.server, "farm-abc", "queue-aaa", "job-001", "step-001",
-        &[json!({"taskId": "task-001", "runStatus": "SUCCEEDED", "createdAt": "2024-12-18T00:00:00Z"})],
+        &[json!({"taskId": "task-001", "runStatus": "SUCCEEDED", "createdAt": "2024-12-18T00:00:00Z", "createdBy": "user:test"})],
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
