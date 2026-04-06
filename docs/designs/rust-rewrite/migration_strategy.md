@@ -186,65 +186,18 @@ proven patterns and well-understood APIs. The risk is schedule, not feasibility.
 
 ## Fail-Fast Strategy
 
-The phased rollout below is ordered by **shipping value**, but development
-must prioritize **risk reduction**. Before investing months in bulk
-implementation, we must prove the high-risk technical bets work through
-minimal vertical spikes.
+All four risk spikes have passed. See the Risk Spikes table in
+`README.md` for the summary. The spike definitions and pass/fail
+criteria below are retained as a decision record.
 
-### Required spikes (must pass before bulk Phase 1 work)
+### Required spikes (all passed)
 
-Each spike is a minimal proof-of-concept — days of work, not weeks. The
-goal is to surface blockers early enough to change course.
-
-| Spike | Proves | Scope | Pass criteria |
-|-------|--------|-------|---------------|
-| **GUI FFI round-trip** | Python ↔ Rust ↔ Qt works | Build a minimal `deadline-gui-ffi` that exposes `get_auth_status()`. Load it from Python via ctypes. Display the result in a QDialog. Wire a callback (e.g. progress) from Rust back to Python. | Loads on Linux, macOS, Windows. Callback doesn't crash. Qt event loop stays responsive. |
-| **GUI FFI inside a DCC** | Shared library loads in a real DCC Python environment | Load the spike `.so`/`.dylib` from inside Blender's Python and call `get_auth_status()`. | Returns correct result. No symbol conflicts. No Qt version crash. |
-| **S3 transfer performance** | Rust S3 throughput ≥ Python | Implement minimal S3 multipart upload/download using `aws-sdk-s3`. Benchmark against Python `boto3.s3.transfer` with a 1 GB file. | Rust throughput ≥ Python throughput. |
-| **Job attachment hashing** | Parallel hashing is fast | Implement `xxh128` hashing of a directory tree with rayon parallelism. Benchmark against Python's single-threaded implementation. | Rust is measurably faster. Hashes match Python output byte-for-byte. |
-
-### Spike ordering and gates
-
-```
-Spike: GUI FFI round-trip
-  │
-  ├─ PASS → Spike: GUI FFI inside DCC (Blender)
-  │           │
-  │           ├─ PASS → Phase 3 is viable. Continue Phase 1 with confidence.
-  │           └─ FAIL → Investigate DCC-specific issues. If unsolvable,
-  │                     revise DCC strategy (keep Python for GUI entirely?).
-  │
-  └─ FAIL → STOP. The core architecture doesn't work.
-            Options: (a) debug and fix, (b) use PyO3 instead of ctypes,
-            (c) keep GUI in Python and only migrate CLI + worker agent.
-
-Spike: S3 transfer performance
-  │
-  ├─ PASS → Job attachments crate is viable. Proceed with §19-35.
-  └─ FAIL → Investigate. If Rust SDK is the bottleneck, consider
-            calling S3 via raw HTTP or using the CRT-based transfer
-            manager. If fundamentally slower, worker agent migration
-            (Phase 2) loses its primary justification.
-
-Spike: Job attachment hashing
-  │
-  ├─ PASS → Proceed with attachment data model (§19-20).
-  └─ FAIL → Unlikely (pure computation), but if hashes don't match,
-            investigate xxh128 implementation differences.
-```
-
-### Development order within Phase 1
-
-After spikes pass, Phase 1 implementation follows this order:
-
-1. **Library crates that the spikes already validated** — job attachment
-   models/hashing (§19-20), then S3 transfer (§21-22)
-2. **Remaining `deadline-client` APIs** — §3-14 (session, auth, queue
-   params, credentials, login/logout, telemetry)
-3. **`deadline-job-bundle`** — §15-18 (bundle loading, parameters)
-4. **Remaining CLI commands** — §37-49 (wired up as APIs become available)
-5. **Full `deadline-job-attachments`** — §23-35 (caches, manifests, VFS,
-   path mapping, progress tracking)
+| Spike | Proves | Pass criteria |
+|-------|--------|---------------|
+| **GUI FFI round-trip** | Python ↔ Rust ↔ Qt works | Loads on Linux, macOS, Windows. Callback doesn't crash. Qt event loop stays responsive. |
+| **GUI FFI inside a DCC** | Shared library loads in a real DCC Python environment | Returns correct result. No symbol conflicts. No Qt version crash. |
+| **S3 transfer performance** | Rust S3 throughput ≥ Python | Rust throughput ≥ Python throughput. |
+| **Job attachment hashing** | Parallel hashing is fast | Rust is measurably faster. Hashes match Python output byte-for-byte. |
 
 ## Phased Rollout
 

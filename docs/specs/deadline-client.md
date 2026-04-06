@@ -335,6 +335,26 @@ Telemetry for blocked features (`get_queue_parameter_definitions` §8,
 same pattern when those API functions are implemented — add the
 `telemetry` parameter and record latency internally.
 
+## AWS Client Caching Architecture
+
+Python has two independent `@lru_cache` hierarchies for AWS clients:
+
+1. **`client.api._session`** — session, service client, and queue user
+   session caches. `invalidate_boto3_session_cache()` clears these.
+   Covered by work items #1 and #3.
+2. **`job_attachments._aws.aws_clients`** — separate S3 client (with
+   its own config: `s3v4` signature, custom timeouts, pool size,
+   `ExpectedBucketOwner` injection), transfer manager, STS client, and
+   Deadline client caches. **Not** cleared by
+   `invalidate_boto3_session_cache()`. Covered by work items #8 and #9.
+
+The two hierarchies don't share state. This means credential changes
+(e.g., after login) don't propagate to job_attachments clients until
+the process restarts. This is acceptable because job_attachments
+operations run within a single submission flow where credentials don't
+change. Replicate this separation in Rust; unifying them is a future
+improvement.
+
 ## Deferred
 
 - §11 (submit job bundle) — blocked on `deadline-job-bundle` and

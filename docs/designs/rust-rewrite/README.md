@@ -45,9 +45,8 @@ All passed. See `migration_strategy.md` § "Fail-Fast Strategy" for details.
 
 ### Work Items
 
-Each row is a self-contained unit of work. A fresh agent picks the first
-row with status **Not started** whose dependencies are all **✅ Done**, then
-follows `workflow.md` for that item.
+Each row is a self-contained unit of work. See `workflow.md` for how to
+pick and execute work items.
 
 | # | Work Item | Status | Library §§ | CLI §§ | Test Spec Files | Depends On |
 |---|-----------|--------|-----------|--------|-----------------|------------|
@@ -81,13 +80,8 @@ follows `workflow.md` for that item.
 
 **Status key:** ✅ Done · In progress · Not started · Deferred (blocked on CLI completion)
 
-**In-progress notes:**
-- **#6**: `wait_for_job_completion` and `deadline job wait` CLI are done
-  (§12 cases 1-15, §44 cases 22-24). Remaining: `get_session_logs`,
-  `get_worker_logs` (§12 cases 16-35), and CLI commands `deadline job logs`
-  (§44 cases 17-21), `deadline job trace-schedule` (§44 cases 27-28).
-  Next batch requires `aws-sdk-cloudwatchlogs`, `assume_fleet_role_for_read`,
-  `list_session_actions`, `get_session_action` API functions.
+**In-progress details:** See `HANDOFF.md` for current state of any
+"In progress" work items.
 
 **Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
 after the core CLI commands are complete. #18 (worker agent) is deferred until
@@ -95,22 +89,3 @@ the entire CLI — including GUI FFI and MCP — is done. The CLI exercises all
 the same library crates, so completing it first means battle-tested foundations
 for the worker agent.
 
-### Notes on AWS client caching
-
-Python has two independent `@lru_cache` hierarchies for AWS clients:
-
-1. **`client.api._session`** — session, service client, and queue user
-   session caches. `invalidate_boto3_session_cache()` clears these.
-   Covered by work items #1 and #3.
-2. **`job_attachments._aws.aws_clients`** — separate S3 client (with
-   its own config: `s3v4` signature, custom timeouts, pool size,
-   `ExpectedBucketOwner` injection), transfer manager, STS client, and
-   Deadline client caches. **Not** cleared by
-   `invalidate_boto3_session_cache()`. Covered by work items #8 and #9.
-
-The two hierarchies don't share state. This means credential changes
-(e.g., after login) don't propagate to job_attachments clients until
-the process restarts. This is acceptable because job_attachments
-operations run within a single submission flow where credentials don't
-change. Replicate this separation in Rust; unifying them is a future
-improvement.
