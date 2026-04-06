@@ -306,12 +306,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_failed_tasks_count_box.setValue(
             settings.max_failed_tasks_count
             if self._has_compatible_attr(settings, "max_failed_tasks_count", int)
-            else 20
+            else 20  # See docs/decisions/job-retry-and-failure-defaults.md for rationale
         )
         self.max_retries_per_task_box.setValue(
             settings.max_retries_per_task
             if self._has_compatible_attr(settings, "max_retries_per_task", int)
-            else 5
+            else 5  # See docs/decisions/job-retry-and-failure-defaults.md for rationale
         )
         self.priority_box.setValue(
             settings.priority if self._has_compatible_attr(settings, "priority", int) else 50
