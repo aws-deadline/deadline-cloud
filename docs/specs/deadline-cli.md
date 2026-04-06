@@ -188,6 +188,25 @@ Spawns a Python process that loads the GUI widget package and
 
 Both commands use `suggest_resources_on_client_error` on API failure.
 
+- `deadline job logs [--farm-id] [--queue-id] [--job-id] [--session-id] [--session-action-id] [--limit 100] [--start-time] [--end-time] [--next-token] [--output verbose|json] [--timestamp-format utc|local|relative]`
+  Retrieves CloudWatch session logs. Always calls `GetJob` first for the
+  job name. If `--session-id` is omitted, auto-selects from the job's
+  sessions (ongoing preferred, then most recently ended). If
+  `--session-action-id` is provided, derives session ID from it (strict
+  format: `sessionaction-{32hex}-{digits}`), fetches the action for time
+  bounds, and intersects with user-provided time range. Verbose output
+  prints `[timestamp] message` per event. JSON output includes jobId,
+  jobName, events array, count, nextToken, logGroup, logStream.
+  `--timestamp-format relative` shows delta from session/action start.
+  Deprecated `--timezone` option maps to `--timestamp-format` with a
+  stderr warning; errors if both are provided.
+- `deadline job trace-schedule [--farm-id] [--queue-id] [--job-id] [-v] [--trace-format chrome] [--trace-file path]`
+  EXPERIMENTAL. Fetches all sessions, session actions per session,
+  caches steps/tasks by ID, computes timing statistics (session count,
+  action count, durations). Optional Chrome trace format output via
+  `--trace-format chrome --trace-file path`. Errors if `--trace-file`
+  without `--trace-format`.
+
 ### `deadline worker`
 
 - `deadline worker list --fleet-id <id> [--farm-id] [--page-size 5] [--item-offset 0]`

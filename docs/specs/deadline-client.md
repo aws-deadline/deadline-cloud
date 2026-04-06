@@ -285,6 +285,68 @@ Result types live in `deadline-models::job_monitoring`:
 - `FailedTask { step_id, task_id, step_name, parameters, session_id? }`
 - `JobCompletionResult { status, failed_tasks, elapsed_time }`
 
+## Log Retrieval (`log_retrieval.rs`) — §12 cases 16-35
+
+Retrieves CloudWatch Logs for sessions and workers. Separate module from
+`job_monitoring.rs` because it talks to CloudWatch, not the Deadline API.
+
+### `get_session_logs`
+
+Fetches log events from CloudWatch log group
+`/aws/deadline/{farm_id}/{queue_id}` with log stream `session_id`.
+
+Session auto-selection when `session_id` is None but `job_id` is provided:
+paginates all sessions via `list_sessions`, prioritizes ongoing sessions
+(no `endedAt`, most recently started), falls back to most recently ended.
+
+Credential handling for CloudWatch access:
+- DCM users (have `user_id`): uses queue-role credentials via
+  `get_queue_user_config` from `session.rs`
+- Non-DCM users: uses base session credentials
+
+Parameters: `farm_id`, `queue_id`, `session_id?`, `job_id?`, `limit`,
+`start_time?`, `end_time?`, `next_token?`, `config`.
+
+Returns `SessionLogResult { events, next_token, log_group, log_stream, count }`.
+
+CloudWatch `ResourceNotFoundException` returns empty result (count=0),
+not an error. Log messages have trailing whitespace stripped.
+
+### `get_worker_logs`
+
+Fetches log events from CloudWatch log group
+`/aws/deadline/{farm_id}/{fleet_id}` with log stream `worker_id`.
+
+Credential handling:
+- DCM users: uses fleet-role credentials via `assume_fleet_role_for_read`,
+  then builds a temporary CloudWatch client with those credentials
+- Non-DCM users: uses base session credentials
+
+Parameters: `farm_id`, `fleet_id`, `worker_id`, `limit`, `start_time?`,
+`end_time?`, `next_token?`, `config`.
+
+Returns `WorkerLogResult { events, next_token, log_group, log_stream,
+worker_id, fleet_id, count }`.
+
+### Result types
+
+Live in `deadline-models::job_monitoring`:
+- `LogEvent { timestamp: DateTime<Utc>, message: String, ingestion_time?: DateTime<Utc>, event_id?: String }`
+- `SessionLogResult { events, next_token?, log_group, log_stream, count }`
+- `WorkerLogResult { events, next_token?, log_group, log_stream, worker_id, fleet_id, count }`
+
+## API (`api.rs`) — fleet credentials, session actions
+
+`assume_fleet_role_for_read(farm_id, fleet_id, config, telemetry)`:
+thin wrapper using `ResponseBodyCapture`. Returns the full API response.
+
+`list_session_actions(farm_id, queue_id, job_id, session_id, config,
+telemetry)`: paginated via `paginated_list` helper. Returns
+`{"sessionActions": [...]}`.
+
+`get_session_action(farm_id, queue_id, job_id, session_action_id,
+config, telemetry)`: single `capture_send`. Returns full response.
+
 ## Not Yet Implemented
 
 - Queue parameters (§8) — blocked on `deadline-job-bundle` §16

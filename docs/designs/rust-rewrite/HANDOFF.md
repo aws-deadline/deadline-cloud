@@ -9,65 +9,63 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Workflow Step
 
-Step 0 (planning). The remaining scope has been analyzed but not yet
-approved for implementation.
+Step 3 (write failing tests) for Batch 1. Steps 0-2 are complete.
 
 ### What's Done
 
-- `wait_for_job_completion` in `crates/deadline-client/src/job_monitoring.rs`
-  — §12 cases 1-15 (polling, exponential backoff, timeout, failed task
-  collection, session ID extraction from `latestSessionActionId`)
-- `deadline job wait` CLI in `crates/deadline-cli/src/commands/job.rs`
-  — §44 cases 22-24 (verbose/json output, exit codes 0-5, status
-  updates via `\r` overwrite)
+- **Step 0 (plan):** Approved. Two batches: API layer (log retrieval)
+  and CLI layer (job logs + trace-schedule).
+- **Step 1 (audit):** One gap found — `extract_session_id` in
+  `job_monitoring.rs` is too loose for CLI `--session-action-id` use.
+  Will add strict `parse_session_action_id` in batch 2. No changes
+  needed to existing code.
+- **Step 2 (spec):** Updated `docs/specs/deadline-client.md` with
+  `log_retrieval.rs` design (get_session_logs, get_worker_logs, result
+  types, credential handling, new API functions). Updated
+  `docs/specs/deadline-cli.md` with job logs and trace-schedule
+  command descriptions.
+- **Previously completed:** `wait_for_job_completion` in
+  `crates/deadline-client/src/job_monitoring.rs` (§12 cases 1-15) and
+  `deadline job wait` CLI (§44 cases 22-24).
 
 ### What's Next
 
-Two batches remain:
+**Batch 1 Step 3: Write failing tests for API log functions.**
 
-**Batch 1 — API layer (session/worker logs + supporting functions):**
-- `get_session_logs` (§12 cases 16-30) — CloudWatch log retrieval,
-  session auto-selection from job_id, queue-role credentials for DCM
-  users, log group `/aws/deadline/{farm_id}/{queue_id}`
-- `get_worker_logs` (§12 cases 31-35) — CloudWatch log retrieval,
-  fleet-role credentials, log group `/aws/deadline/{farm_id}/{fleet_id}`
-- New API functions needed in `api.rs`: `assume_fleet_role_for_read`,
+Scope:
+- Add `aws-sdk-cloudwatchlogs` to workspace `Cargo.toml` and
+  `crates/deadline-client/Cargo.toml`
+- New API functions in `api.rs`: `assume_fleet_role_for_read`,
   `list_session_actions`, `get_session_action`
-- New dependency: `aws-sdk-cloudwatchlogs` (not yet in workspace
-  `Cargo.toml`)
+- New module `log_retrieval.rs` in `deadline-client`: `get_session_logs`,
+  `get_worker_logs`
+- New result types in `deadline-models::job_monitoring`: `LogEvent`,
+  `SessionLogResult`, `WorkerLogResult`
+- Test cases: §12 cases 16-35
 
-**Batch 2 — CLI layer:**
-- `deadline job logs` (§44 cases 17-21) — `--session-id`,
-  `--session-action-id`, `--limit`, `--start-time`, `--end-time`,
-  `--next-token`, `--output verbose|json`,
-  `--timestamp-format utc|local|relative`, deprecated `--timezone`
-- `deadline job trace-schedule` (§44 cases 27-28) — fetches all
-  sessions + session actions + steps/tasks, computes schedule
-  statistics, optional Chrome trace format output via `--trace-format`
-  and `--trace-file`
+After batch 1, proceed to batch 2:
+- `deadline job logs` CLI (§44 cases 17-21)
+- `deadline job trace-schedule` CLI (§44 cases 27-28)
+- Strict `parse_session_action_id` for `--session-action-id` option
 
 ### Key Context
 
 - Python source: `../deadline-cloud-python/src/deadline/client/api/_job_monitoring.py`
-  has `get_session_logs` and `get_worker_logs`. The CLI is in
-  `../deadline-cloud-python/src/deadline/client/cli/_groups/job_group.py`
-  (lines 1171-1700).
-- `get_session_logs` uses `get_queue_user_boto3_session` for DCM users
-  (queue-role credentials). `get_worker_logs` uses
-  `assume_fleet_role_for_read` (fleet-role credentials). These are
-  different credential paths.
+  has `get_session_logs` (line ~170) and `get_worker_logs` (line ~290).
+  CLI is in `../deadline-cloud-python/src/deadline/client/cli/_groups/job_group.py`
+  (job_logs at line 1171, trace_schedule at line 1536).
+- `get_session_logs` uses queue-role credentials for DCM users
+  (`get_queue_user_boto3_session`). `get_worker_logs` uses fleet-role
+  credentials (`assume_fleet_role_for_read`). Different credential paths.
 - Session auto-selection: prioritizes ongoing sessions (no `endedAt`),
   then most recently ended. Uses `list_sessions` paginator.
-- `job logs` with `--session-action-id` derives session ID from the
-  action ID, fetches the action to get time bounds, intersects with
-  user-provided `--start-time`/`--end-time`.
-- `job trace-schedule` is marked EXPERIMENTAL in Python. It fetches
-  all sessions, all session actions per session, caches steps/tasks,
-  and computes timing statistics. Chrome trace format output is
-  optional.
-- CloudWatch `ResourceNotFoundException` returns empty result (count=0),
-  not an error.
-- Log messages have trailing whitespace stripped.
+- CloudWatch `ResourceNotFoundException` → empty result (count=0), not
+  an error.
+- Log messages have trailing whitespace stripped (`.rstrip()`).
+- `_parse_session_action_id` in Python uses strict regex:
+  `^sessionaction-([0-9a-f]{32})-\d+$`
+- `job trace-schedule` is EXPERIMENTAL. Fetches all sessions + actions,
+  caches steps/tasks by ID, computes timing stats.
 
 ### Open Questions
 
