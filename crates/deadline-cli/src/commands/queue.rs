@@ -47,17 +47,26 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::list_queues(&farm, config.as_ref(), None).await.map_err(|e| {
-                CliError::Operation(format!("Failed to get Queues from Deadline:\n{e}"))
-            })?;
-            let empty = vec![];
-            let queues = resp["queues"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = queues
-                .iter()
-                .map(|q| serde_json::json!({"queueId": q["queueId"], "displayName": q["displayName"]}))
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
-            Ok(())
+            match api::list_queues(&farm, config.as_ref(), None).await {
+                Ok(resp) => {
+                    let empty = vec![];
+                    let queues = resp["queues"].as_array().unwrap_or(&empty);
+                    let structured: Vec<serde_json::Value> = queues
+                        .iter()
+                        .map(|q| serde_json::json!({"queueId": q["queueId"], "displayName": q["displayName"]}))
+                        .collect();
+                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), None, None, config.as_ref(),
+                    ).await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Queues from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
         QueueAction::Get { profile, farm_id, queue_id } => {
             let config = apply_profile(profile)?;
