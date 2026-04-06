@@ -152,6 +152,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::queue::QueueAction::Get { .. } => "get",
             commands::queue::QueueAction::ExportCredentials { .. } => "export-credentials",
             commands::queue::QueueAction::GetStorageProfile { .. } => "get-storage-profile",
+            commands::queue::QueueAction::Paramdefs { .. } => "paramdefs",
         }),
         Commands::Job { action } => ("job", match action {
             commands::job::JobAction::List { .. } => "list",

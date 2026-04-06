@@ -87,3 +87,36 @@ pub async fn mock_list_storage_profiles_for_queue(
         .mount(server)
         .await;
 }
+
+pub async fn mock_list_queue_environments(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    environments: &[Value],
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/environments"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "environments": environments,
+        })))
+        .mount(server)
+        .await;
+}
+
+pub async fn mock_get_queue_environment(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    env_id: &str,
+    response: Value,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/environments/{env_id}"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(server)
+        .await;
+}

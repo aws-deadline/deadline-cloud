@@ -6,8 +6,8 @@ service and STS.
 ## Status: In Progress (§3-10, §12 partial)
 
 Session creation, auth status, session caching, user-agent, farm list/get,
-queue user credentials, job wait, session/worker log retrieval implemented.
-Remaining: queue parameters, trace-schedule support APIs.
+queue user credentials, job wait, session/worker log retrieval, queue
+parameter definitions implemented. Remaining: trace-schedule support APIs.
 
 ## Consumers
 
@@ -347,9 +347,33 @@ telemetry)`: paginated via `paginated_list` helper. Returns
 `get_session_action(farm_id, queue_id, job_id, session_action_id,
 config, telemetry)`: single `capture_send`. Returns full response.
 
-## Not Yet Implemented
+## Queue Parameters (`queue_parameters.rs`) — §8
 
-- Queue parameters (§8) — blocked on `deadline-job-bundle` §16
+### `get_queue_parameter_definitions`
+
+Fetches all queue environment templates, extracts `parameterDefinitions`,
+validates, deduplicates by name, auto-detects UI controls, and sets
+`groupLabel` to the environment name when not explicitly provided.
+
+Flow:
+1. `list_queue_environments` (paginated) → get all environment summaries
+2. Sort by `priority` field
+3. For each environment: `get_queue_environment` → parse `template` as YAML
+4. For each parameter in `parameterDefinitions`:
+   - Validate structure (name required, type required, default required)
+   - If no `userInterface.control`, auto-detect from type
+   - If no `userInterface.groupLabel`, set to `"Queue Environment: {name}"`
+   - Check for duplicate names: identical definitions → keep one,
+     different definitions → error listing mismatched fields
+5. Return list of parameter definitions as `Vec<serde_json::Value>`
+
+Parameter validation, UI control detection, and definition comparison
+are private helpers in this module. They will move to
+`deadline-job-bundle::parameters` when work item #7 is implemented.
+
+Dependencies: `serde_yaml` for parsing environment templates.
+
+## Not Yet Implemented
 
 ### Telemetry — API-layer latency events
 

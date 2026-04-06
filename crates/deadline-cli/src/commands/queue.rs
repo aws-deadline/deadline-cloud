@@ -34,6 +34,12 @@ pub enum QueueAction {
         #[arg(long)] queue_id: Option<String>,
         #[arg(long)] storage_profile_id: String,
     },
+    /// List queue parameter definitions from queue environments
+    Paramdefs {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+    },
 }
 
 pub fn run(action: QueueAction) -> Result<(), CliError> {
@@ -150,6 +156,27 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 .map_err(|e| CliError::Operation(format!("Failed to get storage profile:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));
             Ok(())
+        }
+        QueueAction::Paramdefs { profile, farm_id, queue_id } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            match deadline_client::queue_parameters::get_queue_parameter_definitions(
+                &farm, &queue, config.as_ref(), None,
+            ).await {
+                Ok(params) => {
+                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(params)));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), Some(&queue), None, config.as_ref(),
+                    ).await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Queue Parameter Definitions from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
     }
 }

@@ -10,18 +10,21 @@ None. Pick the next "Not started" item from the Work Items table in
 
 ## Recently Completed
 
-**#6 — Job monitoring & logs** (marked ✅ Done)
+**#4 — Queue parameters** (marked ✅ Done)
 
 Implemented:
-- `wait_for_job_completion` + `deadline job wait` (14 Level 2 tests)
-- `get_session_logs` + `deadline job logs` (10 Level 2 tests)
-- `get_worker_logs` library function (2 Level 1 tests)
-- `assume_fleet_role_for_read`, `session::get_sdk_config`
-- CloudWatch mock helpers, test harness CloudWatch endpoint
-- TESTING.md snapshot guidance, mock response data rules
+- `list_queue_environments` and `get_queue_environment` in `api.rs`
+- `get_queue_parameter_definitions` in `queue_parameters.rs`
+  (deadline-client) with inline validation, UI control detection,
+  and definition comparison helpers
+- `deadline queue paramdefs` CLI command
+- 7 Level 2 tests covering §8 cases 1-10 and §42 cases 6-7
 
-Deferred within #6:
-- `deadline job trace-schedule` — EXPERIMENTAL, low priority
-- `--session-action-id` for `job logs`
-- `--timezone` deprecated flag
-- DCM credential paths (queue-role, fleet-role) not tested
+Design note: parameter helpers are private in `queue_parameters.rs`.
+They will move to `deadline-job-bundle::parameters` when work item #7
+is implemented. No new inter-crate dependencies were added; only
+`serde_yaml` and `indexmap` external deps on `deadline-client`.
+
+**#6 — Job monitoring & logs** (marked ✅ Done)
+
+See previous handoff for details.
