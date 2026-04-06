@@ -317,6 +317,11 @@ pub async fn deadline_client(config: Option<&IniConfig>) -> DeadlineClient {
     SESSION.lock().unwrap().build_deadline_client(config).await
 }
 
+/// Get the cached SdkConfig (for building non-Deadline AWS clients like CloudWatch Logs).
+pub async fn get_sdk_config(config: Option<&IniConfig>) -> aws_config::SdkConfig {
+    SESSION.lock().unwrap().get_config(config).await.clone()
+}
+
 /// Build an STS client using the cached SDK config.
 pub async fn sts_client(config: Option<&IniConfig>) -> StsClient {
     SESSION.lock().unwrap().build_sts_client(config).await

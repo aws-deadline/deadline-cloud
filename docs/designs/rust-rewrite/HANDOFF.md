@@ -9,63 +9,57 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Workflow Step
 
-Step 3 (write failing tests) for Batch 1. Steps 0-2 are complete.
+Step 3 (write failing tests) for the final batch: `deadline job trace-schedule`.
 
 ### What's Done
 
-- **Step 0 (plan):** Approved. Two batches: API layer (log retrieval)
-  and CLI layer (job logs + trace-schedule).
-- **Step 1 (audit):** One gap found — `extract_session_id` in
-  `job_monitoring.rs` is too loose for CLI `--session-action-id` use.
-  Will add strict `parse_session_action_id` in batch 2. No changes
-  needed to existing code.
-- **Step 2 (spec):** Updated `docs/specs/deadline-client.md` with
-  `log_retrieval.rs` design (get_session_logs, get_worker_logs, result
-  types, credential handling, new API functions). Updated
-  `docs/specs/deadline-cli.md` with job logs and trace-schedule
-  command descriptions.
-- **Previously completed:** `wait_for_job_completion` in
-  `crates/deadline-client/src/job_monitoring.rs` (§12 cases 1-15) and
-  `deadline job wait` CLI (§44 cases 22-24).
+- **`wait_for_job_completion`** — `deadline job wait` CLI command with
+  polling, failed task collection, exit codes 0-5, verbose/JSON output.
+  14 Level 2 tests.
+- **`get_session_logs`** — `deadline job logs` CLI command with session
+  auto-selection, CloudWatch log retrieval, timestamp formatting
+  (utc/local/relative), verbose/JSON output, pagination token
+  passthrough, ResourceNotFoundException handling. 10 Level 2 tests.
+- **`get_worker_logs`** — library function for MCP (not CLI-reachable).
+  2 Level 1 tests.
+- **`assume_fleet_role_for_read`** — API function in `api.rs`.
+- **`session::get_sdk_config`** — public function for building
+  non-Deadline AWS clients (CloudWatch Logs).
+- **CloudWatch mock helpers** — `deadline-test-server::cloudwatch` module.
+- **Test harness** — `AWS_ENDPOINT_URL_CLOUDWATCHLOGS` added.
+- **TESTING.md** — Updated with snapshot vs programmatic assertion
+  guidance. Existing `cli_job_wait` tests converted to snapshots.
+- **Mock response data rules** — Documented in `deadline-test-server`
+  and `TESTING.md` (union types must use tagged object format).
 
 ### What's Next
 
-**Batch 1 Step 3: Write failing tests for API log functions.**
+**Final batch: `deadline job trace-schedule` (§44 cases 27-28).**
 
-Scope:
-- Add `aws-sdk-cloudwatchlogs` to workspace `Cargo.toml` and
-  `crates/deadline-client/Cargo.toml`
-- New API functions in `api.rs`: `assume_fleet_role_for_read`,
-  `list_session_actions`, `get_session_action`
-- New module `log_retrieval.rs` in `deadline-client`: `get_session_logs`,
-  `get_worker_logs`
-- New result types in `deadline-models::job_monitoring`: `LogEvent`,
-  `SessionLogResult`, `WorkerLogResult`
-- Test cases: §12 cases 16-35
+This is an EXPERIMENTAL command. It fetches all sessions + session
+actions + steps + tasks for a job, computes timing statistics, and
+optionally writes a Chrome trace format JSON file.
 
-After batch 1, proceed to batch 2:
-- `deadline job logs` CLI (§44 cases 17-21)
-- `deadline job trace-schedule` CLI (§44 cases 27-28)
-- Strict `parse_session_action_id` for `--session-action-id` option
+Requires:
+- `list_session_actions` API function (already stubbed in `api.rs`)
+- `get_step`, `get_task` API functions (already exist)
+- Progress bar for step/task fetching
+- Chrome trace format JSON output
+
+Python source: `job_group.py` line 1536 (`job_trace_schedule`).
 
 ### Key Context
 
-- Python source: `../deadline-cloud-python/src/deadline/client/api/_job_monitoring.py`
-  has `get_session_logs` (line ~170) and `get_worker_logs` (line ~290).
-  CLI is in `../deadline-cloud-python/src/deadline/client/cli/_groups/job_group.py`
-  (job_logs at line 1171, trace_schedule at line 1536).
-- `get_session_logs` uses queue-role credentials for DCM users
-  (`get_queue_user_boto3_session`). `get_worker_logs` uses fleet-role
-  credentials (`assume_fleet_role_for_read`). Different credential paths.
-- Session auto-selection: prioritizes ongoing sessions (no `endedAt`),
-  then most recently ended. Uses `list_sessions` paginator.
-- CloudWatch `ResourceNotFoundException` → empty result (count=0), not
-  an error.
-- Log messages have trailing whitespace stripped (`.rstrip()`).
-- `_parse_session_action_id` in Python uses strict regex:
-  `^sessionaction-([0-9a-f]{32})-\d+$`
-- `job trace-schedule` is EXPERIMENTAL. Fetches all sessions + actions,
-  caches steps/tasks by ID, computes timing stats.
+- `--session-action-id` support for `job logs` is deferred. Python
+  parses it with strict regex `^sessionaction-([0-9a-f]{32})-\d+$`.
+  Will add `parse_session_action_id` when implementing.
+- `--timezone` deprecated flag is not implemented (low priority).
+- DCM credential paths (queue-role for session logs, fleet-role for
+  worker logs) are not tested. The implementation always uses base
+  session credentials. Testing requires AWS config file setup for DCM
+  profiles.
+- `job wait` verbose output uses `\r` for status line updates on
+  stderr. Snapshot tests filter these with insta regex.
 
 ### Open Questions
 

@@ -6,8 +6,8 @@ service and STS.
 ## Status: In Progress (§3-10, §12 partial)
 
 Session creation, auth status, session caching, user-agent, farm list/get,
-queue user credentials, job wait implemented. Remaining: queue parameters,
-session/worker logs.
+queue user credentials, job wait, session/worker log retrieval implemented.
+Remaining: queue parameters, trace-schedule support APIs.
 
 ## Consumers
 

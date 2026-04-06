@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_client::{api, job_monitoring};
+use deadline_client::{api, job_monitoring, log_retrieval};
 
 use super::config::CliError;
 use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
@@ -65,6 +65,23 @@ pub enum JobAction {
         timeout: u64,
         #[arg(long, default_value = "verbose")]
         output: String,
+    },
+    /// Print session logs from CloudWatch for a job
+    Logs {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long)] session_id: Option<String>,
+        #[arg(long, default_value = "100")]
+        limit: i32,
+        #[arg(long)] start_time: Option<String>,
+        #[arg(long)] end_time: Option<String>,
+        #[arg(long)] next_token: Option<String>,
+        #[arg(long, default_value = "verbose")]
+        output: String,
+        #[arg(long, default_value = "utc")]
+        timestamp_format: String,
     },
 }
 
@@ -281,6 +298,108 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     Err(CliError::ExitCode { code: if is_timeout { 1 } else { 2 }, message: String::new() })
                 }
             }
+        }
+        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, limit, start_time, end_time, next_token, output, timestamp_format } => {
+            let config = apply_profile(profile)?;
+            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
+            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let is_json = output.eq_ignore_ascii_case("json");
+
+            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let job_resp = api::get_job(&farm, &queue, &job, config.as_ref(), None).await
+                .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+            let job_name = job_resp["name"].as_str().unwrap_or("");
+
+            let sid = session_id.as_deref();
+
+            // Get session start time for timestamp formatting (needed for relative mode)
+            let reference_start = if let Some(ref s) = session_id {
+                let sess = api::get_session(&farm, &queue, &job, s, config.as_ref(), None).await
+                    .map_err(|e| CliError::Operation(format!("Failed to get session: {e}")))?;
+                sess["startedAt"].as_str().and_then(|t| {
+                    chrono::DateTime::parse_from_rfc3339(&t.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+                        .ok()
+                })
+            } else {
+                None
+            };
+
+            // Build timestamp formatter
+            let ts_fmt = match timestamp_format.to_lowercase().as_str() {
+                "local" => crate::common::TimestampFormat::Local,
+                "relative" => {
+                    let reference = reference_start.unwrap_or_else(|| {
+                        chrono::Utc::now().fixed_offset()
+                    });
+                    crate::common::TimestampFormat::new_relative(reference)
+                }
+                _ => crate::common::TimestampFormat::Utc,
+            };
+
+            let start = start_time.as_deref().and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+                    .ok()
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+            });
+            let end = end_time.as_deref().and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+                    .ok()
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+            });
+
+            if !is_json {
+                println!("Retrieving logs for session {} from log group /aws/deadline/{farm}/{queue}...",
+                    session_id.as_deref().unwrap_or("(auto-selected)"));
+                println!("Job ID: {job}");
+                println!("Job Name: {job_name}");
+            }
+
+            let result = log_retrieval::get_session_logs(
+                &farm, &queue, sid, Some(&job), limit, start, end,
+                next_token.as_deref(), config.as_ref(),
+            ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
+
+            if is_json {
+                let response = serde_json::json!({
+                    "jobId": job,
+                    "jobName": job_name,
+                    "events": result.events.iter().map(|e| {
+                        let ts_fixed = e.timestamp.fixed_offset();
+                        serde_json::json!({
+                            "timestamp": ts_fmt.format(&ts_fixed),
+                            "message": e.message,
+                            "ingestionTime": e.ingestion_time.map(|t| ts_fmt.format(&t.fixed_offset())),
+                            "eventId": e.event_id,
+                        })
+                    }).collect::<Vec<_>>(),
+                    "count": result.count,
+                    "nextToken": result.next_token,
+                    "logGroup": result.log_group,
+                    "logStream": result.log_stream,
+                });
+                println!("{}", serde_json::to_string_pretty(&response).unwrap());
+            } else {
+                // Show reference time for relative format
+                if let crate::common::TimestampFormat::Relative { ref reference } = ts_fmt {
+                    println!("Logs relative to start time: {}", reference.to_rfc3339());
+                }
+
+                println!();
+                if result.events.is_empty() {
+                    println!("No logs found for the specified session.");
+                } else {
+                    for event in &result.events {
+                        let ts_fixed = event.timestamp.fixed_offset();
+                        let ts = ts_fmt.format(&ts_fixed);
+                        println!("[{ts}] {}", event.message);
+                    }
+                    println!("\nRetrieved {} log events.", result.count);
+                }
+                if let Some(ref token) = result.next_token {
+                    println!("More logs are available. Use --next-token \"{token}\" to retrieve the next page.");
+                }
+            }
+            Ok(())
         }
     }
 }

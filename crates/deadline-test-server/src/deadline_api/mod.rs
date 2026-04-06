@@ -54,3 +54,4 @@ pub mod queue_resources;
 pub mod telemetry;
 pub mod errors;
 pub mod sts;
+pub mod cloudwatch;

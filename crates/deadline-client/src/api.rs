@@ -457,3 +457,76 @@ pub async fn get_storage_profile_for_queue(
         }).await
     }).await
 }
+
+// ---------------------------------------------------------------------------
+// Fleet credentials
+// ---------------------------------------------------------------------------
+
+pub async fn assume_fleet_role_for_read(
+    farm_id: &str,
+    fleet_id: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("assume_fleet_role_for_read", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        capture_send(|cap| async move {
+            client.assume_fleet_role_for_read().farm_id(farm_id).fleet_id(fleet_id)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}
+
+// ---------------------------------------------------------------------------
+// Session actions
+// ---------------------------------------------------------------------------
+
+pub async fn list_session_actions(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_id: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("list_session_actions", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        let farm_id = farm_id.to_string();
+        let queue_id = queue_id.to_string();
+        let job_id = job_id.to_string();
+        let session_id = session_id.to_string();
+        paginated_list("sessionActions", |token| {
+            let client = client.clone();
+            let farm_id = farm_id.clone();
+            let queue_id = queue_id.clone();
+            let job_id = job_id.clone();
+            let session_id = session_id.clone();
+            async move {
+                capture_send(|cap| {
+                    let mut req = client.list_session_actions()
+                        .farm_id(&farm_id).queue_id(&queue_id).job_id(&job_id).session_id(&session_id);
+                    if let Some(t) = token { req = req.next_token(t); }
+                    async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
+                }).await
+            }
+        }).await
+    }).await
+}
+
+pub async fn get_session_action(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_action_id: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("get_session_action", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        capture_send(|cap| async move {
+            client.get_session_action()
+                .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_action_id(session_action_id)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}

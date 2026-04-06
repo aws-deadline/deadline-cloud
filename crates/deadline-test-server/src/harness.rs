@@ -54,6 +54,7 @@ impl TestHarness {
         let ep = self.endpoint_url();
         cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
         cmd.env("AWS_ENDPOINT_URL_STS", &ep);
+        cmd.env("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
         cmd.env("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         cmd.env("AWS_DEFAULT_REGION", "us-west-2");
@@ -71,6 +72,7 @@ impl TestHarness {
         let ep = self.endpoint_url();
         cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
         cmd.env("AWS_ENDPOINT_URL_STS", &ep);
+        cmd.env("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
         cmd.env("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         cmd.env("AWS_DEFAULT_REGION", "us-west-2");
