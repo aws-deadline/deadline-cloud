@@ -9,6 +9,14 @@ use deadline_test_server::deadline_api::{jobs, sessions};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
+fn insta_settings() -> insta::Settings {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"Elapsed time: .* seconds", "Elapsed time: [TIME] seconds");
+    settings.add_filter(r"\[[\d.]+s elapsed.*\]", "[ELAPSED]");
+    settings.add_filter(r"\r.*\n", "");  // strip \r status line overwrites
+    settings
+}
+
 // ---------------------------------------------------------------------------
 // Job completes with SUCCEEDED, exits 0
 // ---------------------------------------------------------------------------
@@ -27,14 +35,8 @@ async fn job_wait_succeeded_exits_0() {
         "taskRunStatusCounts": { "SUCCEEDED": 10 },
     })).await;
 
-    let output = harness.cli(&["job", "wait"])
-        .output()
-        .expect("failed to run");
-
-    assert!(output.status.success(), "expected exit code 0 for SUCCEEDED");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("SUCCEEDED"), "expected SUCCEEDED in output");
-    assert!(stdout.contains("No failed tasks"), "expected no failed tasks message");
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
 }
 
 // ---------------------------------------------------------------------------
@@ -77,14 +79,8 @@ async fn job_wait_failed_exits_2_with_failed_tasks() {
         }),
     ]).await;
 
-    let output = harness.cli(&["job", "wait"])
-        .output()
-        .expect("failed to run");
-
-    assert_eq!(output.status.code(), Some(2), "expected exit code 2 for FAILED");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("FAILED"), "expected FAILED in output, got: {stdout}");
-    assert!(stdout.contains("1 failed task"), "expected failed task count, got: {stdout}");
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
 }
 
 // ---------------------------------------------------------------------------
@@ -186,17 +182,12 @@ async fn job_wait_timeout_exits_1() {
         "taskRunStatusCounts": { "RUNNING": 5 },
     })).await;
 
-    let output = harness.cli(&["job", "wait", "--timeout", "1"])
-        .output()
-        .expect("failed to run");
-
-    assert_eq!(output.status.code(), Some(1), "expected exit code 1 for timeout");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Timeout"), "expected timeout message");
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["job", "wait", "--timeout", "1"]));
 }
 
 // ---------------------------------------------------------------------------
-// job_callback drives verbose status line on stderr
+// Verbose status line on stderr
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -213,14 +204,8 @@ async fn job_wait_verbose_shows_status_line() {
         "taskRunStatusCounts": { "SUCCEEDED": 10, "RUNNING": 0 },
     })).await;
 
-    let output = harness.cli(&["job", "wait"])
-        .output()
-        .expect("failed to run");
-
-    assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Waiting for job"), "expected waiting message on stderr");
-    assert!(stderr.contains("Render Job"), "expected job name on stderr");
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
 }
 
 // ---------------------------------------------------------------------------
@@ -235,17 +220,12 @@ async fn job_wait_api_error_exits_1() {
     harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
 
     // No mock — initial get_job for name fails via CliError (exit 1)
-    let output = harness.cli(&["job", "wait"])
-        .output()
-        .expect("failed to run");
-
-    assert_eq!(output.status.code(), Some(1), "expected exit code 1 for API error");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Error waiting for job completion"), "expected error message");
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
 }
 
 // ---------------------------------------------------------------------------
-// Failed tasks with full details + session_id extraction
+// Failed tasks with full details + session_id extraction (JSON)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -296,7 +276,7 @@ async fn job_wait_json_failed_tasks_have_full_details() {
 }
 
 // ---------------------------------------------------------------------------
-// latestSessionActionId absent — session_id is null
+// latestSessionActionId absent — session_id is null (JSON)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -343,7 +323,7 @@ async fn job_wait_json_failed_task_no_session_action_id() {
 }
 
 // ---------------------------------------------------------------------------
-// Step with FAILED=0 is skipped (tasks not queried)
+// Step with FAILED=0 is skipped (JSON)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -373,8 +353,6 @@ async fn job_wait_skips_steps_with_no_failed_tasks() {
         }),
     ]).await;
 
-    // Only step-002 tasks mocked — if step-001 tasks are queried, the
-    // mock server returns 404 and the test fails
     sessions::mock_list_tasks(&harness.server, "farm-abc", "queue-abc", "job-aaa", "step-002", &[
         json!({
             "taskId": "task-010",

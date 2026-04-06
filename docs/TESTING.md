@@ -359,14 +359,26 @@ and other major projects.
 
 ### What uses snapshots vs what doesn't
 
+Use `assert_cmd_snapshot!` when the test cares about the **exact formatted
+output** the user sees. This is the default for Level 2 tests. Any change
+to output format — missing field, reordered lines, changed wording, extra
+whitespace — is caught automatically.
+
+For non-deterministic content (elapsed time, timestamps), use insta filters
+to redact the varying parts before the snapshot comparison.
+
 | Test type | Tool | Why |
 |-----------|------|-----|
-| CLI stdout/stderr/exit code (Level 2) | `insta-cmd` snapshot | Full output captured; any regression caught |
-| API request validation | wiremock request matchers | Verify CLI sends correct params (e.g. `principalId`) |
+| CLI verbose/YAML output (Level 2) | `insta-cmd` snapshot | Full output captured; any format regression caught |
+| CLI JSON output | `serde_json::from_str` + field assertions | Need typed comparison; snapshots are brittle to field ordering |
+| CLI error messages | `insta-cmd` snapshot | Error wording matters to users |
+| Telemetry verification | `.assert().success()` | Only checks command doesn't break; no user-visible output to snapshot |
 | Config file side effects | `assert_eq!` on file content | Run command, read file, verify contents |
+| API request validation | wiremock request matchers | Verify CLI sends correct params (e.g. `principalId`) |
 | Unit test return values (Level 1) | `assert_eq!` | Simple value-in/value-out; snapshots are overkill |
-| Structured data assertions | `assert_eq!` on parsed JSON | Need typed comparison, not string |
 | Behavioral checks | `assert!` | Exit code, file existence |
+
+**Rule of thumb:** if a human would notice the output changed, use a snapshot.
 
 ### How `insta-cmd` works
 
