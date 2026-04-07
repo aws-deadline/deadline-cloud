@@ -143,7 +143,7 @@ Python source. Look for:
 - Opportunities to use idiomatic Rust (ValueEnum instead of manual
   FromStr, concrete error types instead of Box<dyn Error>)
 
-Implement improvements first, commit, then proceed to new features.
+Implement improvements first, update docs, commit, then proceed to new features.
 Skip this step if the crate is a stub with no existing implementation.
 
 ### 2. Update the crate spec

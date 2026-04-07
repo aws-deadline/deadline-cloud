@@ -1,5 +1,6 @@
 use clap::Subcommand;
 use deadline_client::{api, job_monitoring, log_retrieval};
+use deadline_config::config_file;
 
 use super::config::CliError;
 use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
@@ -82,6 +83,28 @@ pub enum JobAction {
         output: String,
         #[arg(long, default_value = "utc")]
         timestamp_format: String,
+    },
+    /// Cancel a job, optionally marking it with an alternative status
+    Cancel {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long, default_value = "CANCELED")]
+        mark_as: String,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Requeue tasks of a job
+    RequeueTasks {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        run_status: Vec<String>,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -411,7 +434,238 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
             Ok(())
         }
+        JobAction::Cancel { profile, farm_id, queue_id, job_id, mark_as, yes } => {
+            let mut config = config_file::read_config()
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+            crate::common::apply_cli_options_to_config(
+                &mut config,
+                &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
+                &["farm_id", "queue_id", "job_id"],
+            ).map_err(CliError::Operation)?;
+
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap();
+            let job_id = config_file::get_setting_with_config("defaults.job_id", &config).unwrap();
+            let mark_as = mark_as.to_uppercase();
+            let auto_accept = is_auto_accept(&config);
+
+            let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
+                Ok(j) => j,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                    ).await;
+                    return Err(CliError::Operation(format!(
+                        "Failed to get Job from Deadline:\n{e}{suggestion}"
+                    )));
+                }
+            };
+
+            // Filter taskRunStatusCounts to non-zero entries
+            let mut counts = serde_json::Map::new();
+            if let Some(obj) = job.get("taskRunStatusCounts").and_then(|v| v.as_object()) {
+                for (k, v) in obj {
+                    if v.as_i64().unwrap_or(0) != 0 {
+                        counts.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+
+            // Build filtered summary
+            let mut summary = serde_json::Map::new();
+            for &field in &["name", "jobId", "taskRunStatus"] {
+                if let Some(v) = job.get(field) { summary.insert(field.into(), v.clone()); }
+            }
+            summary.insert("taskRunStatusCounts".into(), serde_json::Value::Object(counts));
+            for &field in &["startedAt", "endedAt", "createdBy", "createdAt"] {
+                let v = job.get(field).and_then(|v| v.as_str()).unwrap_or("");
+                summary.insert(field.into(), serde_json::Value::String(v.to_string()));
+            }
+            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Object(summary)));
+
+            if !auto_accept {
+                let msg = if mark_as == "CANCELED" {
+                    "Are you sure you want to cancel this job?".to_string()
+                } else {
+                    format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
+                };
+                eprint!("{msg} ");
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).ok();
+                if !input.trim().eq_ignore_ascii_case("y") && !input.trim().eq_ignore_ascii_case("yes") {
+                    println!("Job not canceled.");
+                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                }
+            }
+
+            if mark_as == "CANCELED" {
+                println!("Canceling job...");
+            } else {
+                println!("Canceling job and marking as {mark_as}...");
+            }
+            api::update_job(&farm, &queue, &job_id, &mark_as, Some(&config), None).await
+                .map_err(|e| CliError::Operation(format!("Failed to update job:\n{e}")))?;
+            Ok(())
+        }
+        JobAction::RequeueTasks { profile, farm_id, queue_id, job_id, run_status, yes } => {
+            let mut config = config_file::read_config()
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+            crate::common::apply_cli_options_to_config(
+                &mut config,
+                &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
+                &["farm_id", "queue_id", "job_id"],
+            ).map_err(CliError::Operation)?;
+
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap();
+            let job_id = config_file::get_setting_with_config("defaults.job_id", &config).unwrap();
+            let auto_accept = is_auto_accept(&config);
+
+            let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {
+                ["SUSPENDED", "CANCELED", "FAILED"].iter().map(|s| s.to_string()).collect()
+            } else {
+                run_status.iter().map(|s| s.to_uppercase()).collect()
+            };
+
+            let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
+                Ok(j) => j,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                    ).await;
+                    return Err(CliError::Operation(format!(
+                        "Failed to get Job from Deadline:\n{e}{suggestion}"
+                    )));
+                }
+            };
+
+            println!("Job: {} ({})", job["name"].as_str().unwrap_or(""), job["jobId"].as_str().unwrap_or(""));
+
+            let counts = job.get("taskRunStatusCounts").and_then(|v| v.as_object());
+            // Print taskRunStatusCounts (non-zero, keys uppercased)
+            let mut counts_map = serde_json::Map::new();
+            if let Some(obj) = counts {
+                for (k, v) in obj {
+                    if v.as_i64().unwrap_or(0) != 0 {
+                        counts_map.insert(k.to_uppercase(), v.clone());
+                    }
+                }
+            }
+            println!("{}", crate::common::cli_object_repr(&serde_json::json!({"taskRunStatusCounts": counts_map})));
+
+            let sorted_statuses: Vec<&String> = {
+                let mut v: Vec<&String> = run_status_set.iter().collect();
+                v.sort();
+                v
+            };
+            println!("Requeuing all tasks with run status among: {}", sorted_statuses.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+
+            let (total_to_requeue, summary_by_status) = count_and_summarize(counts, &run_status_set);
+
+            if total_to_requeue == 0 {
+                println!("No tasks to requeue.");
+                return Ok(());
+            }
+
+            if auto_accept {
+                println!("Estimated {total_to_requeue} total tasks ({summary_by_status}) to requeue.");
+            } else {
+                println!("This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})");
+                eprint!("Are you sure you want to requeue these tasks? ");
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).ok();
+                if !input.trim().eq_ignore_ascii_case("y") && !input.trim().eq_ignore_ascii_case("yes") {
+                    println!("No tasks were requeued.");
+                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                }
+                println!("Requeuing tasks...");
+            }
+
+            let mut total_requeued: i64 = 0;
+
+            let steps_resp = api::list_steps(&farm, &queue, &job_id, Some(&config), None).await
+                .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
+            let steps = steps_resp["steps"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
+
+            for step in steps {
+                let step_id = step["stepId"].as_str().unwrap_or("");
+                let step_name = step["name"].as_str().unwrap_or("");
+                println!("\nStep: {step_name} ({step_id})");
+
+                let step_counts = step.get("taskRunStatusCounts").and_then(|v| v.as_object());
+                let (step_to_requeue, step_summary) = count_and_summarize(step_counts, &run_status_set);
+
+                if step_to_requeue == 0 {
+                    println!("  Step has no tasks to requeue.");
+                    continue;
+                }
+                println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
+
+                let tasks_resp = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config), None).await
+                    .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
+                let tasks = tasks_resp["tasks"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
+
+                for task in tasks {
+                    let status = task.get("runStatus").and_then(|v| v.as_str()).unwrap_or("");
+                    if !run_status_set.contains(&status.to_uppercase()) {
+                        continue;
+                    }
+                    let task_id = task["taskId"].as_str().unwrap_or("");
+                    let params = task.get("parameters").and_then(|v| v.as_object());
+                    let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
+                        let param_str: String = p.iter().map(|(name, val)| {
+                            // Union type: {"Frame": {"int": "1"}} → extract first value of inner dict
+                            let extracted = val.as_object()
+                                .and_then(|inner| inner.values().next())
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            format!("{name}={extracted}")
+                        }).collect::<Vec<_>>().join(",");
+                        format!("{param_str} ({task_id})")
+                    } else {
+                        task_id.to_string()
+                    };
+                    println!("    {status} {task_summary}");
+
+                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config), None).await
+                        .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
+                    total_requeued += 1;
+                }
+            }
+
+            println!("\nRequeued a total of {total_requeued} tasks.");
+            Ok(())
+        }
     }
+}
+
+/// Read auto_accept from config (already set by apply_cli_options_to_config when --yes).
+fn is_auto_accept(config: &deadline_config::ini::IniConfig) -> bool {
+    config_file::get_setting_with_config("settings.auto_accept", config)
+        .ok()
+        .and_then(|v| config_file::str2bool(&v).ok())
+        .unwrap_or(false)
+}
+
+/// Count matching tasks and build a summary string like "2 FAILED tasks, 1 CANCELED tasks".
+fn count_and_summarize(
+    counts: Option<&serde_json::Map<String, serde_json::Value>>,
+    statuses: &std::collections::HashSet<String>,
+) -> (i64, String) {
+    let total = counts.map_or(0, |obj| {
+        obj.iter()
+            .filter(|(k, _)| statuses.contains(&k.to_uppercase()))
+            .filter_map(|(_, v)| v.as_i64())
+            .sum()
+    });
+    let summary = counts.map_or(String::new(), |obj| {
+        obj.iter()
+            .filter(|(k, v)| statuses.contains(&k.to_uppercase()) && v.as_i64().unwrap_or(0) != 0)
+            .map(|(k, v)| format!("{} {} tasks", v.as_i64().unwrap_or(0), k.to_uppercase()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    });
+    (total, summary)
 }
 
 /// Estimate remaining job time from task progress and elapsed time.

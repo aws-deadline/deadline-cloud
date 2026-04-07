@@ -223,6 +223,21 @@ single `ResponseBodyCapture` call. Returns the full API response as
 `get_session`, `list_sessions`, `list_steps`, `list_tasks`: follow
 existing patterns. List functions use the paginated helper.
 
+## API (`api.rs`) — job/task mutations (§44)
+
+`update_job(farm_id, queue_id, job_id, target_task_run_status, config,
+telemetry)`: single `capture_send` call. PATCH to
+`/farms/{farmId}/queues/{queueId}/jobs/{jobId}` with
+`targetTaskRunStatus` in the request body. Returns the full API response
+as `serde_json::Value`. Used by `deadline job cancel`.
+
+`update_task(farm_id, queue_id, job_id, step_id, task_id,
+target_run_status, config, telemetry)`: single `capture_send` call.
+PATCH to
+`/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}`
+with `targetRunStatus` in the request body. Returns the full API
+response as `serde_json::Value`. Used by `deadline job requeue-tasks`.
+
 ## Session (`session.rs`) — queue user credentials (§5)
 
 `QueueUserCredentialProvider` implements the AWS SDK's `ProvideCredentials`

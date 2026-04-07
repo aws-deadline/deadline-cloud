@@ -70,10 +70,11 @@ pick and execute work items.
 | 9 | Job attachments: transfer | Not started | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
 | 10 | Job attachments: orchestration | Not started | §23, §26-29, §32, §35 (325 cases) | §47 (26 cases) | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
-| 12 | Job action commands | Not started | — | §44 cases 6-9, 25-28 | `cli.md` | 6 |
+| 12 | Job cancel | ✅ Done | — | §44 cases 25-26 | `cli.md` | 6 |
+| 12b | Job search command | Not started | — | §44 cases 6-9 | `cli.md` | 6 |
 | 13 | Job download & sync-output | Not started | — | §44 cases 10-16, §42 cases 14-26 | `cli.md` | 10 |
 | 14 | Handle web URL | Not started | — | §48 (14 cases) | `cli.md` | 13 |
-| 15 | Job requeue-tasks | Not started | — | §44 cases 29-42 | `cli.md` | 6 |
+| 15 | Job requeue-tasks | ✅ Done | — | §44 cases 29-42 | `cli.md` | 6 |
 | 15b | Job get search & estimated time | Not started | — | §44 cases 1-5 | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | Not started | — | §44 cases 17-21 | `cli.md` | 6 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
@@ -95,4 +96,13 @@ for the worker agent.
 - **#6**: `deadline job trace-schedule` (§44 cases 27-28) is EXPERIMENTAL
   in Python and deferred. `--session-action-id` for `job logs` is also
   deferred. `--timezone` deprecated flag not implemented.
+
+**Technical debt:**
+- **CLI option handling**: Commands in #0g (`job list/get`, `farm list/get`,
+  etc.) use the older `apply_profile` + `require_setting` pattern instead
+  of `apply_cli_options_to_config`. Both produce identical behavior, but
+  the old pattern doesn't handle `--yes` and returns `Option<IniConfig>`
+  instead of `IniConfig`. New commands (#12, #15) use
+  `apply_cli_options_to_config` matching the Python `_apply_cli_options_to_config`.
+  Migrate old commands opportunistically when touching them.
 

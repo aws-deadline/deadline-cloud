@@ -205,6 +205,41 @@ Spawns a Python process that loads the GUI widget package and
   `--timestamp-format relative` shows delta from session/action start.
   Deprecated `--timezone` option maps to `--timestamp-format` with a
   stderr warning; errors if both are provided.
+- `deadline job cancel [--farm-id] [--queue-id] [--job-id] [--mark-as CANCELED] [--yes]`
+  Calls `GetJob` for a summary, prints it as YAML (fields: `name`,
+  `jobId`, `taskRunStatus`, `taskRunStatusCounts` with zero counts
+  removed, `startedAt`, `endedAt`, `createdBy`, `createdAt`), then asks
+  for confirmation. Confirmation message varies: "Are you sure you want
+  to cancel this job?" when `--mark-as` is CANCELED (default), otherwise
+  "Are you sure you want to cancel this job and mark its taskRunStatus
+  as {mark_as}?". Confirmation skipped if `--yes` or
+  `settings.auto_accept` is true. On decline: prints "Job not canceled."
+  and exits 1. On confirm: prints "Canceling job..." (or "Canceling job
+  and marking as {mark_as}..." when not CANCELED), then calls
+  `UpdateJob` with `targetTaskRunStatus`. `--mark-as` accepts
+  CANCELED, SUSPENDED, FAILED, SUCCEEDED (case-insensitive).
+  Uses `suggest_resources_on_client_error` on `GetJob` failure.
+- `deadline job requeue-tasks [--farm-id] [--queue-id] [--job-id] [--run-status ...] [--yes]`
+  Calls `GetJob` for summary, prints `"Job: {name} ({jobId})"`, then
+  `taskRunStatusCounts` as YAML (zero counts removed, keys uppercased),
+  then `"Requeuing all tasks with run status among: {sorted statuses}"`.
+  Computes estimated task count from `taskRunStatusCounts`. If zero:
+  prints "No tasks to requeue." and exits 0. Otherwise asks for
+  confirmation (skipped if `--yes` or `settings.auto_accept`). With
+  auto-accept: prints `"Estimated {N} total tasks ({breakdown}) to
+  requeue."`. Without: prints `"This action will requeue an estimated
+  {N} total tasks ({breakdown})"` then `"Are you sure you want to
+  requeue these tasks?"`. On decline: prints "No tasks were requeued."
+  and exits 1. On confirm: iterates `ListSteps` → `ListTasks` per step.
+  For each step: prints step name and ID, estimated count, then each
+  matching task as `"    {runStatus} {param=value,...} ({taskId})"`.
+  Task parameters use union type extraction: `{"Frame": {"int": "1"}}`
+  → `Frame=1`. Calls `UpdateTask` with `targetRunStatus=PENDING` for
+  each matching task. Prints total requeued count at end. `--run-status`
+  is repeatable; defaults to FAILED, CANCELED, SUSPENDED. Accepts
+  SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE
+  (case-insensitive). Uses `suggest_resources_on_client_error` on
+  `GetJob` failure.
 - `deadline job trace-schedule [--farm-id] [--queue-id] [--job-id] [-v] [--trace-format chrome] [--trace-file path]`
   EXPERIMENTAL. Fetches all sessions, session actions per session,
   caches steps/tasks by ID, computes timing statistics (session count,

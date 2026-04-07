@@ -1,0 +1,36 @@
+---
+source: crates/deadline-cli/tests/cli_job_actions.rs
+info:
+  program: deadline
+  args:
+    - job
+    - requeue-tasks
+    - "--yes"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:64759"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:64759"
+    AWS_ENDPOINT_URL_STS: "http://localhost:64759"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpeCq2Zg/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpeCq2Zg
+---
+success: true
+exit_code: 0
+----- stdout -----
+Job: Render Job (job-aaf4cdf8aae242f58fb84c5bb19f199b)
+taskRunStatusCounts:
+  SUCCEEDED: 10
+
+Requeuing all tasks with run status among: CANCELED, FAILED, SUSPENDED
+No tasks to requeue.
+
+----- stderr -----

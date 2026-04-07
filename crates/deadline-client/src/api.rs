@@ -569,3 +569,46 @@ pub async fn get_queue_environment(
         }).await
     }).await
 }
+
+pub async fn update_job(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    target_task_run_status: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("update_job", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = target_task_run_status.into();
+        capture_send(|cap| async move {
+            client.update_job()
+                .farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+                .target_task_run_status(status)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}
+
+pub async fn update_task(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    step_id: &str,
+    task_id: &str,
+    target_run_status: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("update_task", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        let status: aws_sdk_deadline::types::TaskTargetRunStatus = target_run_status.into();
+        capture_send(|cap| async move {
+            client.update_task()
+                .farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+                .step_id(step_id).task_id(task_id)
+                .target_run_status(status)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}

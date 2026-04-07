@@ -73,3 +73,21 @@ pub async fn mock_list_tasks(
         .mount(server)
         .await;
 }
+
+/// Mount an UpdateTask response (PATCH). Used by `deadline job requeue-tasks`.
+pub async fn mock_update_task(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    step_id: &str,
+    task_id: &str,
+) {
+    Mock::given(method("PATCH"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks/{task_id}"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .mount(server)
+        .await;
+}
