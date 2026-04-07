@@ -8,21 +8,26 @@
 
 The default test approach is to run the compiled CLI binary as a subprocess,
 pointed at a local stub server, and assert on its observable behavior (stdout,
-stderr, exit code). Direct unit tests exist only for code that the CLI cannot
-reach or where CLI-level testing would be imprecise.
+stderr, exit code). Direct unit tests supplement CLI tests for precision on
+edge cases, and are the primary approach for library code not yet reachable
+through a CLI command.
 
 **Three rules:**
 1. If the CLI can exercise it, test it through the CLI.
-2. If the CLI can't reach it, test the public function directly.
+2. If the CLI can't reach it, or CLI-level testing lacks precision, test the
+   public function directly.
 3. No traditional mocking. Ever.
 
 The goal is to maximize coverage through the highest-level interface available.
 Tests that go through the CLI survive internal refactors — if you rename a
 helper function, restructure modules, or change how data flows internally,
-CLI tests keep passing as long as the observable behavior is the same. Tests
-that call internal helpers break on every refactor, even when nothing the user
-sees has changed. Prefer one CLI test that exercises a code path end-to-end
-over five unit tests that each test a helper in isolation.
+CLI tests keep passing as long as the observable behavior is the same.
+
+Level 1 and Level 2 tests can coexist on the same code path when they test
+different things. A Level 2 test catches integration issues (argument parsing,
+config loading, output formatting). A Level 1 test on the same function
+catches precise error messages or edge cases that the CLI output doesn't
+distinguish. See "When Both Levels Add Value" below for guidance.
 
 ---
 
@@ -116,14 +121,18 @@ necessary in the test file and keep the mock surface as small as possible.
 
 Call a public function in-process, assert on return value or error.
 
-**When to use — ALL of these must be true:**
-- The behavior is not reachable through any CLI command, OR
+**When to use:**
+- The behavior is not reachable through any CLI command (e.g., library crate
+  whose CLI consumer doesn't exist yet), OR
 - CLI-level testing would be imprecise (e.g., testing that a function returns
   exactly `"1.5 GB"` vs. parsing it out of a formatted table), OR
 - The behavior is an internal optimization invisible to the CLI (caching,
-  atomicity, file permissions)
-- AND the function is a high-use helper whose reliability must be independently
-  confirmed
+  atomicity, file permissions), OR
+- The function has many edge cases where Level 1 gives faster, more precise
+  feedback than Level 2 (e.g., 48 parameter validation variants)
+
+Level 1 tests may coexist with Level 2 tests on the same code path.
+See "When Both Levels Add Value" below.
 
 **Examples:**
 - `human_readable_file_size(1_500_000_000)` → `"1.5 GB"`
@@ -257,6 +266,37 @@ Can the behavior be exercised by running `deadline <subcommand>`?
 
 ---
 
+## When Both Levels Add Value
+
+The decision tree above picks the *default* level for a new test. But some
+behaviors benefit from tests at both levels. Keep a Level 1 test alongside
+a Level 2 test when:
+
+- **The Level 1 test asserts on precision the CLI can't expose.** Example:
+  `validate_job_parameter_value` with INT param and float 3.7 — the Level 1
+  test asserts the error contains "not an integer". A Level 2 `bundle submit`
+  test only sees a generic error exit. If the error message regresses, only
+  the Level 1 test catches it.
+
+- **The Level 1 test is significantly faster for a hot development loop.**
+  Level 1 tests run in-process with no subprocess spawn. For validation
+  functions with many edge cases (48 parameter validation variants), Level 1
+  gives sub-millisecond feedback. The Level 2 test covers the integration
+  path; the Level 1 tests cover the combinatorial space.
+
+**Remove** a Level 1 test only when the Level 2 test asserts on the exact
+same observable output with the same precision. If the CLI snapshot captures
+the full error message verbatim, the Level 1 test for that error is
+redundant.
+
+**Library-first development:** When implementing library crates before their
+CLI consumers exist (e.g., `deadline-job-bundle` before `bundle submit`),
+write Level 1 tests first. When the CLI command lands, add Level 2 tests
+for CLI-reachable paths. Audit the Level 1 tests and remove only those that
+are fully subsumed.
+
+---
+
 ## Naming Convention
 
 ```
@@ -330,7 +370,8 @@ INSTA_UPDATE=always cargo test -p deadline-cli
 ## Checklist: Before Marking Tests Complete
 
 - [ ] CLI-reachable behavior is tested through the CLI subprocess (Level 2)
-- [ ] Level 1 tests exist only for code the CLI cannot reach
+- [ ] Level 1 tests cover precision or edge cases that Level 2 can't distinguish
+- [ ] Level 1 tests that are fully subsumed by a Level 2 snapshot are removed
 - [ ] Happy-path CLI tests assert on **exact stdout** (not `contains`)
 - [ ] Error CLI tests assert on **exact stdout** including suggestion text
 - [ ] Mock responses include **all fields** the real API returns
