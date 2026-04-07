@@ -872,8 +872,14 @@ dependencies = [
 name = "deadline-job-bundle"
 version = "0.1.0"
 dependencies = [
- "deadline-config",
+ "chrono",
  "deadline-models",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "test-case",
 ]
 
 [[package]]

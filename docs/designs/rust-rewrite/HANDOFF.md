@@ -9,6 +9,23 @@ None. Consult the Work Items table in `README.md` for the next item.
 
 ## Recently Completed
 
+**#7 — Job bundle** (marked ✅ Done)
+
+- `deadline-job-bundle` crate: loader, parameters, submission, history
+- 179 Level 1 tests (174 spec cases from §15-18 + 5 extras)
+- `loader.rs`: symlink validation, YAML/JSON file discovery, parsing,
+  saving, `deadline_yaml_dump` (serde_yaml handles block literal natively)
+- `parameters.rs`: validate_job_parameter, validate_job_parameter_value,
+  validate_user_interface_spec, validate_user_interface_file_filter,
+  read_job_bundle_parameters, apply_job_parameters,
+  merge_queue_job_parameters, get_ui_control_for_parameter_definition,
+  parameter_definition_difference
+- `submission.rs`: AssetReferences (BTreeSet), split_parameter_args,
+  parse_frame_range (LazyLock regex)
+- `history.rs`: create_job_history_bundle_dir
+- CLI `bundle submit` (§45 cases 1-13) deferred to #11
+- CLI `bundle gui-submit` (§45 case 14) deferred to Phase 3
+
 **#12 — Job cancel** and **#15 — Job requeue-tasks** (marked ✅ Done)
 
 - `deadline job cancel` with `--mark-as` and `--yes`
