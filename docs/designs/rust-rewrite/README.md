@@ -66,7 +66,7 @@ pick and execute work items.
 | 5 | Telemetry API integration | ✅ Done | §14 (24 cases) | §42 cases 11-13 | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 6 | Job monitoring & logs | ✅ Done | §12 (35 cases) | §44 cases 17-24 | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 7 | Job bundle | ✅ Done | §15-18 (174 cases) | §45 case 14 | `job_bundle.md`, `cli.md` | 1, 4 |
-| 8 | Job attachments: core | Not started | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
+| 8 | Job attachments: core | In progress | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
 | 9 | Job attachments: transfer | Not started | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
 | 10 | Job attachments: orchestration | Not started | §23, §26-29, §32, §35 (325 cases) | §47 (26 cases) | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |

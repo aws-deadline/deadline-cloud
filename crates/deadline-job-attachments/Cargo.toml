@@ -9,3 +9,13 @@ license.workspace = true
 deadline-models = { workspace = true }
 deadline-common = { workspace = true }
 deadline-config = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+test-case = { workspace = true }
