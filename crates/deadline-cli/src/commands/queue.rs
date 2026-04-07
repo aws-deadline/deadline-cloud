@@ -1,9 +1,10 @@
 use clap::Subcommand;
 use deadline_client::api;
+use deadline_config::config_file;
 use deadline_common::telemetry::create_telemetry;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
+use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
 pub enum QueueAction {
@@ -48,12 +49,23 @@ pub fn run(action: QueueAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
+fn setup(profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>, required: &[&str]) -> Result<deadline_config::ini::IniConfig, CliError> {
+    let mut config = config_file::read_config()
+        .map_err(|e| CliError::Operation(e.to_string()))?;
+    crate::common::apply_cli_options_to_config(
+        &mut config,
+        &crate::common::CliOptions { profile, farm_id, queue_id, job_id: None, yes: false },
+        required,
+    ).map_err(CliError::Operation)?;
+    Ok(config)
+}
+
 async fn run_async(action: QueueAction) -> Result<(), CliError> {
     match action {
         QueueAction::List { profile, farm_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            match api::list_queues(&farm, config.as_ref(), None).await {
+            let config = setup(profile, farm_id, None, &["farm_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            match api::list_queues(&farm, Some(&config), None).await {
                 Ok(resp) => {
                     let empty = vec![];
                     let queues = resp["queues"].as_array().unwrap_or(&empty);
@@ -66,7 +78,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), None, None, config.as_ref(),
+                        &e.to_string(), Some(&farm), None, None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queues from Deadline:\n{e}{suggestion}"
@@ -75,23 +87,18 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             }
         }
         QueueAction::Get { profile, farm_id, queue_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            match api::get_queue(&farm, &queue, config.as_ref(), None).await {
+            let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            match api::get_queue(&farm, &queue, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(),
-                        Some(&farm),
-                        Some(&queue),
-                        None,
-                        config.as_ref(),
-                    )
-                    .await;
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                    ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue from Deadline:\n{e}{suggestion}"
                     )))
@@ -100,15 +107,15 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         }
         QueueAction::ExportCredentials { profile, farm_id, queue_id, mode } => {
             let start = std::time::Instant::now();
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
 
-            let telemetry = create_telemetry(config.as_ref());
+            let telemetry = create_telemetry(Some(&config));
 
             let result = match mode.to_uppercase().as_str() {
-                "READ" => api::assume_queue_role_for_read(&farm, &queue, config.as_ref(), Some(&telemetry)).await,
-                _ => api::assume_queue_role_for_user(&farm, &queue, config.as_ref(), Some(&telemetry)).await,
+                "READ" => api::assume_queue_role_for_read(&farm, &queue, Some(&config), Some(&telemetry)).await,
+                _ => api::assume_queue_role_for_user(&farm, &queue, Some(&config), Some(&telemetry)).await,
             };
 
             let duration_ms = start.elapsed().as_millis() as u64;
@@ -123,10 +130,6 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                     telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
 
                     let creds = &resp["credentials"];
-                    // credential_process spec requires RFC 3339 timestamps (T separator).
-                    // ResponseBodyCapture converts datetimes to Python display format
-                    // (space separator), so convert back for machine-readable output.
-                    // See: https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html
                     let expiration = creds["expiration"].as_str().unwrap_or("")
                         .replacen(' ', "T", 1);
                     let output = serde_json::json!({
@@ -148,21 +151,21 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             }
         }
         QueueAction::GetStorageProfile { profile, farm_id, queue_id, storage_profile_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, config.as_ref(), None)
+            let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let resp = api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get storage profile:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));
             Ok(())
         }
         QueueAction::Paramdefs { profile, farm_id, queue_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
             match deadline_client::queue_parameters::get_queue_parameter_definitions(
-                &farm, &queue, config.as_ref(), None,
+                &farm, &queue, Some(&config), None,
             ).await {
                 Ok(params) => {
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(params)));
@@ -170,7 +173,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, config.as_ref(),
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue Parameter Definitions from Deadline:\n{e}{suggestion}"

@@ -98,11 +98,5 @@ for the worker agent.
   deferred. `--timezone` deprecated flag not implemented.
 
 **Technical debt:**
-- **CLI option handling**: Commands in #0g (`job list/get`, `farm list/get`,
-  etc.) use the older `apply_profile` + `require_setting` pattern instead
-  of `apply_cli_options_to_config`. Both produce identical behavior, but
-  the old pattern doesn't handle `--yes` and returns `Option<IniConfig>`
-  instead of `IniConfig`. New commands (#12, #15) use
-  `apply_cli_options_to_config` matching the Python `_apply_cli_options_to_config`.
-  Migrate old commands opportunistically when touching them.
+- None currently tracked.
 

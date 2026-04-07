@@ -1,8 +1,8 @@
 use clap::Subcommand;
 use deadline_client::{auth, session};
+use deadline_config::config_file;
 
 use super::config::CliError;
-use super::helpers::apply_profile;
 
 #[derive(Subcommand)]
 pub enum AuthAction {
@@ -51,7 +51,15 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
 }
 
 async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
-    let config = apply_profile(profile)?;
+    let config = if let Some(p) = profile {
+        let mut c = config_file::read_config()
+            .map_err(|e| CliError::Operation(e.to_string()))?;
+        config_file::set_setting_in_config("defaults.aws_profile_name", &p, &mut c)
+            .map_err(|e| CliError::Operation(e.to_string()))?;
+        Some(c)
+    } else {
+        None
+    };
     let config_ref = config.as_ref();
 
     let profile_name = session::display_profile_name(config_ref);

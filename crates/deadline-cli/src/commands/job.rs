@@ -1,9 +1,34 @@
 use clap::Subcommand;
 use deadline_client::{api, job_monitoring, log_retrieval};
 use deadline_config::config_file;
+use deadline_config::ini::IniConfig;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
+use super::helpers::suggest_resources_on_client_error;
+
+/// Set up config from CLI options and extract required settings.
+/// Returns (config, farm_id, queue_id) or (config, farm_id, queue_id, job_id).
+fn setup_config(
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    yes: bool,
+    required: &[&str],
+) -> Result<IniConfig, CliError> {
+    let mut config = config_file::read_config()
+        .map_err(|e| CliError::Operation(e.to_string()))?;
+    crate::common::apply_cli_options_to_config(
+        &mut config,
+        &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
+        required,
+    ).map_err(CliError::Operation)?;
+    Ok(config)
+}
+
+fn get(config: &IniConfig, setting: &str) -> String {
+    config_file::get_setting_with_config(setting, config).unwrap_or_default()
+}
 
 #[derive(Subcommand)]
 pub enum JobAction {
@@ -117,14 +142,14 @@ pub fn run(action: JobAction) -> Result<(), CliError> {
 async fn run_async(action: JobAction) -> Result<(), CliError> {
     match action {
         JobAction::List { profile, farm_id, queue_id, page_size, item_offset } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref(), None).await {
+            let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, Some(&config), None).await {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, config.as_ref(),
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
                         "Failed to get Jobs from Deadline:\n{e}{suggestion}"
@@ -167,11 +192,11 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             Ok(())
         }
         JobAction::Get { profile, farm_id, queue_id, job_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            match api::get_job(&farm, &queue, &job, config.as_ref(), None).await {
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
+            match api::get_job(&farm, &queue, &job, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     let est = estimate_remaining_time(&resp);
@@ -184,7 +209,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                         Some(&farm),
                         Some(&queue),
                         None,
-                        config.as_ref(),
+                        Some(&config),
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -194,57 +219,57 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
         }
         JobAction::GetSession { profile, farm_id, queue_id, job_id, session_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::get_session(&farm, &queue, &job, &session_id, config.as_ref(), None)
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
+            let resp = api::get_session(&farm, &queue, &job, &session_id, Some(&config), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));
             Ok(())
         }
         JobAction::ListSessions { profile, farm_id, queue_id, job_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_sessions(&farm, &queue, &job, config.as_ref(), None)
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
+            let resp = api::list_sessions(&farm, &queue, &job, Some(&config), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["sessions"]));
             Ok(())
         }
         JobAction::ListSteps { profile, farm_id, queue_id, job_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_steps(&farm, &queue, &job, config.as_ref(), None)
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
+            let resp = api::list_steps(&farm, &queue, &job, Some(&config), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["steps"]));
             Ok(())
         }
         JobAction::ListTasks { profile, farm_id, queue_id, job_id, step_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let resp = api::list_tasks(&farm, &queue, &job, &step_id, config.as_ref(), None)
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
+            let resp = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config), None)
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["tasks"]));
             Ok(())
         }
         JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job = get(&config, "defaults.job_id");
             let is_json = output.eq_ignore_ascii_case("json");
 
-            let job_resp = api::get_job(&farm, &queue, &job, config.as_ref(), None).await
+            let job_resp = api::get_job(&farm, &queue, &job, Some(&config), None).await
                 .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {e}")))?;
             let job_name = job_resp["name"].as_str().unwrap_or("");
 
@@ -276,7 +301,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             match job_monitoring::wait_for_job_completion(
                 &farm, &queue, &job, max_poll_interval, timeout,
-                config.as_ref(), None, None, Some(&*job_cb),
+                Some(&config), None, None, Some(&*job_cb),
             ).await {
                 Ok(result) => {
                     let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
@@ -333,13 +358,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
         }
         JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, limit, start_time, end_time, next_token, output, timestamp_format } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
+            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
             let is_json = output.eq_ignore_ascii_case("json");
 
-            let job = require_setting("job_id", job_id, "defaults.job_id", config.as_ref())?;
-            let job_resp = api::get_job(&farm, &queue, &job, config.as_ref(), None).await
+            let job = get(&config, "defaults.job_id");
+            let job_resp = api::get_job(&farm, &queue, &job, Some(&config), None).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
             let job_name = job_resp["name"].as_str().unwrap_or("");
 
@@ -347,7 +372,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             // Get session start time for timestamp formatting (needed for relative mode)
             let reference_start = if let Some(ref s) = session_id {
-                let sess = api::get_session(&farm, &queue, &job, s, config.as_ref(), None).await
+                let sess = api::get_session(&farm, &queue, &job, s, Some(&config), None).await
                     .map_err(|e| CliError::Operation(format!("Failed to get session: {e}")))?;
                 sess["startedAt"].as_str().and_then(|t| {
                     chrono::DateTime::parse_from_rfc3339(&t.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
@@ -389,7 +414,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             let result = log_retrieval::get_session_logs(
                 &farm, &queue, sid, Some(&job), limit, start, end,
-                next_token.as_deref(), config.as_ref(),
+                next_token.as_deref(), Some(&config),
             ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
 
             if is_json {
@@ -435,17 +460,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             Ok(())
         }
         JobAction::Cancel { profile, farm_id, queue_id, job_id, mark_as, yes } => {
-            let mut config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
-            crate::common::apply_cli_options_to_config(
-                &mut config,
-                &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
-                &["farm_id", "queue_id", "job_id"],
-            ).map_err(CliError::Operation)?;
-
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap();
-            let job_id = config_file::get_setting_with_config("defaults.job_id", &config).unwrap();
+            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job_id = get(&config, "defaults.job_id");
             let mark_as = mark_as.to_uppercase();
             let auto_accept = is_auto_accept(&config);
 
@@ -508,17 +526,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             Ok(())
         }
         JobAction::RequeueTasks { profile, farm_id, queue_id, job_id, run_status, yes } => {
-            let mut config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
-            crate::common::apply_cli_options_to_config(
-                &mut config,
-                &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
-                &["farm_id", "queue_id", "job_id"],
-            ).map_err(CliError::Operation)?;
-
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap();
-            let job_id = config_file::get_setting_with_config("defaults.job_id", &config).unwrap();
+            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+            let job_id = get(&config, "defaults.job_id");
             let auto_accept = is_auto_accept(&config);
 
             let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {

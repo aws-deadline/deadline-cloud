@@ -1,8 +1,9 @@
 use clap::Subcommand;
 use deadline_client::api;
+use deadline_config::config_file;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
+use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
 pub enum FarmAction {
@@ -23,11 +24,22 @@ pub fn run(action: FarmAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
+fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) -> Result<deadline_config::ini::IniConfig, CliError> {
+    let mut config = config_file::read_config()
+        .map_err(|e| CliError::Operation(e.to_string()))?;
+    crate::common::apply_cli_options_to_config(
+        &mut config,
+        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+        required,
+    ).map_err(CliError::Operation)?;
+    Ok(config)
+}
+
 async fn run_async(action: FarmAction) -> Result<(), CliError> {
     match action {
         FarmAction::List { profile } => {
-            let config = apply_profile(profile)?;
-            let resp = api::list_farms(config.as_ref(), None).await.map_err(|e| {
+            let config = setup(profile, None, &[])?;
+            let resp = api::list_farms(Some(&config), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Farms from Deadline:\n{e}"))
             })?;
             let empty = vec![];
@@ -40,9 +52,9 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
             Ok(())
         }
         FarmAction::Get { profile, farm_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            match api::get_farm(&farm, config.as_ref(), None).await {
+            let config = setup(profile, farm_id, &["farm_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            match api::get_farm(&farm, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
@@ -53,7 +65,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         None,
-                        config.as_ref(),
+                        Some(&config),
                     )
                     .await;
                     Err(CliError::Operation(format!(

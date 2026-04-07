@@ -1,8 +1,9 @@
 use clap::Subcommand;
 use deadline_client::api;
+use deadline_config::config_file;
 
 use super::config::CliError;
-use super::helpers::{apply_profile, require_setting, suggest_resources_on_client_error};
+use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
 pub enum FleetAction {
@@ -25,12 +26,23 @@ pub fn run(action: FleetAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
+fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) -> Result<deadline_config::ini::IniConfig, CliError> {
+    let mut config = config_file::read_config()
+        .map_err(|e| CliError::Operation(e.to_string()))?;
+    crate::common::apply_cli_options_to_config(
+        &mut config,
+        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+        required,
+    ).map_err(CliError::Operation)?;
+    Ok(config)
+}
+
 async fn run_async(action: FleetAction) -> Result<(), CliError> {
     match action {
         FleetAction::List { profile, farm_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let resp = api::list_fleets(&farm, config.as_ref(), None).await.map_err(|e| {
+            let config = setup(profile, farm_id, &["farm_id"])?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let resp = api::list_fleets(&farm, Some(&config), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Fleets from Deadline:\n{e}"))
             })?;
             let empty = vec![];
@@ -43,10 +55,19 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             Ok(())
         }
         FleetAction::Get { profile, farm_id, fleet_id } => {
-            let config = apply_profile(profile)?;
-            let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
-            let fleet = require_setting("fleet_id", fleet_id, "defaults.fleet_id", config.as_ref())?;
-            match api::get_fleet(&farm, &fleet, config.as_ref(), None).await {
+            // fleet_id isn't in CliOptions, so handle it manually after setup
+            let mut config = config_file::read_config()
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+            crate::common::apply_cli_options_to_config(
+                &mut config,
+                &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+                &["farm_id"],
+            ).map_err(CliError::Operation)?;
+            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let fleet = fleet_id.ok_or_else(|| CliError::Operation(
+                "Missing '--fleet-id' or default Fleet ID configuration".to_string()
+            ))?;
+            match api::get_fleet(&farm, &fleet, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
@@ -57,7 +78,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         Some(&fleet),
-                        config.as_ref(),
+                        Some(&config),
                     )
                     .await;
                     Err(CliError::Operation(format!(
