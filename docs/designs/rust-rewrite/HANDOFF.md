@@ -12,8 +12,13 @@ self-contained CLI commands.
 
 ### Workflow Step
 
-Step 0 (plan and get approval) — analysis done, needs formal approval.
-Steps 1-2 not yet started.
+Step 1 (review existing implementation for improvements) — in progress.
+Fixing behavior gaps found during Step 0 audit:
+1. `job list` missing `suggest_resources_on_client_error` on API failure
+2. `job list` and `job get` missing `estimatedTimeRemaining` computation
+3. `job get` missing `estimatedTimeRemaining` line after YAML output
+
+Then proceeding to Steps 2-7 for cancel/requeue implementation.
 
 ### What's Being Implemented
 

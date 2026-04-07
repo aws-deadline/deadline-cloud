@@ -97,11 +97,17 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let config = apply_profile(profile)?;
             let farm = require_setting("farm_id", farm_id, "defaults.farm_id", config.as_ref())?;
             let queue = require_setting("queue_id", queue_id, "defaults.queue_id", config.as_ref())?;
-            let resp = api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref(), None)
-                .await
-                .map_err(|e| {
-                    CliError::Operation(format!("Failed to get Jobs from Deadline:\n{e}"))
-                })?;
+            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, config.as_ref(), None).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), Some(&queue), None, config.as_ref(),
+                    ).await;
+                    return Err(CliError::Operation(format!(
+                        "Failed to get Jobs from Deadline:\n{e}{suggestion}"
+                    )));
+                }
+            };
             let total = resp["totalResults"].as_i64().unwrap_or(0);
             let empty = vec![];
             let jobs = resp["jobs"].as_array().unwrap_or(&empty);
@@ -122,7 +128,9 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                         m.insert(field.into(), serde_json::Value::String(v.to_string()));
                     }
                     m.insert("estimatedTimeRemaining".into(),
-                        serde_json::Value::String("N/A".into()));
+                        serde_json::Value::String(
+                            estimate_remaining_time(j).unwrap_or_else(|| "N/A".into())
+                        ));
                     serde_json::Value::Object(m)
                 })
                 .collect();
@@ -143,6 +151,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             match api::get_job(&farm, &queue, &job, config.as_ref(), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
+                    let est = estimate_remaining_time(&resp);
+                    println!("estimatedTimeRemaining: {}", est.as_deref().unwrap_or("N/A"));
                     Ok(())
                 }
                 Err(e) => {
@@ -401,5 +411,60 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
             Ok(())
         }
+    }
+}
+
+/// Estimate remaining job time from task progress and elapsed time.
+/// Returns None if not computable (no startedAt, no completed tasks, or no remaining tasks).
+/// Matches Python's `_estimate_remaining_time` in `_job_helpers.py`.
+fn estimate_remaining_time(job: &serde_json::Value) -> Option<String> {
+    let counts = job.get("taskRunStatusCounts")?.as_object()?;
+    let started_at = job.get("startedAt").and_then(|v| v.as_str())?;
+
+    let started = chrono::DateTime::parse_from_rfc3339(
+        &started_at.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"),
+    ).ok()?;
+
+    let completed = ["SUCCEEDED", "FAILED", "CANCELED"].iter()
+        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .sum::<i64>();
+    let in_progress = ["RUNNING", "STARTING", "ASSIGNED"].iter()
+        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .sum::<i64>();
+    let pending = ["PENDING", "READY", "SCHEDULED"].iter()
+        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .sum::<i64>();
+
+    if completed == 0 || (pending == 0 && in_progress == 0) {
+        return None;
+    }
+
+    let elapsed = (chrono::Utc::now() - started.with_timezone(&chrono::Utc)).num_seconds() as f64;
+    if elapsed <= 0.0 {
+        return None;
+    }
+
+    let remaining_secs = (elapsed / completed as f64) * (in_progress + pending) as f64;
+    Some(format_duration(remaining_secs))
+}
+
+fn format_duration(seconds: f64) -> String {
+    let secs = seconds as u64;
+    if secs < 60 {
+        return format!("{secs} seconds");
+    }
+    let minutes = secs / 60;
+    if minutes < 60 {
+        let s = if minutes != 1 { "s" } else { "" };
+        return format!("{minutes} minute{s}");
+    }
+    let hours = minutes / 60;
+    let mins = minutes % 60;
+    let hs = if hours != 1 { "s" } else { "" };
+    if mins == 0 {
+        format!("{hours} hour{hs}")
+    } else {
+        let ms = if mins != 1 { "s" } else { "" };
+        format!("{hours} hour{hs}, {mins} minute{ms}")
     }
 }

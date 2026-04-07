@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline job` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{jobs, telemetry};
+use deadline_test_server::deadline_api::{errors, jobs, queues, telemetry};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -70,6 +70,36 @@ async fn job_get_no_job_id_exits_with_error() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
+}
+
+// --- behavior gap fixes ---
+
+#[tokio::test]
+async fn job_list_api_failure_prints_error_with_suggestions() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    errors::mock_search_jobs_access_denied(&harness.server, "farm-abc", "Access denied").await;
+    queues::mock_list_queues(
+        &harness.server, "farm-abc",
+        &[json!({"queueId": "queue-111", "displayName": "Good Queue"})],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "list"]));
+}
+
+#[tokio::test]
+async fn job_get_prints_estimated_time_remaining() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatusCounts": {"SUCCEEDED": 5, "RUNNING": 2, "PENDING": 3},
+    })).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }

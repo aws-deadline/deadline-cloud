@@ -177,7 +177,11 @@ Spawns a Python process that loads the GUI widget package and
   client-side from `taskRunStatusCounts` and `startedAt`; shows `"N/A"` if
   not computable. DateTime fields are formatted as `YYYY-MM-DD HH:MM:SS+00:00`.
 - `deadline job get [--farm-id] [--queue-id] [--job-id]`
-  Calls `GetJob`, prints full response as YAML (minus `ResponseMetadata`).
+  Calls `GetJob`, prints full response as YAML (minus `ResponseMetadata`),
+  then prints `estimatedTimeRemaining: <value>` on a separate line after
+  the YAML. The estimate is computed client-side from `taskRunStatusCounts`
+  and `startedAt`; shows `"N/A"` if not computable (no `startedAt`, no
+  completed tasks, or no remaining tasks).
 - `deadline job wait [--farm-id] [--queue-id] [--job-id] [--max-poll-interval 120] [--timeout 0] [--output verbose|json]`
   Polls `GetJob` until terminal state (SUCCEEDED, FAILED, CANCELED,
   SUSPENDED, NOT_COMPATIBLE). Verbose mode prints status updates to stderr
@@ -186,7 +190,8 @@ Spawns a Python process that loads the GUI widget package and
   0=SUCCEEDED, 1=timeout, 2=FAILED, 3=CANCELED, 4=SUSPENDED/ARCHIVED,
   5=NOT_COMPATIBLE. Uses `CliError::ExitCode` for non-zero exits.
 
-Both commands use `suggest_resources_on_client_error` on API failure.
+`job list`, `job get`, and `job wait` all use
+`suggest_resources_on_client_error` on API failure.
 
 - `deadline job logs [--farm-id] [--queue-id] [--job-id] [--session-id] [--session-action-id] [--limit 100] [--start-time] [--end-time] [--next-token] [--output verbose|json] [--timestamp-format utc|local|relative]`
   Retrieves CloudWatch session logs. Always calls `GetJob` first for the

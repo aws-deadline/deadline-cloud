@@ -9,9 +9,13 @@ The workflow for porting each feature from the Python CLI to Rust.
   it left off — it has the current workflow step, what's done, and
   what's next. If there is no active work item, consult the Work Items
   table in `README.md` and pick the first row with status "Not started"
-  whose dependencies are all "✅ Done". Update `HANDOFF.md` at the end
-  of each session or when the human asks. When a work item is complete,
+  whose dependencies are all "✅ Done". When a work item is complete,
   clear `HANDOFF.md` so the next session picks up fresh work.
+- **Update HANDOFF.md after every step.** After completing each
+  workflow step (0, 1, 2, 3, 4, 5, 6, 7), update `HANDOFF.md` with
+  the current step, what was done, and what's next. This is the
+  running log — if the session ends mid-work, the next session can
+  resume exactly where this one left off.
 - **Risk spikes before bulk implementation.** Before starting any new
   batch of work, check the Risk Spikes table in `README.md`. If any
   spike is "Not started" or "In progress", that spike takes priority
@@ -25,11 +29,17 @@ The workflow for porting each feature from the Python CLI to Rust.
 - **Improvements before new code.** Before adding new features, audit
   existing implementation against the Python source. Flag behavior gaps
   and cleanups. Implement improvements first.
-- **Commit per batch.** Each logical batch gets its own commit following
-  red-green TDD. Keep commits small and focused.
-- **Docs stay in sync.** After implementation, update `docs/specs/<crate>.md`
-  with Rust-specific design decisions. Update the Progress table in
-  `README.md`. Do not let docs drift from code.
+- **Commit per batch.** A batch is the complete workflow (Steps 1-7)
+  for a work item or group of work items being done together. Do not
+  commit partway through — complete all steps including doc updates,
+  then commit. Within a batch, the working state lives in HANDOFF.md
+  (updated after each step) and uncommitted files. The commit message
+  covers the entire batch. Keep batches small and focused.
+- **Docs stay in sync.** Before committing, update
+  `docs/specs/<crate>.md` with Rust-specific design decisions, update
+  the Progress table in `README.md`, and update `HANDOFF.md`. All doc
+  updates are part of the batch and included in the same commit. Do
+  not let docs drift from code.
 - **Defer honestly.** If a feature is blocked on an unimplemented crate,
   say so and document it in the Progress table rather than building
   throwaway scaffolding.
@@ -178,9 +188,20 @@ For CLI commands that call AWS APIs, follow the patterns in
 Before accepting any snapshot, compare it against the Python CLI output.
 The Python CLI is the reference implementation — the Rust output must match.
 
+**This step is mandatory, not optional.** Do not reason about what the
+Python output "would be" — actually run the Python CLI and capture the
+output. Skipping this step has caused behavior gaps in past work items.
+
 1. Run `cargo test` — new snapshots are written as `.snap.new` files
-2. For each snapshot, run the equivalent Python CLI command and capture
-   its output
+2. For each snapshot, **actually run** the equivalent Python CLI command
+   against the local stub server or real API and capture its exact output.
+   Use the Python source at `../deadline-cloud-python`. If the command
+   requires a stub server, use the same mock data the Rust test uses.
+   If the command can be tested against the real API with credentials,
+   prefer that:
+   ```bash
+   diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
+   ```
 3. Compare the snapshot content against the Python output. Watch for:
    - YAML key ordering (Python's dict insertion order vs Rust's serde)
    - Field completeness in `get` commands (all API response fields present)

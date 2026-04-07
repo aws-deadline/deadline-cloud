@@ -110,3 +110,17 @@ pub async fn mock_get_worker_not_found(
         .mount(server)
         .await;
 }
+
+/// Mount an AccessDeniedException for SearchJobs.
+pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str, message: &str) {
+    Mock::given(method("POST"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/search/jobs")))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_json(json!({
+                "__type": "AccessDeniedException",
+                "message": message
+            })),
+        )
+        .mount(server)
+        .await;
+}

@@ -74,6 +74,8 @@ pick and execute work items.
 | 13 | Job download & sync-output | Not started | — | §44 cases 10-16, §42 cases 14-26 | `cli.md` | 10 |
 | 14 | Handle web URL | Not started | — | §48 (14 cases) | `cli.md` | 13 |
 | 15 | Job requeue-tasks | Not started | — | §44 cases 29-42 | `cli.md` | 6 |
+| 15b | Job get search & estimated time | Not started | — | §44 cases 1-5 | `cli.md` | 6 |
+| 15c | Job logs auto-selection messages | Not started | — | §44 cases 17-21 | `cli.md` | 6 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 | 18 | Worker agent | Deferred | §53+ | — | — | 1-17 |
