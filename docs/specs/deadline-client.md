@@ -151,10 +151,12 @@ Functions:
 - `list_farms`, `list_queues`, `list_fleets` — paginated via manual
   `nextToken` loop with `ResponseBodyCapture` per page
 - `get_farm`, `get_queue`, `get_fleet`, `get_job` — single resource, all fields
-- `search_jobs(farm_id, queue_ids, item_offset, page_size, config)` — calls
-  `SearchJobs` (POST), sorted by `CREATED_AT` descending. Returns
-  `{"jobs": [...], "totalResults": N}`. Each job contains raw API fields.
-  Replaces `list_jobs` (Python CLI uses `SearchJobs`, not `ListJobs`).
+- `search_jobs(farm_id, queue_ids, item_offset, page_size, config,
+  filter_expressions?, sort_expressions?)` — calls `SearchJobs` (POST).
+  When `filter_expressions` is provided, passes it as the `filterExpressions`
+  field. When `sort_expressions` is provided, uses it; otherwise defaults to
+  `CREATED_AT` descending. Returns `{"jobs": [...], "totalResults": N}`.
+  Each job contains raw API fields.
 - `search_workers(farm_id, fleet_ids, item_offset, page_size, config)` — calls
   `SearchWorkers` (POST). Returns `{"workers": [...], "totalResults": N}`.
 - `get_worker(farm_id, fleet_id, worker_id, config)` — single worker, all fields.
@@ -313,6 +315,13 @@ Fetches log events from CloudWatch log group
 Session auto-selection when `session_id` is None but `job_id` is provided:
 paginates all sessions via `list_sessions`, prioritizes ongoing sessions
 (no `endedAt`, most recently started), falls back to most recently ended.
+Returns `(session_id, AutoSelectInfo)` where `AutoSelectInfo` indicates
+how the session was selected: `OnlySession`, `LatestSession`, or
+`Provided` (when session_id was given explicitly). The CLI uses this to
+print user-facing messages:
+- Single session: `"Using the only available session: {session_id}"`
+- Multiple sessions: `"Using the latest session: {session_id}"`
+- Explicit: no message
 
 Credential handling for CloudWatch access:
 - DCM users (have `user_id`): uses queue-role credentials via

@@ -59,11 +59,10 @@ fn read_aws_profile_key(profile_name: &str, key: &str) -> Option<String> {
         if trimmed.starts_with('[') {
             break; // next section
         }
-        if let Some((k, v)) = trimmed.split_once('=') {
-            if k.trim() == key {
+        if let Some((k, v)) = trimmed.split_once('=')
+            && k.trim() == key {
                 return Some(v.trim().to_string());
             }
-        }
     }
     None
 }
@@ -205,12 +204,11 @@ async fn login_inner(
         if status == AwsAuthenticationStatus::Authenticated {
             return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
         }
-        if let Some(cb) = on_cancellation_check {
-            if cb() {
+        if let Some(cb) = on_cancellation_check
+            && cb() {
                 let _ = child.kill();
                 return Err("Login canceled".to_string());
             }
-        }
         if let Some(_exit) = child.try_wait().ok().flatten() {
             let out = child
                 .stdout

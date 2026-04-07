@@ -1,5 +1,6 @@
 use clap::Subcommand;
 use deadline_client::{api, job_monitoring, log_retrieval};
+use deadline_client::log_retrieval::SessionAutoSelect;
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 
@@ -42,8 +43,11 @@ pub enum JobAction {
         #[arg(long, default_value = "0")]
         item_offset: i32,
     },
-    /// Get details of a specific job
+    /// Get details of a specific job, or search for jobs with a search term
     Get {
+        /// A job ID (job-xxx) or search string to find matching jobs
+        #[arg()]
+        search_term: Option<String>,
         #[arg(long)] profile: Option<String>,
         #[arg(long)] farm_id: Option<String>,
         #[arg(long)] queue_id: Option<String>,
@@ -131,6 +135,18 @@ pub enum JobAction {
         #[arg(long)]
         yes: bool,
     },
+    /// Search for jobs with filter and sort expressions
+    Search {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] filter_expressions: Option<String>,
+        #[arg(long)] sort_expressions: Option<String>,
+        #[arg(long, default_value = "5")]
+        page_size: i32,
+        #[arg(long, default_value = "0")]
+        item_offset: i32,
+    },
 }
 
 pub fn run(action: JobAction) -> Result<(), CliError> {
@@ -156,66 +172,38 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     )));
                 }
             };
-            let total = resp["totalResults"].as_i64().unwrap_or(0);
-            let empty = vec![];
-            let jobs = resp["jobs"].as_array().unwrap_or(&empty);
-
-            // Python uses "name" if present, falls back to "displayName"
-            let name_field = if jobs.first().map_or(false, |j| j.get("name").is_some()) {
-                "name"
-            } else {
-                "displayName"
-            };
-
-            let structured: Vec<serde_json::Value> = jobs
-                .iter()
-                .map(|j| {
-                    let mut m = serde_json::Map::new();
-                    for &field in &[name_field, "jobId", "taskRunStatus", "startedAt", "endedAt", "createdBy", "createdAt"] {
-                        let v = j.get(field).and_then(|v| v.as_str()).unwrap_or("");
-                        m.insert(field.into(), serde_json::Value::String(v.to_string()));
-                    }
-                    m.insert("estimatedTimeRemaining".into(),
-                        serde_json::Value::String(
-                            estimate_remaining_time(j).unwrap_or_else(|| "N/A".into())
-                        ));
-                    serde_json::Value::Object(m)
-                })
-                .collect();
-
-            println!(
-                "Displaying {} of {} Jobs starting at {}",
-                structured.len(), total, item_offset
-            );
-            println!();
-            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+            print_job_list(&resp, item_offset);
             Ok(())
         }
-        JobAction::Get { profile, farm_id, queue_id, job_id } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            match api::get_job(&farm, &queue, &job, Some(&config), None).await {
-                Ok(resp) => {
-                    println!("{}", crate::common::cli_object_repr(&resp));
-                    let est = estimate_remaining_time(&resp);
-                    println!("estimatedTimeRemaining: {}", est.as_deref().unwrap_or("N/A"));
-                    Ok(())
+        JobAction::Get { search_term, profile, farm_id, queue_id, job_id } => {
+            // If --job-id is provided, it takes precedence over search_term
+            let mut effective_job_id = job_id;
+            let mut search = None;
+
+            if let Some(ref term) = search_term {
+                if effective_job_id.is_none() {
+                    // Check if search_term is a job ID pattern
+                    if regex::Regex::new(r"^job-[0-9a-f]{32}$").unwrap().is_match(term) {
+                        effective_job_id = Some(term.clone());
+                    } else {
+                        search = Some(term.clone());
+                    }
                 }
-                Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(),
-                        Some(&farm),
-                        Some(&queue),
-                        None,
-                        Some(&config),
-                    )
-                    .await;
-                    Err(CliError::Operation(format!(
-                        "Failed to get Job from Deadline:\n{e}{suggestion}"
-                    )))
-                }
+            }
+
+            if let Some(search_term) = search {
+                // Search mode
+                let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+                let farm = get(&config, "defaults.farm_id");
+                let queue = get(&config, "defaults.queue_id");
+                resolve_job_search(&farm, &queue, &search_term, &config).await
+            } else {
+                // Direct get mode
+                let config = setup_config(profile, farm_id, queue_id, effective_job_id, false, &["farm_id", "queue_id", "job_id"])?;
+                let farm = get(&config, "defaults.farm_id");
+                let queue = get(&config, "defaults.queue_id");
+                let job = get(&config, "defaults.job_id");
+                print_job_details(&farm, &queue, &job, &config).await
             }
         }
         JobAction::GetSession { profile, farm_id, queue_id, job_id, session_id } => {
@@ -406,16 +394,30 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             });
 
             if !is_json {
-                println!("Retrieving logs for session {} from log group /aws/deadline/{farm}/{queue}...",
-                    session_id.as_deref().unwrap_or("(auto-selected)"));
-                println!("Job ID: {job}");
-                println!("Job Name: {job_name}");
+                // Header lines printed after session resolution so we have the actual session ID
             }
 
-            let result = log_retrieval::get_session_logs(
+            let (result, auto_select) = log_retrieval::get_session_logs(
                 &farm, &queue, sid, Some(&job), limit, start, end,
                 next_token.as_deref(), Some(&config),
             ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
+
+            // Print auto-selection message then header (non-JSON only, matching Python order)
+            if !is_json {
+                match &auto_select {
+                    SessionAutoSelect::OnlySession(id) => {
+                        println!("Using the only available session: {id}");
+                    }
+                    SessionAutoSelect::LatestSession(id) => {
+                        println!("Using the latest session: {id}");
+                    }
+                    SessionAutoSelect::Provided => {}
+                }
+                println!("Retrieving logs for session {} from log group /aws/deadline/{farm}/{queue}...",
+                    result.log_stream);
+                println!("Job ID: {job}");
+                println!("Job Name: {job_name}");
+            }
 
             if is_json {
                 let response = serde_json::json!({
@@ -647,6 +649,32 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             println!("\nRequeued a total of {total_requeued} tasks.");
             Ok(())
         }
+        JobAction::Search { profile, farm_id, queue_id, filter_expressions, sort_expressions, page_size, item_offset } => {
+            let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue = get(&config, "defaults.queue_id");
+
+            let filter_json = parse_json_or_file_arg(filter_expressions.as_deref())?;
+            let sort_json = parse_json_or_file_arg(sort_expressions.as_deref())?;
+
+            let resp = match api::search_jobs_with_filters(
+                &farm, &[queue.as_str()], item_offset, page_size,
+                filter_json.as_ref(), sort_json.as_ref(),
+                Some(&config), None,
+            ).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                    ).await;
+                    return Err(CliError::Operation(format!(
+                        "Failed to search Jobs from Deadline:\n{e}{suggestion}"
+                    )));
+                }
+            };
+            print_job_list(&resp, item_offset);
+            Ok(())
+        }
     }
 }
 
@@ -732,4 +760,163 @@ fn format_duration(seconds: f64) -> String {
         let ms = if mins != 1 { "s" } else { "" };
         format!("{hours} hour{hs}, {mins} minute{ms}")
     }
+}
+
+/// Print full job details (used by `job get` in direct mode).
+async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniConfig) -> Result<(), CliError> {
+    match api::get_job(farm, queue, job_id, Some(config), None).await {
+        Ok(resp) => {
+            println!("{}", crate::common::cli_object_repr(&resp));
+            let est = estimate_remaining_time(&resp);
+            println!("estimatedTimeRemaining: {}", est.as_deref().unwrap_or("N/A"));
+            Ok(())
+        }
+        Err(e) => {
+            let suggestion = suggest_resources_on_client_error(
+                &e.to_string(), Some(farm), Some(queue), None, Some(config),
+            ).await;
+            Err(CliError::Operation(format!(
+                "Failed to get Job from Deadline:\n{e}{suggestion}"
+            )))
+        }
+    }
+}
+
+/// Search for jobs matching a term. Single match → show details. Multiple → summary list.
+async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: &IniConfig) -> Result<(), CliError> {
+    let filter = serde_json::json!({
+        "filters": [{
+            "searchTermFilter": {
+                "searchTerm": search_term,
+                "matchType": "CONTAINS"
+            }
+        }],
+        "operator": "AND"
+    });
+    let resp = match api::search_jobs_with_filters(
+        farm, &[queue], 0, 5, Some(&filter), None, Some(config), None,
+    ).await {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CliError::Operation(format!("Failed to search jobs:\n{e}")));
+        }
+    };
+
+    let empty = vec![];
+    let jobs = resp["jobs"].as_array().unwrap_or(&empty);
+    let total = resp["totalResults"].as_i64().unwrap_or(0);
+
+    if jobs.is_empty() {
+        println!("No jobs found matching \"{search_term}\"");
+        return Ok(());
+    }
+
+    if total == 1 {
+        let job_id = jobs[0]["jobId"].as_str().unwrap_or("");
+        return print_job_details(farm, queue, job_id, config).await;
+    }
+
+    // Multiple results — show summary
+    println!("Found {total} job(s) matching \"{search_term}\", showing most recent {}:\n", jobs.len());
+    for job in jobs {
+        let name = job.get("name").or(job.get("displayName"))
+            .and_then(|v| v.as_str()).unwrap_or("");
+        let name = truncate_middle(name, 80);
+        let job_id = job["jobId"].as_str().unwrap_or("");
+        let status = job["taskRunStatus"].as_str().unwrap_or("");
+        let created = job["createdAt"].as_str().map(|s| {
+            // Convert to local time like Python's _format_timestamp
+            chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+                .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S %z").to_string())
+                .unwrap_or_else(|_| s.to_string())
+        }).unwrap_or_default();
+        let counts = job.get("taskRunStatusCounts").and_then(|v| v.as_object());
+        let task_summary = format_task_summary(counts);
+
+        println!("  {name}");
+        println!("    {job_id}  {status:<12}  {created}");
+        println!("    Tasks: {task_summary}");
+        println!();
+    }
+
+    if total > jobs.len() as i64 {
+        println!("  ... and {} more", total - jobs.len() as i64);
+    }
+    println!("\nTo get details, run: deadline job get --job-id <job-id>");
+    Ok(())
+}
+
+fn truncate_middle(text: &str, max_length: usize) -> String {
+    if text.len() <= max_length { return text.to_string(); }
+    let keep = max_length - 3;
+    let start = (keep * 2) / 3;
+    let end = keep - start;
+    format!("{}...{}", &text[..start], &text[text.len() - end..])
+}
+
+fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value>>) -> String {
+    let Some(counts) = counts else { return "no tasks".into() };
+    let get = |keys: &[&str]| -> i64 {
+        keys.iter().filter_map(|k| counts.get(*k).and_then(|v| v.as_i64())).sum()
+    };
+    let mut parts = Vec::new();
+    let ready = get(&["READY"]);
+    let running = get(&["RUNNING", "STARTING", "ASSIGNED", "SCHEDULED"]);
+    let pending = get(&["PENDING"]);
+    let succeeded = get(&["SUCCEEDED"]);
+    let failed = get(&["FAILED"]);
+    let canceled = get(&["CANCELED"]);
+    let suspended = get(&["SUSPENDED"]);
+    if ready > 0 { parts.push(format!("{ready} ready")); }
+    if running > 0 { parts.push(format!("{running} running")); }
+    if pending > 0 { parts.push(format!("{pending} pending")); }
+    if suspended > 0 { parts.push(format!("{suspended} suspended")); }
+    if succeeded > 0 { parts.push(format!("{succeeded} succeeded")); }
+    if failed > 0 { parts.push(format!("{failed} failed")); }
+    if canceled > 0 { parts.push(format!("{canceled} canceled")); }
+    if parts.is_empty() { "no tasks".into() } else { parts.join(", ") }
+}
+
+/// Print job list output (shared between `job list` and `job search`).
+fn print_job_list(resp: &serde_json::Value, item_offset: i32) {
+    let total = resp["totalResults"].as_i64().unwrap_or(0);
+    let empty = vec![];
+    let jobs = resp["jobs"].as_array().unwrap_or(&empty);
+
+    let name_field = if jobs.first().map_or(false, |j| j.get("name").is_some()) {
+        "name"
+    } else {
+        "displayName"
+    };
+
+    let structured: Vec<serde_json::Value> = jobs.iter().map(|j| {
+        let mut m = serde_json::Map::new();
+        for &field in &[name_field, "jobId", "taskRunStatus", "startedAt", "endedAt", "createdBy", "createdAt"] {
+            let v = j.get(field).and_then(|v| v.as_str()).unwrap_or("");
+            m.insert(field.into(), serde_json::Value::String(v.to_string()));
+        }
+        m.insert("estimatedTimeRemaining".into(),
+            serde_json::Value::String(
+                estimate_remaining_time(j).unwrap_or_else(|| "N/A".into())
+            ));
+        serde_json::Value::Object(m)
+    }).collect();
+
+    println!("Displaying {} of {} Jobs starting at {}", structured.len(), total, item_offset);
+    println!();
+    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+}
+
+/// Parse a CLI argument that can be inline JSON or `file://path`.
+fn parse_json_or_file_arg(arg: Option<&str>) -> Result<Option<serde_json::Value>, CliError> {
+    let Some(arg) = arg else { return Ok(None) };
+    let content = if let Some(path) = arg.strip_prefix("file://") {
+        std::fs::read_to_string(path)
+            .map_err(|e| CliError::Operation(format!("Failed to read {path}: {e}")))?
+    } else {
+        arg.to_string()
+    };
+    let val: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| CliError::Operation(format!("Invalid JSON: {e}")))?;
+    Ok(Some(val))
 }

@@ -1,6 +1,5 @@
 ---
 source: crates/deadline-cli/tests/cli_job_logs.rs
-assertion_line: 136
 info:
   program: deadline
   args:
@@ -12,23 +11,20 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:51346"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51346"
-    AWS_ENDPOINT_URL_STS: "http://localhost:51346"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:53173"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:53173"
+    AWS_ENDPOINT_URL_STS: "http://localhost:53173"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6lYc4m/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6lYc4m
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTbhdzL/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTbhdzL
 ---
 success: false
 exit_code: 1
 ----- stdout -----
-Retrieving logs for session (auto-selected) from log group /aws/deadline/farm-abc/queue-abc...
-Job ID: job-aaa
-Job Name: Render Job
 No sessions found for job job-aaa
 
 ----- stderr -----

@@ -3,7 +3,18 @@ use deadline_config::ini::IniConfig;
 use deadline_models::errors::DeadlineError;
 use deadline_models::job_monitoring::{LogEvent, SessionLogResult, WorkerLogResult};
 
-use crate::{api, auth, session};
+use crate::{api, session};
+
+/// How the session was selected for log retrieval.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SessionAutoSelect {
+    /// Session ID was provided explicitly.
+    Provided,
+    /// Only one session exists for the job.
+    OnlySession(String),
+    /// Multiple sessions exist; the latest was selected.
+    LatestSession(String),
+}
 
 /// Build a CloudWatch Logs client using the base session config.
 async fn logs_client(config: Option<&IniConfig>) -> aws_sdk_cloudwatchlogs::Client {
@@ -21,7 +32,7 @@ fn parse_events(raw_events: &[aws_sdk_cloudwatchlogs::types::OutputLogEvent]) ->
         .iter()
         .map(|e| {
             let timestamp = e.timestamp.map(|ms| Utc.timestamp_millis_opt(ms).unwrap())
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let message = e.message.as_deref().unwrap_or("").trim_end().to_string();
             let ingestion_time = e.ingestion_time
                 .map(|ms| Utc.timestamp_millis_opt(ms).unwrap());
@@ -45,10 +56,10 @@ pub async fn get_session_logs(
     end_time: Option<DateTime<Utc>>,
     next_token: Option<&str>,
     config: Option<&IniConfig>,
-) -> Result<SessionLogResult, DeadlineError> {
+) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
     // Resolve session_id
-    let resolved_session_id = match session_id {
-        Some(id) => id.to_string(),
+    let (resolved_session_id, auto_select) = match session_id {
+        Some(id) => (id.to_string(), SessionAutoSelect::Provided),
         None => {
             let jid = job_id.ok_or_else(|| {
                 DeadlineError::OperationError(
@@ -84,23 +95,23 @@ pub async fn get_session_logs(
             let raw_events = resp.events();
             let events = parse_events(raw_events);
             let count = events.len();
-            Ok(SessionLogResult {
+            Ok((SessionLogResult {
                 events,
                 next_token: resp.next_forward_token().map(|s| s.to_string()),
                 log_group,
                 log_stream: resolved_session_id,
                 count,
-            })
+            }, auto_select))
         }
         Err(e) => {
             if is_resource_not_found(&e) {
-                Ok(SessionLogResult {
+                Ok((SessionLogResult {
                     events: vec![],
                     next_token: None,
                     log_group,
                     log_stream: resolved_session_id,
                     count: 0,
-                })
+                }, auto_select))
             } else {
                 Err(DeadlineError::OperationError(format!(
                     "Failed to retrieve logs: {e}"
@@ -181,7 +192,7 @@ async fn auto_select_session(
     queue_id: &str,
     job_id: &str,
     config: Option<&IniConfig>,
-) -> Result<String, DeadlineError> {
+) -> Result<(String, SessionAutoSelect), DeadlineError> {
     let resp = api::list_sessions(farm_id, queue_id, job_id, config, None).await?;
     let empty = vec![];
     let sessions = resp["sessions"].as_array().unwrap_or(&empty);
@@ -192,26 +203,32 @@ async fn auto_select_session(
         )));
     }
 
+    if sessions.len() == 1 {
+        let id = sessions[0]["sessionId"].as_str().unwrap_or("").to_string();
+        return Ok((id.clone(), SessionAutoSelect::OnlySession(id)));
+    }
+
     // Prefer ongoing sessions (no endedAt), most recently started
     let ongoing: Vec<&serde_json::Value> = sessions
         .iter()
         .filter(|s| s.get("endedAt").is_none())
         .collect();
 
-    if !ongoing.is_empty() {
-        let best = ongoing
+    let best = if !ongoing.is_empty() {
+        ongoing
             .iter()
             .max_by_key(|s| s["startedAt"].as_str().unwrap_or(""))
-            .unwrap();
-        return Ok(best["sessionId"].as_str().unwrap_or("").to_string());
-    }
+            .unwrap()
+    } else {
+        // Fall back to most recently ended
+        sessions
+            .iter()
+            .max_by_key(|s| s["endedAt"].as_str().unwrap_or(""))
+            .unwrap()
+    };
 
-    // Fall back to most recently ended
-    let best = sessions
-        .iter()
-        .max_by_key(|s| s["endedAt"].as_str().unwrap_or(""))
-        .unwrap();
-    Ok(best["sessionId"].as_str().unwrap_or("").to_string())
+    let id = best["sessionId"].as_str().unwrap_or("").to_string();
+    Ok((id.clone(), SessionAutoSelect::LatestSession(id)))
 }
 
 /// Check if a CloudWatch error is ResourceNotFoundException.

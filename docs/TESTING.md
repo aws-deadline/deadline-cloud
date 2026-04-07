@@ -266,7 +266,7 @@ Can the behavior be exercised by running `deadline <subcommand>`?
 
 ---
 
-## When Both Levels Add Value
+## When Both Testing Levels Add Value
 
 The decision tree above picks the *default* level for a new test. But some
 behaviors benefit from tests at both levels. Keep a Level 1 test alongside

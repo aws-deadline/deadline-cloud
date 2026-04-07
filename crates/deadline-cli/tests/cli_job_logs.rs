@@ -349,3 +349,142 @@ async fn job_logs_json_timestamp_format_utc() {
     // Python UTC isoformat: 2024-12-18T00:00:00+00:00
     assert!(ts.contains("+00:00"), "UTC timestamp should have +00:00 offset, got: {ts}");
 }
+
+// ===========================================================================
+// #15c: Job logs auto-selection messages (§44 cases 17-21)
+// ===========================================================================
+
+// §44.18: Auto-select single session → prints "Using the only available session"
+#[tokio::test]
+async fn job_logs_auto_select_single_session_prints_message() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({"sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z", "endedAt": "2024-12-18T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
+    ]).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857600000_i64, "message": "log line"}),
+    ], None).await;
+
+    let output = harness.cli(&["job", "logs"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "got: {stdout}");
+    assert!(
+        stdout.contains("Using the only available session"),
+        "Expected 'Using the only available session' message, got:\n{stdout}"
+    );
+}
+
+// §44.19: Auto-select from multiple sessions → prints "Using the latest session"
+#[tokio::test]
+async fn job_logs_auto_select_multiple_sessions_prints_message() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({"sessionId": "session-old", "startedAt": "2024-12-17T00:00:00Z", "endedAt": "2024-12-17T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
+        json!({"sessionId": "session-recent", "startedAt": "2024-12-18T00:00:00Z", "endedAt": "2024-12-18T02:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-002"}),
+    ]).await;
+
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-recent",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-002",
+    })).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[], None).await;
+
+    let output = harness.cli(&["job", "logs"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "got: {stdout}");
+    assert!(
+        stdout.contains("Using the latest session"),
+        "Expected 'Using the latest session' message, got:\n{stdout}"
+    );
+}
+
+// Auto-select messages should NOT appear in JSON output
+#[tokio::test]
+async fn job_logs_auto_select_json_no_message() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({"sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z", "endedAt": "2024-12-18T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
+    ]).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857600000_i64, "message": "log line"}),
+    ], None).await;
+
+    let output = harness.cli(&["job", "logs", "--output", "json"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    // JSON output should be valid JSON (no extra text)
+    let _: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("Expected valid JSON (no auto-select message mixed in): {e}"));
+    assert!(!stdout.contains("Using the"), "JSON output should not contain auto-select message");
+}
+
+// Auto-select from multiple sessions with one ongoing → "Using the latest session"
+// (not "only" — there are 2+ sessions, even though one is ongoing)
+#[tokio::test]
+async fn job_logs_auto_select_ongoing_from_multiple_prints_latest_message() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({"sessionId": "session-ended", "startedAt": "2024-12-17T00:00:00Z", "endedAt": "2024-12-17T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
+        json!({"sessionId": "session-ongoing", "startedAt": "2024-12-18T02:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-002"}),
+    ]).await;
+
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-ongoing",
+        "startedAt": "2024-12-18T02:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-002",
+    })).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702944000000_i64, "message": "log line"}),
+    ], None).await;
+
+    let output = harness.cli(&["job", "logs"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "got: {stdout}");
+    assert!(
+        stdout.contains("Using the latest session"),
+        "Expected 'Using the latest session' (not 'only'), got:\n{stdout}"
+    );
+}

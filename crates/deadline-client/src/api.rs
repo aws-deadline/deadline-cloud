@@ -212,16 +212,43 @@ pub async fn search_jobs(
     config: Option<&IniConfig>,
     telemetry: Option<&TelemetryClient>,
 ) -> Result<Value, DeadlineError> {
+    search_jobs_with_filters(farm_id, queue_ids, item_offset, page_size, None, None, config, telemetry).await
+}
+
+/// Search jobs with optional filter and sort expressions.
+#[allow(clippy::too_many_arguments)]
+pub async fn search_jobs_with_filters(
+    farm_id: &str,
+    queue_ids: &[&str],
+    item_offset: i32,
+    page_size: i32,
+    filter_expressions: Option<&Value>,
+    sort_expressions: Option<&Value>,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    let filter = filter_expressions.map(build_filter_expressions).transpose()?;
+    let sort = sort_expressions.map(build_sort_expressions).transpose()?;
     with_telemetry_latency_async("search_jobs", config, telemetry, || async {
         let client = session::deadline_client(config).await;
         capture_send(|cap| async move {
-            client
+            let mut req = client
                 .search_jobs()
                 .farm_id(farm_id)
                 .set_queue_ids(Some(queue_ids.iter().map(|s| s.to_string()).collect()))
                 .item_offset(item_offset)
-                .page_size(page_size)
-                .sort_expressions(
+                .page_size(page_size);
+
+            if let Some(ref f) = filter {
+                req = req.filter_expressions(f.clone());
+            }
+
+            if let Some(ref sorts) = sort {
+                for s in sorts {
+                    req = req.sort_expressions(s.clone());
+                }
+            } else {
+                req = req.sort_expressions(
                     aws_sdk_deadline::types::SearchSortExpression::FieldSort(
                         aws_sdk_deadline::types::FieldSortExpression::builder()
                             .name("CREATED_AT")
@@ -229,14 +256,95 @@ pub async fn search_jobs(
                             .build()
                             .unwrap(),
                     ),
-                )
-                .customize()
+                );
+            }
+
+            req.customize()
                 .interceptor(cap)
                 .send()
                 .await
                 .map(|_| ())
         }).await
     }).await
+}
+
+/// Build SDK SearchGroupedFilterExpressions from JSON.
+fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
+    use aws_sdk_deadline::types::*;
+
+    let operator = match json["operator"].as_str().unwrap_or("AND") {
+        "OR" => LogicalOperator::Or,
+        _ => LogicalOperator::And,
+    };
+
+    let filters = json["filters"].as_array()
+        .ok_or_else(|| DeadlineError::OperationError("filterExpressions.filters must be an array".into()))?;
+
+    let mut sdk_filters = Vec::new();
+    for f in filters {
+        if let Some(stf) = f.get("searchTermFilter") {
+            let term = stf["searchTerm"].as_str().unwrap_or("").to_string();
+            let match_type = SearchTermMatchingType::from(
+                stf["matchType"].as_str().unwrap_or("CONTAINS")
+            );
+            sdk_filters.push(SearchFilterExpression::SearchTermFilter(
+                SearchTermFilterExpression::builder()
+                    .search_term(term)
+                    .match_type(match_type)
+                    .build()
+                    .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
+            ));
+        } else if let Some(sf) = f.get("stringFilter") {
+            let name = sf["name"].as_str().unwrap_or("").to_string();
+            let value = sf["value"].as_str().unwrap_or("").to_string();
+            let op = match sf["operator"].as_str().unwrap_or("EQUAL") {
+                "NOT_EQUAL" => ComparisonOperator::NotEqual,
+                _ => ComparisonOperator::Equal,
+            };
+            sdk_filters.push(SearchFilterExpression::StringFilter(
+                StringFilterExpression::builder()
+                    .name(name)
+                    .value(value)
+                    .operator(op)
+                    .build()
+                    .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
+            ));
+        }
+        // Additional filter types can be added as needed
+    }
+
+    SearchGroupedFilterExpressions::builder()
+        .set_filters(Some(sdk_filters))
+        .operator(operator)
+        .build()
+        .map_err(|e| DeadlineError::OperationError(format!("Invalid filter expressions: {e}")))
+}
+
+/// Build SDK SearchSortExpression list from JSON.
+fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::types::SearchSortExpression>, DeadlineError> {
+    use aws_sdk_deadline::types::*;
+
+    let arr = json.as_array()
+        .ok_or_else(|| DeadlineError::OperationError("sortExpressions must be an array".into()))?;
+
+    let mut result = Vec::new();
+    for item in arr {
+        if let Some(fs) = item.get("fieldSort") {
+            let name = fs["name"].as_str().unwrap_or("CREATED_AT").to_string();
+            let order = match fs["sortOrder"].as_str().unwrap_or("DESCENDING") {
+                "ASCENDING" => SortOrder::Ascending,
+                _ => SortOrder::Descending,
+            };
+            result.push(SearchSortExpression::FieldSort(
+                FieldSortExpression::builder()
+                    .name(name)
+                    .sort_order(order)
+                    .build()
+                    .map_err(|e| DeadlineError::OperationError(format!("Invalid sort: {e}")))?,
+            ));
+        }
+    }
+    Ok(result)
 }
 
 pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {

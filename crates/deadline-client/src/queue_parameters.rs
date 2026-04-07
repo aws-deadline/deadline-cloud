@@ -55,7 +55,7 @@ pub async fn get_queue_parameter_definitions(
             let needs_group_label = param.get("userInterface")
                 .and_then(|ui| ui.get("groupLabel"))
                 .and_then(|g| g.as_str())
-                .map_or(true, |s| s.is_empty());
+                .is_none_or(|s| s.is_empty());
 
             if needs_group_label {
                 let control = if param.get("userInterface").and_then(|ui| ui.get("control")).is_none() {
@@ -106,13 +106,12 @@ fn validate_job_parameter(param: &Value, type_required: bool, default_required: 
             format!("Job parameter \"{name}\" is missing required key \"type\""),
         ));
     }
-    if let Some(t) = obj.get("type").and_then(|t| t.as_str()) {
-        if !["INT", "FLOAT", "STRING", "PATH"].contains(&t) {
+    if let Some(t) = obj.get("type").and_then(|t| t.as_str())
+        && !["INT", "FLOAT", "STRING", "PATH"].contains(&t) {
             return Err(DeadlineError::OperationError(
                 format!("Job parameter \"{name}\" had \"type\" {t} but expected one of (\"INT\", \"FLOAT\", \"STRING\", \"PATH\")"),
             ));
         }
-    }
 
     if default_required && !obj.contains_key("default") {
         return Err(DeadlineError::OperationError(

@@ -176,12 +176,24 @@ Spawns a Python process that loads the GUI widget package and
   `estimatedTimeRemaining`. The `estimatedTimeRemaining` field is computed
   client-side from `taskRunStatusCounts` and `startedAt`; shows `"N/A"` if
   not computable. DateTime fields are formatted as `YYYY-MM-DD HH:MM:SS+00:00`.
-- `deadline job get [--farm-id] [--queue-id] [--job-id]`
+- `deadline job get [SEARCH_TERM] [--farm-id] [--queue-id] [--job-id]`
   Calls `GetJob`, prints full response as YAML (minus `ResponseMetadata`),
   then prints `estimatedTimeRemaining: <value>` on a separate line after
   the YAML. The estimate is computed client-side from `taskRunStatusCounts`
   and `startedAt`; shows `"N/A"` if not computable (no `startedAt`, no
   completed tasks, or no remaining tasks).
+  Optional positional `SEARCH_TERM`: if it matches `job-[0-9a-f]{32}`,
+  treated as `--job-id`. Otherwise, searches for jobs matching the term.
+  Single match → shows full details. Multiple matches → shows summary
+  list with name (truncated to 80 chars), jobId, taskRunStatus, created
+  timestamp, and task summary. Prints "To get details, run: deadline job
+  get --job-id <job-id>". No matches → prints "No jobs found matching
+  ...".
+- `deadline job search [--farm-id] [--queue-id] [--filter-expressions JSON] [--sort-expressions JSON] [--page-size 5] [--item-offset 0]`
+  Calls `SearchJobs` with user-provided filter and sort expressions.
+  `--filter-expressions` accepts inline JSON or `file://path.json`.
+  `--sort-expressions` accepts inline JSON or `file://path.json`.
+  Output format matches `job list`.
 - `deadline job wait [--farm-id] [--queue-id] [--job-id] [--max-poll-interval 120] [--timeout 0] [--output verbose|json]`
   Polls `GetJob` until terminal state (SUCCEEDED, FAILED, CANCELED,
   SUSPENDED, NOT_COMPATIBLE). Verbose mode prints status updates to stderr
@@ -196,8 +208,11 @@ Spawns a Python process that loads the GUI widget package and
 - `deadline job logs [--farm-id] [--queue-id] [--job-id] [--session-id] [--session-action-id] [--limit 100] [--start-time] [--end-time] [--next-token] [--output verbose|json] [--timestamp-format utc|local|relative]`
   Retrieves CloudWatch session logs. Always calls `GetJob` first for the
   job name. If `--session-id` is omitted, auto-selects from the job's
-  sessions (ongoing preferred, then most recently ended). If
-  `--session-action-id` is provided, derives session ID from it (strict
+  sessions (ongoing preferred, then most recently ended). Prints a
+  message indicating how the session was selected (non-JSON only):
+  - Single session: `"Using the only available session: {session_id}"`
+  - Multiple sessions: `"Using the latest session: {session_id}"`
+  If `--session-action-id` is provided, derives session ID from it (strict
   format: `sessionaction-{32hex}-{digits}`), fetches the action for time
   bounds, and intersects with user-provided time range. Verbose output
   prints `[timestamp] message` per event. JSON output includes jobId,

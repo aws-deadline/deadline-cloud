@@ -63,6 +63,12 @@ pub struct SessionCache {
     pub context: SessionContext,
 }
 
+impl Default for SessionCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionCache {
     pub fn new() -> Self {
         Self {

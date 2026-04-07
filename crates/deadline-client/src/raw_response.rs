@@ -42,6 +42,12 @@ pub struct ResponseBodyCapture {
     bytes: Arc<Mutex<Vec<u8>>>,
 }
 
+impl Default for ResponseBodyCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResponseBodyCapture {
     pub fn new() -> Self {
         Self { bytes: Arc::new(Mutex::new(Vec::new())) }

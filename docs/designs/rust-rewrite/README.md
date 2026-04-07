@@ -71,12 +71,12 @@ pick and execute work items.
 | 10 | Job attachments: orchestration | Not started | §23, §26-29, §32, §35 (325 cases) | §47 (26 cases) | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | — | §44 cases 25-26 | `cli.md` | 6 |
-| 12b | Job search command | Not started | — | §44 cases 6-9 | `cli.md` | 6 |
+| 12b | Job search command | ✅ Done | — | §44 cases 6-9 | `cli.md` | 6 |
 | 13 | Job download & sync-output | Not started | — | §44 cases 10-16, §42 cases 14-26 | `cli.md` | 10 |
 | 14 | Handle web URL | Not started | — | §48 (14 cases) | `cli.md` | 13 |
 | 15 | Job requeue-tasks | ✅ Done | — | §44 cases 29-42 | `cli.md` | 6 |
-| 15b | Job get search & estimated time | Not started | — | §44 cases 1-5 | `cli.md` | 6 |
-| 15c | Job logs auto-selection messages | Not started | — | §44 cases 17-21 | `cli.md` | 6 |
+| 15b | Job get search & estimated time | ✅ Done | — | §44 cases 1-5 | `cli.md` | 6 |
+| 15c | Job logs auto-selection messages | ✅ Done | — | §44 cases 17-21 | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | Not started | — | — | — | 11 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |

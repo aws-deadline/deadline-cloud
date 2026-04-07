@@ -165,6 +165,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::job::JobAction::Logs { .. } => "logs",
             commands::job::JobAction::Cancel { .. } => "cancel",
             commands::job::JobAction::RequeueTasks { .. } => "requeue-tasks",
+            commands::job::JobAction::Search { .. } => "search",
         }),
         Commands::Worker { action } => ("worker", match action {
             commands::worker::WorkerAction::List { .. } => "list",
