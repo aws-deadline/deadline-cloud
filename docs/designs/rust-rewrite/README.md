@@ -77,6 +77,7 @@ pick and execute work items.
 | 15 | Job requeue-tasks | ✅ Done | — | §44 cases 29-42 | `cli.md` | 6 |
 | 15b | Job get search & estimated time | Not started | — | §44 cases 1-5 | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | Not started | — | §44 cases 17-21 | `cli.md` | 6 |
+| 15d | Level 2 test coverage audit | Not started | — | — | — | 11 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 | 18 | Worker agent | Deferred | §53+ | — | — | 1-17 |
@@ -98,5 +99,11 @@ for the worker agent.
   deferred. `--timezone` deprecated flag not implemented.
 
 **Technical debt:**
-- None currently tracked.
+- **#15d**: Audit all Level 1 tests in library crates (`deadline-job-bundle`,
+  `deadline-job-attachments`, etc.) to identify which can be converted to or
+  supplemented with Level 2 CLI subprocess tests. Per TESTING.md rule 1: "If
+  the CLI can exercise it, test it through the CLI." Once `bundle submit` (#11)
+  and other CLI commands exist, many library behaviors become CLI-reachable.
+  Add `assert_cmd_snapshot!` tests for those paths. Keep Level 1 tests only
+  for behaviors too low-level to assert through CLI output.
 
