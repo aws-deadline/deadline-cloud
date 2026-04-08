@@ -35,6 +35,8 @@ an S3 URI (`s3://bucket/prefix`).
 | `full_task_output_prefix(...)` | Extends with task. |
 | `full_output_prefix(...)` | Full hierarchical path including session action. |
 | `partial_manifest_prefix(farm, queue)` | `"farm/queue/Inputs/{random_guid}"`. |
+| `partial_session_action_manifest_prefix(farm, queue, job, step, task, session_action, time)` | `"farm/queue/job/step/task/{iso_time}_{session_action}"`. Static method. |
+| `partial_session_action_manifest_prefix_without_task(farm, queue, job, step, session_action, time)` | Same but without task_id. For task chunking. Static method. |
 | `add_root_and_manifest_folder_prefix(path)` | `"prefix/Manifests/path"`. |
 
 The `s3://` URI is parsed with `strip_prefix` + `split_once` — no URL
@@ -102,6 +104,9 @@ directory list.
 
 - `join_s3_paths(parts)` — joins with `/`. Replaces Python's `_join_s3_paths`.
 - `generate_random_guid()` — `Uuid::new_v4().simple().to_string()`.
+- `float_to_iso_datetime_string(time)` — converts a Unix timestamp (f64)
+  to ISO 8601 datetime string. Used by session action manifest prefix
+  methods.
 
 ---
 
@@ -433,8 +438,14 @@ as parameters.
 `FileSystemLocation` — struct with `name: String`, `path: String`,
 `location_type: FileSystemLocationType`.
 
-`StorageProfile` — struct with
-`file_system_locations: Vec<FileSystemLocation>`.
+`StorageProfile` — struct with `storage_profile_id: String`,
+`display_name: String`,
+`os_family: StorageProfileOperatingSystemFamily`, and
+`file_system_locations: Vec<FileSystemLocation>`. The first three fields
+are used by the CLI to match storage profiles to queues. Python's
+`StorageProfile` uses camelCase field names (`storageProfileId`, etc.)
+because it deserializes directly from API JSON; Rust uses snake_case
+with serde rename if needed.
 
 #### `prepare_paths_for_upload`
 
@@ -597,3 +608,23 @@ back-to-back with alternating order to control for network variance.
 
 7. **Integer mtime comparison** in hash cache instead of string
    comparison. Faster and more correct.
+
+## Known Gaps (to address in future work items)
+
+Types and functions that exist in Python but are not yet ported. Each
+gap lists which work item will address it.
+
+| Gap | Python location | Needed by | Work item |
+|-----|----------------|-----------|-----------|
+| `UploadManifestInfo` struct | `models.py` | Worker agent upload script | #18 |
+| `FileStatus` enum (NEW/MODIFIED/UNCHANGED/DELETED) | `models.py` | Internal to upload, manifest diff | #10 |
+| `FileConflictResolution` enum | `models.py` | Download conflict handling | #10 |
+| `GlobConfig` struct | `models.py` | Manifest CLI commands | #10 |
+| `ManifestSnapshot`, `ManifestDiff`, `ManifestMerge`, `ManifestDownload` | `models.py` | Manifest CLI commands, worker agent | #10 |
+| `ManifestPathGroup` | `models.py` | Download path grouping | #9 |
+| `OutputFile` | `models.py` | Download output tracking | #9 |
+| `_manifest_snapshot`, `_manifest_merge` functions | `api/manifest.py` | Worker agent, manifest CLI | #10 |
+| `_path_mapping`, `_PathMappingRuleApplier` | `_path_mapping.py` | Cross-OS download path remapping | #10 |
+| `os_file_permission` module | `os_file_permission.py` | File permission management on download | #10 |
+| `_float_to_iso_datetime_string` | `_utils.py` | Output manifest S3 paths | #9 |
+| `_get_unique_dest_dir_name` | `_utils.py` | Download directory naming | #9 |

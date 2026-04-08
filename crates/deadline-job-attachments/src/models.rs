@@ -14,6 +14,17 @@ pub fn generate_random_guid() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
+/// Converts a Unix timestamp (seconds as f64) to ISO 8601 datetime string.
+/// Format: `2024-01-15T10:30:00.123456Z` (always 6 decimal places).
+/// Matches Python's `_float_to_iso_datetime_string`.
+pub fn float_to_iso_datetime_string(time: f64) -> String {
+    let seconds = time as i64;
+    let microseconds = ((time - seconds as f64) * 1_000_000.0) as u32;
+    let dt = chrono::DateTime::from_timestamp(seconds, microseconds * 1000)
+        .unwrap_or_default();
+    dt.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
+}
+
 // --- StorageProfileOperatingSystemFamily ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +232,37 @@ impl JobAttachmentS3Settings {
         join_s3_paths(&[farm_id, queue_id, "Inputs", &guid])
     }
 
+    /// Builds the partial S3 prefix for output manifests with task_id.
+    /// Pattern: `farm/queue/job/step/task/{iso_time}_{session_action_id}`
+    pub fn partial_session_action_manifest_prefix(
+        farm_id: &str,
+        queue_id: &str,
+        job_id: &str,
+        step_id: &str,
+        task_id: &str,
+        session_action_id: &str,
+        time: f64,
+    ) -> String {
+        let ts = float_to_iso_datetime_string(time);
+        let last_segment = format!("{ts}_{session_action_id}");
+        join_s3_paths(&[farm_id, queue_id, job_id, step_id, task_id, &last_segment])
+    }
+
+    /// Builds the partial S3 prefix for output manifests without task_id (task chunking).
+    /// Pattern: `farm/queue/job/step/{iso_time}_{session_action_id}`
+    pub fn partial_session_action_manifest_prefix_without_task(
+        farm_id: &str,
+        queue_id: &str,
+        job_id: &str,
+        step_id: &str,
+        session_action_id: &str,
+        time: f64,
+    ) -> String {
+        let ts = float_to_iso_datetime_string(time);
+        let last_segment = format!("{ts}_{session_action_id}");
+        join_s3_paths(&[farm_id, queue_id, job_id, step_id, &last_segment])
+    }
+
     pub fn add_root_and_manifest_folder_prefix(
         &self,
         path: &str,
@@ -389,6 +431,9 @@ pub struct FileSystemLocation {
 
 #[derive(Debug, Clone)]
 pub struct StorageProfile {
+    pub storage_profile_id: String,
+    pub display_name: String,
+    pub os_family: StorageProfileOperatingSystemFamily,
     pub file_system_locations: Vec<FileSystemLocation>,
 }
 
@@ -768,5 +813,68 @@ mod tests {
         assert!(guid.chars().all(|c: char| c.is_ascii_hexdigit()));
         let guid2 = generate_random_guid();
         assert_ne!(guid, guid2);
+    }
+
+    // === float_to_iso_datetime_string ===
+
+    #[test]
+    fn float_to_iso_datetime_string_basic() {
+        let ts = 1705312200.0;
+        let result = float_to_iso_datetime_string(ts);
+        assert_eq!(result, "2024-01-15T09:50:00.000000Z");
+    }
+
+    #[test]
+    fn float_to_iso_datetime_string_with_microseconds() {
+        let ts = 1705312200.123456;
+        let result = float_to_iso_datetime_string(ts);
+        assert_eq!(result, "2024-01-15T09:50:00.123456Z");
+    }
+
+    #[test]
+    fn float_to_iso_datetime_string_epoch() {
+        let result = float_to_iso_datetime_string(0.0);
+        assert_eq!(result, "1970-01-01T00:00:00.000000Z");
+    }
+
+    // === partial_session_action_manifest_prefix ===
+
+    #[test]
+    fn partial_session_action_manifest_prefix_with_task() {
+        let ts = 1705312200.5;
+        let result = JobAttachmentS3Settings::partial_session_action_manifest_prefix(
+            "farm-1", "queue-1", "job-1", "step-1", "task-1", "sa-1", ts,
+        );
+        assert_eq!(
+            result,
+            "farm-1/queue-1/job-1/step-1/task-1/2024-01-15T09:50:00.500000Z_sa-1"
+        );
+    }
+
+    #[test]
+    fn partial_session_action_manifest_prefix_without_task() {
+        let ts = 1705312200.5;
+        let result = JobAttachmentS3Settings::partial_session_action_manifest_prefix_without_task(
+            "farm-1", "queue-1", "job-1", "step-1", "sa-1", ts,
+        );
+        assert_eq!(
+            result,
+            "farm-1/queue-1/job-1/step-1/2024-01-15T09:50:00.500000Z_sa-1"
+        );
+    }
+
+    // === StorageProfile full fields ===
+
+    #[test]
+    fn storage_profile_has_identity_fields() {
+        let profile = StorageProfile {
+            storage_profile_id: "sp-abc123".into(),
+            display_name: "My Profile".into(),
+            os_family: StorageProfileOperatingSystemFamily::Linux,
+            file_system_locations: vec![],
+        };
+        assert_eq!(profile.storage_profile_id, "sp-abc123");
+        assert_eq!(profile.display_name, "My Profile");
+        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Linux);
     }
 }

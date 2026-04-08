@@ -16,7 +16,9 @@ Items table in `README.md` and pick the first row with status
 Batch 8a: foundational types, hashing, manifest encode/decode, caches
 (80 Level 1 tests). Batch 8b: progress tracker (17 Level 1 tests).
 Batch 8c: path grouping and manifest creation (21 Level 1 tests).
-Total: 118 tests.
+Post-batch improvements: session action manifest prefix methods,
+StorageProfile full fields, float_to_iso_datetime_string (6 tests).
+Total: 124 tests.
 
 **Files changed (8b/8c batch):**
 - `crates/deadline-job-attachments/src/progress_tracker.rs` — ProgressStatus,

@@ -480,6 +480,9 @@ mod tests {
         let f1 = create_test_file(&dir, "shared/a.txt", b"data");
 
         let profile = StorageProfile {
+            storage_profile_id: "sp-test".into(),
+            display_name: "Test".into(),
+            os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
                 path: shared_dir.to_string_lossy().into(),
@@ -509,6 +512,9 @@ mod tests {
         let f1 = create_test_file(&dir, "local/a.txt", b"data");
 
         let profile = StorageProfile {
+            storage_profile_id: "sp-test".into(),
+            display_name: "Test".into(),
+            os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "LocalLoc".into(),
                 path: local_dir.to_string_lossy().into(),
@@ -657,6 +663,9 @@ mod tests {
         fs::create_dir_all(&shared_dir).unwrap();
 
         let profile = StorageProfile {
+            storage_profile_id: "sp-test".into(),
+            display_name: "Test".into(),
+            os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
                 path: shared_dir.to_string_lossy().into(),
@@ -686,6 +695,9 @@ mod tests {
         let ref_path = dir.path().join("shared/ref.txt");
 
         let profile = StorageProfile {
+            storage_profile_id: "sp-test".into(),
+            display_name: "Test".into(),
+            os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
                 path: shared_dir.to_string_lossy().into(),

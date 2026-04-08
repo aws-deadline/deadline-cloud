@@ -11,6 +11,7 @@ deadline-common = { workspace = true }
 deadline-config = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+chrono = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
