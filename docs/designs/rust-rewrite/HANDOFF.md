@@ -5,9 +5,53 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-None. Work item #8 is complete. Next session should consult the Work
-Items table in `README.md` and pick the first row with status
-"Not started" whose dependencies are all "✅ Done".
+**#9 — Job attachments: transfer** (batch 9a starting)
+
+### Current Step
+
+Step 0 complete (plan approved). Starting batch 9a (S3 client
+infrastructure, §34: 37 cases).
+
+### Batching Plan
+
+| Batch | Scope | Test Spec | Cases |
+|-------|-------|-----------|-------|
+| 9a | S3 client infrastructure + aws-sdk-s3 | §34 | 37 |
+| 9b | Upload engine (S3AssetUploader, upload_assets) | §21 | 28 |
+| 9c | Download engine (download_file, merge, output manifests) | §22 | 34 |
+| 9d | Public API (attachment_download/upload, path mapping) | §30 | 36 |
+| 9e | CLI commands + manifest API | §31, §46 | 60 |
+
+### What's Next
+
+Batch 9a complete. Proceed to batch 9b (upload engine, §21: 28 cases).
+
+### Batch 9a — What Was Done
+
+Added `s3.rs` module to `deadline-job-attachments` with S3 client
+infrastructure:
+- Constants: timeouts (30s), retry mode (standard), chunk size (8MB),
+  concurrency limits (10), user agent string
+- `build_s3_client(sdk_config, config)` — builds S3 client with
+  job-attachments-specific config on top of caller's credentials.
+  Validates pool connections at build time (warns on misconfiguration).
+- `get_s3_max_pool_connections(config)` — reads and validates config.
+  Propagates config read errors (does not silently default).
+- `get_account_id(sdk_config)` — STS GetCallerIdentity wrapper.
+  No caching — callers should cache the result.
+- 14 Level 1 tests, all passing
+
+Refactors applied:
+- Removed dead `pool_connections` computation from `build_s3_client`
+  (was computed then discarded; callers use `get_s3_max_pool_connections`
+  directly for worker counts)
+- Fixed `get_s3_max_pool_connections` to propagate config read errors
+  instead of silently falling back to "50"
+- Added doc comments about caching responsibility on `get_account_id`
+- Clarified `S3_RETRIES_MODE` constant purpose (behavioral parity
+  verification, not used in implementation)
+
+New dependencies: `aws-sdk-s3`, `aws-sdk-sts`, `aws-config`, `tokio`.
 
 ## Recently Completed
 

@@ -514,9 +514,158 @@ avoid redundant `stat()` calls. Rust's `fs::metadata` is a direct
 syscall (~1-2μs) vs Python's FFI overhead (~10-50μs). The cache
 overhead would exceed the syscall cost.
 
+#### S3 upload engine (batch 9b)
+
+`S3AssetUploader` — struct holding `aws_sdk_s3::Client` and config.
+
+| Method | Behavior |
+|--------|----------|
+| `upload_input_files(manifest, bucket, root, cas_prefix, ...)` | Splits files into small (≤ threshold) and large queues. Small files uploaded in parallel, large files serially with multipart. S3 check cache used to skip already-uploaded files. |
+| `upload_object_to_cas(file, alg, bucket, root, prefix, cache, ...)` | Checks S3 check cache → HeadObject → upload if needed. Updates cache. Returns `(was_uploaded, file_size)`. |
+| `file_already_uploaded(bucket, key) -> bool` | HeadObject check. 404 → false. 403 → error with `s3:ListBucket` guidance. |
+| `upload_file_to_s3(path, bucket, key, ...)` | Upload via multipart with progress callback. Rejects symlinks (`O_NOFOLLOW`). Skips directories and non-existent files. |
+| `upload_bytes_to_s3(bytes, bucket, key, ...)` | Upload raw bytes (for manifests). Includes `ExpectedBucketOwner`. |
+| `snapshot_assets(dir, manifest, root, ...)` | Local copy to `dir/Data/` instead of S3 (debug mode). |
+
+`S3AssetManager.upload_assets` and `snapshot_assets` orchestrate the
+uploader with progress tracking, building `ManifestProperties` and
+`Attachments` from the results. Error if `farm_id` or `queue_id` is
+missing.
+
+S3 error handling matches Python's guidance messages:
+- 403 (non-KMS): `s3:PutObject` permission guidance
+- 403 (KMS): `kms:GenerateDataKey` and `kms:DescribeKey` guidance
+- 404: bucket/key existence guidance
+- Transport errors: credential/network guidance
+
 ### `download` — File download from S3 CAS (work item #9)
 
-Not yet implemented.
+Downloads files from S3 content-addressed storage by hash, with conflict
+resolution, manifest merging, and output manifest retrieval.
+
+#### S3 interaction model
+
+All S3 operations use queue-scoped credentials (assumed via
+`GetQueueUserBoto3Session`). Every S3 call includes
+`ExpectedBucketOwner` set to the caller's account ID (from STS
+`GetCallerIdentity`) to prevent confused deputy attacks.
+
+Files are stored in CAS at `{rootPrefix}/Data/{hash}.{algorithm}`.
+Download constructs the S3 key from the manifest entry's hash and
+algorithm, then calls `GetObject`. If 404, retries without the
+`.{algorithm}` suffix for backward compatibility with pre-CAS objects.
+
+#### `download_file`
+
+Downloads a single file from CAS to a local path.
+
+1. Construct S3 key: `{cas_prefix}/{hash}.{algorithm}`
+2. Resolve local path: `{local_download_dir}/{manifest_path}`
+3. If file exists locally, apply conflict resolution:
+   - `Skip` → return `(file_bytes, None)`
+   - `Overwrite` → proceed (overwrite)
+   - `CreateCopy` → generate unique copy name with collision tracking
+4. Create parent directories
+5. Download via S3 `GetObject` with progress callback
+6. On 404: retry with key `{cas_prefix}/{hash}` (no algorithm suffix)
+7. On 403: error with `s3:GetObject` or `kms:Decrypt` guidance
+8. Set file mtime from manifest (microseconds → seconds)
+9. Return `(file_bytes, local_path)`
+
+Progress callback integration: the download handler calls
+`progress_tracker.track_progress(bytes, false)` for each chunk, and
+the tracker can cancel by returning `false`.
+
+#### `download_files_from_manifests`
+
+Parallel download of all files across multiple manifests.
+
+1. Compute total files and bytes across all manifests
+2. Create `ProgressTracker` with `DownloadInProgress` status
+3. For each `(local_root, manifest)` pair:
+   - Download all files in parallel (bounded concurrency)
+   - Track downloaded file paths per root
+4. Return `DownloadSummaryStatistics` with per-root file counts
+
+#### `merge_asset_manifests`
+
+Merges multiple manifests into one. Later manifests' paths win on
+conflict (used for output-over-input merging).
+
+- Empty list → `None`
+- Single manifest → return as-is
+- Multiple: collect paths into a map keyed by path string; later
+  entries overwrite earlier ones. Recalculate `total_size`.
+- Error if manifests have different hash algorithms.
+
+#### `get_output_manifests_by_asset_root`
+
+Lists and downloads output manifests from S3, grouped by asset root.
+
+1. Build S3 prefix from farm/queue/job (optionally step/task)
+2. `ListObjectsV2` to find all manifest keys under the prefix
+3. Download each manifest in parallel, extracting asset root from
+   S3 object metadata (`asset-root` or `asset-root-json`)
+4. Group by asset root, merge chronologically (oldest first, so
+   newer files overwrite older ones)
+5. Return `{asset_root: [merged_manifest]}`
+
+Output manifests are per-root-path, not per-output-directory. Even
+if a manifest entry has multiple `outputRelativeDirectories`, they
+all collect into one manifest per root path.
+
+#### `OutputDownloader`
+
+Orchestrates output download with root path remapping for cross-OS
+scenarios.
+
+- Constructed with S3 settings, farm/queue/job/step/task IDs
+- `get_output_paths_by_root()` → paths grouped by asset root
+- `set_root_path(original, new)` → remaps download destination
+- `download_job_output()` → downloads all outputs with progress
+
+---
+
+### `s3` — S3 client infrastructure (batch 9a)
+
+Factory functions for creating and configuring S3 clients, account
+identity retrieval, and S3-specific constants.
+
+#### Design: explicit parameters, no event hooks
+
+Python uses boto3 event hooks to inject `ExpectedBucketOwner` on
+every S3 call. The Rust SDK doesn't have event hooks. Instead, every
+S3 call explicitly passes the account ID. This is more verbose but
+more transparent — no hidden parameter injection.
+
+#### S3 client configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| Signature version | `s3v4` | Hardcoded |
+| Connect timeout | 30s | Constant |
+| Read timeout | 30s | Constant |
+| Retry mode | `standard` | Constant |
+| Max pool connections | From config `settings.s3_max_pool_connections` | Runtime |
+| User agent | `S3A/Deadline/NA/JobAttachments/{version}` | Hardcoded |
+
+#### `get_account_id`
+
+Calls STS `GetCallerIdentity`, returns the `Account` field. Does not
+cache — creates a fresh STS client per call. Callers should cache the
+result when they need the account ID for multiple S3 operations (e.g.
+as `ExpectedBucketOwner` on every PutObject/GetObject).
+
+#### Upload/download concurrency
+
+No boto3 `TransferManager` equivalent in Rust. Use
+`tokio::task::JoinSet` + `tokio::sync::Semaphore` for bounded
+concurrent multipart upload/download (proven in S3 spike).
+
+- Small file threshold: `8MB * small_file_threshold_multiplier`
+  (from config)
+- Upload workers: `s3_max_pool_connections / min(multiplier, 10)`
+- Download workers: `s3_max_pool_connections / 10`
 
 ### `vfs` — Virtual filesystem (deferred)
 
@@ -533,6 +682,10 @@ Deferred per migration strategy. Linux-only FUSE, platform-specific.
 | `rusqlite` (feature `bundled`) | SQLite caches |
 | `serde` + `serde_json` | Manifest JSON encode/decode |
 | `uuid` (feature `v4`) | Random GUID generation |
+| `chrono` | Datetime formatting for manifest S3 paths |
+| `aws-sdk-s3` | S3 client for upload/download (work item #9) |
+| `aws-sdk-sts` | Account ID retrieval (work item #9) |
+| `tokio` | Async runtime for concurrent S3 operations (work item #9) |
 
 ## S3 Transfer Spike
 
