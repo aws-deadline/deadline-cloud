@@ -9,22 +9,107 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Current Step
 
-Step 0 complete (plan approved). Starting batch 9a (S3 client
-infrastructure, §34: 37 cases).
+Batch 9b complete. Proceed to batch 9c (download engine, §22: 34 cases).
 
 ### Batching Plan
 
 | Batch | Scope | Test Spec | Cases |
 |-------|-------|-----------|-------|
 | 9a | S3 client infrastructure + aws-sdk-s3 | §34 | 37 |
-| 9b | Upload engine (S3AssetUploader, upload_assets) | §21 | 28 |
+| 9b | Upload engine (S3UploadContext, upload_assets) | §21 | 28 |
 | 9c | Download engine (download_file, merge, output manifests) | §22 | 34 |
 | 9d | Public API (attachment_download/upload, path mapping) | §30 | 36 |
 | 9e | CLI commands + manifest API | §31, §46 | 60 |
 
 ### What's Next
 
-Batch 9a complete. Proceed to batch 9b (upload engine, §21: 28 cases).
+Batch 9b complete. Proceed to batch 9c: download engine
+(`download_file`, `download_files_from_manifests`,
+`merge_asset_manifests`, `get_output_manifests_by_asset_root`).
+§22: 34 cases.
+
+### Batch 9b — Steps 5-6: Python Verification + Refactor
+
+**Step 5 — Python behavioral comparison:**
+
+Systematically compared each function against Python source. Found
+three behavioral gaps:
+
+1. **Upload order wrong** — Rust uploaded files before manifest. Python
+   uploads manifest first so it's available in S3 even if file upload
+   fails partway. Fixed: reordered.
+
+2. **Missing `verify_hash_cache_integrity`** — Python samples up to 30
+   S3 check cache entries before uploading, resets cache if any are
+   missing from S3. Rust had no integrity check. Fixed: added methods
+   and called from `upload_assets`.
+
+3. **Missing 408/500/503 error guidance** — Python's
+   `COMMON_ERROR_GUIDANCE_FOR_S3` provides specific messages. Fixed:
+   added status-specific S3Client errors matching Python's wording.
+
+**Step 6 — Tightened wiremock matchers on 5 tests:**
+
+- `upload_assets` happy path: manifest PUT path regex, requires
+  `x-amz-expected-bucket-owner` header
+- `upload_input_files` small files: PUT path matches CAS key format
+- `upload_input_files` existing file: HEAD path matches CAS key format
+- `upload_file_to_s3` valid file: requires `x-amz-expected-bucket-owner`
+- `upload_assets` multiple manifests: requires
+  `x-amz-expected-bucket-owner`
+
+### Batch 9b — Step 4 Implementation
+
+Added to `upload.rs`:
+
+- `S3UploadContext` struct — holds `s3_client`, `account_id`,
+  `small_file_threshold`, `num_upload_workers`. Constructed via `new()`
+  which reads config via `compute_upload_config()`.
+- `S3UploadContext::file_already_uploaded` — async HeadObject with
+  HTTP status extraction from `raw_response()`. 404 → false, 403 →
+  S3Client error with ListBucket guidance, other → S3BotoCore.
+- `S3UploadContext::upload_file_to_s3` — async PutObject. Rejects
+  symlinks via `symlink_metadata()`. Skips dirs/nonexistent silently.
+  403 error checks both Display and `message()` for KMS detection.
+- `S3UploadContext::upload_bytes_to_s3` — async PutObject for manifests
+  with ExpectedBucketOwner and optional metadata.
+- `S3UploadContext::upload_input_files` — iterates manifest paths,
+  checks S3 check cache, HeadObject, uploads, updates cache. Final
+  progress report + cancellation check.
+- `upload_assets` free function — validates farm/queue, iterates
+  manifests, builds ManifestProperties, calls uploader, returns
+  (SummaryStatistics, Attachments).
+- `snapshot_assets` free function — same pattern with local fs::copy.
+
+Key implementation decisions:
+- HTTP status extracted from `sdk_err.raw_response().status()` instead
+  of string matching — reliable across SDK versions.
+- KMS detection checks both `format!("{service_err}")` and
+  `service_err.message()` since SDK Display may not include the raw
+  XML message body.
+- `ProvideErrorMetadata` trait imported for `.message()` access.
+
+All 24 integration tests pass. 143 existing lib tests pass. Full
+workspace green (0 failures, 0 warnings).
+
+### Batch 9b — Step 1 Improvements
+
+Audited existing `upload.rs`, `s3.rs`, and `errors.rs` against Python
+source. Applied three improvements:
+
+1. **Fixed S3Client error Display format** — was `"S3 {action} failed
+   ({status_code}) bucket={bucket} key={key}: {msg}"`, now matches
+   Python: `"Error {action} in bucket '{bucket}', Target key or prefix:
+   '{key}', HTTP Status Code: {status_code}, {msg}"`.
+
+2. **Fixed S3BotoCore error Display format** — was `"S3 {action}:
+   {details}"`, now matches Python with full guidance text about
+   credentials, network, and retry.
+
+3. **Added `get_small_file_threshold_multiplier` and
+   `compute_upload_config` to `s3.rs`** — the upload engine needs both
+   `small_file_threshold` and `num_upload_workers` computed from config.
+   Added helpers with validation (positive integer check) and 5 tests.
 
 ### Batch 9a — What Was Done
 

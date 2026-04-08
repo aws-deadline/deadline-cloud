@@ -3,11 +3,13 @@
 Asset manifest handling, S3 upload/download, hash cache, content-addressed
 storage.
 
-## Status: Complete
+## Status: In Progress
 
 Batch 8a: foundational types, hashing, manifest encode/decode, caches.
 Batch 8b: progress tracking. Batch 8c: path grouping and manifest
-creation. Upload, download, and orchestration follow in work items #9–#10.
+creation. Batch 9a: S3 client infrastructure. Batch 9b: upload engine
+(`S3UploadContext`, `upload_assets`, `snapshot_assets`). Download and
+orchestration follow in batches 9c–9e and work item #10.
 
 ## Modules
 
@@ -516,27 +518,144 @@ overhead would exceed the syscall cost.
 
 #### S3 upload engine (batch 9b)
 
-`S3AssetUploader` — struct holding `aws_sdk_s3::Client` and config.
+##### Design: struct with owned client, free functions for orchestration
+
+Python splits upload across two classes: `S3AssetUploader` (S3 operations)
+and `S3AssetManager` (orchestration with farm/queue context). Rust uses
+`S3UploadContext` for S3 operations and free functions for orchestration. The
+orchestration functions take farm/queue IDs as parameters rather than
+storing them on a struct — they're only needed at the top level, not
+threaded through every S3 call (Principle 3).
+
+##### `S3UploadContext`
+
+Struct holding the S3 client, account ID, and computed config values.
+
+```
+pub struct S3UploadContext {
+    s3_client: aws_sdk_s3::Client,
+    account_id: String,
+    small_file_threshold: usize,
+    num_upload_workers: usize,
+}
+```
+
+Construction: `new(s3_client, account_id, config)`. Reads
+`settings.small_file_threshold_multiplier` and
+`settings.s3_max_pool_connections` via `compute_upload_config()` from
+`s3.rs`. The caller builds the S3 client (via `build_s3_client`) and
+gets the account ID (via `get_account_id`) before constructing the
+uploader. This avoids the uploader needing `SdkConfig` or STS access.
 
 | Method | Behavior |
 |--------|----------|
-| `upload_input_files(manifest, bucket, root, cas_prefix, ...)` | Splits files into small (≤ threshold) and large queues. Small files uploaded in parallel, large files serially with multipart. S3 check cache used to skip already-uploaded files. |
-| `upload_object_to_cas(file, alg, bucket, root, prefix, cache, ...)` | Checks S3 check cache → HeadObject → upload if needed. Updates cache. Returns `(was_uploaded, file_size)`. |
-| `file_already_uploaded(bucket, key) -> bool` | HeadObject check. 404 → false. 403 → error with `s3:ListBucket` guidance. |
-| `upload_file_to_s3(path, bucket, key, ...)` | Upload via multipart with progress callback. Rejects symlinks (`O_NOFOLLOW`). Skips directories and non-existent files. |
-| `upload_bytes_to_s3(bytes, bucket, key, ...)` | Upload raw bytes (for manifests). Includes `ExpectedBucketOwner`. |
-| `snapshot_assets(dir, manifest, root, ...)` | Local copy to `dir/Data/` instead of S3 (debug mode). |
+| `upload_input_files(manifest, s3_bucket, source_root, s3_cas_prefix, progress_tracker, s3_check_cache_dir, force_s3_check)` | Async. For each manifest path: check S3 check cache (unless `force_s3_check=true`) → `file_already_uploaded` → upload if needed → update cache. Skipped files tracked via `increase_skipped`. After all files, calls `report_progress()` and checks cancellation. Currently sequential; parallel small/large split deferred to when performance testing requires it. |
+| `file_already_uploaded(bucket, key) -> bool` | Async. `HeadObject`. HTTP status extracted from `raw_response()`. 404 → false. 403 → `S3Client` error with `s3:ListBucket` guidance including account ID. Other → `S3BotoCore` transport error. |
+| `upload_file_to_s3(local_path, s3_bucket, s3_upload_key, progress_tracker)` | Async. Checks symlink via `symlink_metadata()` (rejects), skips directories and non-existent files silently. Uploads via `PutObject` with `ExpectedBucketOwner`. On completion, calls `progress_tracker.increase_processed(1, 0)`. |
+| `upload_bytes_to_s3(bytes, bucket, key, metadata)` | Async. `PutObject` with `expected_bucket_owner` set to `self.account_id`. Used for manifest uploads. Optional metadata map passed as S3 object metadata. |
+| `verify_hash_cache_integrity(s3_check_cache_dir, manifest, s3_cas_prefix, s3_bucket) -> bool` | Async. Samples up to 30 S3 check cache entries for manifest files, verifies each exists in S3 via `file_already_uploaded`. Returns false if any missing. |
+| `reset_s3_check_cache(s3_check_cache_dir)` | Deletes the S3 check cache database file. |
 
-`S3AssetManager.upload_assets` and `snapshot_assets` orchestrate the
-uploader with progress tracking, building `ManifestProperties` and
-`Attachments` from the results. Error if `farm_id` or `queue_id` is
-missing.
+**Symlink rejection:** Rust checks `fs::symlink_metadata(path).file_type().is_symlink()`
+before opening. This matches the intent of Python's `O_NOFOLLOW` without
+needing raw file descriptors. On failure (permission error, etc.), the
+file is skipped with a warning log — matching Python's
+`_open_non_symlink_file_binary` yielding `None`.
 
-S3 error handling matches Python's guidance messages:
-- 403 (non-KMS): `s3:PutObject` permission guidance
-- 403 (KMS): `kms:GenerateDataKey` and `kms:DescribeKey` guidance
-- 404: bucket/key existence guidance
-- Transport errors: credential/network guidance
+**Parallel upload and multipart:** Currently sequential single-PutObject.
+The `small_file_threshold` and `num_upload_workers` fields are stored on
+`S3UploadContext` for future use when parallel upload via `JoinSet` +
+`Semaphore` and multipart for large files are added. The S3 spike proved
+concurrent parts match boto3 throughput — this optimization will be added
+when performance testing requires it.
+
+**S3 error handling** matches Python's guidance messages exactly:
+
+| HTTP Status | Context | Guidance |
+|-------------|---------|----------|
+| 403 (non-KMS) | `upload_file_to_s3` | `s3:PutObject` permission |
+| 403 (KMS) | `upload_file_to_s3` | `kms:GenerateDataKey` and `kms:DescribeKey` |
+| 403 | `file_already_uploaded` | `s3:ListBucket` permission + account ID |
+| 403 (non-KMS) | `upload_bytes_to_s3` | `s3:PutObject` permission |
+| 403 (KMS) | `upload_bytes_to_s3` | `kms:GenerateDataKey` and `kms:DescribeKey` |
+| 404 | `upload_file_to_s3` | bucket/key existence |
+| 404 | `upload_bytes_to_s3` | bucket existence |
+| 408, 500, 503 | all | retry/network guidance (from `COMMON_ERROR_GUIDANCE_FOR_S3`) |
+| Transport | all | `S3BotoCore` with credential/network guidance |
+
+KMS detection: check if the error message string contains `"kms:"` —
+same heuristic as Python.
+
+##### `upload_assets` (free function)
+
+Orchestrates the full upload flow for a list of `AssetRootManifest`s.
+
+```
+pub async fn upload_assets(
+    farm_id: &str,
+    queue_id: &str,
+    job_attachment_settings: &JobAttachmentS3Settings,
+    manifests: &[AssetRootManifest],
+    uploader: &S3UploadContext,
+    on_uploading_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    s3_check_cache_dir: Option<&str>,
+    force_s3_check: Option<bool>,
+) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError>
+```
+
+Behavior:
+1. Validate `farm_id` and `queue_id` are non-empty. Error:
+   `"upload_assets: Farm or Fleet ID is missing."`.
+2. Compute total files/bytes from manifests (only those with
+   `asset_manifest.is_some()`).
+3. Create `ProgressTracker` with `UploadInProgress` status.
+4. For each `AssetRootManifest`:
+   a. Build `ManifestProperties` with `root_path`, `root_path_format`
+      (host format), `file_system_location_name`, and
+      `output_relative_directories` (relative to `root_path`).
+   b. If `asset_manifest` is `Some`:
+      - Generate `partial_manifest_prefix` (random GUID path).
+      - Encode manifest to bytes, compute manifest name as
+        `{hash_of_root_path_str}_input`.
+      - Call `ctx.upload_bytes_to_s3` for the manifest (uploaded
+        first so it's available even if file upload fails partway).
+      - Verify S3 check cache integrity (sample up to 30 entries,
+        reset cache if any missing). Skip if `force_s3_check=true`.
+      - Call `ctx.upload_input_files` for the file data.
+      - Set `input_manifest_path` and `input_manifest_hash` on the
+        `ManifestProperties`.
+5. Return `(SummaryStatistics, Attachments)`.
+
+##### `snapshot_assets` (free function)
+
+Same signature pattern as `upload_assets` but copies files locally
+instead of uploading to S3.
+
+```
+pub fn snapshot_assets(
+    farm_id: &str,
+    queue_id: &str,
+    job_attachment_settings: &JobAttachmentS3Settings,
+    snapshot_dir: &Path,
+    manifests: &[AssetRootManifest],
+    on_snapshotting_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError>
+```
+
+Behavior:
+1. Same farm/queue validation.
+2. For each manifest with files: copy each file to
+   `snapshot_dir/Data/{hash}.{algorithm}` using `std::fs::copy`.
+   Write manifest to `snapshot_dir/Manifests/{partial_prefix}/{name}`.
+3. Progress tracking with `SnapshotInProgress` status.
+4. Cancellation check after each file.
+
+##### `verify_hash_cache_integrity`
+
+Method on `S3UploadContext`. See method table above. The sample is
+randomized (Fisher-Yates shuffle using time-seeded hash, take first 30
+that have cache entries). This matches Python's `random.shuffle` +
+`break at 30` pattern.
 
 ### `download` — File download from S3 CAS (work item #9)
 

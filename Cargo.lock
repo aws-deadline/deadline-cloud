@@ -1026,6 +1026,7 @@ dependencies = [
  "test-case",
  "tokio",
  "uuid",
+ "wiremock",
  "xxhash-rust",
 ]
 

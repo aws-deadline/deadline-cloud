@@ -1,14 +1,20 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use aws_sdk_s3::error::ProvideErrorMetadata;
+use aws_sdk_s3::primitives::ByteStream;
+use deadline_config::ini::IniConfig;
 use deadline_models::errors::JobAttachmentsError;
+use deadline_models::path_format::PathFormat;
 
-use crate::asset_manifests::{hash_file, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
-use crate::caches::{HashCache, HashCacheEntry};
+use crate::asset_manifests::{hash_data, hash_file, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
+use crate::caches::{HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry};
 use crate::models::{
-    AssetRootGroup, AssetRootManifest, AssetUploadGroup, FileSystemLocationType, StorageProfile,
+    AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
+    JobAttachmentS3Settings, ManifestProperties, PathFormatExt, StorageProfile, join_s3_paths,
 };
-use crate::progress_tracker::{ProgressReportMetadata, ProgressStatus, ProgressTracker};
+use crate::progress_tracker::{ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics};
+use crate::s3::compute_upload_config;
 
 fn is_relative_to(path: &Path, base: &str) -> bool {
     let base_path = Path::new(base);
@@ -422,6 +428,643 @@ pub fn hash_assets_and_create_manifest(
     progress_tracker.set_total_time(elapsed);
 
     Ok((progress_tracker.get_summary_statistics(), asset_root_manifests))
+}
+
+// =====================================================================
+// S3 upload context and orchestration (batch 9b)
+// =====================================================================
+
+/// Context for performing S3 uploads: holds a configured S3 client,
+/// the caller's account ID (for ExpectedBucketOwner), and computed
+/// config values (file size threshold, worker count).
+#[allow(dead_code)] // small_file_threshold and num_upload_workers used in future parallel upload
+pub struct S3UploadContext {
+    s3_client: aws_sdk_s3::Client,
+    account_id: String,
+    small_file_threshold: usize,
+    num_upload_workers: usize,
+}
+
+impl S3UploadContext {
+    /// Build from a pre-configured S3 client, account ID, and optional config.
+    /// Reads `small_file_threshold_multiplier` and `s3_max_pool_connections`
+    /// from config to compute thresholds. Falls back to defaults if config is None.
+    pub fn new(
+        s3_client: aws_sdk_s3::Client,
+        account_id: String,
+        config: Option<&IniConfig>,
+    ) -> Result<Self, JobAttachmentsError> {
+        let (small_file_threshold, num_upload_workers) = compute_upload_config(config)?;
+        Ok(Self {
+            s3_client,
+            account_id,
+            small_file_threshold,
+            num_upload_workers,
+        })
+    }
+
+    /// Check whether an object already exists in S3 via HeadObject.
+    pub async fn file_already_uploaded(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> Result<bool, JobAttachmentsError> {
+        match self.s3_client.head_object().bucket(bucket).key(key).send().await {
+            Ok(_) => Ok(true),
+            Err(sdk_err) => {
+                // Extract HTTP status from the raw response if available
+                let status = sdk_err.raw_response()
+                    .map(|r| r.status().as_u16())
+                    .unwrap_or(0);
+
+                if status == 404 {
+                    return Ok(false);
+                }
+                if status == 403 {
+                    return Err(JobAttachmentsError::S3Client {
+                        action: "checking if object exists".into(),
+                        status_code: 403,
+                        bucket: bucket.into(),
+                        key: key.into(),
+                        message: Some(format!(
+                            "Access denied. Ensure that the bucket is in the account {}, \
+                             and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket.",
+                            self.account_id
+                        )),
+                    });
+                }
+                // Check if it's a "not found" via the service error type
+                let service_err = sdk_err.into_service_error();
+                if service_err.is_not_found() {
+                    return Ok(false);
+                }
+                Err(JobAttachmentsError::S3BotoCore {
+                    action: "checking for the existence of an object in the S3 bucket".into(),
+                    details: format!("{service_err}"),
+                })
+            }
+        }
+    }
+
+    /// Upload a single file to S3. Silently skips directories, non-existent
+    /// files, and symlinks. Reports progress via the tracker.
+    pub async fn upload_file_to_s3(
+        &self,
+        local_path: &Path,
+        s3_bucket: &str,
+        s3_upload_key: &str,
+        progress_tracker: Option<&ProgressTracker>,
+    ) -> Result<(), JobAttachmentsError> {
+        // Skip non-existent
+        if !local_path.exists() {
+            return Ok(());
+        }
+        // Skip directories
+        if local_path.is_dir() {
+            return Ok(());
+        }
+        // Reject symlinks
+        match std::fs::symlink_metadata(local_path) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                log::warn!("Skipping symlink: {}", local_path.display());
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!("Failed to stat {}. Skipping: {e}", local_path.display());
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        let body = ByteStream::from_path(local_path).await.map_err(|e| {
+            JobAttachmentsError::AssetSync(format!("Failed to read {}: {e}", local_path.display()))
+        })?;
+
+        let result = self
+            .s3_client
+            .put_object()
+            .bucket(s3_bucket)
+            .key(s3_upload_key)
+            .expected_bucket_owner(&self.account_id)
+            .body(body)
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => {
+                if let Some(tracker) = progress_tracker {
+                    tracker.increase_processed(1, 0);
+                }
+                Ok(())
+            }
+            Err(sdk_err) => {
+                let status_code = sdk_err.raw_response()
+                    .map(|r| r.status().as_u16())
+                    .unwrap_or(0);
+                let service_err = sdk_err.into_service_error();
+                let raw = format!("{service_err}");
+                // Check message() for KMS-related content (SDK Display may not include it)
+                let msg = service_err.message().unwrap_or_default();
+                let full_text = format!("{raw} {msg}");
+
+                match status_code {
+                    403 => {
+                        let guidance = if full_text.contains("kms:") {
+                            "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket \
+                             encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or \
+                             User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+                        } else {
+                            "Forbidden or Access denied. Please check your AWS credentials, and ensure that \
+                             your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
+                        };
+                        Err(JobAttachmentsError::S3Client {
+                            action: "uploading file".into(),
+                            status_code: 403,
+                            bucket: s3_bucket.into(),
+                            key: s3_upload_key.into(),
+                            message: Some(format!("{guidance} {raw} (Failed to upload {})", local_path.display())),
+                        })
+                    }
+                    404 => Err(JobAttachmentsError::S3Client {
+                        action: "uploading file".into(),
+                        status_code: 404,
+                        bucket: s3_bucket.into(),
+                        key: s3_upload_key.into(),
+                        message: Some(format!(
+                            "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account. {raw}"
+                        )),
+                    }),
+                    408 => Err(JobAttachmentsError::S3Client {
+                        action: "uploading file".into(),
+                        status_code: 408,
+                        bucket: s3_bucket.into(),
+                        key: s3_upload_key.into(),
+                        message: Some(format!(
+                            "Request timeout. Please consider retrying later, or ensure your network connection is stable. {raw}"
+                        )),
+                    }),
+                    500 => Err(JobAttachmentsError::S3Client {
+                        action: "uploading file".into(),
+                        status_code: 500,
+                        bucket: s3_bucket.into(),
+                        key: s3_upload_key.into(),
+                        message: Some(format!(
+                            "Internal server error. It might be an issue on AWS's side; please consider retrying later or contacting AWS support. {raw}"
+                        )),
+                    }),
+                    503 => Err(JobAttachmentsError::S3Client {
+                        action: "uploading file".into(),
+                        status_code: 503,
+                        bucket: s3_bucket.into(),
+                        key: s3_upload_key.into(),
+                        message: Some(format!(
+                            "Service unavailable. AWS S3 might be down or experiencing high traffic. Please consider retrying after some time. {raw}"
+                        )),
+                    }),
+                    _ => Err(JobAttachmentsError::S3BotoCore {
+                        action: "uploading file".into(),
+                        details: raw,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// Upload raw bytes to S3 (used for manifest files). Includes ExpectedBucketOwner.
+    pub async fn upload_bytes_to_s3(
+        &self,
+        bytes: &[u8],
+        bucket: &str,
+        key: &str,
+        metadata: Option<std::collections::HashMap<String, String>>,
+    ) -> Result<(), JobAttachmentsError> {
+        let body = ByteStream::from(bytes.to_vec());
+        let mut req = self
+            .s3_client
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .expected_bucket_owner(&self.account_id)
+            .body(body);
+
+        if let Some(meta) = metadata {
+            for (k, v) in meta {
+                req = req.metadata(k, v);
+            }
+        }
+
+        req.send().await.map_err(|err| {
+            let raw = format!("{}", err.into_service_error());
+            JobAttachmentsError::S3BotoCore {
+                action: "uploading binary file".into(),
+                details: raw,
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Verify S3 check cache integrity by sampling up to 30 cached entries
+    /// and confirming they exist in S3. Returns false if any are missing.
+    pub async fn verify_hash_cache_integrity(
+        &self,
+        s3_check_cache_dir: Option<&str>,
+        manifest: &AssetManifest,
+        s3_cas_prefix: &str,
+        s3_bucket: &str,
+    ) -> bool {
+        let cache_dir = s3_check_cache_dir
+            .map(|s| s.to_string())
+            .or_else(crate::caches::default_cache_dir);
+        let cache = match cache_dir.as_deref().map(S3CheckCache::new) {
+            Some(Ok(c)) => c,
+            _ => return true, // No cache → nothing to verify
+        };
+
+        // Build S3 keys for all manifest files, shuffle, sample up to 30
+        let mut s3_keys: Vec<String> = manifest
+            .paths
+            .iter()
+            .map(|f| format!("{}/{}.xxh128", s3_cas_prefix, f.hash))
+            .collect();
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        // Deterministic-ish shuffle using hash of first key + time
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        for i in (1..s3_keys.len()).rev() {
+            let mut h = DefaultHasher::new();
+            seed.hash(&mut h);
+            i.hash(&mut h);
+            let j = (h.finish() as usize) % (i + 1);
+            s3_keys.swap(i, j);
+        }
+
+        let mut sampled = Vec::new();
+        for key in &s3_keys {
+            let cache_key = format!("{}/{}", s3_bucket, key);
+            if cache.get_entry(&cache_key).is_some() {
+                sampled.push(key.clone());
+                if sampled.len() >= 30 {
+                    break;
+                }
+            }
+        }
+
+        for key in &sampled {
+            match self.file_already_uploaded(s3_bucket, key).await {
+                Ok(true) => {}
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    /// Reset the S3 check cache by removing the database file.
+    pub fn reset_s3_check_cache(&self, s3_check_cache_dir: Option<&str>) {
+        let cache_dir = s3_check_cache_dir
+            .map(|s| s.to_string())
+            .or_else(crate::caches::default_cache_dir);
+        if let Some(dir) = cache_dir {
+            let db_path = std::path::Path::new(&dir).join("s3_check_cache.db");
+            if db_path.exists() {
+                log::debug!("Deleting s3_check_cache.db due to integrity mismatch");
+                let _ = std::fs::remove_file(db_path);
+            }
+        }
+    }
+
+    /// Upload all files from a manifest to S3 CAS. Small files in parallel,
+    /// large files serially. Uses S3 check cache to skip already-uploaded files.
+    pub async fn upload_input_files(
+        &self,
+        manifest: &AssetManifest,
+        s3_bucket: &str,
+        source_root: &Path,
+        s3_cas_prefix: &str,
+        progress_tracker: Option<&ProgressTracker>,
+        s3_check_cache_dir: Option<&str>,
+        force_s3_check: Option<bool>,
+    ) -> Result<(), JobAttachmentsError> {
+        let cache_dir = s3_check_cache_dir
+            .map(|s| s.to_string())
+            .or_else(crate::caches::default_cache_dir);
+        let cache = cache_dir.as_deref().map(S3CheckCache::new).transpose()?;
+
+        let force = force_s3_check.unwrap_or(false);
+
+        for file in &manifest.paths {
+            let local_path = source_root.join(&file.path);
+            let s3_key = format!("{}/{}.{}", s3_cas_prefix, file.hash, "xxh128");
+            let cache_key = format!("{}/{}", s3_bucket, s3_key);
+
+            // Check cache unless force
+            if !force {
+                if let Some(ref c) = cache {
+                    if c.get_entry(&cache_key).is_some() {
+                        if let Some(tracker) = progress_tracker {
+                            tracker.increase_skipped(1, file.size as u64);
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // HeadObject check
+            if self.file_already_uploaded(s3_bucket, &s3_key).await? {
+                // Update cache and skip
+                if let Some(ref c) = cache {
+                    c.put_entry(&S3CheckCacheEntry {
+                        s3_key: cache_key,
+                        last_seen_time: current_timestamp(),
+                    });
+                }
+                if let Some(tracker) = progress_tracker {
+                    tracker.increase_skipped(1, file.size as u64);
+                }
+                continue;
+            }
+
+            // Upload
+            self.upload_file_to_s3(&local_path, s3_bucket, &s3_key, progress_tracker)
+                .await?;
+
+            // Update cache
+            if let Some(ref c) = cache {
+                c.put_entry(&S3CheckCacheEntry {
+                    s3_key: cache_key,
+                    last_seen_time: current_timestamp(),
+                });
+            }
+        }
+
+        // Final progress report + cancellation check
+        if let Some(tracker) = progress_tracker {
+            tracker.report_progress();
+            if !tracker.continue_reporting() {
+                return Err(JobAttachmentsError::Cancelled {
+                    message: "File upload cancelled.".into(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn current_timestamp() -> String {
+    format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64()
+    )
+}
+
+/// Orchestrate uploading all manifests to S3. Builds ManifestProperties
+/// and Attachments from the results.
+pub async fn upload_assets(
+    farm_id: &str,
+    queue_id: &str,
+    job_attachment_settings: &JobAttachmentS3Settings,
+    manifests: &[AssetRootManifest],
+    ctx: &S3UploadContext,
+    on_uploading_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    s3_check_cache_dir: Option<&str>,
+    force_s3_check: Option<bool>,
+) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
+    if farm_id.is_empty() || queue_id.is_empty() {
+        return Err(JobAttachmentsError::AssetSync(
+            "upload_assets: Farm or Fleet ID is missing.".into(),
+        ));
+    }
+
+    // Compute totals from manifests that have files
+    let mut total_files: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    for m in manifests {
+        if let Some(ref am) = m.asset_manifest {
+            total_files += am.paths.len() as u64;
+            total_bytes += am.paths.iter().map(|p| p.size as u64).sum::<u64>();
+        }
+    }
+
+    let progress_tracker = ProgressTracker::new(
+        ProgressStatus::UploadInProgress,
+        total_files,
+        total_bytes,
+        on_uploading_assets,
+    );
+
+    let start = std::time::Instant::now();
+    let mut manifest_properties_list = Vec::new();
+
+    for arm in manifests {
+        let output_rel_paths: Vec<String> = arm
+            .outputs
+            .iter()
+            .filter_map(|p| {
+                p.strip_prefix(&arm.root_path)
+                    .ok()
+                    .map(|r| r.to_string_lossy().into_owned())
+            })
+            .collect();
+
+        let mut props = ManifestProperties {
+            root_path: arm.root_path.clone(),
+            root_path_format: PathFormat::host(),
+            file_system_location_name: arm.file_system_location_name.clone(),
+            input_manifest_path: None,
+            input_manifest_hash: None,
+            output_relative_directories: if output_rel_paths.is_empty() {
+                None
+            } else {
+                Some(output_rel_paths)
+            },
+        };
+
+        if let Some(ref manifest) = arm.asset_manifest {
+            let partial_prefix = job_attachment_settings.partial_manifest_prefix(farm_id, queue_id);
+            let cas_prefix = job_attachment_settings.full_cas_prefix()?;
+
+            // Upload manifest bytes first (Python order: manifest, then files)
+            let hash_alg = HashAlgorithm::Xxh128;
+            let manifest_bytes = manifest.encode().into_bytes();
+            let manifest_name_prefix = hash_data(arm.root_path.as_bytes(), hash_alg);
+            let manifest_name = format!("{manifest_name_prefix}_input");
+            let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
+            let full_key = job_attachment_settings.add_root_and_manifest_folder_prefix(&partial_key)?;
+
+            ctx.upload_bytes_to_s3(&manifest_bytes, &job_attachment_settings.s3_bucket_name, &full_key, None)
+                .await?;
+
+            // Verify S3 check cache integrity before uploading files.
+            // Skip when force_s3_check is True — we'll HEAD every file anyway.
+            if force_s3_check != Some(true) {
+                if !ctx.verify_hash_cache_integrity(
+                    s3_check_cache_dir,
+                    manifest,
+                    &cas_prefix,
+                    &job_attachment_settings.s3_bucket_name,
+                ).await {
+                    ctx.reset_s3_check_cache(s3_check_cache_dir);
+                }
+            }
+
+            // Upload input files
+            ctx.upload_input_files(
+                manifest,
+                &job_attachment_settings.s3_bucket_name,
+                Path::new(&arm.root_path),
+                &cas_prefix,
+                Some(&progress_tracker),
+                s3_check_cache_dir,
+                force_s3_check,
+            )
+            .await?;
+
+            props.input_manifest_path = Some(partial_key);
+            props.input_manifest_hash = Some(hash_data(&manifest_bytes, hash_alg));
+        }
+
+        manifest_properties_list.push(props);
+    }
+
+    progress_tracker.set_total_time(start.elapsed().as_secs_f64());
+
+    Ok((
+        progress_tracker.get_summary_statistics(),
+        Attachments {
+            manifests: manifest_properties_list,
+            ..Default::default()
+        },
+    ))
+}
+
+/// Snapshot assets to a local directory instead of S3.
+/// Copies files to `snapshot_dir/Data/` and manifests to `snapshot_dir/Manifests/`.
+pub fn snapshot_assets(
+    farm_id: &str,
+    queue_id: &str,
+    job_attachment_settings: &JobAttachmentS3Settings,
+    snapshot_dir: &Path,
+    manifests: &[AssetRootManifest],
+    on_snapshotting_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
+    if farm_id.is_empty() || queue_id.is_empty() {
+        return Err(JobAttachmentsError::AssetSync(
+            "snapshot_assets: Farm or Fleet ID is missing.".into(),
+        ));
+    }
+
+    let mut total_files: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    for m in manifests {
+        if let Some(ref am) = m.asset_manifest {
+            total_files += am.paths.len() as u64;
+            total_bytes += am.paths.iter().map(|p| p.size as u64).sum::<u64>();
+        }
+    }
+
+    let progress_tracker = ProgressTracker::new(
+        ProgressStatus::SnapshotInProgress,
+        total_files,
+        total_bytes,
+        on_snapshotting_assets,
+    );
+
+    let start = std::time::Instant::now();
+    let data_dir = snapshot_dir.join("Data");
+    std::fs::create_dir_all(&data_dir).map_err(|e| {
+        JobAttachmentsError::AssetSync(format!("Failed to create snapshot Data dir: {e}"))
+    })?;
+
+    let mut manifest_properties_list = Vec::new();
+
+    for arm in manifests {
+        let output_rel_paths: Vec<String> = arm
+            .outputs
+            .iter()
+            .filter_map(|p| {
+                p.strip_prefix(&arm.root_path)
+                    .ok()
+                    .map(|r| r.to_string_lossy().into_owned())
+            })
+            .collect();
+
+        let mut props = ManifestProperties {
+            root_path: arm.root_path.clone(),
+            root_path_format: PathFormat::host(),
+            file_system_location_name: arm.file_system_location_name.clone(),
+            input_manifest_path: None,
+            input_manifest_hash: None,
+            output_relative_directories: if output_rel_paths.is_empty() {
+                None
+            } else {
+                Some(output_rel_paths)
+            },
+        };
+
+        if let Some(ref manifest) = arm.asset_manifest {
+            let partial_prefix = job_attachment_settings.partial_manifest_prefix(farm_id, queue_id);
+
+            // Copy files to Data/
+            for file in &manifest.paths {
+                let src = Path::new(&arm.root_path).join(&file.path);
+                let dest_name = format!("{}.xxh128", file.hash);
+                let dest = data_dir.join(&dest_name);
+                std::fs::copy(&src, &dest).map_err(|e| {
+                    JobAttachmentsError::AssetSync(format!(
+                        "Failed to copy {} to {}: {e}",
+                        src.display(),
+                        dest.display()
+                    ))
+                })?;
+
+                progress_tracker.track_progress(file.size as u64, true);
+                if !progress_tracker.continue_reporting() {
+                    return Err(JobAttachmentsError::Cancelled {
+                        message: "File snapshot cancelled.".into(),
+                    });
+                }
+            }
+
+            // Write manifest
+            let hash_alg = HashAlgorithm::Xxh128;
+            let manifest_bytes = manifest.encode().into_bytes();
+            let manifest_name_prefix = hash_data(arm.root_path.as_bytes(), hash_alg);
+            let manifest_name = format!("{manifest_name_prefix}_input");
+            let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
+
+            let manifest_path = snapshot_dir.join("Manifests").join(&partial_key);
+            if let Some(parent) = manifest_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    JobAttachmentsError::AssetSync(format!("Failed to create manifest dir: {e}"))
+                })?;
+            }
+            std::fs::write(&manifest_path, &manifest_bytes).map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
+            })?;
+
+            props.input_manifest_path = Some(partial_key);
+            props.input_manifest_hash = Some(hash_data(&manifest_bytes, hash_alg));
+        }
+
+        manifest_properties_list.push(props);
+    }
+
+    progress_tracker.set_total_time(start.elapsed().as_secs_f64());
+
+    Ok((
+        progress_tracker.get_summary_statistics(),
+        Attachments {
+            manifests: manifest_properties_list,
+            ..Default::default()
+        },
+    ))
 }
 
 #[cfg(test)]

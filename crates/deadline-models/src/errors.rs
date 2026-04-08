@@ -120,14 +120,23 @@ impl fmt::Display for JobAttachmentsError {
                 key,
                 message,
             } => {
-                write!(f, "S3 {action} failed ({status_code}) bucket={bucket} key={key}")?;
+                write!(
+                    f,
+                    "Error {action} in bucket '{bucket}', Target key or prefix: '{key}', HTTP Status Code: {status_code}"
+                )?;
                 if let Some(msg) = message {
-                    write!(f, ": {msg}")?;
+                    write!(f, ", {msg}")?;
                 }
                 Ok(())
             }
             Self::S3BotoCore { action, details } => {
-                write!(f, "S3 {action}: {details}")
+                write!(
+                    f,
+                    "An issue occurred with AWS service request while {action}: {details}\n\
+                     This could be due to temporary issues with AWS, internet connection, or your AWS credentials. \
+                     Please verify your credentials and network connection. If the problem persists, try again later \
+                     or contact support for further assistance."
+                )
             }
         }
     }
