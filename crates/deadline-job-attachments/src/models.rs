@@ -1,4 +1,5 @@
 use deadline_models::errors::JobAttachmentsError;
+pub use deadline_models::job_attachments::FileSystemLocationType;
 use deadline_models::job_attachments::JobAttachmentsFileSystem;
 use deadline_models::path_format::PathFormat;
 
@@ -408,14 +409,6 @@ impl PathMappingRule {
     pub fn get_hashed_source_path(&self, alg: HashAlgorithm) -> String {
         hash_data(self.source_path.as_bytes(), alg)
     }
-}
-
-// --- FileSystemLocationType ---
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FileSystemLocationType {
-    Local,
-    Shared,
 }
 
 // --- FileSystemLocation ---
