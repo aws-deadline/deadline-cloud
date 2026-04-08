@@ -3,10 +3,11 @@
 Asset manifest handling, S3 upload/download, hash cache, content-addressed
 storage.
 
-## Status: In Progress (batch 8a)
+## Status: Complete
 
-Batch 8a implements the foundational types, hashing, manifest encode/decode,
-and caches. Upload, download, and orchestration follow in work items #9–#10.
+Batch 8a: foundational types, hashing, manifest encode/decode, caches.
+Batch 8b: progress tracking. Batch 8c: path grouping and manifest
+creation. Upload, download, and orchestration follow in work items #9–#10.
 
 ## Modules
 
@@ -289,39 +290,218 @@ needed.
 Tracks file processing progress (hashing, upload, download) and reports
 to callers via callbacks.
 
+#### Design: struct with methods, not closure-on-self
+
+Python's `ProgressTracker.__init__` creates a `track_progress_callback`
+closure that captures `self`. Rust uses a method
+`track_progress(&self, bytes: u64, file_done: bool) -> bool` instead.
+The caller invokes the method directly — no stored closure needed.
+
+#### `ProgressStatus`
+
+Enum representing the current processing stage.
+
+| Variant | `title()` | `verb_in_message()` |
+|---------|-----------|---------------------|
+| `None` | `"NONE"` | `""` |
+| `PreparingInProgress` | `"PREPARING_IN_PROGRESS"` | `"Processed"` |
+| `UploadInProgress` | `"UPLOAD_IN_PROGRESS"` | `"Uploaded"` |
+| `DownloadInProgress` | `"DOWNLOAD_IN_PROGRESS"` | `"Downloaded"` |
+| `SnapshotInProgress` | `"SNAPSHOT_IN_PROGRESS"` | `"Snapshotted"` |
+
+#### `ProgressReportMetadata`
+
+Struct passed to the progress callback on each report.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `ProgressStatus` | Current processing stage |
+| `progress` | `f64` | Percentage (0.0–100.0), one decimal place |
+| `transfer_rate` | `f64` | Bytes/second since last report |
+| `progress_message` | `String` | Human-readable message |
+| `processed_files` | `u64` | Files completed so far |
+
+The `progress_message` format matches Python exactly:
+`"{verb} {completed_bytes} / {total_bytes} of {N} file(s) ({rate_label}: {rate}/s)"`
+
+Where `rate_label` is `"Hashing speed"` for `PreparingInProgress`,
+`"Transfer rate"` for all others. Byte sizes use `human_readable_file_size`
+from `deadline-common`.
+
 #### `SummaryStatistics`
 
-Struct with: `total_time`, `total_files`, `total_bytes`, `processed_files`,
-`processed_bytes`, `skipped_files`, `skipped_bytes`, `transfer_rate`.
-`aggregate()` combines two instances.
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_time` | `f64` | Seconds (fractional) |
+| `total_files` | `u64` | Total files to process |
+| `total_bytes` | `u64` | Total bytes to process |
+| `processed_files` | `u64` | Files processed |
+| `processed_bytes` | `u64` | Bytes processed |
+| `skipped_files` | `u64` | Files skipped (cached) |
+| `skipped_bytes` | `u64` | Bytes skipped |
+| `transfer_rate` | `f64` | Bytes/second overall |
+
+| Method | Behavior |
+|--------|----------|
+| `aggregate(&mut self, other: &SummaryStatistics)` | Sums all fields; recalculates `transfer_rate` as `processed_bytes / total_time`. |
+| `Display` | Matches Python's `__str__` exactly: processed count, skipped count, total time, rate. Singular "file" when count is 1. |
+
+`Display` output format (matches Python):
+```
+Processed {N} file(s) totaling {size}.
+Skipped re-processing {N} files totaling {size}.
+Total processing time of {time} seconds at {rate}/s.
+```
 
 #### `DownloadSummaryStatistics`
 
-Extends `SummaryStatistics` (via composition) with
-`file_counts_by_root_directory` and `downloaded_files`.
+Composition over `SummaryStatistics` (not inheritance — Rust doesn't have it).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stats` | `SummaryStatistics` | Base statistics |
+| `file_counts_by_root_directory` | `BTreeMap<String, usize>` | Download count per root |
+| `downloaded_files` | `Vec<String>` | All downloaded file paths, sorted |
+
+`aggregate` sums the base stats and merges the root directory counts.
 
 #### `ProgressTracker`
 
-Struct holding:
-- Callback: `Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>`
-- Counters: processed/skipped files and bytes
-- Timing: uses `Instant` (monotonic) instead of Python's `time.perf_counter()`
-- Thread safety: `Mutex` around mutable state
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `ProgressStatus` | Current stage |
+| `total_files` | `u64` | Total files to process |
+| `total_bytes` | `u64` | Total bytes to process |
+| `callback` | `Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>` | Progress callback |
+| `continue_reporting` | `bool` | `false` after cancellation |
+| `processed_files` | `u64` | Files processed |
+| `processed_bytes` | `u64` | Bytes processed |
+| `skipped_files` | `u64` | Files skipped |
+| `skipped_bytes` | `u64` | Bytes skipped |
+| `total_time` | `f64` | Set by caller after processing completes |
+| `completed_files_in_chunk` | `u64` | Files since last report |
+| `reporting_files_per_chunk` | `u64` | Chunk threshold (1 or 50) |
+| `last_report_time` | `Option<Instant>` | Monotonic timestamp of last report |
+| `last_report_processed_bytes` | `u64` | Bytes at last report (for rate calc) |
 
-The callback returns `false` to signal cancellation. The tracker sets
-`continue_reporting = false` and subsequent calls to `report_progress()`
-return `false` immediately.
+All mutable state is behind a `Mutex` for thread safety.
 
-Reporting fires when: (a) the time interval has elapsed (1s default),
-(b) a chunk of files has completed (50 default), or (c) progress reaches
-100%.
+| Method | Behavior |
+|--------|----------|
+| `new(status, total_files, total_bytes, callback)` | Sets `reporting_files_per_chunk` to 50 if `total_files >= 50`, else 1. |
+| `set_total_files(files, bytes)` | Updates totals and recalculates chunk threshold. |
+| `increase_processed(num_files, file_bytes)` | Increments processed counters and `completed_files_in_chunk`. |
+| `increase_skipped(num_files, file_bytes)` | Increments skipped counters and `completed_files_in_chunk`. |
+| `report_progress() -> bool` | Fires callback if: time elapsed ≥ 1s, OR chunk complete, OR 100% done. Returns `false` if cancelled. |
+| `track_progress(bytes, file_done) -> bool` | Increments `processed_bytes`; if `file_done`, increments `processed_files` and chunk counter. Calls `report_progress`. |
+| `get_summary_statistics() -> SummaryStatistics` | Snapshot of current state. `transfer_rate = processed_bytes / total_time`. |
+
+**Cancellation:** When the callback returns `false`, `continue_reporting`
+is set to `false`. All subsequent calls to `report_progress()` and
+`track_progress()` return `false` without invoking the callback.
+
+**Transfer rate in reports:** Computed as bytes-since-last-report divided
+by seconds-since-last-report (instantaneous rate, not cumulative). This
+matches Python's `_get_progress_report_metadata`.
 
 ---
 
-### `upload` — Path grouping and manifest creation (batch 8c)
+### `upload` — Path grouping, manifest creation, and S3 upload
 
-Not yet implemented. Will contain `prepare_paths_for_upload`,
-`hash_assets_and_create_manifest`, and S3 upload logic.
+Batch 8c implements path grouping and manifest creation as free functions.
+S3 upload logic follows in work item #9.
+
+#### Design: free functions, not a god-class
+
+Python uses `S3AssetManager` as a class holding farm_id, queue_id,
+session, and job_attachment_settings, with methods for path grouping,
+hashing, uploading, and snapshotting. The path grouping and hashing
+methods don't use any S3 state — they only need filesystem access and
+the hash cache.
+
+Rust implements path grouping and manifest creation as free functions.
+No struct is needed until S3 upload arrives in #9 (Principle 3 — every
+abstraction must earn its keep). The functions take their dependencies
+as parameters.
+
+#### Storage profile types
+
+`StorageProfile` and `FileSystemLocation` are added to `models.rs`:
+
+`FileSystemLocationType` — enum: `Local`, `Shared`.
+
+`FileSystemLocation` — struct with `name: String`, `path: String`,
+`location_type: FileSystemLocationType`.
+
+`StorageProfile` — struct with
+`file_system_locations: Vec<FileSystemLocation>`.
+
+#### `prepare_paths_for_upload`
+
+```
+fn prepare_paths_for_upload(
+    input_paths: &[String],
+    output_paths: &[String],
+    referenced_paths: &[String],
+    storage_profile: Option<&StorageProfile>,
+    require_paths_exist: bool,
+) -> Result<AssetUploadGroup, JobAttachmentsError>
+```
+
+Groups input/output/referenced paths by asset root, respecting storage
+profile LOCAL and SHARED locations.
+
+Behavior:
+1. Filter out empty strings from all path lists.
+2. For each input path, resolve to absolute (without following symlinks,
+   using `std::path::absolute` + normalize).
+3. If the path is relative to a SHARED location, skip it.
+4. If the path is relative to a LOCAL location, group under that
+   location's root (most specific match wins — longest path).
+5. Otherwise, group under the filesystem root (top-level directory
+   component).
+6. Non-existent input files: if `require_paths_exist` is true, collect
+   and return error. If false, move to referenced paths with a warning.
+7. Directories classified as input files → error.
+8. Same SHARED/LOCAL logic applies to output and referenced paths.
+9. After grouping, compute `root_path` as `common_path` of all paths
+   in each group. If the common path is a file, use its parent.
+10. Return `AssetUploadGroup` with groups sorted by `(root_path,
+    file_system_location_name)`, plus total file count and byte count.
+
+#### `hash_assets_and_create_manifest`
+
+```
+fn hash_assets_and_create_manifest(
+    asset_groups: &[AssetRootGroup],
+    total_input_files: u64,
+    total_input_bytes: u64,
+    hash_cache_dir: Option<&str>,
+    on_preparing_to_submit: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+) -> Result<(SummaryStatistics, Vec<AssetRootManifest>), JobAttachmentsError>
+```
+
+For each `AssetRootGroup`:
+1. If the group has input files, hash each file using the hash cache.
+   - Cache hit (same mtime): use cached hash, mark as skipped.
+   - Cache miss or mtime changed: hash file, update cache, mark as
+     processed.
+2. Create an `AssetManifest` from the hashed files. Paths are stored
+   as POSIX-style relative paths (`path.as_posix()` equivalent).
+   File mtime is `trunc(st_mtime_ns / 1000)` (microseconds).
+3. If the group has no input files (only outputs), the manifest is
+   `None`.
+4. Build `AssetRootManifest` with the manifest, root path, location
+   name, and sorted output list.
+5. Report progress via `ProgressTracker` after each file.
+6. If the callback returns `false`, return `Cancelled` error.
+
+Returns `(SummaryStatistics, Vec<AssetRootManifest>)`.
+
+**No stat cache.** Python uses `_FileStatCache` with `@lru_cache` to
+avoid redundant `stat()` calls. Rust's `fs::metadata` is a direct
+syscall (~1-2μs) vs Python's FFI overhead (~10-50μs). The cache
+overhead would exceed the syscall cost.
 
 ### `download` — File download from S3 CAS (work item #9)
 

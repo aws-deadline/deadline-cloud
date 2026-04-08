@@ -5,55 +5,36 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#8 — Job attachments: core** (batch 8a complete, 8b/8c not started)
-
-### Current Step
-
-Batch 8a complete (Steps 0–7). Next session should start batch 8b or 8c.
-
-### Batch 8a — What Was Done
-
-Implemented foundational types, hashing, manifest encode/decode, and
-caches in `deadline-job-attachments`. 80 Level 1 tests, all passing.
-
-**Files changed:**
-- `crates/deadline-job-attachments/Cargo.toml` — added xxhash-rust,
-  rusqlite, uuid, serde, serde_json, log dependencies
-- `crates/deadline-job-attachments/src/asset_manifests.rs` — HashAlgorithm,
-  hash_file, hash_data, ManifestVersion, ManifestPath, AssetManifest
-  (canonical JSON encode, UTF-16 BE path sort, ensure_ascii),
-  decode_manifest with full validation
-- `crates/deadline-job-attachments/src/models.rs` — JobAttachmentS3Settings,
-  ManifestProperties, Attachments, PathMappingRule,
-  StorageProfileOperatingSystemFamily, PathFormat extensions, helpers
-- `crates/deadline-job-attachments/src/caches.rs` — HashCache (hashesV5),
-  S3CheckCache (s3checkV1), retry with jitter, WAL mode
-- `docs/specs/deadline-job-attachments.md` — full design spec
-- `docs/designs/rust-rewrite/README.md` — status updated to In progress
-
-**Bug fixes over Python:**
-1. Hash cache mtime precision — integer nanoseconds in hashesV5 instead
-   of lossy datetime string in hashesV4
-2. Manifest path double-sort — sorted once at construction by canonical
-   UTF-16 BE comparator
-
-**Test spec coverage:** §19 (30 cases), §24 (20 cases), §25 (30 cases)
-
-### Remaining Batches
-
-| Batch | Scope | Test Spec Sections | Status |
-|-------|-------|--------------------|--------|
-| 8a | Types, hashing, manifest encode/decode, caches | §19, §24, §25 | ✅ Done |
-| 8b | Progress tracker | §33 | Not started |
-| 8c | Path grouping, manifest creation | §20 | Not started |
-
-### What's Next
-
-Pick up batch 8b (progress tracker) or 8c (path grouping & manifest
-creation). Both are independent — can be done in either order. Batch 8c
-depends on 8b for the progress callback during hashing.
+None. Work item #8 is complete. Next session should consult the Work
+Items table in `README.md` and pick the first row with status
+"Not started" whose dependencies are all "✅ Done".
 
 ## Recently Completed
+
+**#8 — Job attachments: core** (all batches complete, marked ✅ Done)
+
+Batch 8a: foundational types, hashing, manifest encode/decode, caches
+(80 Level 1 tests). Batch 8b: progress tracker (17 Level 1 tests).
+Batch 8c: path grouping and manifest creation (21 Level 1 tests).
+Total: 118 tests.
+
+**Files changed (8b/8c batch):**
+- `crates/deadline-job-attachments/src/progress_tracker.rs` — ProgressStatus,
+  ProgressReportMetadata, SummaryStatistics (with Display),
+  DownloadSummaryStatistics, ProgressTracker with callback-based reporting
+  and cancellation
+- `crates/deadline-job-attachments/src/upload.rs` — prepare_paths_for_upload
+  (path grouping with storage profile support),
+  hash_assets_and_create_manifest (hash cache integration, progress
+  reporting, cancellation)
+- `crates/deadline-job-attachments/src/models.rs` — added
+  FileSystemLocationType, FileSystemLocation, StorageProfile,
+  AssetRootGroup, AssetUploadGroup, AssetRootManifest
+- `docs/specs/deadline-job-attachments.md` — updated status, expanded
+  progress_tracker and upload module specs
+- `docs/designs/rust-rewrite/README.md` — #8 marked ✅ Done
+
+**Test spec coverage:** §19 (30), §20 (21), §24 (20), §25 (30), §32 (17)
 
 **#12b — Job search**, **#15b — Job get search term**,
 **#15c — Job logs auto-selection messages** (batched, marked ✅ Done)

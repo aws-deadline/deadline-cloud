@@ -368,6 +368,60 @@ impl PathMappingRule {
     }
 }
 
+// --- FileSystemLocationType ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileSystemLocationType {
+    Local,
+    Shared,
+}
+
+// --- FileSystemLocation ---
+
+#[derive(Debug, Clone)]
+pub struct FileSystemLocation {
+    pub name: String,
+    pub path: String,
+    pub location_type: FileSystemLocationType,
+}
+
+// --- StorageProfile ---
+
+#[derive(Debug, Clone)]
+pub struct StorageProfile {
+    pub file_system_locations: Vec<FileSystemLocation>,
+}
+
+// --- AssetRootGroup ---
+
+#[derive(Debug, Clone)]
+pub struct AssetRootGroup {
+    pub file_system_location_name: Option<String>,
+    pub root_path: String,
+    pub inputs: std::collections::BTreeSet<std::path::PathBuf>,
+    pub outputs: std::collections::BTreeSet<std::path::PathBuf>,
+    pub references: std::collections::BTreeSet<std::path::PathBuf>,
+}
+
+// --- AssetUploadGroup ---
+
+#[derive(Debug, Clone)]
+pub struct AssetUploadGroup {
+    pub asset_groups: Vec<AssetRootGroup>,
+    pub total_input_files: u64,
+    pub total_input_bytes: u64,
+}
+
+// --- AssetRootManifest ---
+
+#[derive(Debug, Clone)]
+pub struct AssetRootManifest {
+    pub file_system_location_name: Option<String>,
+    pub root_path: String,
+    pub asset_manifest: Option<crate::asset_manifests::AssetManifest>,
+    pub outputs: Vec<std::path::PathBuf>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
