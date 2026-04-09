@@ -106,6 +106,13 @@ for the worker agent.
   and other CLI commands exist, many library behaviors become CLI-reachable.
   Add `assert_cmd_snapshot!` tests for those paths. Keep Level 1 tests only
   for behaviors too low-level to assert through CLI output.
+- **Realistic test IDs**: Replace hardcoded pseudo-IDs in tests (e.g.
+  `"farm-1"`, `"queue-1"`, `"job-1"`, `"step-1"`, `"task-1"`,
+  `"session-1"`, `"sessionaction-1"`, `"fleet-1"`) with pseudorandomly
+  generated IDs that follow the actual Deadline Cloud ID format (e.g.
+  `farm-0123456789abcdef0123456789abcdef`,
+  `queue-0123456789abcdef0123456789abcdef`). Add a test helper that
+  generates realistic IDs per resource type. Applies across all crates.
 - **Crate rename discussion**: Consider renaming `deadline-client` to
   something more specific (e.g. `deadline-api` or `deadline-service`).
   Currently it holds Deadline Cloud API calls, session/credential management,

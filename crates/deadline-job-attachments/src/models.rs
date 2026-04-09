@@ -411,6 +411,26 @@ impl PathMappingRule {
     }
 }
 
+// --- FileConflictResolution ---
+
+/// How to resolve conflicts when a downloaded file already exists locally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileConflictResolution {
+    Skip,
+    Overwrite,
+    CreateCopy,
+}
+
+// --- UploadManifestInfo ---
+
+/// Result of uploading a single manifest via `attachment_upload`.
+#[derive(Debug, Clone)]
+pub struct UploadManifestInfo {
+    pub output_manifest_path: String,
+    pub output_manifest_hash: String,
+    pub source_path: Option<String>,
+}
+
 // --- FileSystemLocation ---
 
 #[derive(Debug, Clone)]

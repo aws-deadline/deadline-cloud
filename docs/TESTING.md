@@ -115,6 +115,50 @@ necessary in the test file and keep the mock surface as small as possible.
 
 ---
 
+## Cleaning Up Test Artifacts
+
+Most tests write files inside a `tempfile::TempDir`, which automatically
+deletes its contents on drop. No manual cleanup needed.
+
+Some code under test writes to locations the test doesn't control — for
+example, `attachment_download` falls back to the current working directory
+when no path mapping rule matches. These files are **not** inside a
+`TempDir` and will accumulate across test runs if not cleaned up.
+
+Use an RAII guard for cleanup. The `Drop` impl runs when the guard goes
+out of scope — even if the test panics — just like pytest's `yield`
+fixtures:
+
+```rust
+/// RAII guard that removes a directory on drop (even on panic).
+struct CleanupDir(PathBuf);
+
+impl Drop for CleanupDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[tokio::test]
+async fn test_that_writes_to_cwd() {
+    // Guard created early — cleanup runs no matter how the test exits
+    let _cleanup = CleanupDir(std::env::current_dir().unwrap().join("output_dir"));
+
+    // ... test code that creates "output_dir" in cwd ...
+
+    assert!(result.is_ok());
+    // _cleanup dropped here → output_dir removed
+}
+```
+
+**Rules:**
+- If the code under test writes inside a `TempDir` path → no action needed
+- If it writes to cwd or another fixed location → add a `CleanupDir` guard
+- Use PID-based unique names (`format!("_test_{}", std::process::id())`)
+  to avoid collisions between parallel test runs
+
+---
+
 ## Test Levels
 
 ### Level 1: Direct Unit Tests

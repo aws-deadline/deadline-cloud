@@ -9,7 +9,75 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Current Step
 
-Batch 9b complete. Proceed to batch 9c (download engine, §22: 34 cases).
+Batch 9d complete. Proceeding to batch 9e (CLI commands + manifest API).
+
+### Batch 9d — Step 6 Audit
+
+**Test gap analysis (§30):** Found 10 missing test cases. Added 8 new
+tests covering cases 6, 8, 10, 12, 17, 20, 21, 22. Cases 18-19
+(non-ASCII metadata, file-system-location-name) are metadata assertions
+that require wiremock request inspection — deferred to CLI-level tests
+in batch 9e where the full flow is exercised.
+
+**Bug fix:** `attachment_upload` was passing `rule.source_path` to
+`upload_input_files` as the local root. Python passes
+`rule.destination_path` (the local machine path after mapping).
+`source_path` is the original submitting machine's path. Fixed.
+
+**Test cleanup fix:** Tests using the cwd fallback path (cases 2, 3)
+were creating directories in the crate root (`m.manifest/`,
+`m1.manifest/`, `unmatched_manifest/`). Fixed by:
+- Using unique PID-based manifest names to avoid parallel test collisions
+- Adding explicit cleanup (`fs::remove_dir_all`) after each test
+- Restructuring case 6 to use path mapping rules (it tests S3 URI
+  parsing, not the cwd fallback)
+
+**Test count:** 26 → 34 tests. Full crate: 228 tests, 0 failures,
+0 leftover files.
+
+### Batch 9c — Step 4 Implementation
+
+Added `download.rs` module to `deadline-job-attachments` with:
+
+**Public functions:**
+- `merge_asset_manifests(&[AssetManifest]) -> Option<AssetManifest>` —
+  merges manifests, later paths win, recalculates total_size.
+- `download_file(...)` — async, downloads single file from CAS with
+  conflict resolution (Skip/Overwrite/CreateCopy), 404 retry without
+  algorithm suffix, KMS/non-KMS error guidance, mtime from manifest.
+- `download_files_from_manifests(...)` — async, iterates manifests by
+  root, downloads all files, returns DownloadSummaryStatistics.
+- `get_output_manifests_by_asset_root(...)` — async, lists S3 objects,
+  downloads manifests, groups by asset root, merges chronologically.
+
+**Public types:**
+- `CollisionState` — `Arc<Mutex<HashMap<String, i32>>>` for CreateCopy
+  collision tracking.
+- `FileConflictResolution` enum added to `models.rs`.
+
+**Internal helpers:**
+- `s3_download_error` — builds S3Client/S3BotoCore errors matching
+  upload patterns exactly (403/404/408/500/503 guidance).
+- `s3_get_object_bytes` — GetObject with KMS detection via both
+  Display and message() (matching upload's ProvideErrorMetadata pattern).
+- `get_new_copy_file_path` — atomic CreateCopy via OpenOptions::create_new.
+- `get_asset_root_from_metadata` — prefers asset-root-json, falls back
+  to asset-root.
+- `get_output_manifest_prefix` — builds S3 prefix from IDs.
+- `list_manifest_keys_from_s3` — paginated ListObjectsV2.
+- `select_latest_manifests_per_task` — alphabetical sort of
+  timestamp_sessionaction_id folders.
+- `download_manifest_from_s3` — GetObject + decode + metadata extraction.
+- `get_manifests_by_session_action_id` — regex search in task then step
+  prefix.
+
+**Other changes:**
+- `HashAlgorithm::as_str()` added to `asset_manifests.rs`.
+- `ProgressTracker::processed_files()` accessor added.
+- Dependencies: `filetime`, `regex` added to Cargo.toml.
+
+All 21 download tests pass. 149 lib tests pass. 24 upload tests pass.
+Full workspace green (0 failures).
 
 ### Batching Plan
 
@@ -23,10 +91,75 @@ Batch 9b complete. Proceed to batch 9c (download engine, §22: 34 cases).
 
 ### What's Next
 
-Batch 9b complete. Proceed to batch 9c: download engine
-(`download_file`, `download_files_from_manifests`,
-`merge_asset_manifests`, `get_output_manifests_by_asset_root`).
-§22: 34 cases.
+Batch 9d complete. Proceed to batch 9e: CLI commands
+(`deadline attachment download`, `deadline attachment upload`) and
+manifest API functions (`glob_files`, `manifest_snapshot`,
+`manifest_diff`, `manifest_upload`, `manifest_download`,
+`manifest_merge`, `write_manifest`). §31: 45 cases, §46: 15 cases.
+
+### Batch 9d — Complete Summary
+
+**New files:**
+- `crates/deadline-job-attachments/src/api.rs` — public API module
+- `crates/deadline-job-attachments/tests/api_tests.rs` — 34 Level 1 tests
+
+**Modified files:**
+- `crates/deadline-job-attachments/src/lib.rs` — added `pub mod api`
+- `crates/deadline-job-attachments/src/models.rs` — added `UploadManifestInfo`
+- `docs/specs/deadline-job-attachments.md` — added `api` module section,
+  updated status, updated Known Gaps
+- `docs/designs/rust-rewrite/HANDOFF.md` — updated throughout
+
+**Public API:**
+- `read_manifests(manifest_paths) -> HashMap<String, AssetManifest>`
+- `process_path_mapping(path_mapping_rules?, root_dirs) -> Vec<PathMappingRule>`
+- `attachment_download(manifests, s3_root_uri, s3_client, account_id,
+  path_mapping_rules?, callback?, conflict_resolution) -> DownloadSummaryStatistics`
+- `attachment_upload(manifests, s3_root_uri, s3_client, account_id,
+  root_dirs, path_mapping_rules?, upload_manifest_path?, callback?,
+  config?) -> Vec<UploadManifestInfo>`
+
+**Test coverage:** 34 tests covering §30 cases 1-17, 20-36.
+Cases 18-19 (non-ASCII metadata, file-system-location-name wiremock
+request inspection) deferred to CLI-level tests in batch 9e.
+
+**Bug fixed:** `attachment_upload` was passing `rule.source_path` to
+`upload_input_files` instead of `rule.destination_path`.
+
+**Test cleanup:** Added `CleanupDir` RAII guard for tests that write
+to cwd (Drop runs on panic, like pytest fixtures). Audited all test
+files across workspace — no other leaks found.
+
+Full crate: 228 tests, 0 failures, 0 leftover files.
+
+### Batch 9d — Step 2 Crate Spec Update
+
+Updated `docs/specs/deadline-job-attachments.md`:
+- Status line updated to include batch 9d
+- Added `api` module section with design rationale, `UploadManifestInfo`
+  type, and all four function signatures with behavior descriptions
+- Removed `UploadManifestInfo`, `ManifestPathGroup`, `OutputFile`, and
+  `_get_unique_dest_dir_name` from Known Gaps (addressed by 9d or no
+  longer needed as separate types)
+
+### Batch 9d — Step 1 Review
+
+Audited existing `upload.rs`, `download.rs`, `models.rs` against Python
+source for the functions batch 9d builds on. No behavior gaps found:
+
+- `upload_assets` correctly passes `None` for manifest metadata (matches
+  Python's `S3AssetManager.upload_assets` which also omits metadata;
+  metadata is only passed in the `_attachment_upload` path, which is
+  batch 9d scope)
+- `download_files_from_manifests` signature and behavior match Python
+- `merge_asset_manifests` correctly handles empty/single/multiple cases
+- `PathMappingRule.get_hashed_source_path` matches Python's UTF-8 hash
+- `JobAttachmentS3Settings.from_s3_root_uri` parsing matches Python
+- `ManifestProperties.as_output_metadata` handles ASCII/non-ASCII correctly
+- S3 error guidance messages match Python
+- `FileConflictResolution` all three variants correct
+
+No improvements needed. Proceeding to Step 2.
 
 ### Batch 9b — Steps 5-6: Python Verification + Refactor
 

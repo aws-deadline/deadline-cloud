@@ -20,6 +20,8 @@ aws-config = { workspace = true }
 aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
 aws-sdk-sts = { workspace = true }
 tokio = { workspace = true }
+filetime = "0.2"
+regex = "1"
 
 [dev-dependencies]
 tempfile = { workspace = true }

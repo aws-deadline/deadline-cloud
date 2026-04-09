@@ -13,8 +13,14 @@ pub enum HashAlgorithm {
 
 impl fmt::Display for HashAlgorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl HashAlgorithm {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Xxh128 => write!(f, "xxh128"),
+            Self::Xxh128 => "xxh128",
         }
     }
 }

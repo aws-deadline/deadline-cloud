@@ -8,8 +8,12 @@ storage.
 Batch 8a: foundational types, hashing, manifest encode/decode, caches.
 Batch 8b: progress tracking. Batch 8c: path grouping and manifest
 creation. Batch 9a: S3 client infrastructure. Batch 9b: upload engine
-(`S3UploadContext`, `upload_assets`, `snapshot_assets`). Download and
-orchestration follow in batches 9c–9e and work item #10.
+(`S3UploadContext`, `upload_assets`, `snapshot_assets`). Batch 9c:
+download engine (`download_file`, `download_files_from_manifests`,
+`merge_asset_manifests`, `get_output_manifests_by_asset_root`). Batch 9d:
+public API (`attachment_download`, `attachment_upload`,
+`process_path_mapping`, `read_manifests`).
+CLI commands follow in batch 9e and work item #10.
 
 ## Modules
 
@@ -662,12 +666,27 @@ that have cache entries). This matches Python's `random.shuffle` +
 Downloads files from S3 content-addressed storage by hash, with conflict
 resolution, manifest merging, and output manifest retrieval.
 
+#### Design: free functions + `FileConflictResolution` enum
+
+Python splits download across `download_file` (free function),
+`download_files_from_manifests` (free function), and `OutputDownloader`
+(class). Rust uses free functions for the core engine (batch 9c) and
+defers `OutputDownloader` to batch 9d where the CLI consumer needs it.
+
+`FileConflictResolution` is an enum in `models.rs`: `Skip`, `Overwrite`,
+`CreateCopy`. Python uses integer-valued enum members (0-3) with a
+`NOT_SELECTED` variant; Rust omits `NOT_SELECTED` (callers pass
+`Option<FileConflictResolution>` if selection is optional).
+
+Collision tracking for `CreateCopy` uses `Arc<Mutex<HashMap<String, i32>>>`
+shared across concurrent downloads. Python uses `threading.Lock` +
+`DefaultDict[str, int]` — same semantics.
+
 #### S3 interaction model
 
-All S3 operations use queue-scoped credentials (assumed via
-`GetQueueUserBoto3Session`). Every S3 call includes
-`ExpectedBucketOwner` set to the caller's account ID (from STS
-`GetCallerIdentity`) to prevent confused deputy attacks.
+Every S3 call includes `ExpectedBucketOwner` set to the caller's
+account ID (from STS `GetCallerIdentity`). The S3 client and account
+ID are passed as parameters — no struct needed (Principle 3).
 
 Files are stored in CAS at `{rootPrefix}/Data/{hash}.{algorithm}`.
 Download constructs the S3 key from the manifest entry's hash and
@@ -676,67 +695,125 @@ algorithm, then calls `GetObject`. If 404, retries without the
 
 #### `download_file`
 
-Downloads a single file from CAS to a local path.
+Async. Downloads a single file from CAS to a local path.
 
+```
+pub async fn download_file(
+    file: &ManifestPath,
+    hash_algorithm: HashAlgorithm,
+    local_download_dir: &str,
+    s3_client: &aws_sdk_s3::Client,
+    s3_bucket: &str,
+    cas_prefix: Option<&str>,
+    account_id: &str,
+    progress_tracker: Option<&ProgressTracker>,
+    file_conflict_resolution: FileConflictResolution,
+    collision_state: &CollisionState,
+) -> Result<(i64, Option<PathBuf>), JobAttachmentsError>
+```
+
+Behavior:
 1. Construct S3 key: `{cas_prefix}/{hash}.{algorithm}`
 2. Resolve local path: `{local_download_dir}/{manifest_path}`
 3. If file exists locally, apply conflict resolution:
    - `Skip` → return `(file_bytes, None)`
-   - `Overwrite` → proceed (overwrite)
-   - `CreateCopy` → generate unique copy name with collision tracking
+   - `Overwrite` → proceed
+   - `CreateCopy` → generate unique copy name via atomic
+     `OpenOptions::create_new(true)` in a loop with `(N)` suffix,
+     tracked in shared `CollisionState`
 4. Create parent directories
-5. Download via S3 `GetObject` with progress callback
-6. On 404: retry with key `{cas_prefix}/{hash}` (no algorithm suffix)
-7. On 403: error with `s3:GetObject` or `kms:Decrypt` guidance
-8. Set file mtime from manifest (microseconds → seconds)
-9. Return `(file_bytes, local_path)`
+5. Download via S3 `GetObject` with `ExpectedBucketOwner`
+6. Write content directly to target path
+7. On 404: retry with key `{cas_prefix}/{hash}` (no algorithm suffix)
+8. On 403: S3Client error with `s3:GetObject` or `kms:Decrypt` guidance
+9. On 408/500/503: S3Client error with retry/network guidance
+10. Set file mtime from manifest (microseconds → seconds) via `filetime`
+11. Return `(file_bytes, local_path)`
 
-Progress callback integration: the download handler calls
-`progress_tracker.track_progress(bytes, false)` for each chunk, and
-the tracker can cancel by returning `false`.
+Progress: calls `progress_tracker.increase_processed` after each file.
+Cancellation checked via `report_progress` return value.
+
+S3 error handling matches upload patterns exactly (same guidance
+messages for 403/404/408/500/503).
 
 #### `download_files_from_manifests`
 
-Parallel download of all files across multiple manifests.
+Async. Downloads all files across multiple manifests.
 
+```
+pub async fn download_files_from_manifests(
+    s3_bucket: &str,
+    manifests_by_root: &HashMap<String, AssetManifest>,
+    cas_prefix: Option<&str>,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+    on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    conflict_resolution: FileConflictResolution,
+) -> Result<DownloadSummaryStatistics, JobAttachmentsError>
+```
+
+Behavior:
 1. Compute total files and bytes across all manifests
 2. Create `ProgressTracker` with `DownloadInProgress` status
 3. For each `(local_root, manifest)` pair:
-   - Download all files in parallel (bounded concurrency)
+   - Download each file via `download_file`
    - Track downloaded file paths per root
-4. Return `DownloadSummaryStatistics` with per-root file counts
+   - On cancellation: return `Cancelled` error
+4. Final progress report at 100%
+5. Return `DownloadSummaryStatistics` with per-root file counts
+
+Currently sequential per file. Parallel download via `JoinSet` +
+`Semaphore` deferred to performance optimization (same pattern as
+upload engine).
 
 #### `merge_asset_manifests`
 
-Merges multiple manifests into one. Later manifests' paths win on
-conflict (used for output-over-input merging).
+Pure function. Merges multiple manifests into one.
 
 - Empty list → `None`
-- Single manifest → return as-is
-- Multiple: collect paths into a map keyed by path string; later
-  entries overwrite earlier ones. Recalculate `total_size`.
-- Error if manifests have different hash algorithms.
+- Single manifest → return as-is (clone)
+- Multiple: collect paths into `IndexMap` keyed by path string;
+  later entries overwrite earlier ones. Recalculate `total_size`.
+- Error if manifests have different hash algorithms
+  (`JobAttachmentsError::AssetSync`).
 
 #### `get_output_manifests_by_asset_root`
 
-Lists and downloads output manifests from S3, grouped by asset root.
+Async. Lists and downloads output manifests from S3, grouped by root.
 
-1. Build S3 prefix from farm/queue/job (optionally step/task)
-2. `ListObjectsV2` to find all manifest keys under the prefix
-3. Download each manifest in parallel, extracting asset root from
-   S3 object metadata (`asset-root` or `asset-root-json`)
-4. Group by asset root, merge chronologically (oldest first, so
-   newer files overwrite older ones)
-5. Return `{asset_root: [merged_manifest]}`
+```
+pub async fn get_output_manifests_by_asset_root(
+    s3_settings: &JobAttachmentS3Settings,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    step_id: Option<&str>,
+    task_id: Option<&str>,
+    session_action_id: Option<&str>,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError>
+```
 
-Output manifests are per-root-path, not per-output-directory. Even
-if a manifest entry has multiple `outputRelativeDirectories`, they
-all collect into one manifest per root path.
+Behavior:
+1. If `session_action_id` provided: require `step_id` and `task_id`,
+   search by regex in task then step prefix
+2. Otherwise: build S3 prefix from farm/queue/job (optionally step/task)
+3. `ListObjectsV2` (paginated) to find manifest keys
+4. `_get_tasks_manifests_keys_from_s3` selects latest per task
+   (alphabetical sort of `timestamp_sessionaction_id` folders)
+5. Download each manifest via `GetObject`, extract asset root from
+   S3 object metadata (`asset-root-json` preferred, `asset-root` fallback)
+6. Group by asset root, merge chronologically (oldest first by
+   `LastModified`, so newer files overwrite older ones)
+7. Return `{asset_root: [merged_manifest]}`
 
-#### `OutputDownloader`
+Missing asset root in metadata → `MissingAssetRoot` error.
 
-Orchestrates output download with root path remapping for cross-OS
-scenarios.
+#### `OutputDownloader` (batch 9d)
+
+Deferred. Orchestrates output download with root path remapping for
+cross-OS scenarios. Needed by CLI `job download-output` command.
 
 - Constructed with S3 settings, farm/queue/job/step/task IDs
 - `get_output_paths_by_root()` → paths grouped by asset root
@@ -785,6 +862,135 @@ concurrent multipart upload/download (proven in S3 spike).
   (from config)
 - Upload workers: `s3_max_pool_connections / min(multiplier, 10)`
 - Download workers: `s3_max_pool_connections / 10`
+
+### `api` — Public API for attachment download/upload (batch 9d)
+
+Stateless orchestration functions that compose the lower-level upload and
+download engines. These are the entry points that the CLI `attachment`
+commands call. Corresponds to Python's `deadline.job_attachments.api.attachment`
+and `deadline.job_attachments.api._utils`.
+
+#### Design: free functions, not a class
+
+Python uses module-level functions (`_attachment_download`,
+`_attachment_upload`, `_process_path_mapping`, `_read_manifests`). Rust
+does the same — no struct needed since these functions are stateless
+orchestrators that take all dependencies as parameters (Principle 3).
+
+#### New type: `UploadManifestInfo`
+
+Added to `models.rs`:
+
+```
+pub struct UploadManifestInfo {
+    pub output_manifest_path: String,
+    pub output_manifest_hash: String,
+    pub source_path: Option<String>,
+}
+```
+
+Returned by `attachment_upload` — one entry per input manifest, in the
+same order as the input list.
+
+#### `read_manifests(manifest_paths) -> IndexMap<String, AssetManifest>`
+
+Reads and decodes manifest files from disk. Returns an `IndexMap` keyed
+by base filename (preserves insertion order for `attachment_upload`
+iteration — Python dicts preserve insertion order in 3.7+).
+
+- Validates all paths exist upfront; collects invalid ones into a single
+  error: `"Specified manifests [path1, path2] are not valid."`
+- Empty list → empty map
+- Invalid manifest content → propagates decode error
+
+#### `process_path_mapping(path_mapping_rules?, root_dirs) -> Vec<PathMappingRule>`
+
+Builds a list of path mapping rules from a JSON file and/or root
+directories.
+
+- If `path_mapping_rules` is `Some`: validates file exists, parses JSON.
+  Handles both top-level list format and `path_mapping_rules` nested key.
+  Error if file doesn't exist: `"Specified path mapping file {path} is
+  not valid."`
+- If `root_dirs` non-empty: validates all dirs exist. Creates rules with
+  `source_path = destination_path = dir`, empty `source_path_format`.
+  Error if any dir doesn't exist: `"Specified root dir [dirs] are not
+  valid."`
+- Both can be provided (this helper concatenates them). The caller
+  `attachment_upload` enforces mutual exclusion separately.
+- Neither → empty list
+
+#### `attachment_download`
+
+```
+pub async fn attachment_download(
+    manifests: &[String],
+    s3_root_uri: &str,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+    path_mapping_rules: Option<&str>,
+    on_progress: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    conflict_resolution: FileConflictResolution,
+) -> Result<DownloadSummaryStatistics, JobAttachmentsError>
+```
+
+Orchestrates downloading files from S3 CAS based on manifest files and
+optional path mapping rules.
+
+Behavior:
+1. Call `read_manifests` to decode all manifest files
+2. Call `process_path_mapping` if rules file provided
+3. For each manifest: find matching rule by checking if
+   `rule.get_hashed_source_path()` appears in the manifest filename
+   (substring match via `.contains()`). If no match, fall back to
+   `{cwd}/{filename}` as destination.
+4. Reject duplicate destinations: `"{dest} is already in use, one
+   destination path maps to one manifest file only."`
+5. Parse `s3_root_uri` via `JobAttachmentS3Settings::from_s3_root_uri`
+6. Delegate to `download_files_from_manifests` with the resolved
+   `manifests_by_root` map
+
+#### `attachment_upload`
+
+```
+pub async fn attachment_upload(
+    manifests: &[String],
+    s3_root_uri: &str,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+    root_dirs: &[String],
+    path_mapping_rules: Option<&str>,
+    upload_manifest_path: Option<&str>,
+    on_progress: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    config: Option<&IniConfig>,
+) -> Result<Vec<UploadManifestInfo>, JobAttachmentsError>
+```
+
+Orchestrates uploading files to S3 CAS based on manifest files and
+path mapping rules or root directories.
+
+Behavior:
+1. Call `read_manifests` to decode all manifest files
+2. Validate exactly one of `path_mapping_rules` / `root_dirs` is
+   provided. Error: `"One of path mapping rule and root dir must exist,
+   and not both."`
+3. Call `process_path_mapping`
+4. Parse `s3_root_uri` via `JobAttachmentS3Settings::from_s3_root_uri`
+5. Build `S3UploadContext` from `s3_client`, `account_id`, `config`
+6. For each manifest (in original input order):
+   a. Find matching rule by hashed source path in filename
+   b. Error if no match: `"No valid root defined for given manifest
+      {filename}, please check input root dirs and path mapping rule."`
+   c. Build S3 metadata: ASCII paths set `asset-root` directly;
+      non-ASCII paths JSON-encode and set `asset-root-json` (plus
+      `asset-root` with JSON value for backward compatibility).
+      If rule has `source_path_format`, set `file-system-location-name`.
+   d. Upload files via `S3UploadContext.upload_input_files`
+   e. If `upload_manifest_path` provided, upload manifest to S3 via
+      `upload_bytes_to_s3` with metadata
+   f. Collect `UploadManifestInfo` with manifest S3 key, content hash,
+      and source path
+7. Return `Vec<UploadManifestInfo>` in same order as input
 
 ### `vfs` — Virtual filesystem (deferred)
 
@@ -888,15 +1094,10 @@ gap lists which work item will address it.
 
 | Gap | Python location | Needed by | Work item |
 |-----|----------------|-----------|-----------|
-| `UploadManifestInfo` struct | `models.py` | Worker agent upload script | #18 |
 | `FileStatus` enum (NEW/MODIFIED/UNCHANGED/DELETED) | `models.py` | Internal to upload, manifest diff | #10 |
-| `FileConflictResolution` enum | `models.py` | Download conflict handling | #10 |
 | `GlobConfig` struct | `models.py` | Manifest CLI commands | #10 |
 | `ManifestSnapshot`, `ManifestDiff`, `ManifestMerge`, `ManifestDownload` | `models.py` | Manifest CLI commands, worker agent | #10 |
-| `ManifestPathGroup` | `models.py` | Download path grouping | #9 |
-| `OutputFile` | `models.py` | Download output tracking | #9 |
 | `_manifest_snapshot`, `_manifest_merge` functions | `api/manifest.py` | Worker agent, manifest CLI | #10 |
 | `_path_mapping`, `_PathMappingRuleApplier` | `_path_mapping.py` | Cross-OS download path remapping | #10 |
 | `os_file_permission` module | `os_file_permission.py` | File permission management on download | #10 |
-| `_float_to_iso_datetime_string` | `_utils.py` | Output manifest S3 paths | #9 |
-| `_get_unique_dest_dir_name` | `_utils.py` | Download directory naming | #9 |
+| `_get_unique_dest_dir_name` | `_utils.py` | Download directory naming | #10 |

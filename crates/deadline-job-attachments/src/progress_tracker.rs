@@ -236,6 +236,11 @@ impl ProgressTracker {
         self.report_progress_inner(&mut inner)
     }
 
+    /// Returns the current count of processed files.
+    pub fn processed_files(&self) -> u64 {
+        self.inner.lock().unwrap().processed_files
+    }
+
     pub fn get_summary_statistics(&self) -> SummaryStatistics {
         let inner = self.inner.lock().unwrap();
         let total_time = *self.total_time.lock().unwrap();
