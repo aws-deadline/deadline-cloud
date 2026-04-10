@@ -1,7 +1,7 @@
 # AGENTS.md
 
 This is the Rust implementation of the AWS Deadline Cloud client software:
-CLI, worker agent, GUI FFI layer, and shared library crates. The Python GUI
+CLI, GUI FFI layer, and shared library crates. The Python GUI
 widget files also live in this repo under `gui/`.
 
 ## Before you start
@@ -31,7 +31,6 @@ cargo build                              # full workspace
 cargo test                               # full test suite
 cargo test -p deadline-config            # single crate
 cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
-cargo test -p deadline-worker-agent      # worker agent tests
 cargo test -p deadline-gui-ffi           # GUI FFI tests
 cargo insta review                       # review new/changed CLI output snapshots
 ```

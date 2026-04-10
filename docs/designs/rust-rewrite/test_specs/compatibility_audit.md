@@ -20,7 +20,6 @@ where no crate exists.
 | `deadline-job-bundle` | §15–18 (loading, parameters, submission, history) | Has `loader.rs`, `parameters.rs`, `submission.rs` stubs |
 | `deadline-job-attachments` | §20–24 (hashing, upload, download, sync, caches), §26–32 (path mapping, glob, VFS, progress, permissions), §35 (incremental downloads) | Has `asset_manifests.rs`, `caches.rs`, `download.rs`, `upload.rs`, `models.rs`, `progress_tracker.rs`, `vfs.rs` stubs |
 | `deadline-cli` | §37–49 (all CLI commands) | Has `main.rs` stub only |
-| `deadline-worker-agent` | New sections TBD (Phase 2) | Not yet scaffolded |
 | `deadline-gui-ffi` | New sections TBD (Phase 3) | Not yet scaffolded |
 | **⚠️ No crate** | §30–31 (public API: attachment/manifest download/upload) | See Finding #1. |
 | **⚠️ Deferred** | §50 (MCP server) | See Finding #2. |
@@ -209,8 +208,6 @@ found).
 The following crates are not covered by the existing 52 test spec sections
 and will need new sections as they are implemented:
 
-- `deadline-worker-agent` — session management, attachment sync, progress
-  reporting (Phase 2)
 - `deadline-gui-ffi` — C ABI contract, JSON data exchange, error translation,
   callback handling (Phase 3)
 
@@ -255,7 +252,6 @@ and will need new sections as they are implemented:
 | `deadline-job-bundle` | §15–18 | 174 |
 | `deadline-job-attachments` | §20–24, §26–32, §35 | 556 |
 | `deadline-cli` | §37–49 | 224 |
-| `deadline-worker-agent` | TBD (Phase 2) | TBD |
 | `deadline-gui-ffi` | TBD (Phase 3) | TBD |
 | `deadline-mcp` (deferred) | §50 | 39 |
 | **Total (existing specs)** | **52 sections** | **1,369** |

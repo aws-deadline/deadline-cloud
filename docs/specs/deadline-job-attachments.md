@@ -1096,8 +1096,8 @@ gap lists which work item will address it.
 |-----|----------------|-----------|-----------|
 | `FileStatus` enum (NEW/MODIFIED/UNCHANGED/DELETED) | `models.py` | Internal to upload, manifest diff | #10 |
 | `GlobConfig` struct | `models.py` | Manifest CLI commands | #10 |
-| `ManifestSnapshot`, `ManifestDiff`, `ManifestMerge`, `ManifestDownload` | `models.py` | Manifest CLI commands, worker agent | #10 |
-| `_manifest_snapshot`, `_manifest_merge` functions | `api/manifest.py` | Worker agent, manifest CLI | #10 |
+| `ManifestSnapshot`, `ManifestDiff`, `ManifestMerge`, `ManifestDownload` | `models.py` | Manifest CLI commands | #10 |
+| `_manifest_snapshot`, `_manifest_merge` functions | `api/manifest.py` | Manifest CLI | #10 |
 | `_path_mapping`, `_PathMappingRuleApplier` | `_path_mapping.py` | Cross-OS download path remapping | #10 |
 | `os_file_permission` module | `os_file_permission.py` | File permission management on download | #10 |
 | `_get_unique_dest_dir_name` | `_utils.py` | Download directory naming | #10 |

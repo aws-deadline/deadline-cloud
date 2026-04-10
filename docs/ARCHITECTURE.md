@@ -16,13 +16,6 @@ deadline-cli (binary)
 ├── deadline-common
 └── deadline-models
 
-deadline-worker-agent (binary)
-├── deadline-config
-├── deadline-client
-├── deadline-job-attachments
-├── deadline-common
-└── deadline-models
-
 deadline-gui-ffi (shared library, C ABI)
 ├── deadline-config
 ├── deadline-client
@@ -40,7 +33,7 @@ deadline-mcp (library, used by deadline-cli)
 ├── deadline-common
 └── deadline-models
 
-deadline-test-server (dev-dependency of deadline-cli, deadline-worker-agent)
+deadline-test-server (dev-dependency of deadline-cli)
 ├── wiremock
 ├── tempfile
 └── assert_cmd
@@ -54,7 +47,6 @@ gui/ (Python, not a Cargo crate)
 | Crate | Role |
 |-------|------|
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting. No business logic. For GUI commands, spawns a Python process that loads the GUI widgets + `deadline-gui-ffi`. |
-| `deadline-worker-agent` | Binary. Runs on worker machines. Session management, job attachment sync (download/upload), progress reporting. No GUI. |
 | `deadline-gui-ffi` | Shared library with C ABI. Exposes config, auth, API listing, submission, and telemetry to external callers (Python GUI, DCC plugins, Unreal). |
 | `deadline-config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
 | `deadline-client` | AWS API calls (Deadline Cloud service). Owns the SDK/HTTP interaction. |
@@ -96,19 +88,6 @@ deadline-cli
 
 For detailed diagrams of the FFI threading model, callback flow, and
 memory ownership, see `designs/rust-rewrite/gui_ffi_architecture.md`.
-
-### Worker Agent
-
-```
-deadline-worker-agent
-  → Polls for work via deadline-client
-  → Downloads attachments via deadline-job-attachments
-  → Runs session actions
-  → Uploads output via deadline-job-attachments
-  → Reports progress via deadline-client
-```
-
-All Rust, one process, no Python, no GUI.
 
 ### DCC Plugin (e.g., Maya)
 

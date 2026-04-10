@@ -80,7 +80,6 @@ pick and execute work items.
 | 15d | Level 2 test coverage audit | Not started | — | — | — | 11 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
-| 18 | Worker agent | Deferred | §53+ | — | — | 1-17 |
 
 **Status key:** ✅ Done · In progress · Not started · Deferred (blocked on CLI completion)
 
@@ -88,10 +87,7 @@ pick and execute work items.
 "In progress" work items.
 
 **Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
-after the core CLI commands are complete. #18 (worker agent) is deferred until
-the entire CLI — including GUI FFI and MCP — is done. The CLI exercises all
-the same library crates, so completing it first means battle-tested foundations
-for the worker agent.
+after the core CLI commands are complete.
 
 **Deferred features within completed items:**
 - **#6**: `deadline job trace-schedule` (§44 cases 27-28) is EXPERIMENTAL
@@ -120,6 +116,4 @@ for the worker agent.
   it could mean "the client library" (the whole workspace) or "the Deadline
   service client" (what it actually is). With `deadline-job-attachments`
   building its own S3/STS clients independently, the distinction matters.
-  Discuss before the worker agent work (#18) when both crates are consumed
-  together.
 

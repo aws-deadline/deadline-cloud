@@ -12,7 +12,6 @@ parameter definitions implemented. Remaining: trace-schedule support APIs.
 ## Consumers
 
 - `deadline-cli` — CLI commands that call Deadline Cloud APIs
-- `deadline-worker-agent` — worker agent polling, session management, progress reporting
 - `deadline-gui-ffi` — GUI dropdown population, submission
 
 ## Dependencies
@@ -405,7 +404,7 @@ Every public API function in `api.rs` and `login`/`logout` in `auth.rs`
 accept an optional `telemetry: Option<&TelemetryClient>` parameter. If
 `None`, the function creates an ephemeral `TelemetryClient` internally
 (initialized from `AWS_ENDPOINT_URL_DEADLINE`). If `Some`, it reuses the
-caller's client (for long-lived processes like the worker agent that
+caller's client (for long-lived processes that
 want a single background thread).
 
 Each function records a `com.amazon.rum.deadline.latency` event with

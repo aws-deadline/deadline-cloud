@@ -54,7 +54,7 @@ Two tiers — path-explicit (primary) and convenience wrappers:
 No global cache. The CLI reads once per invocation and threads the `IniConfig`
 through all calls. The Python implementation uses mtime-based caching with
 global mutable state; this is intentionally omitted because the Rust
-architecture avoids repeated reads by design. If the worker agent or GUI FFI
+architecture avoids repeated reads by design. If the GUI FFI
 later needs caching, it can be added as a `CachedConfig` wrapper.
 
 #### Setting operations

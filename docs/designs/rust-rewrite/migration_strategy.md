@@ -1,7 +1,7 @@
 # Migration Strategy
 
 Full migration of all AWS Deadline Cloud client software from Python to Rust.
-This covers the CLI, the worker agent, the shared GUI, and all DCC submitter
+This covers the CLI, the shared GUI, and all DCC submitter
 plugins.
 
 ## Goals
@@ -29,7 +29,6 @@ plugins.
 | Component | Today (Python) | End state |
 |-----------|---------------|-----------|
 | CLI binary | PyInstaller-packaged Python | Rust binary (`deadline-cli`) |
-| Worker agent | Python process (separate repo) | Rust binary (`deadline-worker-agent`, monorepo) |
 | Config library | `deadline.client.config` | `deadline-config` crate |
 | API client | `deadline.client.api` | `deadline-client` crate |
 | Job bundle library | `deadline.client.job_bundle` | `deadline-job-bundle` crate |
@@ -95,7 +94,6 @@ repository:
 deadline-cloud-rs/
 ├── crates/
 │   ├── deadline-cli/              # CLI binary
-│   ├── deadline-worker-agent/     # Worker agent binary
 │   ├── deadline-gui-ffi/          # C ABI shared library for GUI + DCC plugins
 │   ├── deadline-mcp/              # MCP server binary (rmcp SDK)
 │   ├── deadline-config/           # Config file read/write
@@ -116,10 +114,8 @@ deadline-cloud-rs/
 ### Why monorepo?
 
 During migration, library crates change frequently. A monorepo ensures the
-CLI, worker agent, GUI FFI, and Python GUI are always in sync. Cross-cutting
-changes are one commit, one CI run. The worker agent (previously a separate
-Python repo) moves here so library changes are tested against all consumers
-immediately. Can split later once libraries stabilize.
+CLI, GUI FFI, and Python GUI are always in sync. Cross-cutting
+changes are one commit, one CI run. Can split later once libraries stabilize.
 
 ## DCC Plugin Constraints
 
@@ -155,7 +151,6 @@ introspection (~100-200 lines per plugin). Can be revisited per-DCC later.
 | 3ds Max | `deadline-gui-ffi` .so | Yes | `pymxs` scene queries + GUI widgets |
 | Unreal | `deadline-gui-ffi` .so (C ABI) | No | N/A |
 | After Effects | `deadline-cli` binary | No | N/A |
-| Worker Agent | Direct Rust crate deps (monorepo) | No | N/A |
 
 ## Risk Assessment
 
@@ -176,7 +171,6 @@ fails, the migration strategy must be revised or abandoned.
 | Risk | Why it matters | What could go wrong |
 |------|---------------|---------------------|
 | **VFS (FUSE) on all platforms** | §28 has 89 test cases. VFS is Linux-only (FUSE). macOS and Windows need different approaches. | Rust FUSE libraries are immature. Platform-specific code paths multiply testing burden. May need to defer VFS and use COPIED mode only. |
-| **Worker agent correctness at scale** | Runs on every worker machine in production. A bug causes job failures across entire fleets. | Subtle behavioral differences from Python cause intermittent failures that only appear under production load. |
 | **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/specs/deadline-client.md` § "Future Improvements" for the Smithy model filtering approach. |
 
 ### Low risks (just labor)
@@ -224,25 +218,10 @@ may cause phases to be revised or reordered.
 - After Effects submission works end-to-end
 - Ships alongside Python package initially (opt-in via env var)
 
-### Phase 2: Rust Worker Agent
+### ~~Phase 2: Rust Worker Agent~~ (out of scope)
 
-**Goal:** Rewrite the worker agent as `deadline-worker-agent` crate in the
-monorepo.
-
-**Scope:**
-- Job attachment sync (download inputs, upload outputs)
-- Manifest decoding, hashing, S3 transfer
-- Progress tracking and reporting
-- Session management and action execution
-- File permission management
-
-**Prerequisites:** Phase 1 library crates complete. S3 transfer performance
-spike passed.
-
-**Ship criteria:**
-- Passes existing integration test suite
-- Job attachment transfer performance ≥ Python
-- Canary fleet deployment before wide rollout
+The worker agent is being rewritten in Rust in a separate project. It is
+not part of this repository's scope.
 
 ### Phase 3: GUI FFI + Python Widget Refactor
 
@@ -339,8 +318,7 @@ No Python.
 | Python QWidgets for GUI layout | cxx-qt does not provide QWidgets bindings. QML has maintainability concerns (runtime typed, custom styling needed, pre-1.0 dependency). Writing C++ QWidgets adds a second systems language. Keeping Python QWidgets as a dumb view layer is the least-smell option — mature tooling, native OS look, minimal refactor. |
 | All business logic in Rust | Config, API, job bundle, attachments, telemetry, auth — all in Rust crates, exposed via `deadline-gui-ffi` C ABI shared library. Python GUI calls Rust for every operation. |
 | Thin Python layer for all DCC plugins | Blender and VRED require Python (no binary plugin support). Consistent approach across all DCCs. Python is only scene introspection + loading the Rust shared library. |
-| Monorepo | During migration, library crates change frequently. Monorepo keeps CLI, worker agent, GUI FFI, and Python GUI in sync. One commit, one CI run for cross-cutting changes. |
-| `deadline-worker-agent` in monorepo | Worker agent is the deepest library consumer. Keeping it in the same repo avoids version coordination during active development. Can split later. |
+| Monorepo | During migration, library crates change frequently. Monorepo keeps CLI, GUI FFI, and Python GUI in sync. One commit, one CI run for cross-cutting changes. |
 | Full Rust for Unreal | Unreal supports C++ plugins natively. Rust interops via C ABI. No Python needed. |
 | After Effects unchanged | Already uses CLI binary via subprocess. |
 | Migrate DCC plugins one at a time | Each is independent. Prove pattern on simplest (Blender), then parallelize. |

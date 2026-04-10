@@ -69,6 +69,5 @@
 
 | # | Section | Status | Phase |
 |---|---------|--------|-------|
-| 53+ | Worker agent: session management, attachment sync | Not started | Phase 2 |
 | TBD | GUI FFI: C ABI contract, JSON exchange, callbacks | Not started | Phase 3 |
 | TBD | MCP server: tool registration, telemetry, error handling | Not started | Phase 5 |

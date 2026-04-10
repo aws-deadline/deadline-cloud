@@ -9,7 +9,6 @@ members = [
     "crates/deadline-cli",
     "crates/deadline-mcp",
     "crates/deadline-gui-ffi",
-    "crates/deadline-worker-agent",
     "crates/deadline-test-server",
 ]
 resolver = "3"
