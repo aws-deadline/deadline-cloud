@@ -22,7 +22,7 @@ defaults.aws_profile_name
         └── defaults.queue_id
 ```
 
-**Source:** `src/deadline/client/config/config_file.py:83-87`
+**Source:** `src/deadline/client/config/config_file.py`
 
 ### 3.2 CLI Commands with Storage Profile Support
 
@@ -31,13 +31,13 @@ defaults.aws_profile_name
 | `deadline bundle submit` | ✅ | N/A | Reads `settings.storage_profile_id` from config or `--storage-profile-id` CLI option. Passed to `create_job_from_job_bundle()` which attaches it to the CreateJob API call and uses it for path grouping during upload. If not set, submission proceeds without a storage profile. No ignore flag needed — uploads don't require path mapping. |
 | `deadline bundle gui-submit` | N/A | N/A | GUI auto-populates a storage profile dropdown by listing profiles for the selected queue, filtered to the current OS. Pre-selects from `settings.storage_profile_id` in config. User can change selection before submitting. No ignore flag needed — uploads don't require path mapping. |
 | `deadline queue sync-output` | ✅ | ✅ | Full support (reference implementation). See §4.2 for code details. |
-| `deadline job download-output` | ❌ | ❌ | **Gap — prompts for manual path entry on OS mismatch** |
+| `deadline job download-output` | ❌ → ✅ | ❌ → ✅ | **Gap (proposed in this design)** — currently prompts for manual path entry on OS mismatch. This design adds `--ignore-storage-profiles` and automatic path mapping via config. |
 
 ### 3.3 Existing `--ignore-storage-profiles` Implementation
 
 The `deadline queue sync-output` command already implements `--ignore-storage-profiles`:
 
-**File:** `src/deadline/client/cli/_groups/queue_group.py:282-290`
+**File:** `src/deadline/client/cli/_groups/queue_group.py`
 
 ```python
 @click.option(
@@ -52,8 +52,8 @@ The `deadline queue sync-output` command already implements `--ignore-storage-pr
 ```
 
 This option is used when:
-- All jobs are submitted and downloaded from the **same machine**
-- No path mapping is needed (same OS, same mount points)
+- All submitting and downloading machines share the **same OS and mount points**
+- No path mapping is needed
 - Downloads go to the original unmapped paths
 
 The proposal is to extend this existing pattern to `deadline job download-output`.
@@ -66,7 +66,7 @@ For a code deep dive into the upload path (job submission), see §12 (Appendix C
 
 ### 4.1 `deadline job download-output` (Single Job)
 
-**File:** `src/deadline/client/cli/_groups/job_group.py:911-985`
+**File:** `src/deadline/client/cli/_groups/job_group.py`
 
 ```
 CLI Command (job_download_output)
@@ -88,7 +88,7 @@ CLI Command (job_download_output)
             └── OutputDownloader.download_job_output()
 ```
 
-#### 4.1.1 Current OS Mismatch Handling (Lines 570-595)
+#### 4.1.1 Current OS Mismatch Handling
 
 ```python
 # Check if the asset roots came from different OS
@@ -111,7 +111,7 @@ for asset_root in asset_roots:
 
 This is the reference implementation for storage profile support in a download command. The proposed changes in §8 follow this same pattern for `job download-output`.
 
-**File:** `src/deadline/client/cli/_groups/queue_group.py:257-420`
+**File:** `src/deadline/client/cli/_groups/queue_group.py`
 
 ```
 CLI Command (sync_output)
@@ -124,7 +124,7 @@ CLI Command (sync_output)
     └── _incremental_output_download()
 ```
 
-#### 4.2.1 Storage Profile Validation (Lines 360-385)
+#### 4.2.1 Storage Profile Validation
 
 ```python
 if ignore_storage_profiles:
@@ -227,7 +227,7 @@ class _PathMappingRuleApplier:
 
 **File:** `src/deadline/job_attachments/download.py`
 
-#### 4.5.1 OutputDownloader Class (Lines 1231-1377)
+#### 4.5.1 OutputDownloader Class
 
 ```python
 class OutputDownloader:
@@ -246,7 +246,7 @@ class OutputDownloader:
         self.outputs_by_root = get_job_output_paths_by_asset_root(...)
 ```
 
-#### 4.5.2 File Download (Lines 695-725)
+#### 4.5.2 File Download
 
 ```python
 def download_files(
@@ -268,7 +268,7 @@ def download_files(
 
 ### 5.1 StorageProfile
 
-**File:** `src/deadline/job_attachments/models.py:451-465`
+**File:** `src/deadline/job_attachments/models.py`
 
 ```python
 @dataclass
@@ -281,7 +281,7 @@ class StorageProfile:
 
 ### 5.2 FileSystemLocation
 
-**File:** `src/deadline/job_attachments/models.py:469-478`
+**File:** `src/deadline/job_attachments/models.py`
 
 ```python
 @dataclass
@@ -776,7 +776,7 @@ job_download_output(..., ignore_storage_profiles=True)
     download to original unmapped paths
 ```
 
-Expected: all storage profile logic bypassed. Same behavior as pre-change code. Use when submitting and downloading from the same machine.
+Expected: all storage profile logic bypassed. Same behavior as pre-change code. Use when submitting and downloading machines share the same OS and mount points.
 
 #### Case 7: Same storage profile on both sides → no mapping needed
 
@@ -868,7 +868,7 @@ This section documents the upload (job submission) code path for reference. It i
 
 ### 12.1 CLI Entry Point: `deadline bundle submit`
 
-**File:** `src/deadline/client/cli/_groups/bundle_group.py:159-320`
+**File:** `src/deadline/client/cli/_groups/bundle_group.py`
 
 ```
 CLI Command
@@ -881,14 +881,14 @@ bundle_submit()
     └── api.create_job_from_job_bundle()
 ```
 
-The `--storage-profile-id` option is defined at line 159 and processed in `_apply_cli_options_to_config()`.
+The `--storage-profile-id` option is processed in `_apply_cli_options_to_config()`.
 
 ### 12.2 API Layer: `create_job_from_job_bundle()`
 
-**File:** `src/deadline/client/api/_submit_job_bundle.py:374-849`
+**File:** `src/deadline/client/api/_submit_job_bundle.py`
 
 ```python
-# Lines 528-534: Storage profile retrieval
+# Storage profile retrieval
 storage_profile_id = get_setting("settings.storage_profile_id", config=config)
 storage_profile = None
 if storage_profile_id:
@@ -899,13 +899,13 @@ if storage_profile_id:
 ```
 
 Key operations:
-1. Retrieves `storage_profile_id` from config (line 528)
-2. If set, adds to `create_job_args` for the CreateJob API call (line 530)
-3. Fetches full `StorageProfile` object for path grouping (line 531-534)
+1. Retrieves `storage_profile_id` from config
+2. If set, adds to `create_job_args` for the CreateJob API call
+3. Fetches full `StorageProfile` object for path grouping
 
 ### 12.3 Asset Manager: `S3AssetManager`
 
-**File:** `src/deadline/job_attachments/upload.py:1034-1680`
+**File:** `src/deadline/job_attachments/upload.py`
 
 ```
 S3AssetManager.__init__()

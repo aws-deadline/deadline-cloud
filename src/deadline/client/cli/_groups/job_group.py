@@ -652,9 +652,9 @@ def _download_job_output(
 
                 job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-
-    _check_and_warn_long_output_paths(output_paths_by_root)
+        # Re-fetch after potential set_root_path calls above
+        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+        _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Prompt users to confirm local root paths where they will download outputs to,
     # and allow users to select different location to download files to if they want.

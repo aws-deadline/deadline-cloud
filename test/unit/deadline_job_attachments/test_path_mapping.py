@@ -171,6 +171,7 @@ def test_path_mapping_rule_applier_create_empty():
     assert applier.path_mapping_rules == []
     assert applier._path_mapping_trie == {}
 
+    assert applier.transform("/some/path") == "/some/path"
     with pytest.raises(ValueError):
         applier.strict_transform("/some/path")
 
@@ -227,10 +228,16 @@ def test_source_posix_rule(dest_paths: DestPaths):
         ]
     )
 
-    # All three rules can be used with strict transform
+    # All three rules can be used with both regular and strict transform
+    assert applier.transform("/mnt/shared") == dest_paths.path1
+    assert applier.transform("/mnt/projects") == dest_paths.path2
+    assert applier.transform("/tmp") == dest_paths.path3
     assert applier.strict_transform("/mnt/shared") == dest_paths.path1
     assert applier.strict_transform("/mnt/projects") == dest_paths.path2
     assert applier.strict_transform("/tmp") == dest_paths.path3
+
+    # transform passes through other paths
+    assert applier.transform("/other/path") == "/other/path"
 
     # strict_transform raises for other paths
     with pytest.raises(ValueError):
@@ -246,17 +253,23 @@ def test_source_windows_rule(dest_paths: DestPaths):
         ]
     )
 
-    # All three rules can be used with strict transform
+    # All three rules can be used with both regular and strict transform
+    assert applier.transform("C:\\Shared") == dest_paths.path1
+    assert applier.transform("C:\\proJects") == dest_paths.path2
+    assert applier.transform("D:\\tmp") == dest_paths.path3
     assert applier.strict_transform("C:\\Shared") == dest_paths.path1
     assert applier.strict_transform("C:\\proJects") == dest_paths.path2
     assert applier.strict_transform("D:\\tmp") == dest_paths.path3
 
     # Windows is case insensitive but case preserving
-    assert applier.strict_transform("C:\\ShArEd") == dest_paths.path1
+    assert applier.transform("C:\\ShArEd") == dest_paths.path1
     assert (
-        applier.strict_transform("C:\\PROJECTS\\Case\\Of\\tail\\PreServed")
+        applier.transform("C:\\PROJECTS\\Case\\Of\\tail\\PreServed")
         == dest_paths.path2 / "Case" / "Of" / "tail" / "PreServed"
     )
+
+    # transform passes through other paths
+    assert applier.transform("C:\\other\\path") == "C:\\other\\path"
 
     # strict_transform raises for other paths
     with pytest.raises(ValueError):
@@ -272,23 +285,23 @@ def test_source_posix_rule_edge_cases(dest_paths: DestPaths):
         ]
     )
 
-    # Paths that are not transformed raise ValueError
-    for path in ["", "/", "/other/path", "/mnt/other/path", "/Mnt/shared"]:
-        with pytest.raises(ValueError):
-            applier.strict_transform(path)
+    # Paths that are not transformed
+    assert applier.transform("") == ""
+    assert applier.transform("/") == "/"
+    assert applier.transform("/other/path") == "/other/path"
+    assert applier.transform("/mnt/other/path") == "/mnt/other/path"
+    assert applier.transform("/Mnt/shared") == "/Mnt/shared"
 
     # Edge cases with unicode and spaces
-    assert applier.strict_transform("/mnt/shared/файл.txt") == dest_paths.path1 / "файл.txt"
+    assert applier.transform("/mnt/shared/файл.txt") == dest_paths.path1 / "файл.txt"
     assert (
-        applier.strict_transform("/mnt/shared/file with spaces.txt")
+        applier.transform("/mnt/shared/file with spaces.txt")
         == dest_paths.path1 / "file with spaces.txt"
     )
 
     # The second rule applies because it is longer and more specific than the first rule
-    assert applier.strict_transform("/mnt/shared/projects") == dest_paths.path2
-    assert (
-        applier.strict_transform("/mnt/shared/projects/file.txt") == dest_paths.path2 / "file.txt"
-    )
+    assert applier.transform("/mnt/shared/projects") == dest_paths.path2
+    assert applier.transform("/mnt/shared/projects/file.txt") == dest_paths.path2 / "file.txt"
 
 
 def test_source_windows_rule_edge_cases(dest_paths: DestPaths):
@@ -302,20 +315,17 @@ def test_source_windows_rule_edge_cases(dest_paths: DestPaths):
         ]
     )
 
-    # Paths that are not transformed raise ValueError
-    for path in ["", "C:\\other\\path"]:
-        with pytest.raises(ValueError):
-            applier.strict_transform(path)
+    # Paths that are not transformed
+    assert applier.transform("") == ""
+    assert applier.transform("C:\\other\\path") == "C:\\other\\path"
 
     # Edge cases with unicode and spaces
-    assert applier.strict_transform("C:\\shared\\файл.txt") == dest_paths.path1 / "файл.txt"
+    assert applier.transform("C:\\shared\\файл.txt") == dest_paths.path1 / "файл.txt"
     assert (
-        applier.strict_transform("C:\\shared\\file with spaces.txt")
+        applier.transform("C:\\shared\\file with spaces.txt")
         == dest_paths.path1 / "file with spaces.txt"
     )
 
     # The second rule applies because it is longer and more specific than the first rule
-    assert applier.strict_transform("C:\\shared\\projects") == dest_paths.path2
-    assert (
-        applier.strict_transform("C:\\shared\\projects\\file.txt") == dest_paths.path2 / "file.txt"
-    )
+    assert applier.transform("C:\\shared\\projects") == dest_paths.path2
+    assert applier.transform("C:\\shared\\projects\\file.txt") == dest_paths.path2 / "file.txt"
