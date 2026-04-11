@@ -106,7 +106,7 @@ fn merge_single_manifest_returns_same() {
     let manifest = make_manifest_no_files(&[
         ("file1.txt", "aabbccdd11223344aabbccdd11223344", 100),
     ]);
-    let result = merge_asset_manifests(&[manifest.clone()]);
+    let result = merge_asset_manifests(&[manifest.clone()]).unwrap();
     assert!(result.is_some());
     let merged = result.unwrap();
     assert_eq!(merged.paths.len(), 1);
@@ -122,7 +122,7 @@ fn merge_two_manifests_non_overlapping_paths() {
     let m2 = make_manifest_no_files(&[
         ("file2.txt", "11223344aabbccdd11223344aabbccdd", 200),
     ]);
-    let result = merge_asset_manifests(&[m1, m2]).unwrap();
+    let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.paths.len(), 2);
     assert_eq!(result.total_size, 300);
 }
@@ -135,7 +135,7 @@ fn merge_two_manifests_overlapping_paths_later_wins() {
     let m2 = make_manifest_no_files(&[
         ("file1.txt", "bbbb000000000000bbbb000000000000", 200),
     ]);
-    let result = merge_asset_manifests(&[m1, m2]).unwrap();
+    let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.paths.len(), 1);
     // Later manifest's entry wins
     assert_eq!(result.paths[0].hash, "bbbb000000000000bbbb000000000000");
@@ -143,9 +143,22 @@ fn merge_two_manifests_overlapping_paths_later_wins() {
 }
 
 #[test]
-fn merge_empty_list_returns_none() {
-    let result = merge_asset_manifests(&[]);
-    assert!(result.is_none());
+fn merge_empty_list_returns_ok_none() {
+    // merge_asset_manifests should return Result<Option<...>>.
+    // Empty input → Ok(None).
+    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[]);
+    assert!(result.unwrap().is_none());
+}
+
+#[test]
+fn merge_single_manifest_returns_ok_some() {
+    let manifest = make_manifest_no_files(&[
+        ("a.txt", "aabbccdd11223344aabbccdd11223344", 10),
+    ]);
+    // Should return Result<Option<...>>, not bare Option.
+    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[manifest]);
+    let merged = result.unwrap().unwrap();
+    assert_eq!(merged.paths.len(), 1);
 }
 
 #[test]
@@ -160,9 +173,9 @@ fn merge_different_hash_algorithms_returns_error() {
     let m2 = make_manifest_no_files(&[
         ("b.txt", "11223344aabbccdd11223344aabbccdd", 20),
     ]);
-    // Same algorithm — should succeed
-    let result = merge_asset_manifests(&[m1, m2]);
-    assert!(result.is_some());
+    // Same algorithm — should return Ok(Some(...))
+    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[m1, m2]);
+    assert!(result.unwrap().is_some());
 }
 
 #[test]
@@ -174,7 +187,7 @@ fn merge_recalculates_total_size_after_dedup() {
     let m2 = make_manifest_no_files(&[
         ("file1.txt", "cccc000000000000cccc000000000000", 50),
     ]);
-    let result = merge_asset_manifests(&[m1, m2]).unwrap();
+    let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     // file1.txt replaced (50), file2.txt kept (200) = 250
     assert_eq!(result.total_size, 250);
 }

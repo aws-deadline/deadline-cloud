@@ -5,11 +5,45 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#9 — Job attachments: transfer** (batch 9a starting)
+**#9 — Job attachments: transfer** (pre-9e fixes)
 
 ### Current Step
 
-Batch 9d complete. Proceeding to batch 9e (CLI commands + manifest API).
+Pre-9e fixes complete. Proceeding to batch 9e.
+
+**Fix #1 — `merge_asset_manifests` returns `Result`:**
+Changed return type from `Option<AssetManifest>` to
+`Result<Option<AssetManifest>, JobAttachmentsError>`. Mismatched hash
+algorithms now return `Err` instead of silent `None`. Updated internal
+caller in `get_output_manifests_by_asset_root` and all tests. Added
+two new tests (`merge_empty_list_returns_ok_none`,
+`merge_single_manifest_returns_ok_some`).
+
+**Fix #2 — `upload_bytes_to_s3` S3 error guidance:**
+Extracted `s3_upload_error` shared helper with HTTP status-specific
+guidance (403 KMS/non-KMS, 404, 408, 500, 503). Refactored
+`upload_file_to_s3` to use it (dedup ~50 lines). Updated
+`upload_bytes_to_s3` to use the same helper instead of generic
+`S3BotoCore`. Added 3 new tests asserting guidance messages.
+
+**Files changed:**
+- `crates/deadline-job-attachments/src/download.rs` — `merge_asset_manifests` signature + caller
+- `crates/deadline-job-attachments/src/upload.rs` — `s3_upload_error` helper, refactored both upload functions
+- `crates/deadline-job-attachments/tests/download_tests.rs` — updated 6 existing + added 2 new merge tests
+- `crates/deadline-job-attachments/tests/upload_s3_tests.rs` — added 3 new upload_bytes error tests
+- `docs/specs/deadline-job-attachments.md` — updated merge and upload_bytes specs
+- `docs/designs/rust-rewrite/README.md` — added #15e behavioral parity audit work item
+- `docs/designs/rust-rewrite/HANDOFF.md` — this file
+
+**Test count:** 231 tests in deadline-job-attachments (228 existing + 2 merge + 3 upload_bytes error guidance). 0 failures.
+
+### What's Next
+
+Batch 9e: CLI commands (`deadline attachment download/upload`,
+`deadline manifest snapshot/diff/download/upload`) and manifest API
+library functions (`glob_files`, `manifest_snapshot`, `manifest_diff`,
+`manifest_upload`, `manifest_download`, `manifest_merge`,
+`write_manifest`). §31: 45 cases, §46: 15 cases, §47: 26 cases.
 
 ### Batch 9d — Step 6 Audit
 

@@ -556,7 +556,7 @@ uploader. This avoids the uploader needing `SdkConfig` or STS access.
 | `upload_input_files(manifest, s3_bucket, source_root, s3_cas_prefix, progress_tracker, s3_check_cache_dir, force_s3_check)` | Async. For each manifest path: check S3 check cache (unless `force_s3_check=true`) → `file_already_uploaded` → upload if needed → update cache. Skipped files tracked via `increase_skipped`. After all files, calls `report_progress()` and checks cancellation. Currently sequential; parallel small/large split deferred to when performance testing requires it. |
 | `file_already_uploaded(bucket, key) -> bool` | Async. `HeadObject`. HTTP status extracted from `raw_response()`. 404 → false. 403 → `S3Client` error with `s3:ListBucket` guidance including account ID. Other → `S3BotoCore` transport error. |
 | `upload_file_to_s3(local_path, s3_bucket, s3_upload_key, progress_tracker)` | Async. Checks symlink via `symlink_metadata()` (rejects), skips directories and non-existent files silently. Uploads via `PutObject` with `ExpectedBucketOwner`. On completion, calls `progress_tracker.increase_processed(1, 0)`. |
-| `upload_bytes_to_s3(bytes, bucket, key, metadata)` | Async. `PutObject` with `expected_bucket_owner` set to `self.account_id`. Used for manifest uploads. Optional metadata map passed as S3 object metadata. |
+| `upload_bytes_to_s3(bytes, bucket, key, metadata)` | Async. `PutObject` with `expected_bucket_owner` set to `self.account_id`. Used for manifest uploads. Optional metadata map passed as S3 object metadata. Uses the same S3 error handling as `upload_file_to_s3` (403 KMS/non-KMS, 404, 408, 500, 503 guidance). |
 | `verify_hash_cache_integrity(s3_check_cache_dir, manifest, s3_cas_prefix, s3_bucket) -> bool` | Async. Samples up to 30 S3 check cache entries for manifest files, verifies each exists in S3 via `file_already_uploaded`. Returns false if any missing. |
 | `reset_s3_check_cache(s3_check_cache_dir)` | Deletes the S3 check cache database file. |
 
@@ -768,14 +768,15 @@ upload engine).
 
 #### `merge_asset_manifests`
 
-Pure function. Merges multiple manifests into one.
+Pure function. Merges multiple manifests into one. Returns
+`Result<Option<AssetManifest>>` — `Ok(None)` for empty input,
+`Err` for mismatched hash algorithms.
 
-- Empty list → `None`
-- Single manifest → return as-is (clone)
-- Multiple: collect paths into `IndexMap` keyed by path string;
+- Empty list → `Ok(None)`
+- Single manifest → `Ok(Some(clone))`
+- Multiple: collect paths into `HashMap` keyed by path string;
   later entries overwrite earlier ones. Recalculate `total_size`.
-- Error if manifests have different hash algorithms
-  (`JobAttachmentsError::AssetSync`).
+- Different hash algorithms → `Err(JobAttachmentsError::AssetSync)`.
 
 #### `get_output_manifests_by_asset_root`
 

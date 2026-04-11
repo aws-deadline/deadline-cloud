@@ -238,13 +238,16 @@ fn get_output_manifest_prefix(
 /// - Empty list → `None`
 /// - Single manifest → clone as-is
 /// - Multiple → collect paths keyed by path string; later entries overwrite
-///   earlier ones. Recalculate `total_size`. Error if hash algorithms differ.
-pub fn merge_asset_manifests(manifests: &[AssetManifest]) -> Option<AssetManifest> {
+///   earlier ones. Recalculate `total_size`.
+/// - Different hash algorithms → `Err(JobAttachmentsError::AssetSync)`.
+pub fn merge_asset_manifests(
+    manifests: &[AssetManifest],
+) -> Result<Option<AssetManifest>, JobAttachmentsError> {
     if manifests.is_empty() {
-        return None;
+        return Ok(None);
     }
     if manifests.len() == 1 {
-        return Some(manifests[0].clone());
+        return Ok(Some(manifests[0].clone()));
     }
 
     let hash_alg = manifests[0].hash_alg;
@@ -252,15 +255,12 @@ pub fn merge_asset_manifests(manifests: &[AssetManifest]) -> Option<AssetManifes
 
     for manifest in manifests {
         if manifest.hash_alg != hash_alg {
-            // Python raises NotImplementedError; we log and skip.
-            // Callers that need strict checking should validate beforehand.
-            log::error!(
-                "Merging manifests with different hash algorithms is not supported. \
-                 {} does not match {}",
+            return Err(JobAttachmentsError::AssetSync(format!(
+                "Merging manifests with different hash algorithms is not supported: \
+                 {} vs {}",
+                hash_alg.as_str(),
                 manifest.hash_alg.as_str(),
-                hash_alg.as_str()
-            );
-            return None;
+            )));
         }
         for path in &manifest.paths {
             merged.insert(path.path.clone(), path.clone());
@@ -270,7 +270,12 @@ pub fn merge_asset_manifests(manifests: &[AssetManifest]) -> Option<AssetManifes
     let paths: Vec<ManifestPath> = merged.into_values().collect();
     let total_size: i64 = paths.iter().map(|p| p.size).sum();
 
-    AssetManifest::new(hash_alg, ManifestVersion::V2023_03_03, total_size, paths).ok()
+    Ok(Some(AssetManifest::new(
+        hash_alg,
+        ManifestVersion::V2023_03_03,
+        total_size,
+        paths,
+    )?))
 }
 
 /// Download a single file from S3 CAS to a local path.
@@ -559,7 +564,7 @@ pub async fn get_output_manifests_by_asset_root(
     let mut outputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
     for (root, manifest_list) in by_root {
         let manifests: Vec<AssetManifest> = manifest_list.into_iter().map(|(_, m)| m).collect();
-        if let Some(merged) = merge_asset_manifests(&manifests) {
+        if let Some(merged) = merge_asset_manifests(&manifests)? {
             outputs.insert(root, vec![merged]);
         }
     }

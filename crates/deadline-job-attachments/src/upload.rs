@@ -434,6 +434,80 @@ pub fn hash_assets_and_create_manifest(
 // S3 upload context and orchestration (batch 9b)
 // =====================================================================
 
+/// Build an S3 upload error with HTTP status-specific guidance.
+/// Shared by `upload_file_to_s3` and `upload_bytes_to_s3`.
+fn s3_upload_error(
+    status_code: u16,
+    raw: &str,
+    action: &str,
+    bucket: &str,
+    key: &str,
+) -> JobAttachmentsError {
+    match status_code {
+        403 => {
+            let guidance = if raw.contains("kms:") {
+                "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket \
+                 encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or \
+                 User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
+            } else {
+                "Forbidden or Access denied. Please check your AWS credentials, and ensure that \
+                 your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
+            };
+            JobAttachmentsError::S3Client {
+                action: action.into(),
+                status_code: 403,
+                bucket: bucket.into(),
+                key: key.into(),
+                message: Some(format!("{guidance} {raw}")),
+            }
+        }
+        404 => JobAttachmentsError::S3Client {
+            action: action.into(),
+            status_code: 404,
+            bucket: bucket.into(),
+            key: key.into(),
+            message: Some(format!(
+                "Not found. Please check your bucket name and object key, \
+                 and ensure that they exist in the AWS account. {raw}"
+            )),
+        },
+        408 => JobAttachmentsError::S3Client {
+            action: action.into(),
+            status_code: 408,
+            bucket: bucket.into(),
+            key: key.into(),
+            message: Some(format!(
+                "Request timeout. Please consider retrying later, or ensure \
+                 your network connection is stable. {raw}"
+            )),
+        },
+        500 => JobAttachmentsError::S3Client {
+            action: action.into(),
+            status_code: 500,
+            bucket: bucket.into(),
+            key: key.into(),
+            message: Some(format!(
+                "Internal server error. It might be an issue on AWS's side; \
+                 please consider retrying later or contacting AWS support. {raw}"
+            )),
+        },
+        503 => JobAttachmentsError::S3Client {
+            action: action.into(),
+            status_code: 503,
+            bucket: bucket.into(),
+            key: key.into(),
+            message: Some(format!(
+                "Service unavailable. AWS S3 might be down or experiencing \
+                 high traffic. Please consider retrying after some time. {raw}"
+            )),
+        },
+        _ => JobAttachmentsError::S3BotoCore {
+            action: action.into(),
+            details: raw.to_string(),
+        },
+    }
+}
+
 /// Context for performing S3 uploads: holds a configured S3 client,
 /// the caller's account ID (for ExpectedBucketOwner), and computed
 /// config values (file size threshold, worker count).
@@ -567,65 +641,13 @@ impl S3UploadContext {
                 let msg = service_err.message().unwrap_or_default();
                 let full_text = format!("{raw} {msg}");
 
-                match status_code {
-                    403 => {
-                        let guidance = if full_text.contains("kms:") {
-                            "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket \
-                             encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or \
-                             User has the 'kms:GenerateDataKey' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
-                        } else {
-                            "Forbidden or Access denied. Please check your AWS credentials, and ensure that \
-                             your AWS IAM Role or User has the 's3:PutObject' permission for this bucket. "
-                        };
-                        Err(JobAttachmentsError::S3Client {
-                            action: "uploading file".into(),
-                            status_code: 403,
-                            bucket: s3_bucket.into(),
-                            key: s3_upload_key.into(),
-                            message: Some(format!("{guidance} {raw} (Failed to upload {})", local_path.display())),
-                        })
-                    }
-                    404 => Err(JobAttachmentsError::S3Client {
-                        action: "uploading file".into(),
-                        status_code: 404,
-                        bucket: s3_bucket.into(),
-                        key: s3_upload_key.into(),
-                        message: Some(format!(
-                            "Not found. Please check your bucket name and object key, and ensure that they exist in the AWS account. {raw}"
-                        )),
-                    }),
-                    408 => Err(JobAttachmentsError::S3Client {
-                        action: "uploading file".into(),
-                        status_code: 408,
-                        bucket: s3_bucket.into(),
-                        key: s3_upload_key.into(),
-                        message: Some(format!(
-                            "Request timeout. Please consider retrying later, or ensure your network connection is stable. {raw}"
-                        )),
-                    }),
-                    500 => Err(JobAttachmentsError::S3Client {
-                        action: "uploading file".into(),
-                        status_code: 500,
-                        bucket: s3_bucket.into(),
-                        key: s3_upload_key.into(),
-                        message: Some(format!(
-                            "Internal server error. It might be an issue on AWS's side; please consider retrying later or contacting AWS support. {raw}"
-                        )),
-                    }),
-                    503 => Err(JobAttachmentsError::S3Client {
-                        action: "uploading file".into(),
-                        status_code: 503,
-                        bucket: s3_bucket.into(),
-                        key: s3_upload_key.into(),
-                        message: Some(format!(
-                            "Service unavailable. AWS S3 might be down or experiencing high traffic. Please consider retrying after some time. {raw}"
-                        )),
-                    }),
-                    _ => Err(JobAttachmentsError::S3BotoCore {
-                        action: "uploading file".into(),
-                        details: raw,
-                    }),
-                }
+                Err(s3_upload_error(
+                    status_code,
+                    &full_text,
+                    "uploading file",
+                    s3_bucket,
+                    s3_upload_key,
+                ))
             }
         }
     }
@@ -653,12 +675,15 @@ impl S3UploadContext {
             }
         }
 
-        req.send().await.map_err(|err| {
-            let raw = format!("{}", err.into_service_error());
-            JobAttachmentsError::S3BotoCore {
-                action: "uploading binary file".into(),
-                details: raw,
-            }
+        req.send().await.map_err(|sdk_err| {
+            let status_code = sdk_err.raw_response()
+                .map(|r| r.status().as_u16())
+                .unwrap_or(0);
+            let service_err = sdk_err.into_service_error();
+            let raw = format!("{service_err}");
+            let msg = service_err.message().unwrap_or_default();
+            let full_text = format!("{raw} {msg}");
+            s3_upload_error(status_code, &full_text, "uploading binary file", bucket, key)
         })?;
         Ok(())
     }

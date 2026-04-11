@@ -888,3 +888,103 @@ async fn file_already_uploaded_transport_error() {
         .await;
     assert!(result.is_err());
 }
+
+// =====================================================================
+// upload_bytes_to_s3 — S3 error guidance (pre-9e fix #2)
+// =====================================================================
+
+#[tokio::test]
+async fn upload_bytes_to_s3_403_non_kms_returns_put_object_guidance() {
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_string(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"#,
+            ),
+        )
+        .mount(&server)
+        .await;
+
+    let uploader = build_uploader(&server).await;
+
+    let result = uploader
+        .upload_bytes_to_s3(
+            b"manifest content",
+            "test-bucket",
+            "root-prefix/Manifests/some-key",
+            None,
+        )
+        .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("s3:PutObject"),
+        "Expected s3:PutObject guidance in error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn upload_bytes_to_s3_403_kms_returns_kms_guidance() {
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_string(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>AccessDenied</Code><Message>kms:GenerateDataKey denied</Message></Error>"#,
+            ),
+        )
+        .mount(&server)
+        .await;
+
+    let uploader = build_uploader(&server).await;
+
+    let result = uploader
+        .upload_bytes_to_s3(
+            b"manifest content",
+            "test-bucket",
+            "root-prefix/Manifests/some-key",
+            None,
+        )
+        .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("kms:GenerateDataKey") || err.contains("kms:DescribeKey"),
+        "Expected KMS guidance in error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn upload_bytes_to_s3_404_returns_bucket_guidance() {
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_string(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>"#,
+            ),
+        )
+        .mount(&server)
+        .await;
+
+    let uploader = build_uploader(&server).await;
+
+    let result = uploader
+        .upload_bytes_to_s3(
+            b"manifest content",
+            "test-bucket",
+            "root-prefix/Manifests/some-key",
+            None,
+        )
+        .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("bucket") || err.contains("404"),
+        "Expected bucket/404 guidance in error, got: {err}"
+    );
+}

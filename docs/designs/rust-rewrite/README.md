@@ -78,6 +78,7 @@ pick and execute work items.
 | 15b | Job get search & estimated time | ✅ Done | — | §44 cases 1-5 | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | — | §44 cases 17-21 | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | Not started | — | — | — | 11 |
+| 15e | Behavioral parity audit | Not started | — | — | — | 9 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 
@@ -102,6 +103,14 @@ after the core CLI commands are complete.
   and other CLI commands exist, many library behaviors become CLI-reachable.
   Add `assert_cmd_snapshot!` tests for those paths. Keep Level 1 tests only
   for behaviors too low-level to assert through CLI output.
+- **#15e**: Complete read-through of all implemented Rust code (work items
+  0a–9, 12, 15) comparing against Python Deadline CLI behavior. For each
+  previously completed step: verify the Rust implementation matches Python's
+  observable behavior without unnecessarily mirroring Python's internal
+  structure; flag high-priority behavioral gaps, silent error swallowing,
+  or missing edge cases; fix issues found. This is a full behavioral parity
+  audit, not a line-by-line Python comparison — the question is "does the
+  Rust code do the right thing?" not "does it look like the Python?"
 - **Realistic test IDs**: Replace hardcoded pseudo-IDs in tests (e.g.
   `"farm-1"`, `"queue-1"`, `"job-1"`, `"step-1"`, `"task-1"`,
   `"session-1"`, `"sessionaction-1"`, `"fleet-1"`) with pseudorandomly
