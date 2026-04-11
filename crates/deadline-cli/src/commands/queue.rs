@@ -56,7 +56,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>, queue_id: Option<Stri
         &mut config,
         &crate::common::CliOptions { profile, farm_id, queue_id, job_id: None, yes: false },
         required,
-    ).map_err(CliError::Operation)?;
+    )?;
     Ok(config)
 }
 

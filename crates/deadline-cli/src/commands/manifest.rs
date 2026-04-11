@@ -202,7 +202,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     profile, farm_id, queue_id, job_id: None, yes: false,
                 },
                 &["farm_id", "queue_id"],
-            ).map_err(CliError::Operation)?;
+            )?;
 
             let _asset = match asset_type.to_lowercase().as_str() {
                 "input" => deadline_job_attachments::manifest_ops::AssetType::Input,

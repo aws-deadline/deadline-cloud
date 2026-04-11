@@ -8,10 +8,13 @@
 
 | Priority | Count | Fixed | Remaining |
 |----------|-------|-------|-----------|
-| Critical | 1     | 0     | 1         |
-| High     | 4     | 0     | 4         |
-| Medium   | 8     | 0     | 8         |
+| Critical | 1     | 1     | 0         |
+| High     | 4     | 3     | 1         |
+| Medium   | 8     | 3     | 5         |
 | Low      | 4     | 0     | 4         |
+
+F-1 (High) deferred — requires real-API investigation.
+Medium items C-4, C-5, G-1, K-1, C-2 accepted as known differences.
 
 ---
 

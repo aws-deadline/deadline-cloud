@@ -36,7 +36,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>) -> Result<deadline_co
         &mut config,
         &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
         &["farm_id"],
-    ).map_err(CliError::Operation)?;
+    )?;
     Ok(config)
 }
 

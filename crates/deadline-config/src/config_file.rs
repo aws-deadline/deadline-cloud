@@ -194,24 +194,13 @@ fn full_section_name(setting_name: &str, setting_def: &SettingDef, config: &IniC
 fn validate_setting(setting_name: &str) -> Result<&'static SettingDef, ConfigError> {
     if !setting_name.contains('.') {
         return Err(ConfigError::InvalidSettingName(format!(
-            "The setting name {setting_name:?} is not valid."
+            "The setting name '{setting_name}' is not valid."
         )));
     }
     find_setting(setting_name).ok_or_else(|| {
-        let section = setting_name.split('.').next().unwrap();
-        let known_sections: Vec<&str> = SETTINGS
-            .iter()
-            .map(|(n, _)| n.split('.').next().unwrap())
-            .collect();
-        if known_sections.contains(&section) {
-            ConfigError::InvalidSettingName(format!(
-                "AWS Deadline Cloud configuration section {section:?} has no setting named {setting_name:?}."
-            ))
-        } else {
-            ConfigError::InvalidSettingName(format!(
-                "AWS Deadline Cloud configuration has no setting named {setting_name:?}."
-            ))
-        }
+        ConfigError::InvalidSettingName(format!(
+            "AWS Deadline Cloud configuration has no setting named '{setting_name}'."
+        ))
     })
 }
 

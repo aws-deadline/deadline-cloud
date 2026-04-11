@@ -69,13 +69,16 @@ fn read_aws_profile_key(profile_name: &str, key: &str) -> Option<String> {
 
 /// Determine where credentials come from.
 /// DCM profiles have `monitor_id` in the AWS profile's scoped config.
+/// Returns `NotValid` if the specified profile does not exist.
 pub fn get_credentials_source(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> AwsCredentialsSource {
     let profile_name = session::resolve_profile_name(config);
     match &profile_name {
         Some(name) => {
-            if read_aws_profile_key(name, "monitor_id").is_some() {
+            if !aws_profile_exists(name) {
+                AwsCredentialsSource::NotValid
+            } else if read_aws_profile_key(name, "monitor_id").is_some() {
                 AwsCredentialsSource::DeadlineCloudMonitorLogin
             } else {
                 AwsCredentialsSource::HostProvided
@@ -84,6 +87,19 @@ pub fn get_credentials_source(
         // Default profile — check [default] section or [profile default]
         None => AwsCredentialsSource::HostProvided,
     }
+}
+
+/// Check whether a named profile section exists in the AWS config file.
+fn aws_profile_exists(profile_name: &str) -> bool {
+    let config_path = std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        format!("{home}/.aws/config")
+    });
+    let Ok(content) = std::fs::read_to_string(&config_path) else {
+        return false;
+    };
+    let section_header = format!("[profile {profile_name}]");
+    content.contains(&section_header)
 }
 
 /// If logged in with DCM, returns (user_id, identity_store_id).

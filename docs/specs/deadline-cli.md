@@ -28,8 +28,11 @@ Both `-h` and `--help` are accepted (clap provides both by default).
 
 Known errors (`CliError::Config`, `CliError::Operation`) print the error
 message to stdout and exit 1, matching the Python CLI's `click.echo(str(e))`
-behavior. The `CliError` enum in `commands/config.rs` distinguishes error
-types via `thiserror` derives with `From` conversions for `ConfigError`.
+behavior. Usage errors (missing required options like `--farm-id` when not
+configured) print the error message to stdout and exit 2, matching Python
+Click's `UsageError` exit code. The `CliError` enum in `commands/config.rs`
+distinguishes error types via `thiserror` derives with `From` conversions
+for `ConfigError`.
 
 ## Common Utilities (`src/common.rs`)
 
@@ -68,7 +71,11 @@ Missing required options return an error like
 
 Formats a `serde_json::Value` as YAML via `serde_yaml::to_string`.
 Multi-line strings that don't end with `\n` get one appended so
-serde_yaml uses `|`-style block scalars.
+serde_yaml uses `|`-style block scalars. String values matching YAML 1.1
+boolean literals (`y`, `Y`, `yes`, `Yes`, `YES`, `n`, `N`, `no`, `No`,
+`NO`, `true`, `True`, `TRUE`, `false`, `False`, `FALSE`, `on`, `On`,
+`ON`, `off`, `Off`, `OFF`) are single-quoted in the output to prevent
+data corruption when parsed by YAML 1.1 consumers (e.g. PyYAML).
 
 ### `parse_file_parameter(path) -> HashMap`
 
@@ -150,7 +157,9 @@ config file at `DEADLINE_CONFIG_FILE_PATH` (or `~/.deadline/config` by default).
   then for each setting: `name: value (default)` (the suffix only when value
   equals the default), followed by the description indented with 3 spaces.
   With `--output json`, prints a JSON object containing
-  `settings.config_file_path` and all setting name/value pairs.
+  `settings.config_file_path` and all setting name/value pairs, with
+  spaces after colons and commas to match Python's `json.dumps()` default
+  format (e.g. `{"key": "value", "key2": "value2"}`).
   `OutputFormat` uses `#[derive(clap::ValueEnum)]`.
 - `deadline config get <setting>` — prints the current value of a single setting.
   If not explicitly set, prints the default.

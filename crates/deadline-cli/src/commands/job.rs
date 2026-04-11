@@ -23,7 +23,7 @@ fn setup_config(
         &mut config,
         &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
         required,
-    ).map_err(CliError::Operation)?;
+    )?;
     Ok(config)
 }
 

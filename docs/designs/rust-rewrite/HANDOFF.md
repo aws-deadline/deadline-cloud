@@ -5,24 +5,41 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#15e — Fix behavioral parity gaps**
+**#15e-F1 — Fix `job logs` against real API (audit finding F-1)**
 
-The audit is complete. All findings are in
-`audit_reports/2026-04-10-behavioral-parity.md` (ranked summary table
-at the bottom). Fix all issues before picking up new feature work
-(#10, #11, etc.). Work in priority order:
+Remaining item from the behavioral parity audit (#15e). All other
+audit findings are fixed (commit `9e8e4ef`). Full audit report:
+`audit_reports/2026-04-10-behavioral-parity.md`.
 
-1. **C-3 (Critical):** YAML output doesn't quote YAML 1.1 boolean-like
-   strings (`ON`/`OFF`/`YES`/`NO`). Data corruption when parsed.
-2. **A-1 (High):** Setting descriptions truncated in `config show`.
-3. **B-1 (High):** `get_credentials_source` returns `HOST_PROVIDED`
-   instead of `NOT_VALID` for non-existent profiles.
-4. **C-1 (High):** Missing required option exits code 1 instead of 2.
-5. **F-1 (High):** `job logs` broken against real API ("service error").
-6. **A-2, A-3, A-4 (Medium):** Error quoting, wording, JSON spacing.
+### Problem
 
-For each fix: follow TDD (failing test → fix → verify). Commit after
-all fixes are applied. Update the audit report's resolution fields.
+`deadline job logs` fails with `"Failed to retrieve logs: service error"`
+against the real Deadline Cloud API. The Python CLI works correctly for
+the same job/session. Two issues to investigate:
+
+1. **Root cause:** Why the CloudWatch Logs call fails. Likely
+   credentials or region not propagating correctly to the CloudWatch
+   client built in `log_retrieval.rs::logs_client()`. The function
+   uses `session::get_sdk_config(config)` but may not be picking up
+   the profile's region or credentials. Compare with how Python's
+   `boto3.Session` builds its CloudWatch client.
+
+2. **Error formatting:** The SDK's `Display` for `SdkError` just says
+   "service error". Need a `cw_sdk_err` helper (like `api.rs::sdk_err`)
+   that extracts the actual error code and message via
+   `ProvideErrorMetadata`. This was prototyped but reverted with the
+   deferral — see the approach in `api.rs::format_sdk_error`.
+
+### Approach
+
+- Run both CLIs side by side against the real API with the same
+  credentials and compare what happens at the HTTP level.
+- Add `RUST_LOG=debug` or SDK-level tracing to see the actual request
+  the Rust CLI sends to CloudWatch.
+- Check whether the CloudWatch endpoint, region, and credentials match
+  what Python sends.
+- Once root cause is found, fix it and apply the error formatting fix.
+- Follow TDD: write a failing test, fix, verify against Python CLI.
 
 ## Critical Context for New Sessions
 

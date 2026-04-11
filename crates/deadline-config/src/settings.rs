@@ -32,7 +32,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "(default)",
             depend: None,
             section_format: Some("profile-{}"),
-            description: "The AWS profile name to use by default.",
+            description: "The AWS profile name to use by default. Set to '' to use the default credentials. Other settings are saved with the profile.",
         },
     ),
     (
@@ -59,7 +59,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "",
             depend: Some("defaults.farm_id"),
             section_format: None,
-            description: "The storage profile that this workstation conforms to.",
+            description: "The storage profile that this workstation conforms to. It specifies where shared file systems are mounted, and where named job attachments should go.",
         },
     ),
     (
@@ -77,7 +77,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "",
             depend: Some("defaults.queue_id"),
             section_format: None,
-            description: "The Job ID to use by default.",
+            description: "The Job ID to use by default. This gets updated by job submission, so is normally the most recently submitted job.",
         },
     ),
     (
@@ -95,7 +95,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "NOT_SELECTED",
             depend: None,
             section_format: None,
-            description: "How to handle downloads if a file already exists.",
+            description: "How to handle downloads if a file already exists",
         },
     ),
     (
@@ -122,7 +122,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "",
             depend: None,
             section_format: None,
-            description: "A randomly generated identifier used to record telemetry events.",
+            description: "A randomly generated identifier used to record telemetry events for this configuration.",
         },
     ),
     (
@@ -131,7 +131,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "COPIED",
             depend: Some("defaults.farm_id"),
             section_format: None,
-            description: "The file system mode to use for job attachments when running jobs.",
+            description: "The file system mode to use for job attachments when running jobs. COPIED means to download a copy of the attachment data, VIRTUAL means to use a virtual file system for lazy loading.",
         },
     ),
     (
@@ -140,7 +140,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "50",
             depend: None,
             section_format: None,
-            description: "The maximum number of connections to keep in the S3 connection pool.",
+            description: "The maximum number of connections to keep in the connection pool used by the S3's upload/download operations. If this value is not set, the default value of 50 is used. (Note: It's recommended setting this value above 10 to avoid 'Connection pool is full' warnings during the uploads/downloads.)",
         },
     ),
     (
@@ -149,7 +149,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "20",
             depend: None,
             section_format: None,
-            description: "Multiplier for calculating the small file size threshold.",
+            description: "When uploading job attachments, the file size threshold is set to separate 'large' files from 'small' files so that 'large' files can be processed serially. This multiplier is used to calculate the size threshold. (Small files are defined as those smaller than or equal to the chunk size multiplied by this factor.)",
         },
     ),
     (
@@ -158,7 +158,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "",
             depend: None,
             section_format: None,
-            description: "A list of paths that should not generate warnings when outside storage profile locations.",
+            description: "A list of paths that should not generate warnings when outside storage profile locations, separated by the OS path list separator (semicolon on Windows, colon on Linux/macOS).",
         },
     ),
     (
@@ -176,7 +176,7 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             default: "false",
             depend: None,
             section_format: None,
-            description: "Controls S3 verification behavior for job attachments.",
+            description: "Controls S3 verification behavior for job attachments. When 'true', always verify files exist in S3 via HEAD request before skipping upload (most reliable but slower, skips cache integrity check since every file is verified). When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default).",
         },
     ),
 ];

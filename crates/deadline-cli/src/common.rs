@@ -48,43 +48,52 @@ pub struct CliOptions {
     pub yes: bool,
 }
 
+/// Error from `apply_cli_options_to_config`.
+#[derive(Debug)]
+pub enum CliConfigError {
+    /// A config operation failed.
+    Operation(String),
+    /// A required option is missing (should exit code 2).
+    MissingRequired(String),
+}
+
 /// Apply CLI flag overrides to a config and validate required options.
 pub fn apply_cli_options_to_config(
     config: &mut deadline_config::ini::IniConfig,
     options: &CliOptions,
     required: &[&str],
-) -> Result<(), String> {
+) -> Result<(), CliConfigError> {
     use deadline_config::config_file;
 
     if let Some(ref v) = options.profile {
         config_file::set_setting_in_config("defaults.aws_profile_name", v, config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.farm_id {
         config_file::set_setting_in_config("defaults.farm_id", v, config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.queue_id {
         config_file::set_setting_in_config("defaults.queue_id", v, config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.job_id {
         config_file::set_setting_in_config("defaults.job_id", v, config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if options.yes {
         config_file::set_setting_in_config("settings.auto_accept", "true", config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
 
     for &req in required {
         let setting_name = format!("defaults.{req}");
         let value = config_file::get_setting_with_config(&setting_name, config)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
 
         if value.is_empty() {
             let flag = req.replace('_', "-");
-            return Err(format!(
+            return Err(CliConfigError::MissingRequired(format!(
                 "Missing '--{flag}' or default {} configuration",
                 match req {
                     "farm_id" => "Farm ID",
@@ -92,7 +101,7 @@ pub fn apply_cli_options_to_config(
                     "job_id" => "Job ID",
                     other => other,
                 }
-            ));
+            )));
         }
     }
 
@@ -100,15 +109,51 @@ pub fn apply_cli_options_to_config(
 }
 
 // ---------------------------------------------------------------------------
+// JSON output formatting
+// ---------------------------------------------------------------------------
+
+/// Serialize a JSON value with spaces after `:` and `,` to match Python's
+/// `json.dumps()` default format. `serde_json`'s compact format omits spaces;
+/// `to_string_pretty` adds newlines. This produces single-line spaced JSON.
+pub fn json_with_spaces(value: &serde_json::Value) -> String {
+    let compact = serde_json::to_string(value).unwrap_or_else(|_| format!("{value}"));
+    // Insert space after : and , that aren't inside strings.
+    let mut result = String::with_capacity(compact.len() * 2);
+    let mut in_string = false;
+    let mut prev = '\0';
+    for ch in compact.chars() {
+        if ch == '"' && prev != '\\' {
+            in_string = !in_string;
+        }
+        result.push(ch);
+        if !in_string && (ch == ':' || ch == ',') {
+            result.push(' ');
+        }
+        prev = ch;
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
 // YAML output formatting
 // ---------------------------------------------------------------------------
 
+/// Regex matching a bare YAML 1.1 boolean as a mapping value or sequence item.
+/// serde_yaml follows YAML 1.2 (only true/false are booleans), so it leaves
+/// ON/OFF/YES/NO etc. unquoted. Downstream YAML 1.1 parsers (PyYAML) would
+/// interpret them as booleans, corrupting data.
+static YAML_11_BOOL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(: |^[ \t]*- )(y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$").unwrap()
+});
+
 /// Format a JSON value as YAML for CLI output.
 /// Multi-line strings that don't end with \n get one appended so YAML
-/// uses |-style block scalars.
+/// uses |-style block scalars. Strings matching YAML 1.1 boolean literals
+/// are single-quoted to prevent misinterpretation by YAML 1.1 parsers.
 pub fn cli_object_repr(obj: &serde_json::Value) -> String {
     let fixed = fix_multiline_strings(obj);
-    serde_yaml::to_string(&fixed).unwrap_or_else(|_| format!("{obj}"))
+    let yaml = serde_yaml::to_string(&fixed).unwrap_or_else(|_| format!("{obj}"));
+    YAML_11_BOOL_RE.replace_all(&yaml, "$1'$2'").into_owned()
 }
 
 fn fix_multiline_strings(val: &serde_json::Value) -> serde_json::Value {
@@ -446,8 +491,10 @@ mod tests {
         let mut config = empty_config();
         let opts = CliOptions::default();
         let result = apply_cli_options_to_config(&mut config, &opts, &["farm_id"]);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("--farm-id"));
+        match result {
+            Err(CliConfigError::MissingRequired(msg)) => assert!(msg.contains("--farm-id")),
+            other => panic!("expected MissingRequired, got {other:?}"),
+        }
     }
 
     #[test]
@@ -455,8 +502,10 @@ mod tests {
         let mut config = empty_config();
         let opts = CliOptions::default();
         let result = apply_cli_options_to_config(&mut config, &opts, &["queue_id"]);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("--queue-id"));
+        match result {
+            Err(CliConfigError::MissingRequired(msg)) => assert!(msg.contains("--queue-id")),
+            other => panic!("expected MissingRequired, got {other:?}"),
+        }
     }
 
     #[test]
@@ -464,8 +513,10 @@ mod tests {
         let mut config = empty_config();
         let opts = CliOptions::default();
         let result = apply_cli_options_to_config(&mut config, &opts, &["job_id"]);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("--job-id"));
+        match result {
+            Err(CliConfigError::MissingRequired(msg)) => assert!(msg.contains("--job-id")),
+            other => panic!("expected MissingRequired, got {other:?}"),
+        }
     }
 
     #[test]
@@ -600,6 +651,35 @@ mod tests {
         let result = cli_object_repr(&obj);
         // The |-style block scalar indicator should appear
         assert!(result.contains('|'), "should use block scalar: {result}");
+    }
+
+    // C-3: YAML 1.1 boolean-like strings must be single-quoted to prevent
+    // data corruption when parsed by YAML 1.1 consumers (e.g. PyYAML).
+    #[test]
+    fn cli_object_repr_yaml_11_booleans_are_quoted() {
+        let obj = serde_json::json!({
+            "enabled": "ON",
+            "disabled": "OFF",
+            "answer": "YES",
+            "negative": "NO",
+            "normal": "hello",
+        });
+        let result = cli_object_repr(&obj);
+        assert!(result.contains("'ON'"), "ON should be quoted: {result}");
+        assert!(result.contains("'OFF'"), "OFF should be quoted: {result}");
+        assert!(result.contains("'YES'"), "YES should be quoted: {result}");
+        assert!(result.contains("'NO'"), "NO should be quoted: {result}");
+        assert!(!result.contains("'hello'"), "normal string should not be quoted: {result}");
+    }
+
+    #[test]
+    fn cli_object_repr_yaml_11_booleans_in_nested_values() {
+        let obj = serde_json::json!({
+            "params": {"multiFrame": {"string": "OFF"}, "other": {"string": "ON"}}
+        });
+        let result = cli_object_repr(&obj);
+        assert!(result.contains("'OFF'"), "nested OFF should be quoted: {result}");
+        assert!(result.contains("'ON'"), "nested ON should be quoted: {result}");
     }
 
     // -- TimestampFormat --

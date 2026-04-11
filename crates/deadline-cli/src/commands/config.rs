@@ -1,5 +1,6 @@
 use deadline_config::config_file;
 use textwrap;
+use crate::common::json_with_spaces;
 
 /// CLI-specific error type that distinguishes known operation errors
 /// from unexpected errors for the error handler in main.rs.
@@ -14,6 +15,17 @@ pub enum CliError {
     /// The message (if any) has already been printed by the command.
     #[error("{message}")]
     ExitCode { code: i32, message: String },
+}
+
+impl From<crate::common::CliConfigError> for CliError {
+    fn from(e: crate::common::CliConfigError) -> Self {
+        match e {
+            crate::common::CliConfigError::Operation(msg) => CliError::Operation(msg),
+            crate::common::CliConfigError::MissingRequired(msg) => {
+                CliError::ExitCode { code: 2, message: msg }
+            }
+        }
+    }
 }
 
 #[derive(clap::Subcommand)]
@@ -90,7 +102,7 @@ fn show(output: OutputFormat) -> Result<(), CliError> {
                 let value = config_file::get_setting_with_config(name, &config)?;
                 map.insert(name.into(), serde_json::Value::String(value));
             }
-            println!("{}", serde_json::Value::Object(map));
+            println!("{}", json_with_spaces(&serde_json::Value::Object(map)));
         }
     }
     Ok(())

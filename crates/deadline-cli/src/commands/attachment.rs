@@ -79,7 +79,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                     profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false,
                 },
                 &[],
-            ).map_err(CliError::Operation)?;
+            )?;
 
             // Resolve S3 root URI
             let uri = match s3_root_uri {
@@ -147,7 +147,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                     profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false,
                 },
                 &[],
-            ).map_err(CliError::Operation)?;
+            )?;
 
             let uri = match s3_root_uri {
                 Some(u) if profile.is_some() => u,

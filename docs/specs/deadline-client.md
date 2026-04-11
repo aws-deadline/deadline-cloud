@@ -96,7 +96,9 @@ to `127.0.0.1` via the `.localhost` TLD (RFC 6761).
 `DeadlineCloudMonitorLogin`. Determined by parsing `~/.aws/config`
 (or `AWS_CONFIG_FILE`) for the active profile's `monitor_id` key.
 DCM-created profiles have `monitor_id`, `user_id`, and
-`identity_store_id` in their `[profile <name>]` section.
+`identity_store_id` in their `[profile <name>]` section. If the
+specified profile section does not exist in the AWS config file,
+returns `NotValid` (not `HostProvided`).
 
 `get_user_and_identity_store_id(config)`: returns `(Option<String>,
 Option<String>)` — the `user_id` and `identity_store_id` from the

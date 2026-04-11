@@ -319,3 +319,27 @@ async fn job_get_job_id_flag_takes_precedence_over_search_term() {
         "--job-id", "job-aaf4cdf8aae242f58fb84c5bb19f199b",
     ]));
 }
+
+// C-3: YAML output must single-quote strings that YAML 1.1 parsers treat as booleans
+#[tokio::test]
+async fn job_get_yaml_11_boolean_strings_are_quoted() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+        "name": "Render Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "parameters": {
+            "MultiFrameRendering": {"string": "OFF"},
+            "IgnoreMissing": {"string": "ON"},
+            "Verbose": {"string": "YES"},
+            "DryRun": {"string": "NO"},
+        },
+    })).await;
+
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "get",
+        "--job-id", "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+    ]));
+}

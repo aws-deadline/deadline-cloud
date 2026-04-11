@@ -203,3 +203,20 @@ async fn auth_logout_dcm_monitor_fails() {
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
+
+// B-1: Non-existent profile should show Source: NOT_VALID, not HOST_PROVIDED
+#[tokio::test]
+async fn auth_status_nonexistent_profile_shows_not_valid() {
+    let harness = TestHarness::new().await;
+
+    // Write an AWS config with only one profile — "existing-profile"
+    let aws_config_path = harness.config_dir.path().join("aws_config");
+    std::fs::write(&aws_config_path, "\
+[profile existing-profile]
+region = us-west-2
+").unwrap();
+
+    let mut cmd = harness.cmd(&["auth", "status", "--profile", "nonexistent-profile"]);
+    cmd.env("AWS_CONFIG_FILE", &aws_config_path);
+    assert_cmd_snapshot!(cmd);
+}

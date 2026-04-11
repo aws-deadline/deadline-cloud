@@ -77,8 +77,10 @@ Two tiers — config-explicit (primary) and convenience wrappers:
 
 #### Validation
 
-Setting names must contain a dot. Unknown names produce errors distinguishing
-"not valid" (no dot) from "has no setting" (valid format, unknown name).
+Setting names must contain a dot. Unknown names produce errors with
+single-quoted setting names matching Python's format:
+- No dot: `"The setting name '<name>' is not valid."`
+- Valid format, unknown name: `"AWS Deadline Cloud configuration has no setting named '<name>'."`
 
 #### str2bool
 

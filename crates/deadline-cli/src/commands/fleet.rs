@@ -33,7 +33,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) ->
         &mut config,
         &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
         required,
-    ).map_err(CliError::Operation)?;
+    )?;
     Ok(config)
 }
 
@@ -62,7 +62,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 &mut config,
                 &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
                 &["farm_id"],
-            ).map_err(CliError::Operation)?;
+            )?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
             let fleet = fleet_id.ok_or_else(|| CliError::Operation(
                 "Missing '--fleet-id' or default Fleet ID configuration".to_string()
