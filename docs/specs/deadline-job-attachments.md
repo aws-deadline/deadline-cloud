@@ -1216,7 +1216,50 @@ Behavior:
 
 #### `manifest_upload` and `manifest_download`
 
-Deferred to batch 9e-2 (S3 + Deadline API interaction).
+#### `manifest_upload(manifest_file, s3_bucket, s3_cas_prefix, s3_client, account_id, s3_key_prefix?, callback?)`
+
+Uploads a manifest file to S3 CAS.
+
+Behavior:
+- Read manifest file from disk.
+- Build S3 key: `{s3_cas_prefix}/Manifests/{s3_key_prefix}/{filename}`
+  (or without `s3_key_prefix` if not provided).
+- Set S3 metadata: `file-system-location-name` = manifest file path.
+- Upload via `S3UploadContext.upload_bytes_to_s3`.
+
+#### `manifest_download(download_dir, farm_id, queue_id, job_id, s3_client, account_id, s3_settings, step_id?, asset_type?, callback?) -> ManifestDownloadResponse`
+
+Downloads and merges manifests for a job from S3, writes them to disk.
+
+New types in `models.rs`:
+```
+AssetType enum: Input, Output, All
+ManifestDownloadEntry { manifest_root: String, local_manifest_path: String }
+ManifestDownloadResponse { downloaded: Vec<ManifestDownloadEntry> }
+```
+
+Behavior:
+- Determine which manifest types to download based on `asset_type`
+  (Input, Output, or All).
+- If downloading inputs: extract `inputManifestPath` and `rootPath`
+  from the job's attachments. Download each manifest from S3 using
+  `{rootPrefix}/Manifests/{inputManifestPath}` as the key.
+- If `step_id` provided and downloading inputs: also fetch step-step
+  dependencies (paginated `ListStepDependencies`), download output
+  manifests for each dependent step via
+  `get_output_manifests_by_asset_root`.
+- If downloading outputs: call `get_output_manifests_by_asset_root`
+  for the job (optionally scoped to `step_id`).
+- Merge all collected manifests per asset root.
+- Write each merged manifest to `download_dir` with filename
+  `{name}-{root_hash}-{timestamp}.manifest`. Name derivation: replace
+  `/` with `_`, strip leading `_` (note: only `/`, not `\` or `:`
+  — differs from `write_manifest`).
+- Return `ManifestDownloadResponse` with one entry per root.
+
+Note: `manifest_download` takes pre-built S3 client and settings as
+parameters. The CLI layer handles queue role assumption and settings
+resolution. This keeps the library function session-agnostic.
 
 ---
 

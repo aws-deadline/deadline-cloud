@@ -707,7 +707,7 @@ fn select_latest_manifests_per_task(keys: &[String]) -> Vec<String> {
 }
 
 /// Download a manifest from S3 and extract its asset root from metadata.
-async fn download_manifest_from_s3(
+pub async fn download_manifest_from_s3(
     s3_client: &S3Client,
     s3_bucket: &str,
     manifest_key: &str,

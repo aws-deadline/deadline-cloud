@@ -9,8 +9,34 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Current Step
 
-Batch 9e-1, Steps 3-4 complete. Proceeding to Step 5 (verify
-against Python CLI) then commit.
+Batch 9e-2 complete. Proceeding to batch 9e-3 (CLI commands).
+
+### Batch 9e-2 — Step 4 Implementation
+
+**New files:**
+- `crates/deadline-job-attachments/tests/manifest_s3_tests.rs` — 6 tests
+
+**Modified files:**
+- `crates/deadline-job-attachments/src/manifest_ops.rs` — added
+  `AssetType`, `ManifestDownloadEntry`, `ManifestDownloadResponse`,
+  `manifest_upload`, `manifest_download`
+- `crates/deadline-job-attachments/src/download.rs` — made
+  `download_manifest_from_s3` public
+- `docs/specs/deadline-job-attachments.md` — added manifest_upload and
+  manifest_download specs
+
+**Design notes:**
+- `manifest_download` takes pre-parsed `job_attachments` HashMap and
+  pre-built S3 client/settings as parameters. The CLI layer handles
+  GetJob, GetQueue, queue role assumption, and settings resolution.
+  This keeps the library function session-agnostic.
+- Step-step dependency fetching (ListStepDependencies) is deferred to
+  batch 9e-3 where the CLI has access to the Deadline API client.
+- `manifest_download` name derivation only replaces `/` with `_`
+  (matching Python's `_manifest_download`), unlike `write_manifest`
+  which also replaces `\` and `:`.
+
+**Test count:** 263 tests in deadline-job-attachments. 0 failures.
 
 ### Batch 9e-1 — Step 4 Implementation
 

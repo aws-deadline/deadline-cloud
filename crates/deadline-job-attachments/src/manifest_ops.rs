@@ -1,5 +1,7 @@
-//! Manifest lifecycle operations: glob, snapshot, diff, merge, write.
+//! Manifest lifecycle operations: glob, snapshot, diff, merge, write,
+//! upload, and download.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use deadline_models::errors::JobAttachmentsError;
@@ -8,12 +10,20 @@ use serde::Serialize;
 use crate::api::read_manifests;
 use crate::asset_manifests::{decode_manifest, hash_data, AssetManifest, HashAlgorithm};
 use crate::diff::{fast_diff, hash_diff, FileStatus};
-use crate::download::merge_asset_manifests;
-use crate::models::AssetRootGroup;
+use crate::download::{download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests};
+use crate::models::{AssetRootGroup, JobAttachmentS3Settings};
 use crate::progress_tracker::ProgressReportMetadata;
-use crate::upload::{hash_assets_and_create_manifest, prepare_paths_for_upload};
+use crate::upload::{hash_assets_and_create_manifest, S3UploadContext};
 
 // --- Types ---
+
+/// Which manifest types to download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetType {
+    Input,
+    Output,
+    All,
+}
 
 /// Glob include/exclude configuration.
 #[derive(Debug, Clone)]
@@ -51,6 +61,19 @@ pub struct ManifestDiffResult {
 pub struct ManifestMergeResult {
     pub manifest_root: String,
     pub local_manifest_path: String,
+}
+
+/// One entry in a manifest download response.
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestDownloadEntry {
+    pub manifest_root: String,
+    pub local_manifest_path: String,
+}
+
+/// Response from manifest_download.
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestDownloadResponse {
+    pub downloaded: Vec<ManifestDownloadEntry>,
 }
 
 // --- Functions ---
@@ -400,4 +423,163 @@ fn total_bytes(files: &[String]) -> u64 {
         .filter_map(|f| std::fs::metadata(f).ok())
         .map(|m| m.len())
         .sum()
+}
+
+/// Upload a manifest file to S3 CAS.
+pub async fn manifest_upload(
+    manifest_file: &str,
+    s3_bucket_name: &str,
+    s3_cas_prefix: &str,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+    s3_key_prefix: Option<&str>,
+    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+) -> Result<(), JobAttachmentsError> {
+    let file_path = Path::new(manifest_file);
+    let filename = file_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    let manifest_s3_key = match s3_key_prefix {
+        Some(prefix) => format!("{s3_cas_prefix}/Manifests/{prefix}/{filename}"),
+        None => format!("{s3_cas_prefix}/Manifests/{filename}"),
+    };
+
+    let contents = std::fs::read(manifest_file).map_err(|e| {
+        JobAttachmentsError::AssetSync(format!("Failed to read manifest file: {e}"))
+    })?;
+
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "file-system-location-name".to_string(),
+        manifest_file.to_string(),
+    );
+
+    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_string(), None)?;
+    ctx.upload_bytes_to_s3(&contents, s3_bucket_name, &manifest_s3_key, Some(metadata))
+        .await
+}
+
+/// Download and merge manifests for a job from S3, write to disk.
+///
+/// `job_attachments` is the `attachments` field from the GetJob API
+/// response (or empty map if the job has no attachments). The CLI layer
+/// is responsible for calling GetJob and passing this in.
+pub async fn manifest_download(
+    download_dir: &str,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    s3_client: &aws_sdk_s3::Client,
+    account_id: &str,
+    s3_settings: &JobAttachmentS3Settings,
+    job_attachments: &HashMap<String, serde_json::Value>,
+    step_id: Option<&str>,
+    asset_type: AssetType,
+    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+) -> Result<ManifestDownloadResponse, JobAttachmentsError> {
+    let download_input = matches!(asset_type, AssetType::Input | AssetType::All);
+    let download_output = matches!(asset_type, AssetType::Output | AssetType::All);
+
+    let s3_prefix = format!("{}/Manifests", s3_settings.root_prefix);
+
+    let mut manifests_by_root: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+
+    // Download input manifests
+    if download_input {
+        if let Some(manifest_list) = job_attachments
+            .get("manifests")
+            .and_then(|v| v.as_array())
+        {
+            for entry in manifest_list {
+                let input_path = entry
+                    .get("inputManifestPath")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let root_path = entry
+                    .get("rootPath")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if input_path.is_empty() {
+                    continue;
+                }
+
+                let manifest_key = format!("{s3_prefix}/{input_path}");
+                let (_, manifest) = download_manifest_from_s3(
+                    s3_client,
+                    &s3_settings.s3_bucket_name,
+                    &manifest_key,
+                    account_id,
+                )
+                .await?;
+
+                manifests_by_root
+                    .entry(root_path.to_string())
+                    .or_default()
+                    .push(manifest);
+            }
+        }
+
+        // Step-step dependencies (if step_id provided)
+        // Deferred: requires Deadline API client for ListStepDependencies.
+        // Will be wired in batch 9e-3 when the CLI has access to the
+        // Deadline client.
+    }
+
+    // Download output manifests
+    if download_output {
+        let output_by_root = get_output_manifests_by_asset_root(
+            s3_settings,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            None, // task_id
+            None, // session_action_id
+            s3_client,
+            account_id,
+        )
+        .await
+        .unwrap_or_default();
+
+        for (root, manifests) in output_by_root {
+            manifests_by_root
+                .entry(root)
+                .or_default()
+                .extend(manifests);
+        }
+    }
+
+    // Merge per root and write to disk
+    let mut downloaded = Vec::new();
+
+    for (root, manifests) in &manifests_by_root {
+        let merged = merge_asset_manifests(manifests)?;
+        if let Some(manifest) = merged {
+            let root_hash = hash_data(root.as_bytes(), HashAlgorithm::Xxh128);
+            let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
+
+            // Name derivation: replace / with _, strip leading _
+            // (differs from write_manifest which also replaces \ and :)
+            let mut manifest_name = root.replace('/', "_");
+            if manifest_name.starts_with('_') {
+                manifest_name = manifest_name[1..].to_string();
+            }
+            let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
+            let local_path = Path::new(download_dir).join(&filename);
+
+            std::fs::write(&local_path, manifest.encode()).map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
+            })?;
+
+            downloaded.push(ManifestDownloadEntry {
+                manifest_root: root.clone(),
+                local_manifest_path: local_path.to_string_lossy().into_owned(),
+            });
+        }
+    }
+
+    Ok(ManifestDownloadResponse { downloaded })
 }
