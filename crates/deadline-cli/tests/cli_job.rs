@@ -269,6 +269,12 @@ async fn job_get_search_term_multiple_matches_shows_summary() {
         }),
     ], 2).await;
 
+    // Redact local timezone in timestamps (e.g. "2023-01-27 00:34:41 -0700" → "[LOCAL_TIMESTAMP]")
+    // to prevent snapshot flakiness across timezone/DST changes.
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}", "[LOCAL_TIMESTAMP]");
+    let _guard = settings.bind_to_scope();
+
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
 }
 
