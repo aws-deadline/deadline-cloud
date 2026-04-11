@@ -87,6 +87,16 @@ identical observable behavior, not identical internal structure.
    design the Rust API from the behavioral requirements. Open the
    Python again only to verify you haven't missed edge cases.
 
+7. **Implement behavior, don't mirror code.** The Python source is a
+   reference for *what the system does*, not *how to build it*. Read
+   Python to understand the behavioral contract (inputs, outputs, error
+   conditions, edge cases), then implement that contract in idiomatic
+   Rust. Mirroring Python structure is only justified when the
+   structure itself is the simplest way to achieve the behavior. If
+   you find yourself translating Python line-by-line, stop and ask
+   what behavior you're trying to produce — then write the Rust that
+   produces it.
+
 ## Steps
 
 ### 0. Plan, study Python, and get approval
@@ -136,15 +146,27 @@ Then apply the Design Principles above and present:
 
 ### 1. Review existing implementation for improvements
 
-Before writing new code, audit what's already implemented against the
-Python source. Look for:
-- Behavior gaps (e.g., stdout vs stderr for errors)
-- Missing edge cases
-- Opportunities to use idiomatic Rust (ValueEnum instead of manual
-  FromStr, concrete error types instead of Box<dyn Error>)
+Before writing new code, audit what's already implemented. The goal is
+to verify the Rust code produces correct behavior — not to check whether
+it mirrors the Python. For each existing function in scope:
 
-Implement improvements first, update docs, commit, then proceed to new features.
-Skip this step if the crate is a stub with no existing implementation.
+1. **State the behavioral contract:** What inputs does it accept? What
+   does it return? What errors can it produce? What side effects does
+   it have? Derive this from the test spec and by running the Python
+   CLI, not by reading Python source line-by-line.
+2. **Verify the Rust code satisfies the contract.** Does it handle all
+   the input cases? Does it produce the right output? Does it surface
+   errors instead of swallowing them?
+3. **Flag gaps:** Missing edge cases, silent failures, wrong error
+   messages, unnecessary Python-isms that don't serve the behavior.
+4. **Flag improvements:** Idiomatic Rust opportunities (ValueEnum
+   instead of manual FromStr, concrete error types instead of
+   Box<dyn Error>, etc.) that make the code simpler without changing
+   behavior.
+
+Implement improvements first, update docs, commit, then proceed to new
+features. Skip this step if the crate is a stub with no existing
+implementation.
 
 ### 2. Update the crate spec
 
