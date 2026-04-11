@@ -6,6 +6,7 @@ Tests for the CLI config command.
 
 import json
 import logging
+import os
 
 import pytest
 from click.testing import CliRunner
@@ -113,7 +114,11 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
 
     # We should see all the overridden values in the output
     assert "EnvVarOverrideProfile" in result.output
-    assert "~/alternate/job_history" in result.output
+    # Path settings are stored with forward slashes but displayed in native format
+    if os.name == "nt":
+        assert "~\\alternate\\job_history" in result.output
+    else:
+        assert "~/alternate/job_history" in result.output
     assert result.output.count("False") == 1
     assert result.output.count("True") == 1
     # "true" appears three times: once as the value for force_s3_check,
@@ -125,7 +130,10 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     assert "CREATE_COPY" in result.output
     assert "DEBUG" in result.output
     assert "user-id-123abc-456def" in result.output
-    assert "/known/asset/path" in result.output
+    if os.name == "nt":
+        assert "\\known\\asset\\path" in result.output
+    else:
+        assert "/known/asset/path" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
 
