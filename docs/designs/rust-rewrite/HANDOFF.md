@@ -5,8 +5,54 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-None. Work item #9 is complete. Pick the next "Not started" item from
-the Work Items table in `README.md` whose dependencies are all done.
+**#15e — Behavioral parity audit** (priority override)
+
+The developer has requested this audit be done before picking up any
+new feature work (#10, #11, etc.). Do this first.
+
+### What to do
+
+Complete read-through of all implemented Rust code (work items 0a–9,
+12, 15) comparing against Python Deadline CLI **behavior**. For each
+previously completed work item:
+
+1. State the behavioral contract: what does the feature do? What
+   inputs, outputs, errors, side effects? Derive this from the test
+   spec and by running the Python CLI — not by reading Python source
+   line-by-line.
+2. Read the Rust implementation and verify it satisfies the contract.
+3. Flag: behavioral gaps, silent error swallowing, wrong error
+   messages, unnecessary Python-isms that don't serve the behavior,
+   missing edge cases.
+4. For each issue found: classify as high/medium/low priority, fix
+   high-priority issues following TDD workflow (spec → red → green),
+   document medium/low as tech debt.
+
+### Scope
+
+| Work Item | Crate(s) | Key areas to audit |
+|-----------|----------|-------------------|
+| 0a-0f | deadline-models, deadline-common, deadline-config, deadline-cli | Error types, path utils, config read/write, CLI root |
+| 0g-0h | deadline-client | Session creation, auth status, credentials |
+| 1 | deadline-client | Session caching, user-agent |
+| 2 | deadline-client, deadline-cli | Login/logout |
+| 3 | deadline-client | Queue user credentials |
+| 4 | deadline-client, deadline-cli | Queue parameters |
+| 5 | deadline-client, deadline-cli | Telemetry |
+| 6 | deadline-client, deadline-cli | Job monitoring & logs |
+| 7 | deadline-job-bundle | Job bundle loading, parameters |
+| 8-9 | deadline-job-attachments | Core types, hashing, caches, upload, download, API, manifest ops, CLI commands |
+| 12, 15 | deadline-cli | Job cancel, requeue-tasks, search, logs messages |
+
+### How to report
+
+Update this HANDOFF.md after auditing each work item with:
+- Issues found (with priority)
+- Fixes applied
+- Remaining tech debt
+
+After the audit is complete, proceed to the next feature work item
+(#10 or #11) per the Work Items table.
 
 ## Critical Context for New Sessions
 
