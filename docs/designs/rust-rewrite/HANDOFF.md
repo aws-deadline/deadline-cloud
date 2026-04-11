@@ -31,9 +31,8 @@ Things a fresh agent needs to know that aren't obvious from file search:
    - `deadline manifest download` (fully stubbed — returns error)
    - `deadline manifest upload` without `--s3-cas-uri`
 
-3. **Pre-existing test failure:** `cli_job__job_get_search_term_multiple_matches_shows_summary`
-   fails due to a stale snapshot. Not caused by any recent work. Ignore
-   it or fix the snapshot.
+3. **All tests pass.** The full workspace test suite is green as of
+   this commit. If a test fails, it's a real regression.
 
 4. **VFS (§28, 89 cases) is deferred** per migration strategy. Skip it
    when working on #10.
