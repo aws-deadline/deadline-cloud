@@ -43,6 +43,14 @@ The workflow for porting each feature from the Python CLI to Rust.
 - **Defer honestly.** If a feature is blocked on an unimplemented crate,
   say so and document it in the Progress table rather than building
   throwaway scaffolding.
+- **Full audits use the audit prompt.** For cross-cutting behavioral
+  audits spanning multiple work items, use `@rust-port-audit` and
+  follow `audit.md`. The workflow Step 1 mini-audit is for
+  single-work-item review only.
+- **Full audits use the audit prompt.** For cross-cutting behavioral
+  audits spanning multiple work items, use `@rust-port-audit` and
+  follow `audit_methodology.md`. The workflow Step 1 mini-audit is
+  for single-work-item review only.
 
 ## Design Principles
 
@@ -106,7 +114,7 @@ Before planning, read these (in order). Skip none.
 - [ ] `../../AGENTS.md` — repo conventions, build/test commands
 - [ ] `migration_strategy.md` — goals and constraints
 - [ ] `data_flow.md` — persistent data formats
-- [ ] `observations.md` — behavioral notes and ambiguities
+- [ ] `python_observations.md` — behavioral notes and ambiguities
 - [ ] `../../ARCHITECTURE.md` — crate relationships
 - [ ] `../../TESTING.md` — test philosophy and levels
 - [ ] `../../specs/<crate>.md` for the target crate
