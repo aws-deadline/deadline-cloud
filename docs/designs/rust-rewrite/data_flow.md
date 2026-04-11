@@ -377,9 +377,11 @@ range start, and range end. The file path is encoded to a blob using UTF-8 with 
 
 **Eviction policy:** There is no eviction policy. Entries persist indefinitely.
 
-**Version history:** The current table is `hashesV4`. If the table does not exist when the
-cache is opened, it is created. Previous table versions (if any) are not migrated — a new
-empty table is created.
+**Version history:** The Python CLI uses table `hashesV4` with string timestamps. The Rust
+CLI uses `hashesV5` with integer nanosecond timestamps (more precise, avoids float-to-string
+issues). The two are incompatible — switching between CLIs causes a one-time re-hash of all
+files. If the table does not exist when the cache is opened, it is created. Previous table
+versions are not migrated.
 
 ### S3 Check Cache
 

@@ -25,7 +25,7 @@ and gates all planning and implementation work.
   progress reporting, risk table for the spike.
 - `data_flow.md` — Persistent data formats (INI config, job bundle layout,
   manifest JSON, cache schemas, checkpoint format)
-- `observations.md` — Behavioral notes and ambiguities discovered during
+- `python_observations.md` — Behavioral notes and ambiguities discovered during
   analysis
 - `test_specs/` — Behavioral test specifications (52 sections, ~1,300 cases).
   Used as the implementation checklist — not maintained after tests are written.

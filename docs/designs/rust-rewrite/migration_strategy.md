@@ -154,9 +154,9 @@ introspection (~100-200 lines per plugin). Can be revisited per-DCC later.
 
 ## Risk Assessment
 
-The migration's success depends on several technical bets that have not yet
-been proven. These are ordered by severity — if any "project-blocking" risk
-fails, the migration strategy must be revised or abandoned.
+The migration's success depended on several technical bets. All
+project-blocking risks have been proven (see Risk Spikes table in
+`README.md`). The risk descriptions below are retained as a decision record.
 
 ### Project-blocking risks
 
