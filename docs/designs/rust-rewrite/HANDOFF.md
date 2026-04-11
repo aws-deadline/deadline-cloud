@@ -5,11 +5,41 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#9 — Job attachments: transfer** (pre-9e fixes)
+**#9 — Job attachments: transfer** (batch 9e-1 starting)
 
 ### Current Step
 
-Pre-9e fixes complete. Proceeding to batch 9e.
+Batch 9e-1, Steps 3-4 complete. Proceeding to Step 5 (verify
+against Python CLI) then commit.
+
+### Batch 9e-1 — Step 4 Implementation
+
+**New files:**
+- `crates/deadline-job-attachments/src/diff.rs` — `FileStatus` enum,
+  `fast_diff` (mtime/size), `hash_diff` (hash-based comparison)
+- `crates/deadline-job-attachments/src/manifest_ops.rs` — `GlobConfig`,
+  `ManifestSnapshot`, `ManifestDiffResult`, `ManifestMergeResult` types;
+  `resolve_glob_config`, `glob_files`, `write_manifest`,
+  `manifest_snapshot`, `manifest_diff`, `manifest_merge` functions
+- `crates/deadline-job-attachments/tests/diff_tests.rs` — 8 tests
+- `crates/deadline-job-attachments/tests/manifest_ops_tests.rs` — 17 tests
+
+**Modified files:**
+- `crates/deadline-job-attachments/src/lib.rs` — added `diff`, `manifest_ops`
+- `crates/deadline-job-attachments/Cargo.toml` — added `glob` dependency
+- `docs/specs/deadline-job-attachments.md` — added `diff` and `manifest_ops`
+  module specs, updated Known Gaps
+- `docs/designs/rust-rewrite/HANDOFF.md` — this file
+
+**Test count:** 257 tests in deadline-job-attachments. 0 failures.
+
+### Batch 9e-1 — Step 1 Review
+
+Audited existing `api.rs` functions (`read_manifests`,
+`process_path_mapping`, `attachment_download`, `attachment_upload`)
+against their behavioral contracts. No behavior gaps found. One known
+gap noted: `attachment_upload` accepts but ignores `on_progress`
+callback (TODO in code). Not blocking — CLI will wire its own progress.
 
 **Fix #1 — `merge_asset_manifests` returns `Result`:**
 Changed return type from `Option<AssetManifest>` to

@@ -1088,6 +1088,138 @@ back-to-back with alternating order to control for network variance.
 7. **Integer mtime comparison** in hash cache instead of string
    comparison. Faster and more correct.
 
+### `diff` — Manifest comparison (batch 9e-1)
+
+Compares files on disk against a manifest to detect changes. Two
+strategies: fast (mtime + size) and thorough (hash-based).
+
+#### New type: `FileStatus`
+
+Enum in `models.rs`: `Unchanged`, `New`, `Modified`, `Deleted`.
+Represents the status of a local file relative to a manifest entry.
+
+#### `fast_diff(root, current_files, reference_manifest) -> Vec<(String, FileStatus)>`
+
+Compares files by size and modification time against a reference
+manifest. Returns root-relative POSIX paths with their status.
+
+Behavior:
+- For each file in `current_files`: compute root-relative path, look
+  up in manifest by path.
+- Not in manifest → `New`.
+- In manifest, size differs → `Modified`.
+- In manifest, size matches but mtime differs by more than 1
+  microsecond → `Modified`. The 1μs tolerance accounts for rounding
+  when setting mtime from microsecond-precision manifest values.
+  Comparison: `abs(trunc(file_mtime_ns / 1000) - manifest_mtime) > 1`.
+- For each manifest entry not in `current_files` → `Deleted`.
+
+#### `hash_diff(reference, compare) -> Vec<(FileStatus, ManifestPath)>`
+
+Compares two manifests by hash. Returns status for every path in
+either manifest.
+
+Behavior:
+- Path in `compare` but not `reference` → `New`.
+- Path in both, hashes differ → `Modified`.
+- Path in both, hashes match → `Unchanged`.
+- Path in `reference` but not `compare` → `Deleted`.
+
+---
+
+### `manifest_ops` — Manifest lifecycle operations (batch 9e-1)
+
+High-level operations for creating, comparing, merging, uploading, and
+downloading manifests. These are the functions the CLI `manifest`
+commands call.
+
+#### New types in `models.rs`
+
+```
+GlobConfig { include: Vec<String>, exclude: Vec<String> }
+ManifestSnapshot { root: String, manifest: String }
+ManifestDiffResult { new: Vec<String>, modified: Vec<String>, deleted: Vec<String> }
+ManifestMergeResult { manifest_root: String, local_manifest_path: String }
+ManifestDownloadEntry { manifest_root: String, local_manifest_path: String }
+ManifestDownloadResponse { downloaded: Vec<ManifestDownloadEntry> }
+AssetType enum: Input, Output, All
+```
+
+All are simple data containers with `Serialize` for JSON output.
+
+#### `resolve_glob_config(include, exclude, include_exclude_config) -> GlobConfig`
+
+Resolves glob configuration from CLI arguments. Pure function.
+
+Behavior:
+- If `include` or `exclude` is non-empty, use them (config ignored).
+- Else if `include_exclude_config` is provided: try reading as file
+  path first, fall back to parsing as JSON string. Extract `include`
+  and `exclude` keys, defaulting to `["**/*"]` and `[]`.
+- Else: default config (`include: ["**/*"]`, `exclude: []`).
+
+#### `glob_files(root, config) -> Vec<String>`
+
+Returns absolute normalized paths of all files matching the glob config
+under `root`. Directories are excluded from results.
+
+Uses the `glob` crate for pattern matching. Each include pattern is
+joined with the root path. Exclude patterns are subtracted from the
+include results.
+
+#### `write_manifest(root, manifest, destination, name?) -> String`
+
+Writes a manifest to disk and returns the file path.
+
+Behavior:
+- Filename: `{name}-{root_hash}-{timestamp}.manifest`
+  - `root_hash`: xxh128 of root path as UTF-8 bytes
+  - `timestamp`: `YYYY-MM-DDTHH-MM-SS` (local time)
+- Name derivation when not provided: replace `/`, `\`, `:` with `_`,
+  strip leading `_`.
+- Creates parent directories if needed.
+
+#### `manifest_snapshot(root, destination, name, config, diff?, force_rehash?, callback?) -> Option<ManifestSnapshot>`
+
+Creates a manifest of files in a directory, optionally diffing against
+a prior manifest.
+
+Behavior:
+- Glob files in root using config.
+- If no diff manifest: hash all files via `hash_assets_and_create_manifest`,
+  write via `write_manifest`.
+- If diff manifest provided and `force_rehash=false`: fast diff
+  (mtime/size), then hash only new/modified files.
+- If diff manifest provided and `force_rehash=true`: hash all files,
+  compare hashes, include only new/modified.
+- If no files match or diff produces zero changes: return `None`.
+
+#### `manifest_diff(manifest_path, root, config, force_rehash?, callback?) -> ManifestDiffResult`
+
+Computes file differences between a manifest and a directory.
+
+Behavior:
+- Glob files in root using config.
+- If `force_rehash=false`: use `fast_diff`.
+- If `force_rehash=true`: hash all files, use `hash_diff`.
+- Returns three lists: new, modified, deleted (root-relative paths).
+
+#### `manifest_merge(root, manifest_files, destination, name?, callback?) -> Option<ManifestMergeResult>`
+
+Merges multiple manifest files into one.
+
+Behavior:
+- Read and decode all manifest files via `read_manifests`.
+- Merge via `merge_asset_manifests`.
+- If merge produces a result, write via `write_manifest`.
+- Return `None` if merge produces empty result.
+
+#### `manifest_upload` and `manifest_download`
+
+Deferred to batch 9e-2 (S3 + Deadline API interaction).
+
+---
+
 ## Known Gaps (to address in future work items)
 
 Types and functions that exist in Python but are not yet ported. Each
@@ -1095,10 +1227,6 @@ gap lists which work item will address it.
 
 | Gap | Python location | Needed by | Work item |
 |-----|----------------|-----------|-----------|
-| `FileStatus` enum (NEW/MODIFIED/UNCHANGED/DELETED) | `models.py` | Internal to upload, manifest diff | #10 |
-| `GlobConfig` struct | `models.py` | Manifest CLI commands | #10 |
-| `ManifestSnapshot`, `ManifestDiff`, `ManifestMerge`, `ManifestDownload` | `models.py` | Manifest CLI commands | #10 |
-| `_manifest_snapshot`, `_manifest_merge` functions | `api/manifest.py` | Manifest CLI | #10 |
 | `_path_mapping`, `_PathMappingRuleApplier` | `_path_mapping.py` | Cross-OS download path remapping | #10 |
 | `os_file_permission` module | `os_file_permission.py` | File permission management on download | #10 |
 | `_get_unique_dest_dir_name` | `_utils.py` | Download directory naming | #10 |

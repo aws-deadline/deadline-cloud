@@ -1,7 +1,9 @@
 pub mod api;
 pub mod asset_manifests;
 pub mod caches;
+pub mod diff;
 pub mod download;
+pub mod manifest_ops;
 pub mod models;
 pub mod progress_tracker;
 pub mod s3;
