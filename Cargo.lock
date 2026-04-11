@@ -919,6 +919,7 @@ name = "deadline-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "aws-config",
  "chrono",
  "clap",
  "deadline-client",

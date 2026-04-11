@@ -6,3 +6,5 @@ pub mod queue;
 pub mod job;
 pub mod worker;
 pub mod helpers;
+pub mod attachment;
+pub mod manifest;

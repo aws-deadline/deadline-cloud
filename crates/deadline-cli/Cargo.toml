@@ -28,6 +28,7 @@ thiserror = { workspace = true }
 indicatif = { workspace = true }
 serde_yaml = { workspace = true }
 tokio = { workspace = true }
+aws-config = { workspace = true }
 serial_test = { workspace = true }
 
 [dev-dependencies]

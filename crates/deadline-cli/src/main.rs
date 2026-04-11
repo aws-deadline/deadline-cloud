@@ -85,6 +85,16 @@ enum Commands {
         #[command(subcommand)]
         action: commands::worker::WorkerAction,
     },
+    /// BETA - Upload or download job attachment data files
+    Attachment {
+        #[command(subcommand)]
+        action: commands::attachment::AttachmentAction,
+    },
+    /// BETA - Create, compare, download, and upload job attachment manifests
+    Manifest {
+        #[command(subcommand)]
+        action: commands::manifest::ManifestAction,
+    },
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -170,6 +180,16 @@ fn command_name(cmd: &Commands) -> String {
         Commands::Worker { action } => ("worker", match action {
             commands::worker::WorkerAction::List { .. } => "list",
             commands::worker::WorkerAction::Get { .. } => "get",
+        }),
+        Commands::Attachment { action } => ("attachment", match action {
+            commands::attachment::AttachmentAction::Download { .. } => "download",
+            commands::attachment::AttachmentAction::Upload { .. } => "upload",
+        }),
+        Commands::Manifest { action } => ("manifest", match action {
+            commands::manifest::ManifestAction::Snapshot { .. } => "snapshot",
+            commands::manifest::ManifestAction::Diff { .. } => "diff",
+            commands::manifest::ManifestAction::Download { .. } => "download",
+            commands::manifest::ManifestAction::Upload { .. } => "upload",
         }),
     };
     format!("deadline.{group}.{action}")
@@ -269,6 +289,8 @@ fn main() {
             Commands::Queue { action } => commands::queue::run(action),
             Commands::Job { action } => commands::job::run(action),
             Commands::Worker { action } => commands::worker::run(action),
+            Commands::Attachment { action } => commands::attachment::run(action),
+            Commands::Manifest { action } => commands::manifest::run(action),
         };
         if let Err(e) = result {
             match e {

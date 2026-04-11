@@ -294,3 +294,117 @@ Both commands use `suggest_resources_on_client_error` on API failure.
 | `deadline-job-bundle` | Bundle submission |
 | `deadline-job-attachments` | Attachment handling |
 | `deadline-mcp` | MCP server (for `deadline mcp-server` subcommand) |
+
+## `deadline attachment` (batch 9e-3)
+
+BETA subcommand group for uploading and downloading job attachment data
+files using manifest files.
+
+### `deadline attachment download`
+
+Downloads files from S3 CAS based on manifest files.
+
+Options:
+- `-m, --manifests <PATH>...` (required, multiple) — manifest file paths
+- `--s3-root-uri <URI>` — S3 root URI (bucket + prefix)
+- `--path-mapping-rules <PATH>` — path mapping rules JSON file
+- `--farm-id <ID>` — override farm ID
+- `--queue-id <ID>` — override queue ID
+- `--profile <NAME>` — AWS profile for S3 access
+- `--conflict-resolution <MODE>` — SKIP, OVERWRITE, or CREATE_COPY
+- `--json` — print summary as JSON
+
+Credential resolution:
+- If `--profile` provided: use profile credentials + `--s3-root-uri`
+- If no `--profile`: read farm/queue from config, get queue attachment
+  settings for S3 URI, assume queue role for S3 credentials
+- Error if queue has no attachment settings or no S3 root URI
+
+Conflict resolution precedence: `--conflict-resolution` flag > config
+`settings.conflict_resolution` > default `CREATE_COPY`.
+
+Output: prints `DownloadSummaryStatistics` (processed/skipped counts,
+transfer rate). With `--json`, prints the summary as JSON.
+
+### `deadline attachment upload`
+
+Uploads files to S3 CAS based on manifest files.
+
+Options:
+- `-m, --manifests <PATH>...` (required, multiple) — manifest file paths
+- `-r, --root-dirs <PATH>...` (multiple) — root directories
+- `--path-mapping-rules <PATH>` — path mapping rules JSON file
+- `--s3-root-uri <URI>` — S3 root URI
+- `--upload-manifest-path <PREFIX>` — S3 prefix for manifest upload
+- `--farm-id <ID>`, `--queue-id <ID>`, `--profile <NAME>`
+- `--json` — JSON output
+
+Requires exactly one of `--root-dirs` or `--path-mapping-rules`.
+Same credential resolution as download.
+
+## `deadline manifest` (batch 9e-3)
+
+BETA subcommand group for creating, comparing, downloading, and
+uploading job attachment manifests.
+
+### `deadline manifest snapshot`
+
+Creates a manifest of files in a directory.
+
+Options:
+- `--root <DIR>` (required) — directory to snapshot
+- `-d, --destination <DIR>` — where to write manifest (default: root)
+- `-n, --name <NAME>` — manifest name
+- `-i, --include <GLOB>...` — include patterns
+- `-e, --exclude <GLOB>...` — exclude patterns
+- `-ie, --include-exclude-config <JSON>` — glob config
+- `--diff <PATH>` — diff against existing manifest
+- `--force-rehash` — hash-based diff instead of mtime
+- `--json` — JSON output
+
+Error exits 1 if root or destination doesn't exist.
+When no `--destination`, defaults to root and prints a message.
+
+### `deadline manifest diff`
+
+Computes file differences against a manifest.
+
+Options:
+- `--manifest <PATH>` (required) — manifest to diff against
+- `--root <DIR>` — directory to compare
+- `-i, --include`, `-e, --exclude`, `-ie, --include-exclude-config`
+- `--force-rehash`
+- `--json` — JSON output with new/modified/deleted lists
+
+Error exits 1 if manifest or root doesn't exist.
+
+### `deadline manifest download <DOWNLOAD_DIR>`
+
+Downloads job manifests from S3.
+
+Arguments:
+- `<DOWNLOAD_DIR>` — where to write manifests
+
+Options:
+- `--job-id <ID>` (required)
+- `--step-id <ID>` — include step dependencies
+- `--farm-id <ID>`, `--queue-id <ID>`, `--profile <NAME>`
+- `--asset-type <TYPE>` — INPUT, OUTPUT, or ALL (default: ALL)
+- `--json` — JSON output
+
+Error exits 1 if download directory doesn't exist.
+
+### `deadline manifest upload <MANIFEST_FILE>`
+
+Uploads a manifest to S3 CAS.
+
+Arguments:
+- `<MANIFEST_FILE>` — manifest file to upload
+
+Options:
+- `--s3-cas-uri <URI>` — S3 CAS URI
+- `--s3-manifest-prefix <PREFIX>` — S3 key prefix
+- `--farm-id <ID>`, `--queue-id <ID>`, `--profile <NAME>`
+- `--json` — JSON output
+
+Error exits 1 if manifest file doesn't exist.

@@ -137,7 +137,7 @@ pub fn resolve_glob_config(
     Ok(GlobConfig::default())
 }
 
-/// Return absolute paths of all files matching the glob config under root.
+/// Return absolute normalized paths of all files matching the glob config under root.
 pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAttachmentsError> {
     let base = std::path::absolute(Path::new(root))
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Invalid root path: {e}")))?;
@@ -151,8 +151,8 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
         })? {
             if let Ok(path) = entry {
                 if path.is_file() {
-                    let normalized = path
-                        .canonicalize()
+                    // Use absolute instead of canonicalize to avoid /private symlink resolution on macOS
+                    let normalized = std::path::absolute(&path)
                         .unwrap_or(path)
                         .to_string_lossy()
                         .into_owned();
@@ -166,8 +166,7 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
         let full_pattern = base.join(pattern).to_string_lossy().into_owned();
         if let Ok(entries) = glob::glob(&full_pattern) {
             for entry in entries.flatten() {
-                let normalized = entry
-                    .canonicalize()
+                let normalized = std::path::absolute(&entry)
                     .unwrap_or(entry)
                     .to_string_lossy()
                     .into_owned();

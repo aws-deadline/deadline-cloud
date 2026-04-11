@@ -1,5 +1,6 @@
 ---
 source: crates/deadline-cli/tests/cli_common.rs
+assertion_line: 24
 info:
   program: deadline
   args:
@@ -10,15 +11,16 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51289"
-    AWS_ENDPOINT_URL_STS: "http://localhost:51289"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61768"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61768"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61768"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCit7xi/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCit7xi
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpMmeRTm/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpMmeRTm
 ---
 success: true
 exit_code: 0
@@ -30,14 +32,16 @@ Learn more about Deadline Cloud (https://docs.aws.amazon.com/deadline-cloud/late
 Usage: deadline [OPTIONS] [COMMAND]
 
 Commands:
-  config  View and update workstation configuration
-  auth    Manage authentication for Deadline Cloud
-  farm    List or get Deadline Cloud farms
-  fleet   List or get Deadline Cloud fleets
-  queue   List or get Deadline Cloud queues
-  job     List or get Deadline Cloud jobs
-  worker  List or get Deadline Cloud workers
-  help    Print this message or the help of the given subcommand(s)
+  config      View and update workstation configuration
+  auth        Manage authentication for Deadline Cloud
+  farm        List or get Deadline Cloud farms
+  fleet       List or get Deadline Cloud fleets
+  queue       List or get Deadline Cloud queues
+  job         List or get Deadline Cloud jobs
+  worker      List or get Deadline Cloud workers
+  attachment  BETA - Upload or download job attachment data files
+  manifest    BETA - Create, compare, download, and upload job attachment manifests
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --log-level <LOG_LEVEL>

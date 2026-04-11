@@ -9,7 +9,72 @@ every session before consulting the Work Items table in `README.md`.
 
 ### Current Step
 
-Batch 9e-2 complete. Proceeding to batch 9e-3 (CLI commands).
+Batch 9e-3 complete. Work item #9 complete.
+
+### Batch 9e-3 — Steps 4-5 Implementation + Python Verification
+
+**Python CLI comparison findings (Step 5):**
+- Default destination message matches: `"Manifest creation path defaulted to {root} \n"` ✅
+- "Manifest generated at" message matches ✅
+- Error messages match (trailing spaces preserved) ✅
+- JSON diff output: root-relative paths match Python ✅
+- Bug found and fixed: `glob_files` was using `canonicalize()` which
+  resolves `/var` → `/private/var` on macOS, breaking `strip_prefix`
+  in `fast_diff`. Changed to `std::path::absolute()`.
+- Accepted difference: Python prints full traceback on errors; Rust
+  prints clean error message only (documented in CLI spec).
+- Accepted difference: Python prints hashing progress bar; Rust does
+  not yet (progress callback wiring deferred).
+
+**New files:**
+- `crates/deadline-cli/src/commands/attachment.rs` — `deadline attachment download/upload`
+- `crates/deadline-cli/src/commands/manifest.rs` — `deadline manifest snapshot/diff/download/upload`
+- `crates/deadline-cli/tests/cli_attachment.rs` — 2 Level 2 tests
+- `crates/deadline-cli/tests/cli_manifest.rs` — 11 Level 2 tests
+- 7 new snapshot files + 3 updated help text snapshots
+
+**Level 2 test coverage of batch 9 library code:**
+- `manifest_snapshot_creates_manifest_file` → glob_files → hash_assets → write_manifest → validates manifest JSON content
+- `manifest_snapshot_diff_only_includes_changed_files` → fast_diff → re-hash changed → verifies only changed file in output
+- `manifest_diff_json_shows_new_modified_deleted` → fast_diff → verifies all 3 statuses with root-relative paths
+- `manifest_snapshot_include_exclude_filters` → glob_files with patterns → verifies manifest content
+- Error tests verify CLI input validation exits 1 with correct messages
+
+**Known limitations:**
+- `manifest download` CLI stubbed — requires Deadline API client wiring
+- `attachment download/upload` without `--profile` requires queue role assumption
+
+### Batch 9e-3 — Step 4 Implementation
+
+**New files:**
+- `crates/deadline-cli/src/commands/attachment.rs` — `deadline attachment download/upload`
+- `crates/deadline-cli/src/commands/manifest.rs` — `deadline manifest snapshot/diff/download/upload`
+- `crates/deadline-cli/tests/cli_attachment.rs` — 2 Level 2 tests
+- `crates/deadline-cli/tests/cli_manifest.rs` — 10 Level 2 tests
+- 7 new snapshot files + 3 updated help text snapshots
+
+**Modified files:**
+- `crates/deadline-cli/src/commands/mod.rs` — registered new modules
+- `crates/deadline-cli/src/main.rs` — added Commands enum variants, dispatch, command_name
+- `crates/deadline-cli/Cargo.toml` — added `aws-config` dependency
+- `crates/deadline-job-attachments/src/progress_tracker.rs` — added `Serialize` to `SummaryStatistics`
+- `docs/specs/deadline-cli.md` — added attachment and manifest command specs
+
+**Level 2 test coverage of batch 9 library code:**
+The manifest snapshot/diff tests exercise the full stack through the CLI:
+- `manifest snapshot` → `glob_files` → `hash_assets_and_create_manifest` → `write_manifest`
+- `manifest diff` → `glob_files` → `fast_diff` → `ManifestDiffResult`
+- Error paths test input validation at the CLI level
+
+**Known limitations:**
+- `manifest download` CLI is stubbed (returns error) — requires Deadline
+  API client wiring for GetQueue/GetJob/ListStepDependencies. Library
+  function is complete; CLI wiring deferred to work item #13.
+- `attachment download/upload` without `--profile` requires queue role
+  assumption — same Deadline API dependency.
+
+**Test count:** 12 new Level 2 tests. Full CLI: 121 tests (120 pass,
+1 pre-existing failure in cli_job).
 
 ### Batch 9e-2 — Step 4 Implementation
 

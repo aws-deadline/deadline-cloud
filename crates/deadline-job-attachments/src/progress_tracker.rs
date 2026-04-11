@@ -50,7 +50,7 @@ pub struct ProgressReportMetadata {
 
 // --- SummaryStatistics ---
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SummaryStatistics {
     pub total_time: f64,
     pub total_files: u64,
