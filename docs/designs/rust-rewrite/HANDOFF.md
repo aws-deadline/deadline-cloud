@@ -5,11 +5,40 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#9 — Job attachments: transfer** (batch 9e-1 starting)
+None. Work item #9 is complete. Pick the next "Not started" item from
+the Work Items table in `README.md` whose dependencies are all done.
 
-### Current Step
+## Critical Context for New Sessions
 
-Batch 9e-3 complete. Work item #9 complete.
+Things a fresh agent needs to know that aren't obvious from file search:
+
+1. **Python source is at `../deadline-cloud-python`** (sibling directory).
+   The Python CLI binary is at `/Users/viknith/DeadlineCloudSubmitter/DeadlineClient/deadline`.
+   Always run the Python CLI to verify Rust output before accepting
+   snapshots (workflow Step 5).
+
+2. **Queue role assumption is not wired in the CLI.** Commands that
+   access S3 without `--profile` need to: read farm/queue from config →
+   call GetQueue to get attachment settings → assume queue role via
+   `get_queue_user_credentials` → use queue-scoped credentials for S3.
+   The library functions (`attachment_download`, `manifest_download`,
+   etc.) accept pre-built S3 clients. The CLI layer needs to build
+   those clients with queue-scoped credentials. This flow exists in
+   `deadline-client` crate (`session.rs`) but is not yet called from
+   the CLI `attachment` or `manifest` commands. Affects:
+   - `deadline attachment download` without `--profile`
+   - `deadline attachment upload` without `--profile`
+   - `deadline manifest download` (fully stubbed — returns error)
+   - `deadline manifest upload` without `--s3-cas-uri`
+
+3. **Pre-existing test failure:** `cli_job__job_get_search_term_multiple_matches_shows_summary`
+   fails due to a stale snapshot. Not caused by any recent work. Ignore
+   it or fix the snapshot.
+
+4. **VFS (§28, 89 cases) is deferred** per migration strategy. Skip it
+   when working on #10.
+
+## Work Item #9 — Complete
 
 ### Batch 9e-3 — Steps 4-5 Implementation + Python Verification
 
