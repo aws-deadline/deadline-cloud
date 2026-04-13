@@ -1,183 +1,123 @@
 # deadline-job-bundle
 
 Job bundle directory parsing, template loading, parameter validation and
-resolution, asset references, YAML/JSON serialization, and job history
-directory creation.
+resolution, asset reference extraction, and job history directory creation.
 
-## Status: Done
+## Role in the System
 
-## Dependencies
+Handles everything about a job bundle *before* it touches AWS. Parses the
+bundle directory structure, validates templates against the OpenJD spec,
+resolves parameters (merging user values, queue environment values, and
+defaults), and extracts asset references for the attachment subsystem.
 
-| Crate | Purpose |
-|-------|---------|
-| `deadline-models` | Shared error types (`DeadlineError`) |
+Consumers: `deadline-cli` (bundle submit, gui-submit), `deadline-gui-ffi`
+(submission dialog).
 
-Note: `deadline-config` is not a direct dependency. `create_job_history_bundle_dir`
-takes the history directory path as a parameter. Config lookup happens at the CLI layer.
+## Key Concepts
 
-## Module Layout
+**A job bundle is a directory, not a file.** It contains a template
+(YAML or JSON), optional parameter values, and referenced assets. The
+loader discovers files by convention (`template.yaml`/`template.json`,
+`parameter_values.yaml`/`parameter_values.json`) — only one format per
+file is allowed.
 
-```
-src/
-├── lib.rs           // re-exports
-├── loader.rs        // file discovery, symlink validation, YAML/JSON I/O
-├── parameters.rs    // parameter validation, resolution, merging, UI controls
-├── submission.rs    // AssetReferences, split_parameter_args, parse_frame_range
-└── history.rs       // create_job_history_bundle_dir
-```
+**Symlink containment is enforced.** All files within a bundle must
+resolve (after following symlinks) to a location under the bundle root.
+The bundle directory itself may be a symlink, but nothing inside can
+escape it. This prevents path traversal attacks in user-provided bundles.
 
-## loader — File Discovery and I/O
+**Parameters have a type system.** Four types: STRING, PATH, INT, FLOAT.
+Values are validated and coerced (string `"19"` → integer 19 for INT
+parameters). Constraints (min/max length, min/max value, allowedValues)
+are checked after coercion.
 
-### Symlink containment validation
+**PATH parameters drive asset references.** A PATH parameter's `dataFlow`
+and `objectType` determine whether it contributes to input files, input
+directories, output directories, or referenced paths. This is how the
+attachment subsystem knows what to upload/download without parsing the
+template's step scripts.
 
-`validate_directory_symlink_containment(job_bundle_dir)` resolves the
-bundle directory to its real path, then walks all files and directories
-within it. Every path must resolve (after following symlinks) to a
-location under the resolved bundle root. The bundle directory itself may
-be a symlink. If the path is not a directory, returns an error.
+**Queue environment parameters merge with job parameters.** Queue
+environments can define parameters that override or supplement the job
+template's parameters. Same-name parameters must agree on type. The merge
+logic handles conflicts and app-specific parameters (names containing
+`:` like `deadline:priority`).
 
-### File discovery
+## Behavior & Contracts
 
-`read_yaml_or_json(job_bundle_dir, filename, required)` checks for
-`{filename}.json` and `{filename}.yaml` in the bundle directory:
+**Template validation:** Must have `specificationVersion: jobtemplate-2023-09`.
+Other versions are rejected.
 
-- Both exist → error ("only one is permitted")
-- One exists → returns `(contents, "JSON"|"YAML")`
-- Neither exists, required → error ("lacks a {filename}.json or ...")
-- Neither exists, not required → returns `("", "")`
+**Parameter validation rules:**
+- Name is required and non-empty
+- Type must be STRING, PATH, INT, or FLOAT
+- Default value cannot be null
+- INT values must be actual integers (float 3.7 → error)
+- FLOAT values accept both integer and decimal strings
+- allowedValues is checked as a set membership test
+- File filter patterns in UI specs must be 1-20 characters
 
-Files are read as UTF-8.
+**PATH parameter resolution:** PATH parameters with a default but no
+explicit value and no allowedValues have their default resolved relative
+to the bundle directory. The resolved path must be relative and must stay
+within the bundle. PATH values provided by the user are made absolute
+relative to CWD.
 
-### Parsing
+**Asset references output:** `AssetReferences` contains four sorted sets:
+`input_filenames`, `input_directories`, `output_directories`,
+`referenced_paths`. Sorted (via `BTreeSet`) for deterministic iteration
+and serialization.
 
-`parse_yaml_or_json_content(contents, file_type, bundle_dir, filename)`
-parses JSON or YAML content. Unknown file types produce a
-`RuntimeError`-equivalent ("Unexpected file type").
+**Job history directory format:**
+`{history_dir}/YYYY-MM/YYYY-MM-DD-{NN}-{submitter}-{job_name}` where NN
+is a sequential number determined by scanning existing directories.
+Submitter and job names are sanitized (alphanumeric, space, hyphen,
+underscore only). Job name truncated to 128 characters.
 
-`read_yaml_or_json_object(bundle_dir, filename, required)` combines
-reading and parsing. Returns `Option<serde_json::Value>` — `None` when
-the file is absent and not required.
+**YAML serialization:** `deadline_yaml_dump` preserves insertion order
+(no key sorting) and uses block literal style for multi-line strings.
 
-### Saving
+## Design Decisions
 
-`save_yaml_or_json_to_file(bundle_dir, filename, file_type, data)` writes
-data as `{filename}.json` (indent=2) or `{filename}.yaml` (using
-`deadline_yaml_dump`). Unknown file types produce an error.
+**Parameters are `serde_json::Value`, not typed structs.** A parameter
+definition has ~15 optional fields with complex validation rules. Typed
+structs would require extensive `Option<T>` fields and custom
+deserialization. JSON values with runtime validation are simpler and match
+the OpenJD spec's JSON Schema approach.
 
-### YAML serialization
+**UI control inference from type.** If a parameter doesn't specify a UI
+control, one is inferred: STRING→LINE_EDIT, PATH→CHOOSE_DIRECTORY or
+CHOOSE_INPUT_FILE (based on objectType/dataFlow), INT/FLOAT→SPIN_BOX,
+anything with allowedValues→DROPDOWN_LIST.
 
-`deadline_yaml_dump(data)` serializes a `serde_json::Value` to YAML with:
-- `sort_keys=false` (preserves insertion order via `serde_json`'s `preserve_order` feature)
-- Multi-line strings use block literal (`|-`) style — handled natively by `serde_yaml`, no post-processing needed
+**No dependency on `deadline-config`.** The history directory path is
+passed as a parameter by the CLI layer. This keeps the crate focused on
+bundle logic without coupling to config file mechanics.
 
-## parameters — Validation and Resolution
+## Gotchas & Constraints
 
-### Data representation
+- Only one of `template.yaml` or `template.json` may exist in a bundle.
+  Both present → error. Neither present → error.
 
-Job parameters are represented as `serde_json::Value` (JSON objects),
-not typed Rust structs. This matches Python's dict-based approach and
-avoids 15+ `Option<T>` fields. Validation functions extract and check
-fields from the Value, mutating in place where needed.
+- Parameter name conflicts between queue environments and job templates
+  are only errors if the *type* differs. Different defaults are silently
+  accepted (queue environment wins).
 
-### validate_job_parameter
+- App-specific parameters (names with `:`) from unknown prefixes are
+  silently dropped. Only `deadline:` prefix parameters are validated
+  against a known list.
 
-Validates a single parameter definition against the OpenJD schema.
-Checks: name (required, non-empty string), type (one of STRING/PATH/
-INT/FLOAT), description (string), default (not null), allowedValues
-(list), dataFlow (NONE/IN/OUT/INOUT), minLength/maxLength (non-negative
-int), minValue/maxValue (numeric), objectType (FILE/DIRECTORY),
-userInterface (sub-object). Flags `type_required` and `default_required`
-control whether those fields are mandatory.
+- The `parse_frame_range` function uses a strict regex. Whitespace in
+  frame range strings is not tolerated.
 
-### validate_job_parameter_value
+- `read_yaml_or_json_object` returns `None` for absent optional files.
+  Callers must handle the `None` case — don't assume files exist.
 
-Validates and coerces a value for a parameter definition:
-- STRING/PATH: must be string
-- INT: string "19" → integer 19; float 3.7 → error (not an integer)
-- FLOAT: string "3.14" → float 3.14
+## Status & Gaps
 
-Then checks constraints: minLength, maxLength, minValue, maxValue,
-allowedValues.
+Fully implemented for the current scope.
 
-### validate_user_interface_spec / validate_user_interface_file_filter
-
-Validates the `userInterface` sub-object and its `fileFilters` entries.
-File filter patterns must be 1-20 characters.
-
-### read_job_bundle_parameters
-
-Reads template and parameter_values from the bundle directory. Validates
-the template has `specificationVersion: jobtemplate-2023-09`. Merges
-parameter values into template definitions. For PATH parameters with a
-default but no value and no allowedValues, resolves the default relative
-to the bundle directory (must be relative, must resolve within bundle).
-Validates hidden parameters have values or defaults.
-
-### apply_job_parameters
-
-Applies user-provided parameter values to the parameter list. PATH
-values without allowedValues are made absolute relative to CWD. Empty
-PATH values are skipped. PATH parameters with dataFlow populate
-asset_references:
-- IN + FILE → input_filenames
-- IN + DIRECTORY → input_directories
-- OUT + FILE → parent directory added to output_directories
-- OUT + DIRECTORY → output_directories
-- INOUT → both input and output
-- NONE → referenced_paths
-
-### merge_queue_job_parameters
-
-Merges queue environment parameters with job bundle parameters. Same-name
-parameters must agree on type (differences in default are ignored).
-Value-only parameters (name + value, no type) for names not in queue
-params and without `:` in the name produce an error. Names with `:` are
-treated as app-specific and accepted.
-
-### get_ui_control_for_parameter_definition
-
-Returns the UI control for a parameter, using explicit control if set,
-otherwise inferring from type: STRING→LINE_EDIT, PATH→CHOOSE_DIRECTORY/
-CHOOSE_INPUT_FILE/CHOOSE_OUTPUT_FILE (based on objectType and dataFlow),
-INT/FLOAT→SPIN_BOX, any with allowedValues→DROPDOWN_LIST. Validates
-control is supported for the parameter type.
-
-### parameter_definition_difference
-
-Compares two parameter definitions field by field. allowedValues compared
-as sets. `ignore_missing` flag skips fields absent from either side.
-
-## submission — Asset References and Helpers
-
-### AssetReferences
-
-Struct with four `BTreeSet<String>` fields: input_filenames,
-input_directories, output_directories, referenced_paths. BTreeSet gives
-deterministic sorted iteration for `to_dict()`.
-
-Methods: `bool()` (any non-empty), `union()`, `from_dict()` (normalizes
-paths), `to_dict()` (sorted lists).
-
-### split_parameter_args
-
-Splits parameters into app-specific (e.g. `deadline:priority`) and job
-parameters. App parameter names are validated against a supported list.
-Other app prefixes (e.g. `maya:`) are silently dropped. Parameter types
-are lowercased in output.
-
-### parse_frame_range
-
-Parses frame range strings like `"1-10"` or `"1-10:2"` into a list of
-integers. Uses regex: `^(-?\d+)(-(-?\d+)(:(-?\d+))?)?$`.
-
-## history — Job History Directory
-
-### create_job_history_bundle_dir
-
-Creates a dated, sequentially-numbered directory under the configured
-`settings.job_history_dir`. Format:
-`{job_history_dir}/YYYY-MM/YYYY-MM-DD-{NN}-{submitter}-{job_name}`
-
-Submitter and job names are sanitized (keep alphanumeric, space, hyphen,
-underscore). Job name truncated to 128 chars. Sequential number
-determined by scanning existing directories for the date prefix.
+Gaps:
+- `create_job_from_job_bundle` orchestration (the actual submission API
+  call) lives in `deadline-client`, not here. This crate only prepares
+  the bundle data.

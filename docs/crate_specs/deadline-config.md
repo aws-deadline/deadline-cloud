@@ -1,114 +1,102 @@
 # deadline-config
 
 Manages the `~/.deadline/config` INI file — reading, writing, and resolving
-settings through a hierarchical section naming scheme scoped to the active
-AWS profile, farm, and queue.
+settings through a hierarchical section naming scheme.
 
-## Modules
+## Role in the System
 
-### `ini` — INI parser/writer
+The foundational crate that nearly every other crate depends on. Provides
+config file I/O and setting resolution. The CLI reads config once per
+invocation and threads the `IniConfig` through all calls — there is no
+global cache or mutable singleton.
 
-`IniConfig` parses and serializes standard INI format: `[section]` headers,
-`key = value` pairs, `#`/`;` comments. Section names may contain spaces
-(required for the hierarchical naming scheme). Output is sorted by section
-then key for deterministic serialization.
+Consumers: `deadline-cli`, `deadline-client`, `deadline-gui-ffi`,
+`deadline-job-attachments`, `deadline-common`.
 
-### `settings` — Setting definitions
+## Key Concepts
 
-Static table of all 18 Deadline Cloud settings. Each `SettingDef` has:
-
-- `default` — Default value. May contain `{aws_profile_name}` for substitution.
-- `depend` — Parent setting that controls section scoping. `None` = top-level.
-- `section_format` — How this setting's value formats into child section names.
-- `description` — Human-readable, used by `deadline config show`.
-
-The dependency chain defines hierarchical section naming:
+**Hierarchical section naming.** Settings are scoped by AWS profile, farm,
+and queue. A setting like `defaults.job_id` resolves to the section
+`[profile-myprofile farm-abc queue-123 defaults]`. The hierarchy is:
 
 ```
-defaults.aws_profile_name  →  "profile-{}"
-  └─ defaults.farm_id      →  "{}"
-       └─ defaults.queue_id →  "{}"
+aws_profile_name → farm_id → queue_id
 ```
 
-Example: `defaults.job_id` with profile `myprofile`, farm `farm-abc`,
-queue `queue-123` resolves to section `[profile-myprofile farm-abc queue-123 defaults]`.
+Each level's value formats into the section name for the next level's
+settings. This means changing your active profile changes which farm/queue
+defaults you see — they're namespaced, not global.
 
-### `config_file` — Core logic
+**Setting definitions are static.** All 18 settings are defined in a
+compile-time table. Each has a default value, a dependency chain (which
+parent setting scopes it), and a section format string. Adding a new
+setting means adding one entry to this table.
 
-#### File location
+**No global cache by design.** The CLI reads the file once and passes the
+`IniConfig` struct through the call chain. This avoids the mtime-based
+cache invalidation complexity that existed previously. If the GUI FFI
+later needs caching for long-lived processes, it can wrap `IniConfig` in
+a `CachedConfig` — but the core crate stays stateless.
 
-`get_config_file_path()` checks `DEADLINE_CONFIG_FILE_PATH` env var, falls
-back to `~/.deadline/config`. Tilde expansion applied to both.
+## Behavior & Contracts
 
-#### Read / Write
+**File location:** `DEADLINE_CONFIG_FILE_PATH` env var, falling back to
+`~/.deadline/config`. Tilde expansion applies to both.
 
-Two tiers — path-explicit (primary) and convenience wrappers:
+**Read behavior:** Missing file → empty config (not an error). All
+settings return their defaults when not explicitly set.
 
-| Function | Disk I/O |
-|----------|----------|
-| `read_config_from(path)` | Reads specific file. Empty config if missing. |
-| `read_config()` | Reads from default path. |
-| `write_config_to(config, path)` | Atomic write (temp + rename). Creates dirs. 0o600 on POSIX. |
-| `write_config(config)` | Writes to default path. |
+**Write behavior:** Atomic write via temp file + rename. Creates parent
+directories. Sets 0o600 permissions on POSIX.
 
-No global cache. The CLI reads once per invocation and threads the `IniConfig`
-through all calls. The Python implementation uses mtime-based caching with
-global mutable state; this is intentionally omitted because the Rust
-architecture avoids repeated reads by design. If the GUI FFI
-later needs caching, it can be added as a `CachedConfig` wrapper.
+**Clear behavior:** Writing the default value back to the file rather than
+removing the key. This is intentional — it preserves the key's presence
+as a signal that the setting has been touched, and avoids ambiguity
+between "never set" and "explicitly cleared."
 
-#### Setting operations
+**Setting validation:**
+- Names must contain a dot. No dot → `"The setting name '<name>' is not valid."`
+- Valid format but unknown → `"AWS Deadline Cloud configuration has no setting named '<name>'."`
 
-Two tiers — config-explicit (primary) and convenience wrappers:
+**str2bool:** Accepts case-insensitive `yes/no`, `on/off`, `true/false`,
+`1/0`. Everything else is an error.
 
-| Function | Takes config? | Disk I/O |
-|----------|---------------|----------|
-| `get_setting_with_config(name, &config)` | Yes | None |
-| `get_setting(name)` | No (reads disk) | Read |
-| `set_setting_in_config(name, value, &mut config)` | Yes | None |
-| `set_setting(name, value)` | No | Read + Write |
-| `clear_setting_in_config(name, &mut config)` | Yes | None |
-| `clear_setting(name)` | No | Read + Write |
-| `get_setting_default_with_config(name, &config)` | Yes | None |
-| `get_setting_default(name)` | No (reads disk) | Read |
+**Profile resolution:** `get_best_profile_for_farm` finds the best AWS
+profile for a given farm/queue combination. Priority: default profile if
+its farm matches → any profile matching both farm and queue → any profile
+matching farm only → default profile as fallback. The function is pure —
+it takes the profile list as a parameter and works on a cloned config.
 
-`clear_setting` writes the default value back rather than removing the key
-(see `../design_docs/rust-rewrite/data_flow.md` observation #6).
+## Design Decisions
 
-#### Validation
+**Two-tier API (config-explicit vs convenience).** Every operation exists
+in two forms: one that takes `&IniConfig` / `&mut IniConfig` (no disk I/O),
+and a convenience wrapper that reads/writes the file. The config-explicit
+versions are what the CLI uses. The convenience wrappers exist for simple
+scripts and the GUI FFI where threading config through isn't practical.
 
-Setting names must contain a dot. Unknown names produce errors with
-single-quoted setting names matching Python's format:
-- No dot: `"The setting name '<name>' is not valid."`
-- Valid format, unknown name: `"AWS Deadline Cloud configuration has no setting named '<name>'."`
+**INI output is sorted.** Sections and keys are sorted alphabetically for
+deterministic serialization. This means diffs are clean and config files
+don't churn on write.
 
-#### str2bool
+**Default substitution in defaults.** Some default values contain
+`{aws_profile_name}` which gets substituted at resolution time. This
+allows farm/queue defaults to be profile-aware without hardcoding.
 
-Accepts case-insensitive: `yes/no`, `on/off`, `true/false`, `1/0`.
-Everything else is an error.
+## Gotchas & Constraints
 
-#### Helpers
+- Section names can contain spaces (required by the hierarchical scheme).
+  The INI parser must handle this — standard INI libraries that reject
+  spaces in section names won't work.
 
-- `setting_names()` — Iterator over all setting names in definition order.
-- `setting_description(name)` — Human-readable description for a setting.
+- `"(default)"`, `"default"`, and `""` all map to the default credential
+  chain (no named profile). This normalization happens in profile
+  resolution and affects section name construction.
 
-#### Profile resolution
+- The config file format is shared with the GUI and DCC plugins. Changes
+  to section naming or key semantics are breaking changes across the
+  entire Deadline Cloud client ecosystem.
 
-`get_best_profile_for_farm(config, aws_profile_names, farm_id, queue_id)`
-finds the best AWS profile for a given farm/queue. Priority:
+## Status & Gaps
 
-1. Default profile if its farm matches
-2. Any profile matching both farm and queue
-3. Any profile matching farm only
-4. Default profile (fallback)
-
-Takes the profile list as a parameter — the caller sources it from the AWS
-SDK (`boto3.Session` in Python, `aws-config` in Rust). This keeps the
-function pure and testable without coupling `deadline-config` to the SDK.
-Works on a cloned config to avoid mutating the caller's state.
-
-## Dependencies
-
-| Crate | Purpose |
-|-------|---------|
-| `thiserror` | Error type derivation |
+Fully implemented. No known gaps.

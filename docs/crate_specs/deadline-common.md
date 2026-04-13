@@ -1,58 +1,99 @@
 # deadline-common
 
-Utility functions and shared infrastructure across crates.
+Shared utilities and infrastructure used across crates: file size
+formatting, path sequence detection, and background telemetry.
 
-## Status: In Progress
+## Role in the System
 
-Implemented: path utilities, telemetry client.
+The utility layer that sits between `deadline-models` (pure types) and
+the business logic crates. Provides two unrelated capabilities: path
+utilities for human-readable output, and the telemetry client that all
+crates use for usage tracking.
 
-## Dependencies
+Consumers: `deadline-cli`, `deadline-client`, `deadline-job-attachments`,
+`deadline-gui-ffi`.
 
-| Crate | Purpose |
-|-------|---------|
-| `deadline-models` | Shared types |
-| `deadline-config` | Config for telemetry opt-out and identifier |
-| `ureq` | Blocking HTTP POST for telemetry |
-| `uuid` | Session ID, telemetry ID, batch ID |
-| `serde_json` | Telemetry request body serialization |
+## Key Concepts
 
-## Path Utilities (`path_utils.rs`)
+**Telemetry is fire-and-forget.** The `TelemetryClient` uses a background
+OS thread with a bounded channel (capacity 25). Events are dropped
+silently if the queue is full, the client isn't initialized, or the user
+has opted out. A telemetry failure never affects the caller's return value
+or exit code. This is a hard invariant — no telemetry code path should
+ever surface an error to the user.
 
-`human_readable_file_size()` and related path helpers.
+**Telemetry metadata comes from the caller.** The telemetry client lives
+in `deadline-common` to avoid circular dependencies, but it needs
+`user_id`, `monitor_id`, and `account_id` that only `deadline-client`
+can provide (via auth checks and STS). The caller passes these during
+initialization. This is an intentional architectural seam — don't try to
+have `deadline-common` resolve credentials itself.
 
-## Telemetry (`telemetry.rs`)
+**Path utilities are for display, not logic.** `human_readable_file_size`
+uses SI prefixes (1 KB = 1000 bytes). The numbered path detection groups
+files like `frame_001.png` through `frame_100.png` into sequence
+representations for compact display. These are output formatting helpers,
+not filesystem operations.
 
-Background telemetry client matching Python's `_telemetry.py`. Uses
-`std::thread` + `std::sync::mpsc` + `ureq` (blocking HTTP) — no async.
+## Behavior & Contracts
 
-### Design
+**Telemetry opt-out:** Checked via `DEADLINE_CLOUD_TELEMETRY_OPT_OUT` env
+var OR `telemetry.opt_out` config setting. If either is truthy, no events
+are sent and the background thread is never started.
 
-`TelemetryClient` struct with:
-- Bounded `mpsc::SyncSender` (capacity 25, matching Python's `MAX_QUEUE_SIZE`)
-- Background `std::thread` reads events and POSTs to the telemetry endpoint
-- Retry on HTTP 429/500 with exponential backoff + jitter (max 4 attempts)
-- Fire-and-forget: `record_event` silently drops if queue full or not initialized
-- Opt-out via `DEADLINE_CLOUD_TELEMETRY_OPT_OUT` env var or `telemetry.opt_out` config
-- Telemetry identifier: UUID4 from config, generated if missing/invalid
-- Package version truncated to first 3 components
-- Endpoint: Deadline service URL with `management.` prefix after `https://`
+**Telemetry endpoint:** The Deadline service URL with `management.`
+prefixed after `https://`, plus `/2023-10-12/telemetry`. The endpoint
+prefix is hardcoded.
 
-### Metadata enrichment
+**Telemetry retry:** HTTP 429 and 500 responses trigger exponential
+backoff with jitter, up to 4 attempts. All other failures are swallowed
+immediately.
 
-`initialize()` accepts optional `user_id` and `monitor_id` parameters.
-These are added to `system_metadata` if present. `account_id` is added
-to `common_details` (included in every event). The caller (which has
-access to `deadline-client::auth` and STS) provides all three —
-`deadline-common` cannot depend on `deadline-client` (would create a
-circular dependency).
+**Telemetry identifier:** A UUID4 stored in the config file. Generated on
+first use if missing or invalid. This persists across sessions for usage
+correlation.
 
-`create_telemetry()` accepts optional `user_id`, `monitor_id`, and
-`account_id` for the same reason. Callers in `deadline-client` pass
-values from `auth::get_user_and_identity_store_id()`,
-`auth::get_monitor_id()`, and STS `GetCallerIdentity`.
+**`Drop` flushes the queue.** When the `TelemetryClient` is dropped, it
+closes the channel and joins the background thread, ensuring queued events
+are sent before the process exits.
 
-### Consumers
+**File size formatting:** Values near a threshold round up (999999 bytes →
+"1.0 MB", not "1000.0 KB"). Bytes show as integers, larger units show one
+decimal place.
 
-Every crate that calls Deadline APIs or performs user-facing operations
-records telemetry events. The `TelemetryClient` lives in `deadline-common`
-so all crates can access it without depending on `deadline-client`.
+## Design Decisions
+
+**No async, no tokio for telemetry.** Uses `std::thread` + `mpsc` +
+`ureq` (blocking HTTP). Telemetry is a background concern that shouldn't
+force an async runtime on callers. The blocking HTTP call happens on a
+dedicated thread that never blocks the caller.
+
+**Convenience helpers wrap the common patterns.** `with_telemetry_latency`
+(sync) and `with_telemetry_latency_async` (async) exist because every API
+function needs the same timing + recording boilerplate. They resolve the
+client, time the call, and record the event. Two variants are needed
+because Rust's type system distinguishes sync and async at compile time.
+
+**Package version is truncated to 3 components.** The telemetry payload
+only includes major.minor.patch, stripping any pre-release or build
+metadata. This normalizes version strings for aggregation.
+
+## Gotchas & Constraints
+
+- The telemetry background thread joins on `Drop`. If the main thread
+  panics before drop runs, queued events may be lost. This is acceptable
+  — telemetry is best-effort.
+
+- `record_event` uses `try_send` (non-blocking). If the channel is full,
+  the event is silently dropped. This prevents telemetry from ever
+  blocking the hot path.
+
+- The `common_details` map is included in every event. Adding fields here
+  affects all telemetry payloads — use sparingly.
+
+- Path utilities assume SI prefixes (powers of 1000, not 1024). This
+  matches the convention used in the Deadline Cloud console UI.
+
+## Status & Gaps
+
+Fully implemented. No known gaps.
