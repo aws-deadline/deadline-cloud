@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import json
+from configparser import ConfigParser
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
@@ -35,7 +36,7 @@ from ... import api
 from ...api._session import session_context as _session_context
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
-from ...config import get_setting, set_setting, config_file
+from ...config import get_setting, config_file, persist_job_id
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.parameters import JobParameter
@@ -44,7 +45,7 @@ from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticati
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
 from ..widgets.host_requirements_tab import HostRequirementsWidget
-from . import DeadlineConfigDialog, DeadlineLoginDialog
+from . import ConfigureSettingsResult, DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
 
@@ -114,6 +115,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         attachments: AssetReferences,
         on_create_job_bundle_callback: OnCreateJobBundleCallback,
         parent: Optional[QWidget] = None,
+        session_config: Optional[ConfigParser] = None,
         f: Any = Qt.WindowFlags(),
         show_host_requirements_tab: bool = False,
         host_requirements: Optional[HostRequirements] = None,
@@ -123,6 +125,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
 
+        self._session_config = session_config
         # Set window title with submitter package info if available
         window_title = tr("Submit to AWS Deadline Cloud")
         if submitter_info:
@@ -147,6 +150,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_id = None
         self.job_history_bundle_dir: Optional[str] = None
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
+        if self._session_config is not None:
+            self.deadline_authentication_status.set_config(self._session_config)
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
         self.should_close = False
@@ -166,7 +171,16 @@ class SubmitJobToDeadlineDialog(QDialog):
     def _submission_succeeded_signal_receiver(self, job_id: str):
         self.job_id = job_id
 
-        set_setting("defaults.job_id", job_id)
+        # Persist the job ID to the on-disk config under the correct
+        # farm/queue section so that CLI overrides (--farm-id / --queue-id)
+        # target the right place without changing the on-disk defaults.
+        config = self._session_config
+        persist_job_id(
+            job_id,
+            profile=get_setting("defaults.aws_profile_name", config=config),
+            farm_id=get_setting("defaults.farm_id", config=config),
+            queue_id=get_setting("defaults.queue_id", config=config),
+        )
 
     def _close_event_receiver(self):
         if self.submitter_info.submitter_name != "JobBundle" and self.job_id:
@@ -257,8 +271,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Submit button based on whether the
         # AWS Deadline Cloud API is accessible and the farm+queue are configured.
         api_available = self.deadline_authentication_status.api_availability is True
-        farm_configured = get_setting("defaults.farm_id") != ""
-        queue_configured = get_setting("defaults.queue_id") != ""
+        farm_configured = get_setting("defaults.farm_id", config=self._session_config) != ""
+        queue_configured = get_setting("defaults.queue_id", config=self._session_config) != ""
         queue_valid = self.shared_job_settings.is_queue_valid()
 
         enable = api_available and farm_configured and queue_configured and queue_valid
@@ -319,6 +333,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             initial_settings=initial_job_settings,
             initial_shared_parameter_values=initial_shared_parameter_values,
             parent=self,
+            config=self._session_config,
         )
         self.shared_job_settings.parameter_changed.connect(self.on_shared_job_parameter_changed)
         self.shared_job_settings_tab.setWidget(self.shared_job_settings)
@@ -403,13 +418,35 @@ class SubmitJobToDeadlineDialog(QDialog):
         # not always catch a change so force a refresh here.
         self.deadline_authentication_status.refresh_status()
 
-    def on_switch_profile_clicked(self):
-        if DeadlineConfigDialog.configure_settings(parent=self, set_profile_focus=True):
+    def _apply_settings_result(self, result: ConfigureSettingsResult) -> None:
+        """Apply the result from DeadlineConfigDialog.configure_settings()."""
+        if result.session_config is not None:
+            self._session_config = result.session_config
+            self.deadline_authentication_status.set_config(self._session_config)
+            self.shared_job_settings.set_session_config(self._session_config)
             self.refresh_deadline_settings()
 
+    def _ensure_session_config(self) -> ConfigParser:
+        """Return the current session config, creating one from disk if needed."""
+        if self._session_config is None:
+            self._session_config = ConfigParser()
+            self._session_config.read_dict(config_file.read_config())
+        return self._session_config
+
+    def on_switch_profile_clicked(self):
+        result = DeadlineConfigDialog.configure_settings(
+            parent=self,
+            set_profile_focus=True,
+            session_config=self._ensure_session_config(),
+        )
+        self._apply_settings_result(result)
+
     def on_settings_button_clicked(self):
-        if DeadlineConfigDialog.configure_settings(parent=self):
-            self.refresh_deadline_settings()
+        result = DeadlineConfigDialog.configure_settings(
+            parent=self,
+            session_config=self._ensure_session_config(),
+        )
+        self._apply_settings_result(result)
 
     def _on_help_button_clicked(self):
         """Show the Help dialog with submitter information."""
@@ -599,7 +636,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             job_progress_dialog.start_job_submission(
                 job_bundle_dir=self.job_history_bundle_dir,
                 submitter_name=self.submitter_info.submitter_name,
-                config=config_file.read_config(),
+                config=self._session_config or config_file.read_config(),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
                 job_parameters=job_parameters,
                 known_asset_paths=self.known_asset_paths

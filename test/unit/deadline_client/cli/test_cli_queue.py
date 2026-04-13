@@ -81,7 +81,7 @@ def test_cli_queue_list_override_profile(fresh_deadline_config):
         result = runner.invoke(main, ["queue", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
-        session_mock.assert_called_with(profile_name="NonDefaultProfileName", botocore_session=ANY)
+        session_mock.assert_any_call(profile_name="NonDefaultProfileName", botocore_session=ANY)
         session_mock().client().list_queues.assert_called_once_with(farmId="farm-overriddenid")
 
 

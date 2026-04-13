@@ -844,8 +844,10 @@ def create_job_from_job_bundle(
         job_id = create_job_response["jobId"]
         print_function_callback("Waiting for Job to be created...")
 
-        # If using the default config, set the default job id so it holds the
-        # most-recently submitted job.
+        # When no config was provided, the caller is using the public API with
+        # on-disk defaults — auto-persist the job ID so `deadline job get` works.
+        # When a config IS provided, the caller (CLI or GUI) owns persistence
+        # and can resolve the correct hierarchical section via persist_job_id.
         if config is None:
             set_setting("defaults.job_id", job_id)
 

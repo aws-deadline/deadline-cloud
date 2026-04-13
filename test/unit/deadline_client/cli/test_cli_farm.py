@@ -71,7 +71,7 @@ def test_cli_farm_list_override_profile(fresh_deadline_config):
         result = runner.invoke(main, ["farm", "list", "--profile", "NonDefaultProfileName"])
 
         assert result.exit_code == 0
-        session_mock.assert_called_with(profile_name="NonDefaultProfileName", botocore_session=ANY)
+        session_mock.assert_any_call(profile_name="NonDefaultProfileName", botocore_session=ANY)
         session_mock().client().list_farms.assert_called_once_with()
 
 

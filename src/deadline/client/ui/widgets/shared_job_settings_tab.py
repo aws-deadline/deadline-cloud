@@ -7,6 +7,7 @@ A UI Widget containing the render setup tab
 from __future__ import annotations
 
 import sys
+from configparser import ConfigParser
 from typing import Any, Dict, List, Optional
 
 from qtpy.QtCore import Qt, Signal  # type: ignore
@@ -58,10 +59,13 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         *,
         initial_settings: Any,
         initial_shared_parameter_values: dict[str, Any],
+        config: Optional[ConfigParser] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
         layout = QVBoxLayout(self)
+
+        self._config = config
 
         # This is a dictionary {<name>: <value>} containing values to
         # override the queue parameter defaults.
@@ -72,7 +76,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         )
         layout.addWidget(self.shared_job_properties_box)
 
-        self.deadline_cloud_settings_box = DeadlineCloudSettingsWidget(parent=self)
+        self.deadline_cloud_settings_box = DeadlineCloudSettingsWidget(
+            config=self._config, parent=self
+        )
         layout.addWidget(self.deadline_cloud_settings_box)
 
         self.queue_parameters_box = OpenJDParametersWidget(
@@ -84,12 +90,14 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         )
 
         # Track current farm/queue IDs for change detection
-        self.farm_id = get_setting("defaults.farm_id")
-        self.queue_id = get_setting("defaults.queue_id")
+        self.farm_id = get_setting("defaults.farm_id", config=self._config)
+        self.queue_id = get_setting("defaults.queue_id", config=self._config)
         self.__valid_queue = False
 
         # Connect to the controller for queue parameters
         self._controller = DeadlineUIController.getInstance()
+        if self._config is not None:
+            self._controller.set_config(self._config)
         self._controller.queue_parameters_updated.connect(
             self._handle_queue_parameters_update, Qt.QueuedConnection
         )
@@ -109,6 +117,14 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             if name.startswith("deadline:"):
                 self.set_parameter_value({"name": name, "value": value})
 
+    def set_session_config(self, session_config: ConfigParser) -> None:
+        """Update the session config used by this widget and its children."""
+        self._config = session_config
+        self._controller.set_config(session_config)
+        self.deadline_cloud_settings_box._config = session_config
+        self.deadline_cloud_settings_box.farm_box._config = session_config
+        self.deadline_cloud_settings_box.queue_box._config = session_config
+
     def refresh_ui(self, job_settings: Any, load_new_bundle: bool = False):
         # Refresh the job settings in the UI
         self.shared_job_properties_box.refresh_ui(job_settings)
@@ -127,8 +143,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         """
         If the default queue id or job bundle has changed, refresh the queue parameters.
         """
-        farm_id = get_setting("defaults.farm_id")
-        queue_id = get_setting("defaults.queue_id")
+        farm_id = get_setting("defaults.farm_id", config=self._config)
+        queue_id = get_setting("defaults.queue_id", config=self._config)
         if not farm_id or not queue_id:
             self.queue_parameters_box.rebuild_ui(async_loading_state="")
             return  # If the user has not selected a farm or queue ID, don't try to load
@@ -164,8 +180,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         """
         Triggers the controller to load queue parameters.
         """
-        self.farm_id = farm_id = get_setting("defaults.farm_id")
-        self.queue_id = queue_id = get_setting("defaults.queue_id")
+        self.farm_id = farm_id = get_setting("defaults.farm_id", config=self._config)
+        self.queue_id = queue_id = get_setting("defaults.queue_id", config=self._config)
         if not self.farm_id or not self.queue_id:
             # If the user has not selected a farm or queue ID, don't bother loading
             return
@@ -442,8 +458,14 @@ class DeadlineCloudSettingsWidget(QGroupBox):
     UI component for the Deadline Cloud settings.
     """
 
-    def __init__(self, *, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        *,
+        config: Optional[ConfigParser] = None,
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(tr("Deadline Cloud settings"), parent=parent)
+        self._config = config
         self.deadline_settings: Dict[str, Any] = {"counter": -1}
         self.layout = QFormLayout(self)
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -460,11 +482,11 @@ class DeadlineCloudSettingsWidget(QGroupBox):
         Build the UI for the Deadline settings
         """
         self.farm_box_label = QLabel(tr("Farm"))
-        self.farm_box = DeadlineFarmDisplay()
+        self.farm_box = DeadlineFarmDisplay(config=self._config)
         self.layout.addRow(self.farm_box_label, self.farm_box)
 
         self.queue_box_label = QLabel(tr("Queue"))
-        self.queue_box = DeadlineQueueDisplay()
+        self.queue_box = DeadlineQueueDisplay(config=self._config)
         self.layout.addRow(self.queue_box_label, self.queue_box)
 
     def refresh_setting_controls(self, deadline_authorized):
@@ -499,12 +521,20 @@ class _DeadlineNamedResourceDisplay(QWidget):
     # provides (operation_name, BaseException)
     background_exception = Signal(str, BaseException)
 
-    def __init__(self, *, resource_name, setting_name, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        *,
+        resource_name,
+        setting_name,
+        config: Optional[ConfigParser] = None,
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent=parent)
 
         self.resource_name = resource_name
         self.setting_name = setting_name
-        self.item_id = get_setting(self.setting_name)
+        self._config = config
+        self.item_id = get_setting(self.setting_name, config=self._config)
         self.item_name = ""
         self.item_description = ""
 
@@ -544,7 +574,7 @@ class _DeadlineNamedResourceDisplay(QWidget):
                     api.check_deadline_available, for example from
                     an AWS Deadline Cloud Status Widget.
         """
-        resource_id = get_setting(self.setting_name)
+        resource_id = get_setting(self.setting_name, config=self._config)
         if resource_id != self.item_id or not self.item_name:
             self.item_id = resource_id
             self.item_name = ""
@@ -577,11 +607,13 @@ class _DeadlineNamedResourceDisplay(QWidget):
 
 
 class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Farm", setting_name="defaults.farm_id", parent=parent)
+    def __init__(self, *, config: Optional[ConfigParser] = None, parent: Optional[QWidget] = None):
+        super().__init__(
+            resource_name="Farm", setting_name="defaults.farm_id", config=config, parent=parent
+        )
 
     def get_item(self):
-        farm_id = get_setting(self.setting_name)
+        farm_id = get_setting(self.setting_name, config=self._config)
         if farm_id:
             deadline = api.get_boto3_client("deadline")
             response = deadline.get_farm(farmId=farm_id)
@@ -591,12 +623,14 @@ class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
 
 
 class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
-    def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(resource_name="Queue", setting_name="defaults.queue_id", parent=parent)
+    def __init__(self, *, config: Optional[ConfigParser] = None, parent: Optional[QWidget] = None):
+        super().__init__(
+            resource_name="Queue", setting_name="defaults.queue_id", config=config, parent=parent
+        )
 
     def get_item(self):
-        farm_id = get_setting("defaults.farm_id")
-        queue_id = get_setting(self.setting_name)
+        farm_id = get_setting("defaults.farm_id", config=self._config)
+        queue_id = get_setting(self.setting_name, config=self._config)
         if farm_id and queue_id:
             deadline = api.get_boto3_client("deadline")
             response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
@@ -610,17 +644,18 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
     MAC_OS = "Macos"
     LINUX_OS = "Linux"
 
-    def __init__(self, *, parent: Optional[QWidget] = None):
+    def __init__(self, *, config: Optional[ConfigParser] = None, parent: Optional[QWidget] = None):
         super().__init__(
             resource_name="Storage profile name",
             setting_name="settings.storage_profile_id",
+            config=config,
             parent=parent,
         )
 
     def get_item(self):
-        farm_id = get_setting("defaults.farm_id")
-        queue_id = get_setting("defaults.queue_id")
-        storage_profile_id = get_setting(self.setting_name)
+        farm_id = get_setting("defaults.farm_id", config=self._config)
+        queue_id = get_setting("defaults.queue_id", config=self._config)
+        storage_profile_id = get_setting(self.setting_name, config=self._config)
 
         if farm_id and queue_id and storage_profile_id:
             deadline = api.get_boto3_client("deadline")
