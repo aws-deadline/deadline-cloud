@@ -34,7 +34,8 @@ in via Deadline Cloud Monitor (DCM), their base credentials only have
 Deadline API permissions. Accessing CloudWatch Logs or S3 requires
 assuming the queue role (or fleet role for worker logs). The
 `get_queue_scoped_config` function handles this: checks if DCM is active,
-assumes the queue role if so, falls back to base credentials otherwise.
+assumes the queue role if so, returns base credentials for non-DCM users.
+If role assumption fails for a DCM user, the error is propagated.
 This is a critical behavioral contract — without it, `job logs` and
 attachment operations fail silently for DCM users.
 
@@ -101,7 +102,9 @@ documented as accepted differences.
 **Separate log retrieval module.** `log_retrieval.rs` talks to CloudWatch
 Logs, not the Deadline API. It's separated because it has different
 credential requirements (queue/fleet-scoped) and a different AWS service
-client.
+client. `get_session_logs` uses `get_queue_scoped_config` (DCM-gated
+queue role). `get_worker_logs` uses `get_fleet_scoped_config` (DCM-gated
+fleet role via `AssumeFleetRoleForRead`, one-shot temporary credentials).
 
 **Session auto-selection for logs.** When no session ID is provided,
 the system paginates all sessions and picks the best one: ongoing
@@ -131,20 +134,24 @@ understand which session's logs they're seeing.
   tests that return 403 from a mock may cause subprocess hangs if retries
   aren't accounted for.
 
-- `get_queue_scoped_config` falls back to base credentials silently if
-  queue role assumption fails. This matches the legacy behavior but means
-  DCM permission issues may surface as confusing "access denied" errors
-  from CloudWatch/S3 rather than a clear "failed to assume queue role"
-  message.
+- `get_queue_scoped_config` propagates the error if queue role assumption
+  fails for a DCM user (matching Python, which raises
+  `DeadlineOperationError`). This means DCM permission issues surface as
+  clear "Failed to get queue credentials" errors rather than confusing
+  "access denied" errors from CloudWatch/S3.
 
 ## Status & Gaps
 
 Implemented: session management, auth, login/logout, all list/get/search
 operations for farms/queues/fleets/jobs/workers/sessions/steps/tasks,
-queue credentials, queue parameters, job monitoring, log retrieval,
+queue credentials, queue parameters, job monitoring, log retrieval
+(with DCM credential scoping for queue and fleet roles),
 telemetry integration.
 
 Gaps:
+- `attachment download/upload` CLI does not use `get_queue_user_config` —
+  always uses base credentials. Python calls `get_queue_user_boto3_session`
+  unconditionally when no `--profile`. Work item #15f.
 - `create_job_from_job_bundle` (job submission) — blocked on work item #11
 - `job trace-schedule` support APIs — experimental, deferred
 - Smithy model response filtering (would eliminate extra-field differences

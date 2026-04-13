@@ -18,3 +18,42 @@ pub async fn mock_get_fleet(server: &MockServer, farm_id: &str, fleet: Value) {
         .mount(server)
         .await;
 }
+
+/// Mount an AssumeFleetRoleForRead response.
+/// API: GET /2023-10-12/farms/{farmId}/fleets/{fleetId}/read-roles
+/// Response: { "credentials": { "accessKeyId", "secretAccessKey", "sessionToken", "expiration" } }
+pub async fn mock_assume_fleet_role_for_read(
+    server: &MockServer,
+    farm_id: &str,
+    fleet_id: &str,
+    response: Value,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/fleets/{fleet_id}/read-roles"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(server)
+        .await;
+}
+
+/// Mount an error response for AssumeFleetRoleForRead.
+pub async fn mock_assume_fleet_role_for_read_error(
+    server: &MockServer,
+    farm_id: &str,
+    fleet_id: &str,
+    status: u16,
+    error_type: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/fleets/{fleet_id}/read-roles"
+        )))
+        .respond_with(
+            ResponseTemplate::new(status).set_body_json(json!({
+                "__type": error_type
+            })),
+        )
+        .mount(server)
+        .await;
+}

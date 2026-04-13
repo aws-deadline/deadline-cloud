@@ -187,8 +187,9 @@ pub async fn get_queue_scoped_config(
 Checks `auth::get_user_and_identity_store_id(config)`. If the user has
 a DCM login (both `user_id` and `identity_store_id` are `Some`), calls
 `get_queue_user_config` to assume the queue role. Otherwise returns the
-base SDK config. Falls back to base config if queue role assumption
-fails (matching Python's try/except pattern).
+base SDK config. If queue role assumption fails for a DCM user, the
+error is propagated (matching Python, which raises
+`DeadlineOperationError`).
 
 ### Pattern: fleet-scoped credentials
 

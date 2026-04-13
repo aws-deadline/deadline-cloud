@@ -3,7 +3,7 @@ use deadline_config::ini::IniConfig;
 use deadline_models::errors::DeadlineError;
 use deadline_models::job_monitoring::{LogEvent, SessionLogResult, WorkerLogResult};
 
-use crate::{api, session};
+use crate::{api, auth, session};
 
 /// How the session was selected for log retrieval.
 #[derive(Debug, Clone, PartialEq)]
@@ -16,14 +16,55 @@ pub enum SessionAutoSelect {
     LatestSession(String),
 }
 
-/// Build a CloudWatch Logs client using the base session config.
-async fn logs_client(config: Option<&IniConfig>) -> aws_sdk_cloudwatchlogs::Client {
-    let sdk_config = session::get_sdk_config(config).await;
-    let mut builder = aws_sdk_cloudwatchlogs::config::Builder::from(&sdk_config);
+/// Build a CloudWatch Logs client from an SdkConfig.
+fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Client {
+    let mut builder = aws_sdk_cloudwatchlogs::config::Builder::from(sdk_config);
     if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS") {
         builder = builder.endpoint_url(url);
     }
     aws_sdk_cloudwatchlogs::Client::from_conf(builder.build())
+}
+
+/// Get an SdkConfig with fleet-scoped credentials for worker log access.
+///
+/// If the user is logged in via DCM, calls `AssumeFleetRoleForRead` and
+/// builds a temporary SdkConfig from the returned credentials. If not DCM,
+/// returns the base SdkConfig. If fleet role assumption fails for a DCM
+/// user, the error is propagated (matching Python behavior).
+async fn get_fleet_scoped_config(
+    farm_id: &str,
+    fleet_id: &str,
+    config: Option<&IniConfig>,
+) -> Result<aws_config::SdkConfig, DeadlineError> {
+    let (user_id, identity_store_id) = auth::get_user_and_identity_store_id(config);
+    if user_id.is_some() && identity_store_id.is_some() {
+        // DCM user — assume fleet role
+        let resp = api::assume_fleet_role_for_read(farm_id, fleet_id, config, None).await
+            .map_err(|e| DeadlineError::OperationError(
+                format!("Failed to get fleet credentials: {e}")
+            ))?;
+        let creds = &resp["credentials"];
+        let access_key = creds["accessKeyId"].as_str().unwrap_or_default();
+        let secret_key = creds["secretAccessKey"].as_str().unwrap_or_default();
+        let session_token = creds["sessionToken"].as_str().unwrap_or_default();
+
+        let base_config = session::get_sdk_config(config).await;
+        let region = base_config.region().cloned();
+
+        let credentials = aws_credential_types::Credentials::new(
+            access_key, secret_key, Some(session_token.to_string()), None, "fleet-role",
+        );
+        let mut builder = aws_config::SdkConfig::builder()
+            .behavior_version(aws_config::BehaviorVersion::latest())
+            .credentials_provider(aws_credential_types::provider::SharedCredentialsProvider::new(credentials));
+        if let Some(r) = region {
+            builder = builder.region(r);
+        }
+        Ok(builder.build())
+    } else {
+        // Non-DCM user — use base credentials
+        Ok(session::get_sdk_config(config).await)
+    }
 }
 
 /// Format a CloudWatch SDK error using the common smithy trait.
@@ -96,7 +137,9 @@ pub async fn get_session_logs(
     };
 
     let log_group = format!("/aws/deadline/{farm_id}/{queue_id}");
-    let client = logs_client(config).await;
+    // Use queue-scoped credentials for DCM users (matching Python behavior)
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config).await?;
+    let client = logs_client(&sdk_config);
 
     let mut req = client
         .get_log_events()
@@ -157,7 +200,9 @@ pub async fn get_worker_logs(
     config: Option<&IniConfig>,
 ) -> Result<WorkerLogResult, DeadlineError> {
     let log_group = format!("/aws/deadline/{farm_id}/{fleet_id}");
-    let client = logs_client(config).await;
+    // Use fleet-scoped credentials for DCM users (matching Python behavior)
+    let sdk_config = get_fleet_scoped_config(farm_id, fleet_id, config).await?;
+    let client = logs_client(&sdk_config);
 
     let mut req = client
         .get_log_events()
@@ -272,6 +317,8 @@ mod tests {
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
             std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
             std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
+            // Prevent host ~/.aws/config from triggering DCM credential scoping
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
         }
     }
 

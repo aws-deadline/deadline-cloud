@@ -167,6 +167,7 @@ impl SessionCache {
         );
 
         let mut builder = aws_config::SdkConfig::builder()
+            .behavior_version(aws_config::BehaviorVersion::latest())
             .credentials_provider(SharedCredentialsProvider::new(provider));
         if let Some(r) = region {
             builder = builder.region(r);
@@ -349,6 +350,29 @@ pub async fn get_queue_user_config(
     let farm = farm_id.map(String::from).unwrap_or_else(|| get_setting("defaults.farm_id", config));
     let queue = queue_id.map(String::from).unwrap_or_else(|| get_setting("defaults.queue_id", config));
     SESSION.lock().unwrap().get_queue_user_config(&farm, &queue, queue_display_name, config).await
+}
+
+/// Get an SdkConfig appropriate for non-Deadline AWS services (CloudWatch, S3)
+/// that access queue-scoped resources.
+///
+/// If the user is logged in via DCM (monitor_id present in AWS profile),
+/// assumes the queue role via `AssumeQueueRoleForUser` and returns an
+/// SdkConfig with queue-scoped credentials. If not DCM, returns the base
+/// SdkConfig. If queue role assumption fails for a DCM user, the error is
+/// propagated (matching Python, which raises DeadlineOperationError).
+pub async fn get_queue_scoped_config(
+    farm_id: &str,
+    queue_id: &str,
+    config: Option<&IniConfig>,
+) -> Result<SdkConfig, deadline_models::errors::DeadlineError> {
+    let (user_id, identity_store_id) = crate::auth::get_user_and_identity_store_id(config);
+    if user_id.is_some() && identity_store_id.is_some() {
+        // DCM user — assume queue role
+        get_queue_user_config(Some(farm_id), Some(queue_id), None, false, config).await
+    } else {
+        // Non-DCM user — use base credentials
+        Ok(get_sdk_config(config).await)
+    }
 }
 
 // ---------------------------------------------------------------------------

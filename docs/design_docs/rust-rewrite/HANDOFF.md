@@ -5,91 +5,71 @@ every session before consulting the Work Items table in `README.md`.
 
 ## Active Work Item
 
-**#15e-F1 — Fix `job logs` against real API (audit finding F-1)**
+**#15f — Wire queue/fleet assume role for all existing CLI commands**
 
-Remaining item from the behavioral parity audit (#15e). All other
-audit findings are fixed (commit `9e8e4ef`). Full audit report:
-`audit_reports/2026-04-10-behavioral-parity.md`.
+All existing CLI commands that access non-Deadline AWS services (S3,
+CloudWatch) must use the correct credential scoping to match Python.
 
-### Current Step: 3 (Red — write failing tests)
+### Current Step: 0 (Plan)
 
-Steps 0-2 are complete. The SDK retry hang investigation is resolved
-(see "What's Done" below). Ready to write failing tests per §53.
+Previous work item #15e-F1 is complete (committed). That fixed
+`get_session_logs` and `get_worker_logs` to use DCM-gated credential
+scoping. This work item covers the remaining commands.
 
-### What's Done
+### What's Done (from #15e-F1)
 
-- **Root cause identified:** `logs_client()` in `log_retrieval.rs`
-  builds a CloudWatch client from base credentials. For DCM users,
-  base credentials lack CloudWatch Logs permissions — the queue role
-  (via `AssumeQueueRoleForUser`) grants that access. Python checks
-  `get_user_and_identity_store_id()` and assumes the queue role when
-  DCM is detected. Rust skips this entirely.
-
-- **Full scope identified:** Same bug affects `get_worker_logs` (fleet
-  credentials), `attachment download`, and `attachment upload`. All use
-  base credentials where Python uses scoped credentials for DCM users.
-
-- **SDK retry investigation resolved:** The "hang" noted in the
-  previous session was a false alarm. PoC testing confirmed:
-  - `AccessDeniedException` (403) is NOT retried — completes in ~500ms
-  - `ThrottlingException` (403) IS retried — ~2.5s (3 attempts)
-  - `500` transient errors ARE retried — ~2.2s (3 attempts)
-  - The SDK classifies errors using the `__type` field in the JSON body.
-    As long as error mocks include `__type`, retry behavior is correct.
-
-- **SDK error formatting fixed (separate commit):** All non-Deadline
-  AWS SDK errors (CloudWatch, STS) now surface the actual error code
-  and message instead of the opaque `"service error"` from
-  `SdkError::Display`. Uses `aws_smithy_types::ProvideErrorMetadata`.
-
-- **Mock error infrastructure cleaned up (separate commit):** Removed
-  `message` parameter from all mock error helpers. All error mocks use
-  a fixed `"mock error"` placeholder via `MOCK_ERROR_MESSAGE` constant.
-  Tests cannot accidentally assert on fake AWS message text.
-
-- **Docs updated:**
-  - `PATTERNS.md` — updated error formatting section
-  - `ARCHITECTURE.md` — added credential scoping to shared conventions
-  - `TESTING.md` — added mock error response rules and retry awareness
-  - `docs/crate_specs/deadline-client.md` — added `get_queue_scoped_config`
-  - `docs/crate_specs/deadline-job-attachments.md` — documented CLI
-    layer credential responsibility
-
-- **Test spec created:** `test_specs/credential_scoping.md` (§53, 22
-  cases) covering queue-scoped, fleet-scoped, error formatting, CLI
-  end-to-end, and future operations.
-
-- **Work item #15f created** in README for DCM credential scoping tests
-  (depends on #15e-F1 implementation).
+- `get_queue_scoped_config()` in `session.rs` — DCM-gated: checks
+  `get_user_and_identity_store_id`, assumes queue role if DCM,
+  propagates error on failure, returns base config for non-DCM.
+- `get_fleet_scoped_config()` in `log_retrieval.rs` — DCM-gated:
+  same pattern with `AssumeFleetRoleForRead`.
+- `get_session_logs` and `get_worker_logs` use scoped credentials. ✅
+- 3 Level 2 tests (§53 cases 3, 11, 12). ✅
+- Fleet role mock helpers in test server. ✅
+- Test spec §53 corrected: error propagation (not fallback), two
+  distinct credential patterns documented (DCM-gated for logs,
+  unconditional for S3).
 
 ### What's Next
 
-1. **Step 3 (Red)** — Write failing tests per §53 cases 1-10 (Level 1)
-   and cases 11-16 (Level 2). Level 1 tests need `serial` attribute
-   (env var mutation). Level 2 tests use `write_dcm_aws_config` helper
-   from `cli_dcm.rs`.
+Fix `attachment download` and `attachment upload` CLI commands to call
+`get_queue_user_config` unconditionally when no `--profile` is provided,
+matching Python's `get_queue_user_boto3_session` pattern. Then validate
+all other existing commands for credential parity.
 
-2. **Step 4 (Green)** — Implement:
-   - `get_queue_scoped_config()` in `session.rs`
-   - Fix `get_session_logs` to use queue-scoped credentials
-   - Fix `get_worker_logs` to use fleet-scoped credentials
-   - Fix `attachment download/upload` CLI to use queue-scoped credentials
+**Two distinct patterns in Python (must match both):**
 
-3. **Step 5 (Verify)** — Run both CLIs against real API with DCM profile.
+1. **CloudWatch Logs (DCM-gated):** `get_session_logs` and
+   `get_worker_logs` check for DCM before assuming roles. ✅ Done.
 
-4. **Steps 6-7** — Refactor, update docs, commit.
+2. **S3 operations (unconditional):** `attachment download/upload`
+   call `get_queue_user_boto3_session` always when no `--profile`.
+   The `QueueUserCredentialProvider` is inserted into the botocore
+   session regardless of DCM status. ❌ Not done — Rust currently
+   uses `aws_config::defaults().load()` (base creds only).
+
+**Commands to audit and fix:**
+
+| Command | Current Rust | Python behavior | Action |
+|---------|-------------|-----------------|--------|
+| `attachment download` (no `--profile`) | Base creds | `get_queue_user_boto3_session` (unconditional) | Fix |
+| `attachment upload` (no `--profile`) | Base creds | `get_queue_user_boto3_session` (unconditional) | Fix |
+| `attachment download` (`--profile`) | Profile creds | Profile creds (skips queue role) | ✅ Already correct |
+| `attachment upload` (`--profile`) | Profile creds | Profile creds (skips queue role) | ✅ Already correct |
+| `job logs` | Queue-scoped (DCM) / base (non-DCM) | Same | ✅ Fixed in #15e-F1 |
+| `get_worker_logs` (library) | Fleet-scoped (DCM) / base (non-DCM) | Same | ✅ Fixed in #15e-F1 |
+| `queue export-credentials` | Direct assume role call | Same | ✅ Already correct |
+| `farm/queue/fleet/worker/job list/get` | Base creds (Deadline API) | Same | ✅ No scoping needed |
+| `config show/get/set/clear` | No AWS calls | Same | ✅ N/A |
+| `auth login/logout/status` | Base creds / STS | Same | ✅ N/A |
 
 ### Approach
 
-- Add `get_queue_scoped_config(farm_id, queue_id, config)` to
-  `session.rs` — checks DCM, assumes queue role if DCM, falls back to
-  base config on failure.
-- `logs_client()` becomes `logs_client(config, farm_id, queue_id)` and
-  calls `get_queue_scoped_config`.
-- `get_worker_logs` calls `assume_fleet_role_for_read`, builds a
-  temporary `SdkConfig` from the returned credentials.
-- `attachment.rs` download/upload paths call `get_queue_scoped_config`
-  instead of `aws_config::defaults().load()`.
+- In `attachment.rs`, replace `aws_config::defaults().load().await`
+  with `session::get_queue_user_config(farm_id, queue_id, ...)` when
+  no `--profile` is provided.
+- Write Level 2 tests (§53 cases 13-16).
+- Verify against Python CLI with real API.
 
 ## Critical Context for New Sessions
 
@@ -100,8 +80,7 @@ Steps 0-2 are complete. The SDK retry hang investigation is resolved
 
 2. **Queue role assumption is not wired in the CLI.** Commands that
    access S3 without `--profile` need to: read farm/queue from config →
-   call GetQueue to get attachment settings → assume queue role via
-   `get_queue_user_credentials` → use queue-scoped credentials for S3.
+   call `get_queue_user_config` → use queue-scoped credentials for S3.
    The library functions accept pre-built S3 clients. The CLI layer
    needs to build those clients with queue-scoped credentials. Affects:
    - `deadline attachment download/upload` without `--profile`
@@ -116,7 +95,8 @@ Steps 0-2 are complete. The SDK retry hang investigation is resolved
 
 5. **DCM test infrastructure exists.** `cli_dcm.rs` has
    `write_dcm_aws_config()` helper and `cli_auth.rs` has
-   `setup_dcm_env()`/`dcm_cmd()`. Use these patterns for new DCM tests.
+   `setup_dcm_env()`/`dcm_cmd()`. `cli_credential_scoping.rs` has
+   the pattern for testing DCM vs non-DCM credential paths.
 
 6. **Mock error helpers omit message text.** All error mocks in
    `errors.rs` omit the `message` field from the JSON body — only
