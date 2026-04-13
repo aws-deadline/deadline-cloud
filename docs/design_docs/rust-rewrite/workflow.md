@@ -119,6 +119,7 @@ Before planning, read these (in order). Skip none.
 - [ ] `../../../TESTING.md` — test philosophy and levels
 - [ ] `../../crate_specs/<crate>.md` for the target crate
 - [ ] `../../../PATTERNS.md` — when the work item involves API calls
+- [ ] `../../cli_reference.md` — when the work item involves CLI commands
 - [ ] Relevant `test_specs/` sections
 - [ ] Python source for the feature being ported
 

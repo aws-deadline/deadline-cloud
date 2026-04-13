@@ -48,7 +48,7 @@ async fn worker_list_no_fleet_id_exits_with_error() {
 async fn worker_list_api_failure_prints_error() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    errors::mock_search_workers_access_denied(&harness.server, "farm-abc", "Access denied").await;
+    errors::mock_search_workers_access_denied(&harness.server, "farm-abc").await;
 
     assert_cmd_snapshot!(harness.cmd(&["worker", "list", "--fleet-id", "fleet-abc"]));
 }
@@ -80,7 +80,7 @@ async fn worker_get_api_failure_prints_error() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     errors::mock_get_worker_not_found(
-        &harness.server, "farm-abc", "fleet-abc", "worker-bad", "Worker not found",
+        &harness.server, "farm-abc", "fleet-abc", "worker-bad",
     ).await;
 
     assert_cmd_snapshot!(harness.cmd(&[

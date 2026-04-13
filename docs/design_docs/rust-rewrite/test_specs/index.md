@@ -64,6 +64,7 @@
 | 50 | MCP server | ✅ Complete (39 cases) | [mcp.md](mcp.md) |
 | 51 | Exceptions (client) | ✅ Complete (7 cases) | [common.md](common.md) |
 | 52 | SubmitterInfo data structure | ✅ Complete (4 cases) | [common.md](common.md) |
+| 53 | Credential scoping for non-Deadline AWS services | ✅ Complete (22 cases) | [credential_scoping.md](credential_scoping.md) |
 
 ### Planned (new crates)
 

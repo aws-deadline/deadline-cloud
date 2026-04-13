@@ -65,7 +65,6 @@ async fn queue_export_credentials_access_denied_prints_error() {
         "queue-aaa",
         403,
         "AccessDeniedException",
-        "User is not authorized to assume queue role",
     )
     .await;
 

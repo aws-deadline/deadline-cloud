@@ -5,24 +5,29 @@ use deadline_models::errors::DeadlineError;
 use serde_json::Value;
 use std::future::Future;
 
-/// Format an AWS SDK error to include the error code and message.
-fn format_sdk_error<E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata>(
-    err: &aws_sdk_deadline::error::SdkError<E>,
-) -> String {
+/// Format any AWS SDK error to include the error code and message.
+///
+/// Uses the common `ProvideErrorMetadata` trait from `aws-smithy-types`,
+/// so this works for errors from any AWS SDK crate (Deadline, CloudWatch,
+/// STS, S3, etc.). For `ServiceError`, extracts the error code and message
+/// from the response. For transport-level errors (timeout, dispatch failure),
+/// falls back to the SDK's Display impl.
+pub fn format_sdk_error<E, R>(err: &aws_sdk_deadline::error::SdkError<E, R>) -> String
+where
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+{
     match err {
         aws_sdk_deadline::error::SdkError::ServiceError(e) => {
             let inner = e.err();
-            let code = aws_sdk_deadline::error::ProvideErrorMetadata::code(inner)
-                .unwrap_or("Unknown");
-            let msg = aws_sdk_deadline::error::ProvideErrorMetadata::message(inner)
-                .unwrap_or("No message");
+            let code = inner.code().unwrap_or("Unknown");
+            let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
         other => format!("{other}"),
     }
 }
 
-fn sdk_err<E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata>(
+fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata>(
     e: aws_sdk_deadline::error::SdkError<E>,
 ) -> DeadlineError {
     DeadlineError::OperationError(format_sdk_error(&e))

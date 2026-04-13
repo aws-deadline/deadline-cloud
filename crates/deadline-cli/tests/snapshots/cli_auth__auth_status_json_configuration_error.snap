@@ -13,15 +13,16 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:52346"
-    AWS_ENDPOINT_URL_STS: "http://localhost:52346"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61145"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61145"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61145"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpitaEaz/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpitaEaz
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprJIca4/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprJIca4
 ---
 success: true
 exit_code: 0

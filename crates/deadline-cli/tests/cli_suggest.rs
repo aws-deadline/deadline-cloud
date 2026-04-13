@@ -14,7 +14,7 @@ async fn queue_get_access_denied_suggests_available_queues() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
 
-    errors::mock_get_queue_access_denied(&harness.server, "farm-abc", "queue-bad", "Access denied").await;
+    errors::mock_get_queue_access_denied(&harness.server, "farm-abc", "queue-bad").await;
     queues::mock_list_queues(
         &harness.server, "farm-abc",
         &[json!({"queueId": "queue-111", "displayName": "Good Queue"})],
@@ -28,7 +28,7 @@ async fn queue_get_access_denied_suggests_available_queues() {
 async fn farm_get_not_found_suggests_available_farms() {
     let harness = TestHarness::new().await;
 
-    errors::mock_get_farm_not_found(&harness.server, "farm-bad", "Farm not found").await;
+    errors::mock_get_farm_not_found(&harness.server, "farm-bad").await;
     farms::mock_list_farms(
         &harness.server,
         &[json!({"farmId": "farm-real", "displayName": "Real Farm"})],
@@ -44,7 +44,7 @@ async fn job_get_access_denied_suggests_jobs() {
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
 
-    errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad", "Job not found").await;
+    errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad").await;
     jobs::mock_list_jobs(
         &harness.server, "farm-abc", "queue-abc",
         &[json!({"jobId": "job-real", "name": "Real Job"})],
@@ -58,8 +58,8 @@ async fn job_get_access_denied_suggests_jobs() {
 async fn farm_get_not_found_list_also_fails_shows_permission_hint() {
     let harness = TestHarness::new().await;
 
-    errors::mock_get_farm_not_found(&harness.server, "farm-bad", "Farm not found").await;
-    errors::mock_list_farms_access_denied(&harness.server, "No list permission").await;
+    errors::mock_get_farm_not_found(&harness.server, "farm-bad").await;
+    errors::mock_list_farms_access_denied(&harness.server).await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-bad"]));
 }
@@ -69,7 +69,7 @@ async fn farm_get_not_found_list_also_fails_shows_permission_hint() {
 async fn farm_get_not_found_more_than_10_farms_shows_and_more() {
     let harness = TestHarness::new().await;
 
-    errors::mock_get_farm_not_found(&harness.server, "farm-bad", "Farm not found").await;
+    errors::mock_get_farm_not_found(&harness.server, "farm-bad").await;
 
     let many_farms: Vec<serde_json::Value> = (0..15)
         .map(|i| json!({"farmId": format!("farm-{i:03}"), "displayName": format!("Farm {i}")}))

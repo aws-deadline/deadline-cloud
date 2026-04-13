@@ -565,6 +565,48 @@ auto-defaulted).
 
 See also: `crates/deadline-test-server/src/deadline_api/mod.rs` doc comment.
 
+### Mock Error Response Rules
+
+Error mocks simulate AWS service errors (AccessDeniedException,
+ResourceNotFoundException, etc.). The rules below prevent tests from
+coupling to AWS service error message text, which AWS can change at any
+time.
+
+**Error code (`__type`) is the contract, message text is not.**
+
+- Error mocks MUST include `__type` with the correct AWS error code.
+  The SDK uses this field to classify errors (retryable vs non-retryable)
+  and our code branches on it (e.g. `suggest_resources_on_client_error`
+  matches on `"AccessDeniedException"` and `"ResourceNotFoundException"`).
+- Error mocks MUST NOT accept a `message` parameter. All error mock
+  helpers omit the `message` field from the JSON body entirely. The
+  SDK handles missing `message` gracefully, and our `format_sdk_error`
+  falls back to `"No message"`. This prevents tests from asserting on
+  fake AWS message text.
+- Tests that need to assert on error message content should only do so
+  for messages **we generate** (validation errors, business logic errors),
+  never for messages that come from AWS services.
+
+**Retry behavior awareness for error-path tests:**
+
+The AWS SDK for Rust uses `standard` retry mode (3 max attempts) by
+default. Error-path tests should be aware of which errors trigger
+retries, since retryable errors make tests take ~2-3s instead of ~500ms:
+
+| Error type | HTTP | Retried? | Test duration |
+|-----------|------|----------|---------------|
+| `AccessDeniedException` | 403 | No | ~500ms |
+| `ResourceNotFoundException` | 404 | No | ~300ms |
+| `ValidationException` | 400 | No | ~300ms |
+| `ThrottlingException` | 403 | Yes (3 attempts) | ~2-3s |
+| `TooManyRequestsException` | 429 | Yes (3 attempts) | ~2-3s |
+| Any error | 500/502/503/504 | Yes (3 attempts) | ~2-3s |
+
+The SDK classifies errors using the `__type` field in the JSON response
+body. Without `__type`, the SDK falls back to HTTP-status-only
+classification, which may cause unexpected retries on 400/403. Always
+include `__type` in error mocks.
+
 ### Why Snapshots Over Substring Checks
 
 A test that only checks `contains("farm-abc")` will pass even if:

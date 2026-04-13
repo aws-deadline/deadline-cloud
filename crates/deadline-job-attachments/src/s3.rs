@@ -147,6 +147,22 @@ pub fn compute_upload_config(
 
 // --- Account identity ---
 
+/// Format an STS SDK error using the common smithy trait.
+fn format_sts_sdk_err<E>(err: &aws_sdk_sts::error::SdkError<E>) -> String
+where
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+{
+    match err {
+        aws_sdk_sts::error::SdkError::ServiceError(e) => {
+            let inner = e.err();
+            let code = inner.code().unwrap_or("Unknown");
+            let msg = inner.message().unwrap_or("No message");
+            format!("{code}: {msg}")
+        }
+        other => format!("{other}"),
+    }
+}
+
 /// Retrieves the AWS account ID by calling STS GetCallerIdentity.
 ///
 /// Creates a new STS client per call. Callers should cache the result
@@ -161,7 +177,9 @@ pub async fn get_account_id(
         .send()
         .await
         .map_err(|e| {
-            JobAttachmentsError::AssetSync(format!("Failed to get caller identity: {e}"))
+            JobAttachmentsError::AssetSync(format!(
+                "Failed to get caller identity: {}", format_sts_sdk_err(&e)
+            ))
         })?;
     identity
         .account()

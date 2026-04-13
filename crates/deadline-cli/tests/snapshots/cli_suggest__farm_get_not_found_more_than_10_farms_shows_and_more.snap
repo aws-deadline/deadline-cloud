@@ -13,21 +13,22 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:52552"
-    AWS_ENDPOINT_URL_STS: "http://localhost:52552"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61844"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61844"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61844"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpY9APic/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpY9APic
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpsSeRMj/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpsSeRMj
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 Failed to get Farm from Deadline:
-ResourceNotFoundException: Farm not found
+ResourceNotFoundException: No message
 Available farms:
   farm-000  Farm 0
   farm-001  Farm 1

@@ -79,6 +79,7 @@ pick and execute work items.
 | 15c | Job logs auto-selection messages | ✅ Done | — | §44 cases 17-21 | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | Not started | — | — | — | 11 |
 | 15e | Behavioral parity audit | Not started | — | — | — | 9 |
+| 15f | DCM credential scoping fix + tests | Not started | §53 cases 1-10 | §53 cases 11-16 | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
 | 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 

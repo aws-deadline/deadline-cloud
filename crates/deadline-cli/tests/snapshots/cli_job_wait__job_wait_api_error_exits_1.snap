@@ -1,6 +1,5 @@
 ---
 source: crates/deadline-cli/tests/cli_job_wait.rs
-assertion_line: 224
 info:
   program: deadline
   args:
@@ -12,16 +11,16 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63548"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63548"
-    AWS_ENDPOINT_URL_STS: "http://localhost:63548"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61602"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61602"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61602"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTuB9NF/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTuB9NF
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp88KKts/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp88KKts
 ---
 success: false
 exit_code: 1

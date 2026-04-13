@@ -137,7 +137,71 @@ Fractional seconds are preserved as-is from the API response.
 
 ### Error formatting
 
-The SDK's `SdkError` `Display` impl just says `"service error"`. Use
-the `sdk_err` helper in `api.rs` which extracts the error code and
-message: `"AccessDeniedException: User is not authorized..."`. This is
-needed for `suggest_resources_on_client_error` to detect error types.
+The SDK's `SdkError` `Display` impl just says `"service error"` — it
+never includes the actual error code or message. Always use a helper
+that extracts the error code and message via `ProvideErrorMetadata`:
+
+- `api.rs::format_sdk_error` — generic, works for any AWS SDK error.
+  Uses `aws_smithy_types::error::metadata::ProvideErrorMetadata`, the
+  common trait all SDK crates re-export.
+- `api.rs::sdk_err` — wraps `format_sdk_error` into `DeadlineError`
+  for Deadline API calls.
+- `log_retrieval.rs::cw_sdk_err` — same pattern for CloudWatch Logs.
+- `s3.rs::format_sts_sdk_err` — same pattern for STS.
+
+Output format: `"AccessDeniedException: User is not authorized..."`.
+This is needed for `suggest_resources_on_client_error` to detect error
+types, and for users to understand what went wrong.
+
+**Never use `format!("{e}")` on an `SdkError`.** It produces `"service
+error"` which is useless to the user and breaks error-type detection.
+
+## Credential Scoping for Non-Deadline AWS Services
+
+Operations that access AWS services other than the Deadline Cloud API
+(CloudWatch Logs, S3) often require queue-scoped or fleet-scoped
+credentials. The base SDK config (from the user's AWS profile) may not
+have permission to access these resources — the queue or fleet role
+grants that access.
+
+**Rule:** When building a non-Deadline AWS client (CloudWatch Logs, S3)
+for a queue-scoped or fleet-scoped resource, check whether the user is
+logged in via Deadline Cloud Monitor (DCM). If so, use scoped
+credentials. If not, use the base session.
+
+### Pattern: queue-scoped credentials
+
+Used by: `get_session_logs` (CloudWatch Logs), `attachment download/upload`
+(S3), `manifest download/upload` (S3), `bundle submit` (S3),
+`job download-output` (S3), `queue sync-output` (S3).
+
+```rust
+// In session.rs — shared helper
+pub async fn get_queue_scoped_config(
+    farm_id: &str,
+    queue_id: &str,
+    config: Option<&IniConfig>,
+) -> Result<SdkConfig, DeadlineError>
+```
+
+Checks `auth::get_user_and_identity_store_id(config)`. If the user has
+a DCM login (both `user_id` and `identity_store_id` are `Some`), calls
+`get_queue_user_config` to assume the queue role. Otherwise returns the
+base SDK config. Falls back to base config if queue role assumption
+fails (matching Python's try/except pattern).
+
+### Pattern: fleet-scoped credentials
+
+Used by: `get_worker_logs` (CloudWatch Logs).
+
+Fleet credentials use `assume_fleet_role_for_read` (a one-shot API call
+returning temporary credentials), not a cached credential provider.
+Build a temporary `SdkConfig` from the returned credentials for the
+CloudWatch Logs client.
+
+### Why not always use scoped credentials?
+
+Non-DCM users (e.g. IAM users with direct permissions, SSO profiles
+without DCM) may already have the necessary permissions on their base
+credentials. Queue/fleet role assumption would fail for these users.
+The DCM check gates the credential flow correctly.

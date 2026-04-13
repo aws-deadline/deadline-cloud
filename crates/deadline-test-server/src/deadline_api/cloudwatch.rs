@@ -28,8 +28,7 @@ pub async fn mock_get_log_events_not_found(server: &MockServer) {
         .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))
         .respond_with(
             ResponseTemplate::new(400).set_body_json(json!({
-                "__type": "ResourceNotFoundException",
-                "message": "The specified log group does not exist."
+                "__type": "ResourceNotFoundException"
             })),
         )
         .mount(server)

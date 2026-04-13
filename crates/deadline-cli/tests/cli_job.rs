@@ -81,7 +81,7 @@ async fn job_list_api_failure_prints_error_with_suggestions() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    errors::mock_search_jobs_access_denied(&harness.server, "farm-abc", "Access denied").await;
+    errors::mock_search_jobs_access_denied(&harness.server, "farm-abc").await;
     queues::mock_list_queues(
         &harness.server, "farm-abc",
         &[json!({"queueId": "queue-111", "displayName": "Good Queue"})],
@@ -296,7 +296,7 @@ async fn job_get_search_term_api_failure() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    errors::mock_search_jobs_access_denied(&harness.server, "farm-abc", "Access denied").await;
+    errors::mock_search_jobs_access_denied(&harness.server, "farm-abc").await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
 }

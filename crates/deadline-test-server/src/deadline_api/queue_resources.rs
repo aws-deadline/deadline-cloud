@@ -23,7 +23,6 @@ pub async fn mock_assume_queue_role_for_user_error(
     queue_id: &str,
     status: u16,
     error_type: &str,
-    message: &str,
 ) {
     Mock::given(method("GET"))
         .and(path(format!(
@@ -31,8 +30,7 @@ pub async fn mock_assume_queue_role_for_user_error(
         )))
         .respond_with(
             ResponseTemplate::new(status).set_body_json(json!({
-                "__type": error_type,
-                "message": message
+                "__type": error_type
             })),
         )
         .mount(server)

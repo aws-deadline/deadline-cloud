@@ -62,7 +62,7 @@ async fn job_cancel_mark_as_suspended_with_yes() {
 async fn job_cancel_get_job_fails_prints_error_with_suggestions() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
-    errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB, "Job not found").await;
+    errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB).await;
     jobs::mock_list_jobs(&harness.server, FARM, QUEUE,
         &[json!({"jobId": "job-real", "name": "Real Job"})]).await;
 
@@ -193,7 +193,7 @@ async fn job_requeue_tasks_step_with_no_matching_tasks() {
 async fn job_requeue_tasks_get_job_fails_prints_error() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
-    errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB, "Job not found").await;
+    errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB).await;
     jobs::mock_list_jobs(&harness.server, FARM, QUEUE,
         &[json!({"jobId": "job-real", "name": "Real Job"})]).await;
 

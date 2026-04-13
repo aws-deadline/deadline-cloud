@@ -3,13 +3,12 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Mount an AccessDeniedException for ListFarms.
-pub async fn mock_list_farms_access_denied(server: &MockServer, message: &str) {
+pub async fn mock_list_farms_access_denied(server: &MockServer) {
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
         .respond_with(
             ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
-                "message": message
+                "__type": "AccessDeniedException"
             })),
         )
         .mount(server)
@@ -17,13 +16,12 @@ pub async fn mock_list_farms_access_denied(server: &MockServer, message: &str) {
 }
 
 /// Mount a ResourceNotFoundException for GetFarm.
-pub async fn mock_get_farm_not_found(server: &MockServer, farm_id: &str, message: &str) {
+pub async fn mock_get_farm_not_found(server: &MockServer, farm_id: &str) {
     Mock::given(method("GET"))
         .and(path(format!("/2023-10-12/farms/{farm_id}")))
         .respond_with(
             ResponseTemplate::new(404).set_body_json(json!({
-                "__type": "ResourceNotFoundException",
-                "message": message
+                "__type": "ResourceNotFoundException"
             })),
         )
         .mount(server)
@@ -35,7 +33,6 @@ pub async fn mock_get_queue_access_denied(
     server: &MockServer,
     farm_id: &str,
     queue_id: &str,
-    message: &str,
 ) {
     Mock::given(method("GET"))
         .and(path(format!(
@@ -43,8 +40,7 @@ pub async fn mock_get_queue_access_denied(
         )))
         .respond_with(
             ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
-                "message": message
+                "__type": "AccessDeniedException"
             })),
         )
         .mount(server)
@@ -57,7 +53,6 @@ pub async fn mock_get_job_not_found(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    message: &str,
 ) {
     Mock::given(method("GET"))
         .and(path(format!(
@@ -65,8 +60,7 @@ pub async fn mock_get_job_not_found(
         )))
         .respond_with(
             ResponseTemplate::new(404).set_body_json(json!({
-                "__type": "ResourceNotFoundException",
-                "message": message
+                "__type": "ResourceNotFoundException"
             })),
         )
         .mount(server)
@@ -74,15 +68,14 @@ pub async fn mock_get_job_not_found(
 }
 
 /// Mount an AccessDeniedException for SearchWorkers.
-pub async fn mock_search_workers_access_denied(server: &MockServer, farm_id: &str, message: &str) {
+pub async fn mock_search_workers_access_denied(server: &MockServer, farm_id: &str) {
     Mock::given(method("POST"))
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/search/workers"
         )))
         .respond_with(
             ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
-                "message": message
+                "__type": "AccessDeniedException"
             })),
         )
         .mount(server)
@@ -95,7 +88,6 @@ pub async fn mock_get_worker_not_found(
     farm_id: &str,
     fleet_id: &str,
     worker_id: &str,
-    message: &str,
 ) {
     Mock::given(method("GET"))
         .and(path(format!(
@@ -103,8 +95,7 @@ pub async fn mock_get_worker_not_found(
         )))
         .respond_with(
             ResponseTemplate::new(404).set_body_json(json!({
-                "__type": "ResourceNotFoundException",
-                "message": message
+                "__type": "ResourceNotFoundException"
             })),
         )
         .mount(server)
@@ -112,13 +103,12 @@ pub async fn mock_get_worker_not_found(
 }
 
 /// Mount an AccessDeniedException for SearchJobs.
-pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str, message: &str) {
+pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str) {
     Mock::given(method("POST"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/search/jobs")))
         .respond_with(
             ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
-                "message": message
+                "__type": "AccessDeniedException"
             })),
         )
         .mount(server)

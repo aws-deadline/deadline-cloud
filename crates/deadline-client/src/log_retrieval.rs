@@ -26,6 +26,31 @@ async fn logs_client(config: Option<&IniConfig>) -> aws_sdk_cloudwatchlogs::Clie
     aws_sdk_cloudwatchlogs::Client::from_conf(builder.build())
 }
 
+/// Format a CloudWatch SDK error using the common smithy trait.
+fn cw_sdk_err<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> String
+where
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+{
+    match err {
+        aws_sdk_cloudwatchlogs::error::SdkError::ServiceError(e) => {
+            let inner = e.err();
+            let code = inner.code().unwrap_or("Unknown");
+            let msg = inner.message().unwrap_or("No message");
+            format!("{code}: {msg}")
+        }
+        other => format!("{other}"),
+    }
+}
+
+/// Check if a CloudWatch error is ResourceNotFoundException.
+fn is_resource_not_found<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> bool
+where
+    E: aws_smithy_types::error::metadata::ProvideErrorMetadata,
+{
+    use aws_smithy_types::error::metadata::ProvideErrorMetadata;
+    err.code() == Some("ResourceNotFoundException")
+}
+
 /// Parse CloudWatch log events into our LogEvent type.
 fn parse_events(raw_events: &[aws_sdk_cloudwatchlogs::types::OutputLogEvent]) -> Vec<LogEvent> {
     raw_events
@@ -114,7 +139,7 @@ pub async fn get_session_logs(
                 }, auto_select))
             } else {
                 Err(DeadlineError::OperationError(format!(
-                    "Failed to retrieve logs: {e}"
+                    "Failed to retrieve logs: {}", cw_sdk_err(&e)
                 )))
             }
         }
@@ -179,7 +204,7 @@ pub async fn get_worker_logs(
                 })
             } else {
                 Err(DeadlineError::OperationError(format!(
-                    "Failed to retrieve worker logs: {e}"
+                    "Failed to retrieve worker logs: {}", cw_sdk_err(&e)
                 )))
             }
         }
@@ -231,11 +256,6 @@ async fn auto_select_session(
     Ok((id.clone(), SessionAutoSelect::LatestSession(id)))
 }
 
-/// Check if a CloudWatch error is ResourceNotFoundException.
-fn is_resource_not_found<E: std::fmt::Debug>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> bool {
-    let msg = format!("{err:?}");
-    msg.contains("ResourceNotFoundException")
-}
 
 #[cfg(test)]
 mod tests {

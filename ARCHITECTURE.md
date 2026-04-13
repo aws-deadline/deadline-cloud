@@ -125,3 +125,8 @@ ExtendScript (JSX)
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
   are not the primary API.
+- **Credential scoping:** Non-Deadline AWS clients (CloudWatch Logs, S3)
+  that access queue-scoped or fleet-scoped resources must use scoped
+  credentials when the user is logged in via DCM. See
+  [`PATTERNS.md`](PATTERNS.md) § "Credential Scoping for Non-Deadline
+  AWS Services".

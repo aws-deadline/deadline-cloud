@@ -25,7 +25,7 @@ async fn export_credentials_failure_sends_telemetry() {
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
     queue_resources::mock_assume_queue_role_for_user_error(
-        &harness.server, "farm-abc", "queue-aaa", 403, "AccessDeniedException", "Access denied",
+        &harness.server, "farm-abc", "queue-aaa", 403, "AccessDeniedException",
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 

@@ -43,7 +43,7 @@ async fn farm_list_with_profile_option() {
 #[tokio::test]
 async fn farm_list_api_failure_prints_error() {
     let harness = TestHarness::new().await;
-    errors::mock_list_farms_access_denied(&harness.server, "Access denied").await;
+    errors::mock_list_farms_access_denied(&harness.server).await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
@@ -102,7 +102,7 @@ async fn farm_get_no_farm_id_exits_with_error() {
 #[tokio::test]
 async fn farm_get_api_failure_prints_error() {
     let harness = TestHarness::new().await;
-    errors::mock_get_farm_not_found(&harness.server, "farm-nonexistent", "Farm not found").await;
+    errors::mock_get_farm_not_found(&harness.server, "farm-nonexistent").await;
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-nonexistent"]));
 }
 
