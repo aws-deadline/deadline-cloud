@@ -18,7 +18,7 @@ See `tests/python/gui_ffi_test.py` for the Python integration tests and
 
 ## Architecture
 
-See `../designs/rust-rewrite/gui_ffi_architecture.md` for detailed
+See `../design_docs/rust-rewrite/gui_ffi_architecture.md` for detailed
 diagrams of how the FFI layer connects Python, Rust, and Qt.
 
 ### How it works (summary)

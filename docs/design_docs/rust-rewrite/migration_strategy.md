@@ -171,7 +171,7 @@ project-blocking risks have been proven (see Risk Spikes table in
 | Risk | Why it matters | What could go wrong |
 |------|---------------|---------------------|
 | **VFS (FUSE) on all platforms** | §28 has 89 test cases. VFS is Linux-only (FUSE). macOS and Windows need different approaches. | Rust FUSE libraries are immature. Platform-specific code paths multiply testing burden. May need to defer VFS and use COPIED mode only. |
-| **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/specs/deadline-client.md` § "Future Improvements" for the Smithy model filtering approach. |
+| **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/crate_specs/deadline-client.md` § "Future Improvements" for the Smithy model filtering approach. |
 
 ### Low risks (just labor)
 

@@ -36,7 +36,7 @@ The workflow for porting each feature from the Python CLI to Rust.
   (updated after each step) and uncommitted files. The commit message
   covers the entire batch. Keep batches small and focused.
 - **Docs stay in sync.** Before committing, update
-  `docs/specs/<crate>.md` with Rust-specific design decisions, update
+  `docs/crate_specs/<crate>.md` with Rust-specific design decisions, update
   the Progress table in `README.md`, and update `HANDOFF.md`. All doc
   updates are part of the batch and included in the same commit. Do
   not let docs drift from code.
@@ -115,10 +115,10 @@ Before planning, read these (in order). Skip none.
 - [ ] `migration_strategy.md` — goals and constraints
 - [ ] `data_flow.md` — persistent data formats
 - [ ] `python_observations.md` — behavioral notes and ambiguities
-- [ ] `../../ARCHITECTURE.md` — crate relationships
-- [ ] `../../TESTING.md` — test philosophy and levels
-- [ ] `../../specs/<crate>.md` for the target crate
-- [ ] `../../PATTERNS.md` — when the work item involves API calls
+- [ ] `../../../ARCHITECTURE.md` — crate relationships
+- [ ] `../../../TESTING.md` — test philosophy and levels
+- [ ] `../../crate_specs/<crate>.md` for the target crate
+- [ ] `../../../PATTERNS.md` — when the work item involves API calls
 - [ ] Relevant `test_specs/` sections
 - [ ] Python source for the feature being ported
 
@@ -179,7 +179,7 @@ implementation.
 ### 2. Update the crate spec
 
 Write up the feature's behavior and implementation approach in the relevant
-`docs/specs/<crate>.md`. Describe what it does and how it should work in
+`docs/crate_specs/<crate>.md`. Describe what it does and how it should work in
 Rust, but keep it at the design level — no code blocks unless they're
 needed to show a non-obvious interface or data format. This becomes the
 reference for both the tests and the implementation.
@@ -191,10 +191,10 @@ file contents. Prefer Level 2 (CLI subprocess) tests. Run them and confirm
 they fail. If a test passes before implementation, it's not testing anything
 new.
 
-**CLI output tests use `insta-cmd` snapshots** (see `../../TESTING.md` for
+**CLI output tests use `insta-cmd` snapshots** (see `../../../TESTING.md` for
 the generic framework).
 
-Read the relevant section in `docs/designs/rust-rewrite/test_specs/` for
+Read the relevant section in `docs/design_docs/rust-rewrite/test_specs/` for
 test case inspiration. Do **not** reference section or case numbers in test
 names or comments — the test specs are migration-era scaffolding, not
 maintained after tests are written.
@@ -204,7 +204,7 @@ maintained after tests are written.
 Write the minimum code to make the tests pass.
 
 For CLI commands that call AWS APIs, follow the patterns in
-`../../PATTERNS.md`:
+`../../../PATTERNS.md`:
 - All API functions use `ResponseBodyCapture` to capture the raw JSON
   response. This applies to `get_*`, `list_*`, and `search_*` alike.
 - List functions: manual `nextToken` loop with `ResponseBodyCapture` on
@@ -238,7 +238,7 @@ output. Skipping this step has caused behavior gaps in past work items.
    - Header lines on `list` commands (count/offset)
    - Boolean capitalization (`True`/`False` vs `true`/`false`)
    - Error message format
-   - Known accepted differences (see `../../PATTERNS.md`
+   - Known accepted differences (see `../../../PATTERNS.md`
      § "Known differences from Python/boto3")
 4. If the Rust output differs from Python, fix the implementation first —
    do not accept a snapshot that doesn't match (unless it's a documented
@@ -264,7 +264,7 @@ Clean up the implementation by ensuring it follows proper code quality and code 
 
 ### 7. Update docs
 
-Update `docs/specs/<crate>.md` if the implementation diverged from the
-initial spec. Update `docs/ARCHITECTURE.md` if cross-crate relationships
+Update `docs/crate_specs/<crate>.md` if the implementation diverged from the
+initial spec. Update `ARCHITECTURE.md` if cross-crate relationships
 changed. Update the Progress table in `README.md`. Commit all changes after
 getting developer approval.

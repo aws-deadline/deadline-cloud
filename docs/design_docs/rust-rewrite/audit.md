@@ -16,7 +16,7 @@ Python CLI. Follow this document step by step.
 1. Ensure the Rust CLI is built: `cargo build -p deadline-cli`
 2. Confirm the Python CLI is available at the path in HANDOFF.md
 3. Confirm AWS credentials are active (run `deadline auth status`)
-4. Create a new report file: `docs/designs/rust-rewrite/audit_reports/YYYY-MM-DD-<scope>.md`
+4. Create a new report file: `docs/design_docs/rust-rewrite/audit_reports/YYYY-MM-DD-<scope>.md`
 
 ## The audit loop
 

@@ -87,7 +87,7 @@ deadline-cli
 ```
 
 For detailed diagrams of the FFI threading model, callback flow, and
-memory ownership, see `designs/rust-rewrite/gui_ffi_architecture.md`.
+memory ownership, see `docs/design_docs/rust-rewrite/gui_ffi_architecture.md`.
 
 ### DCC Plugin (e.g., Maya)
 
@@ -120,7 +120,7 @@ ExtendScript (JSX)
   See [`TESTING.md`](TESTING.md).
 - **API responses:** All API functions in `deadline-client` use the
   `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
-  The CLI layer never sees SDK types. See [`designs/rust-rewrite/workflow.md`](designs/rust-rewrite/workflow.md) § "AWS SDK for
+  The CLI layer never sees SDK types. See [`docs/design_docs/rust-rewrite/workflow.md`](docs/design_docs/rust-rewrite/workflow.md) § "AWS SDK for
   Rust Usage".
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but

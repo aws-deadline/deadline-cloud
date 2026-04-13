@@ -4,25 +4,29 @@ This is the Rust implementation of the AWS Deadline Cloud client software:
 CLI, GUI FFI layer, and shared library crates. The Python GUI
 widget files also live in this repo under `gui/`.
 
-## Before you start
+## Documentation
 
-Read `docs/README.md` for the documentation reading order and layout.
+Start with `README.md` for the repo overview and documentation layout.
+
+Key top-level docs:
+- `ARCHITECTURE.md` — crate dependency graph, data flows, shared conventions
+- `TESTING.md` — test philosophy, levels, no-mocking policy, snapshot workflow
+- `PATTERNS.md` — AWS SDK usage patterns, coding conventions
+
+Deeper docs:
+- `docs/crate_specs/` — one file per crate, describes current behavior and design
+- `docs/design_docs/` — topic-scoped TDDs, feature designs, decision records
 
 ## Keeping docs in sync with code
 
-- **`docs/specs/`** — One file per crate. Describes what the code currently does.
-  If you change a crate's public API or behavior, update its spec before committing.
-- **`docs/ARCHITECTURE.md`** — Describes how crates relate to each other.
-  If you change a dependency direction or add a new crate, update this file.
-- **`docs/designs/`** — Topic-scoped documents (TDDs, feature designs, decision
-  records). These cover features that may span multiple crates. If you change
-  a feature's design, update the relevant design doc.
+- If you change a crate's public API or behavior, update `docs/crate_specs/<crate>.md`.
+- If you change a dependency direction or add a new crate, update `ARCHITECTURE.md`.
+- If you change a feature's design, update the relevant doc in `docs/design_docs/`.
 
 ## Code style
 
 - Comments explain *what* and *why*, not Rust language concepts.
 - Test names: `{command_or_function}_{scenario}_{expected_outcome}`
-- No mocking. Use real temp directories, real HTTP servers (wiremock).
 
 ## Build and test
 

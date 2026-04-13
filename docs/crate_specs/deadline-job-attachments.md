@@ -1017,7 +1017,7 @@ Deferred per migration strategy. Linux-only FUSE, platform-specific.
 
 Proved that `aws-sdk-s3` matches Python/boto3 throughput for multipart
 upload and download of large files. This was a required risk spike before
-bulk implementation (see `../designs/rust-rewrite/migration_strategy.md`
+bulk implementation (see `../design_docs/rust-rewrite/migration_strategy.md`
 § "Fail-Fast Strategy").
 
 ### Results

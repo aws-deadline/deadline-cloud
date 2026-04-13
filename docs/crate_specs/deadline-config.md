@@ -73,7 +73,7 @@ Two tiers — config-explicit (primary) and convenience wrappers:
 | `get_setting_default(name)` | No (reads disk) | Read |
 
 `clear_setting` writes the default value back rather than removing the key
-(see `../designs/rust-rewrite/data_flow.md` observation #6).
+(see `../design_docs/rust-rewrite/data_flow.md` observation #6).
 
 #### Validation
 
