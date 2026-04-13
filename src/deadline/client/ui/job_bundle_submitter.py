@@ -123,6 +123,7 @@ def show_job_bundle_submitter(
     submitter_info: Optional[SubmitterInfo] = None,
     known_asset_paths: Optional[list[str]] = None,
     job_parameters: Optional[list[dict[str, Any]]] = None,
+    show_hidden_parameters: bool = False,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -264,6 +265,7 @@ def show_job_bundle_submitter(
     initial_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
+    initial_settings.show_hidden_parameters = show_hidden_parameters
 
     initial_shared_parameter_values = {}
 
@@ -305,6 +307,7 @@ def show_job_bundle_submitter(
         f=f,
         submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
+        show_hidden_parameters=show_hidden_parameters,
     )
 
     if job_parameters:

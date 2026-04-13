@@ -1,0 +1,88 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: Hidden Parameters Test
+description: |
+  Test bundle exercising both visible and HIDDEN parameters across all types.
+
+parameterDefinitions:
+# Visible parameters
+- name: VisibleString
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: Visible String
+  default: hello
+- name: VisibleInt
+  type: INT
+  userInterface:
+    control: SPIN_BOX
+    label: Visible Int
+  default: 42
+- name: VisibleFloat
+  type: FLOAT
+  userInterface:
+    control: SPIN_BOX
+    label: Visible Float
+  default: 3.14
+- name: VisiblePath
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+  userInterface:
+    control: CHOOSE_DIRECTORY
+    label: Visible Path
+  default: outputs
+
+# Hidden parameters (one per type)
+- name: HiddenString
+  type: STRING
+  userInterface:
+    control: HIDDEN
+  default: secret-value
+- name: HiddenInt
+  type: INT
+  userInterface:
+    control: HIDDEN
+  default: 99
+- name: HiddenFloat
+  type: FLOAT
+  userInterface:
+    control: HIDDEN
+  default: 2.718
+- name: HiddenPath
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+  userInterface:
+    control: HIDDEN
+  default: hidden
+- name: HiddenInputFile
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+  userInterface:
+    control: HIDDEN
+  default: input.txt
+- name: HiddenOutputFile
+  type: PATH
+  objectType: FILE
+  dataFlow: OUT
+  userInterface:
+    control: HIDDEN
+  default: output.txt
+- name: HiddenDropdown
+  type: STRING
+  userInterface:
+    control: HIDDEN
+  allowedValues:
+    - alpha
+    - beta
+    - gamma
+  default: beta
+
+steps:
+- name: Step
+  script:
+    actions:
+      onRun:
+        command: bash
+        args: ['--help']

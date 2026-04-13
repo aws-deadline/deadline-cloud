@@ -46,6 +46,7 @@ class JobBundleSettingsWidget(QWidget):
     def __init__(self, initial_settings: JobBundleSettings, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
 
+        self._show_hidden_parameters = initial_settings.show_hidden_parameters
         self.param_layout = QVBoxLayout()
 
         self._build_ui(initial_settings)
@@ -69,7 +70,9 @@ class JobBundleSettingsWidget(QWidget):
                 widget.deleteLater()
 
         self.parameters_widget = OpenJDParametersWidget(
-            parameter_definitions=settings.parameters, parent=self
+            parameter_definitions=settings.parameters,
+            show_hidden_parameters=self._show_hidden_parameters,
+            parent=self,
         )
         self.param_layout.addWidget(self.parameters_widget)
         self.parameters_widget.parameter_changed.connect(
@@ -109,6 +112,7 @@ class JobBundleSettingsWidget(QWidget):
             )
             job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
             job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+            job_settings.show_hidden_parameters = self._show_hidden_parameters
 
         except Exception as e:
             msg = str(e)

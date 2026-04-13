@@ -119,6 +119,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         host_requirements: Optional[HostRequirements] = None,
         submitter_info: Optional[SubmitterInfo] = None,
         known_asset_paths: Optional[list[str]] = None,
+        show_hidden_parameters: bool = False,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
@@ -150,6 +151,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
         self.should_close = False
+        self._show_hidden_parameters = show_hidden_parameters
 
         self._build_ui(
             job_setup_widget_type,
@@ -318,6 +320,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings = SharedJobSettingsWidget(
             initial_settings=initial_job_settings,
             initial_shared_parameter_values=initial_shared_parameter_values,
+            show_hidden_parameters=self._show_hidden_parameters,
             parent=self,
         )
         self.shared_job_settings.parameter_changed.connect(self.on_shared_job_parameter_changed)

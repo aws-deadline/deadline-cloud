@@ -58,6 +58,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         *,
         initial_settings: Any,
         initial_shared_parameter_values: dict[str, Any],
+        show_hidden_parameters: bool = False,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
@@ -76,7 +77,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         layout.addWidget(self.deadline_cloud_settings_box)
 
         self.queue_parameters_box = OpenJDParametersWidget(
-            async_loading_state="Loading Queue Environments...", parent=self
+            async_loading_state="Loading Queue Environments...",
+            show_hidden_parameters=show_hidden_parameters,
+            parent=self,
         )
         layout.addWidget(self.queue_parameters_box)
         self.queue_parameters_box.parameter_changed.connect(

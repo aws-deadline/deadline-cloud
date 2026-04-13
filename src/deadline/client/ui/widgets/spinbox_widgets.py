@@ -42,6 +42,7 @@ class FloatDragSpinBox(QDoubleSpinBox):
         self.setMinimum(self.MIN_FLOAT_VALUE)
         self.setDragMultiplier(0.1)
         self.setDecimalMode(DecimalMode.ADAPTIVE_DECIMAL)
+        self.setDecimals(self.MAX_ADAPTIVE_DECIMALS)
         self.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
         self.lineEdit().installEventFilter(self)
 
