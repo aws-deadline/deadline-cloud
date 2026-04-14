@@ -5,6 +5,7 @@ Integration tests for the `deadline bundle submit` CLI command.
 """
 
 import re
+import shutil
 
 import boto3
 import pytest
@@ -172,6 +173,4 @@ def test_job_download_output(
     finally:
         # Clean up downloaded output
         if output_dir.exists():
-            import shutil
-
             shutil.rmtree(output_dir)

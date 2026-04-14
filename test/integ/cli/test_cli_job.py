@@ -7,6 +7,7 @@ Tests cover: job list, job get, job cancel, and job trace-schedule.
 """
 
 import json
+import time
 
 import boto3
 import pytest
@@ -60,8 +61,6 @@ def _wait_for_job_update_succeeded(
     deadline_client, farm_id: str, queue_id: str, job_id: str, max_retries: int = 5
 ) -> None:
     """Poll with exponential backoff until the job's lifecycleStatus reaches UPDATE_SUCCEEDED."""
-    import time
-
     delay = 1
     for attempt in range(max_retries):
         resp = deadline_client.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
