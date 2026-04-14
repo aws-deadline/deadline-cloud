@@ -9,19 +9,20 @@ widget files also live in this repo under `gui/`.
 Start with `README.md` for the repo overview and documentation layout.
 
 Key top-level docs:
-- `ARCHITECTURE.md` — crate dependency graph, data flows, shared conventions
-- `TESTING.md` — test philosophy, levels, no-mocking policy, snapshot workflow
-- `PATTERNS.md` — AWS SDK usage patterns, coding conventions
+- `specs/architecture.md` — crate dependency graph, data flows, shared conventions
+- `specs/testing.md` — test philosophy, levels, no-mocking policy, snapshot workflow
+- `specs/patterns.md` — AWS SDK usage patterns, coding conventions
 
 Deeper docs:
-- `docs/crate_specs/` — one file per crate, describes current behavior and design
-- `docs/design_docs/` — topic-scoped TDDs, feature designs, decision records
+- `specs/` — per-crate subdirectories with architecture and topic-scoped specs
+- `specs/cli/` — per-command CLI feature documentation
+- `specs/workflow.md` — development loop: study Python → write tests → implement → write spec → audit → fix → commit
 
 ## Keeping docs in sync with code
 
-- If you change a crate's public API or behavior, update `docs/crate_specs/<crate>.md`.
-- If you change a dependency direction or add a new crate, update `ARCHITECTURE.md`.
-- If you change a feature's design, update the relevant doc in `docs/design_docs/`.
+- If you change a crate's public API or behavior, update `specs/{crate}/`.
+- If you change a dependency direction or add a new crate, update `specs/architecture.md`.
+- If you change a feature's design, update the relevant spec in `specs/`.
 
 ## Code style
 

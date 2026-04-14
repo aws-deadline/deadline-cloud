@@ -51,11 +51,12 @@ data flows.
 
 | Path | Contents |
 |------|----------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Crate dependency graph, data flows, shared conventions |
-| [TESTING.md](TESTING.md) | Test philosophy, no-mocking policy, snapshot workflow |
-| [PATTERNS.md](PATTERNS.md) | AWS SDK usage patterns, coding conventions |
-| [docs/crate_specs/](docs/crate_specs/) | One file per crate — describes current behavior and design |
-| [docs/design_docs/](docs/design_docs/) | Technical design documents, feature designs, decision records |
+| [specs/](specs/) | All design specifications — per-crate architecture, CLI command docs, cross-cutting design docs |
+| [specs/architecture.md](specs/architecture.md) | Crate dependency graph, data flows, shared conventions |
+| [specs/testing.md](specs/testing.md) | Test philosophy, no-mocking policy, snapshot workflow |
+| [specs/patterns.md](specs/patterns.md) | AWS SDK usage patterns, coding conventions |
+| [specs/cli/](specs/cli/) | Per-command CLI feature documentation |
+| [specs/cli/reference.md](specs/cli/reference.md) | Complete CLI command reference |
 
 ## License
 
