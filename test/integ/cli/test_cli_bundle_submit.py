@@ -91,19 +91,26 @@ def test_bundle_submit(deadline_cli_test: DeadlineCliTest, deadline_client) -> N
 
 
 @pytest.fixture(scope="module")
-def completed_job_with_output(deadline_cli_test: DeadlineCliTest, deadline_client) -> str:
+def completed_job_with_output(
+    deadline_cli_test: DeadlineCliTest, deadline_client, tmp_path_factory
+) -> tuple:
     """
-    Submit the echo_with_attachment bundle via CLI, wait for it to complete.
+    Copy the echo_with_attachment bundle to a tmp directory, submit it via CLI,
+    and wait for it to complete.
 
-    Returns the job ID of a succeeded job that has downloadable output.
+    Returns (job_id, tmp_bundle_path) so the download test knows where output lands.
     """
+    # Copy bundle to tmp so downloads go there instead of the source tree
+    tmp_bundle = tmp_path_factory.mktemp("bundle") / "echo_with_attachment"
+    shutil.copytree(ECHO_BUNDLE, tmp_bundle)
+
     runner = CliRunner()
     result = runner.invoke(
         main,
         [
             "bundle",
             "submit",
-            ECHO_BUNDLE,
+            str(tmp_bundle),
             "--farm-id",
             deadline_cli_test.farm_id,
             "--queue-id",
@@ -128,49 +135,40 @@ def completed_job_with_output(deadline_cli_test: DeadlineCliTest, deadline_clien
         queueId=deadline_cli_test.queue_id,
         jobId=job_id,
     )
-    return job_id
+    return job_id, tmp_bundle
 
 
 def test_job_download_output(
     deadline_cli_test: DeadlineCliTest,
-    completed_job_with_output: str,
-    tmp_path,
+    completed_job_with_output: tuple,
 ) -> None:
     """Verify `deadline job download-output` downloads files from a completed job."""
+    job_id, tmp_bundle = completed_job_with_output
     runner = CliRunner()
 
-    # The download will place files under the original root path from the manifest,
-    # which is the echo_with_attachment bundle directory.
-    output_dir = Path(ECHO_BUNDLE) / "output"
-    result_file = output_dir / "result.txt"
+    result = runner.invoke(
+        main,
+        [
+            "job",
+            "download-output",
+            "--farm-id",
+            deadline_cli_test.farm_id,
+            "--queue-id",
+            deadline_cli_test.queue_id,
+            "--job-id",
+            job_id,
+            "--conflict-resolution",
+            "OVERWRITE",
+            "--yes",
+        ],
+    )
 
-    try:
-        result = runner.invoke(
-            main,
-            [
-                "job",
-                "download-output",
-                "--farm-id",
-                deadline_cli_test.farm_id,
-                "--queue-id",
-                deadline_cli_test.queue_id,
-                "--job-id",
-                completed_job_with_output,
-                "--conflict-resolution",
-                "OVERWRITE",
-                "--yes",
-            ],
-        )
+    assert result.exit_code == 0, result.output
+    assert "Downloading Outputs" in result.output or "Downloaded" in result.output
 
-        assert result.exit_code == 0, result.output
-        assert "Downloading Outputs" in result.output or "Downloaded" in result.output
-
-        # Verify the output file was downloaded with expected content
-        assert result_file.exists(), f"Expected output file at {result_file}"
-        content = result_file.read_text()
-        assert "Input file contents:" in content
-        assert "Hello from integ test attachment" in content
-    finally:
-        # Clean up downloaded output
-        if output_dir.exists():
-            shutil.rmtree(output_dir)
+    # Output lands in the tmp bundle directory (the manifest root path)
+    result_file = tmp_bundle / "output" / "result.txt"
+    assert result_file.exists(), f"Expected output file at {result_file}"
+    content = result_file.read_text()
+    assert "Input file contents:" in content
+    assert "Hello from integ test attachment" in content
