@@ -1,0 +1,28 @@
+[package]
+name = "deadline-api"
+description = "AWS Deadline Cloud client API, session, and telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+deadline-config = { workspace = true }
+aws-config = { workspace = true }
+aws-sdk-deadline = { workspace = true }
+aws-sdk-sts = { workspace = true }
+aws-sdk-cloudwatchlogs = { workspace = true }
+aws-smithy-types = { workspace = true }
+aws-credential-types = "1"
+chrono = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+indexmap = "2"
+tokio = { workspace = true }
+log = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+ureq = "3"
+
+[dev-dependencies]
+test-case = { workspace = true }
+wiremock = { workspace = true }
+serial_test = { workspace = true }

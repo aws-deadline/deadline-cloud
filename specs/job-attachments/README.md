@@ -4,7 +4,7 @@ Asset manifest handling, S3 upload/download, hash cache, content-addressed
 storage, and manifest lifecycle operations. Manages the data plane for job
 attachments — everything that moves files between the user's machine and S3.
 
-Owns its own S3 and STS clients independently from `deadline-client` because
+Owns its own S3 and STS clients independently from `deadline-api` because
 the attachment subsystem has different credential lifecycles, timeout
 requirements, and caching semantics.
 

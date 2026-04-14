@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_client::api;
+use deadline_api::api;
 use deadline_config::config_file;
 
 use super::config::CliError;

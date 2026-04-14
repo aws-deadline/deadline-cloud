@@ -4,9 +4,9 @@
 
 ```
 deadline-cli ──► deadline-config    ← this crate
-deadline-client ──► deadline-config
+deadline-api ──► deadline-config
 deadline-gui-ffi ──► deadline-config
-deadline-job-attachments ──► (indirect via deadline-client)
+deadline-job-attachments ──► (indirect via deadline-api)
 deadline-common ──► (no dependency on config)
 ```
 

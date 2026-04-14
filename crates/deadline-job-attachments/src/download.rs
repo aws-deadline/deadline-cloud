@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use aws_sdk_s3::Client as S3Client;
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 
 use crate::asset_manifests::{decode_manifest, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
 use crate::models::{FileConflictResolution, JobAttachmentS3Settings};

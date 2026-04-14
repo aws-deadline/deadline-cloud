@@ -30,7 +30,7 @@ plugins.
 |-----------|---------------|-----------|
 | CLI binary | PyInstaller-packaged Python | Rust binary (`deadline-cli`) |
 | Config library | `deadline.client.config` | `deadline-config` crate |
-| API client | `deadline.client.api` | `deadline-client` crate |
+| API client | `deadline.client.api` | `deadline-api` crate |
 | Job bundle library | `deadline.client.job_bundle` | `deadline-job-bundle` crate |
 | Job attachments | `deadline.job_attachments` | `deadline-job-attachments` crate |
 | GUI business logic | `deadline.client.ui.controllers`, API calls, auth status | Rust via `deadline-gui-ffi` shared library |
@@ -97,7 +97,7 @@ deadline-cloud-rs/
 │   ├── deadline-gui-ffi/          # C ABI shared library for GUI + DCC plugins
 │   ├── deadline-mcp/              # MCP server binary (rmcp SDK)
 │   ├── deadline-config/           # Config file read/write
-│   ├── deadline-client/           # AWS API calls
+│   ├── deadline-api/           # AWS API calls
 │   ├── deadline-job-bundle/       # Job bundle parsing and parameters
 │   ├── deadline-job-attachments/  # Manifests, hashing, S3 transfer, caches
 │   ├── deadline-models/           # Shared types and errors
@@ -171,7 +171,7 @@ project-blocking risks have been proven (see Risk Spikes table in
 | Risk | Why it matters | What could go wrong |
 |------|---------------|---------------------|
 | **VFS (FUSE) on all platforms** | §28 has 89 test cases. VFS is Linux-only (FUSE). macOS and Windows need different approaches. | Rust FUSE libraries are immature. Platform-specific code paths multiply testing burden. May need to defer VFS and use COPIED mode only. |
-| **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/crate_specs/deadline-client.md` § "Future Improvements" for the Smithy model filtering approach. |
+| **AWS SDK for Rust limitations** | Output types lack `serde::Serialize` ([#269](https://github.com/awslabs/aws-sdk-rust/issues/269), open since 2021). Paginators don't support interceptors. | Workarounds (`ResponseBodyCapture`, manual pagination) may hit edge cases with new API shapes. See `docs/crate_specs/deadline-api.md` § "Future Improvements" for the Smithy model filtering approach. |
 
 ### Low risks (just labor)
 
@@ -206,7 +206,7 @@ may cause phases to be revised or reordered.
 **Scope:**
 - All CLI subcommands: `config`, `auth`, `farm`, `fleet`, `queue`, `worker`,
   `job`, `bundle submit`, `attachment`, `manifest`, `handle-web-url`
-- Library crates: `deadline-config`, `deadline-client`, `deadline-job-bundle`,
+- Library crates: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
   `deadline-job-attachments`, `deadline-models`, `deadline-common`
 - Telemetry
 - GUI commands (`config gui`, `bundle gui-submit`) print an error directing
@@ -287,7 +287,7 @@ official Rust MCP SDK ([rmcp](https://rust.sdk.modelcontextprotocol.io/),
 - Telemetry recording per tool invocation
 - `deadline mcp-server` CLI command starts the server
 
-**Prerequisites:** Phase 1 library crates complete (`deadline-client` for
+**Prerequisites:** Phase 1 library crates complete (`deadline-api` for
 all API calls).
 
 **Ship criteria:**

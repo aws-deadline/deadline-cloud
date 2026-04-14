@@ -31,5 +31,12 @@ are all "✅ Done".
    the pattern for testing DCM vs non-DCM credential paths.
 
 6. **`deadline-job-bundle` owns submission orchestration.** It depends
-   on `deadline-client` (API calls) and `deadline-job-attachments` (S3
+   on `deadline-api` (API calls) and `deadline-job-attachments` (S3
    upload). See `specs/architecture.md` for the dependency graph.
+
+7. **Crate consolidation completed.** `deadline-models` and
+   `deadline-common` were dissolved into `deadline-api` and
+   `deadline-job-attachments`. Error types, telemetry, path utils,
+   and submitter info now live in their natural consumer crates.
+   Import paths changed: `deadline_models::errors::DeadlineError` →
+   `deadline_api::errors::DeadlineError`, etc.

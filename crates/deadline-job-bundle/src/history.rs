@@ -1,4 +1,4 @@
-use deadline_models::errors::DeadlineError;
+use deadline_api::errors::DeadlineError;
 use std::fs;
 use std::path::Path;
 

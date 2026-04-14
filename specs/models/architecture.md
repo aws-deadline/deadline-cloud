@@ -4,7 +4,7 @@
 
 ```
 deadline-cli ──► deadline-models
-deadline-client ──► deadline-models
+deadline-api ──► deadline-models
 deadline-job-bundle ──► deadline-models
 deadline-job-attachments ──► deadline-models
 deadline-gui-ffi ──► deadline-models
@@ -66,7 +66,7 @@ Types shared between `deadline-job-attachments` and `deadline-job-bundle`:
 
 ### job_monitoring.rs
 
-Types used by the job monitoring/wait logic in `deadline-client`:
+Types used by the job monitoring/wait logic in `deadline-api`:
 - `FailedTask` — `{ step_id, task_id, step_name, parameters: Value, session_id: Option }`
 - `JobCompletionResult` — `{ status, failed_tasks: Vec<FailedTask>, elapsed_time: f64 }`
 - `LogEvent` — `{ timestamp: DateTime<Utc>, message, ingestion_time: Option, event_id: Option }`

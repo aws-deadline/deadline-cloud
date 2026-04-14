@@ -1,6 +1,6 @@
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
-use deadline_client::api;
+use deadline_api::api;
 
 use super::config::CliError;
 

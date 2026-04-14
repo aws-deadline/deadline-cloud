@@ -60,7 +60,7 @@ Requires: farm_id, queue_id, `--storage-profile-id`. Calls
 ## `queue paramdefs`
 
 Requires: farm_id, queue_id. Calls `get_queue_parameter_definitions` from
-`deadline-client`, which:
+`deadline-api`, which:
 1. Lists all queue environments
 2. Fetches each environment's full details
 3. Sorts by priority

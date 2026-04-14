@@ -5,7 +5,7 @@ invoked by `deadline-cli` via `deadline mcp-server`.
 
 Consumers: `deadline-cli`.
 
-Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-client`,
+Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`,
 `deadline-job-bundle`, `deadline-job-attachments`, `deadline-common`,
 `deadline-models`.
 

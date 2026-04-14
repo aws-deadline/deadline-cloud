@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use deadline_config::ini::IniConfig;
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 
 use crate::asset_manifests::{decode_manifest, hash_data, AssetManifest, HashAlgorithm};
 use crate::download::download_files_from_manifests;

@@ -10,7 +10,7 @@ directory and parameters; it gives back a job ID.
 Consumers: `deadline-cli` (bundle submit), `deadline-gui-ffi` (submission
 dialog), `deadline-mcp` (submit_job tool).
 
-Dependencies: `deadline-client` (API calls), `deadline-job-attachments`
+Dependencies: `deadline-api` (API calls), `deadline-job-attachments`
 (hashing, S3 upload), `deadline-models` (shared types).
 
 ## Document Index
@@ -50,7 +50,7 @@ Gaps:
 - `read_yaml_or_json_object` returns `None` for absent optional files.
   Callers must handle the `None` case — don't assume files exist.
 
-- The crate transitively includes the AWS SDK (via `deadline-client` and
+- The crate transitively includes the AWS SDK (via `deadline-api` and
   `deadline-job-attachments`). This is intentional: submission is the
   primary use case, and separating parsing from orchestration would force
   all three consumers to duplicate the pipeline.

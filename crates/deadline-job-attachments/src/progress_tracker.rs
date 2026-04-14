@@ -2,7 +2,29 @@ use std::fmt;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use deadline_common::path_utils::human_readable_file_size;
+/// Convert a byte count to a human-readable string (e.g., "1.5 GB").
+///
+/// Uses SI prefixes (1 KB = 1000 bytes).
+fn human_readable_file_size(size_in_bytes: u64) -> String {
+    let postfixes = ["B", "KB", "MB", "GB", "TB", "PB"];
+    let mut converted: f64 = size_in_bytes as f64;
+    let mut rounded: f64;
+
+    for postfix in &postfixes {
+        rounded = (converted * 100.0).round() / 100.0;
+        if rounded < 1000.0 {
+            if *postfix == "B" {
+                return format!("{} {postfix}", rounded as u64);
+            } else {
+                return format!("{rounded:.1} {postfix}");
+            }
+        }
+        converted /= 1000.0;
+    }
+
+    let rounded = (converted * 100.0).round() / 100.0;
+    format!("{rounded:.1} {}", postfixes.last().unwrap())
+}
 
 // --- ProgressStatus ---
 

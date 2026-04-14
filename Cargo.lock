@@ -915,6 +915,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "deadline-api"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-cloudwatchlogs",
+ "aws-sdk-deadline",
+ "aws-sdk-sts",
+ "aws-smithy-types",
+ "chrono",
+ "deadline-config",
+ "indexmap",
+ "log",
+ "serde_json",
+ "serde_yaml",
+ "serial_test",
+ "test-case",
+ "tokio",
+ "ureq",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "deadline-cli"
 version = "0.1.0"
 dependencies = [
@@ -922,12 +946,10 @@ dependencies = [
  "aws-config",
  "chrono",
  "clap",
- "deadline-client",
- "deadline-common",
+ "deadline-api",
  "deadline-config",
  "deadline-job-attachments",
  "deadline-job-bundle",
- "deadline-models",
  "deadline-test-server",
  "env_logger",
  "indicatif",
@@ -947,45 +969,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deadline-client"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-credential-types",
- "aws-sdk-cloudwatchlogs",
- "aws-sdk-deadline",
- "aws-sdk-sts",
- "aws-smithy-types",
- "chrono",
- "deadline-common",
- "deadline-config",
- "deadline-models",
- "indexmap",
- "log",
- "serde_json",
- "serde_yaml",
- "serial_test",
- "test-case",
- "tokio",
- "wiremock",
-]
-
-[[package]]
-name = "deadline-common"
-version = "0.1.0"
-dependencies = [
- "deadline-config",
- "deadline-models",
- "log",
- "serde_json",
- "test-case",
- "tokio",
- "ureq",
- "uuid",
- "wiremock",
-]
-
-[[package]]
 name = "deadline-config"
 version = "0.1.0"
 dependencies = [
@@ -999,12 +982,10 @@ dependencies = [
 name = "deadline-gui-ffi"
 version = "0.1.0"
 dependencies = [
- "deadline-client",
- "deadline-common",
+ "deadline-api",
  "deadline-config",
  "deadline-job-attachments",
  "deadline-job-bundle",
- "deadline-models",
  "serde_json",
  "tokio",
 ]
@@ -1018,9 +999,7 @@ dependencies = [
  "aws-sdk-sts",
  "aws-smithy-types",
  "chrono",
- "deadline-common",
  "deadline-config",
- "deadline-models",
  "filetime",
  "glob",
  "log",
@@ -1041,10 +1020,9 @@ name = "deadline-job-bundle"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "deadline-client",
+ "deadline-api",
  "deadline-config",
  "deadline-job-attachments",
- "deadline-models",
  "log",
  "regex",
  "serde",
@@ -1059,23 +1037,12 @@ dependencies = [
 name = "deadline-mcp"
 version = "0.1.0"
 dependencies = [
- "deadline-client",
- "deadline-common",
+ "deadline-api",
  "deadline-config",
  "deadline-job-attachments",
  "deadline-job-bundle",
- "deadline-models",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "deadline-models"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde_json",
- "test-case",
 ]
 
 [[package]]

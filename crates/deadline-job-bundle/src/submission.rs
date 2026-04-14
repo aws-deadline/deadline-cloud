@@ -1,4 +1,4 @@
-use deadline_models::errors::DeadlineError;
+use deadline_api::errors::DeadlineError;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -189,7 +189,7 @@ use crate::loader::{
 };
 use crate::parameters::{apply_job_parameters, merge_queue_job_parameters, read_job_bundle_parameters};
 
-use deadline_client::{api, queue_parameters, session};
+use deadline_api::{api, queue_parameters, session};
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use deadline_job_attachments::models::{

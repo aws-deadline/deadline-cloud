@@ -1,7 +1,7 @@
 # Coding Patterns
 
 Patterns and conventions for writing code in this workspace. Read this
-before implementing API calls or touching `deadline-client`.
+before implementing API calls or touching `deadline-api`.
 
 ## AWS SDK for Rust Usage
 
@@ -98,7 +98,7 @@ Rust not implementing `serde::Serialize` on output types
 ([awslabs/aws-sdk-rust#269](https://github.com/awslabs/aws-sdk-rust/issues/269),
 open since 2021), which prevents using typed extraction. A future Smithy
 model filtering step could eliminate both — see
-`specs/client/architecture.md` § "Future Improvements".
+`specs/api/architecture.md` § "Future Improvements".
 - **Float precision:** `serde_json` parses JSON `1.0` as integer `1`
   when there is no fractional part. Python preserves `1.0`. Affects
   fields like `costScaleFactor`. **Action item:** investigate

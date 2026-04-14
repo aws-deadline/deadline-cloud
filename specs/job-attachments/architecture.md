@@ -8,7 +8,7 @@ deadline-gui-ffi ──► deadline-job-attachments
 deadline-job-bundle ──► deadline-job-attachments
 ```
 
-Independent from `deadline-client` for AWS operations — owns its own S3 and
+Independent from `deadline-api` for AWS operations — owns its own S3 and
 STS clients with custom timeouts, s3v4 signatures, and pool sizes.
 
 ## Module Layout

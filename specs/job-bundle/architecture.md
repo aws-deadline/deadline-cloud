@@ -8,7 +8,7 @@ deadline-gui-ffi ──► deadline-job-bundle
 deadline-mcp ──► deadline-job-bundle
 ```
 
-Composes `deadline-client` (API), `deadline-job-attachments` (S3 upload),
+Composes `deadline-api` (API), `deadline-job-attachments` (S3 upload),
 and its own parsing logic into a complete submission pipeline.
 
 ## Module Layout

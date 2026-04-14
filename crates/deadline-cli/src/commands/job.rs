@@ -1,6 +1,6 @@
 use clap::Subcommand;
-use deadline_client::{api, job_monitoring, log_retrieval};
-use deadline_client::log_retrieval::SessionAutoSelect;
+use deadline_api::{api, job_monitoring, log_retrieval};
+use deadline_api::log_retrieval::SessionAutoSelect;
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 
@@ -330,7 +330,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     }
                 }
                 Err(e) => {
-                    let is_timeout = matches!(e, deadline_models::errors::DeadlineError::OperationTimedOut(_));
+                    let is_timeout = matches!(e, deadline_api::errors::DeadlineError::OperationTimedOut(_));
                     if is_json {
                         println!("{}", serde_json::to_string_pretty(&serde_json::json!({
                             "error": e.to_string(), "timeout": is_timeout,

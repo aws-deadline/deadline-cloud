@@ -7,7 +7,7 @@ gui/ (Python) ──ctypes.CDLL──► deadline-gui-ffi    ← this crate
 DCC plugins ──ctypes.CDLL──► deadline-gui-ffi
 ```
 
-Depends on: `deadline-config`, `deadline-client`, `deadline-job-bundle`,
+Depends on: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
 `deadline-job-attachments`, `deadline-common`, `deadline-models`.
 
 ## Module Layout

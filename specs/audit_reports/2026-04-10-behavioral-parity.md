@@ -587,7 +587,7 @@ Ran both CLIs against the real Deadline Cloud API with profile `viknith-us-west-
 
 ### Batch I — Session, User-Agent, Telemetry (Library Sweep)
 
-**Audited:** 2026-04-10. Code review of `deadline-client/src/session.rs` and
+**Audited:** 2026-04-10. Code review of `deadline-api/src/session.rs` and
 `deadline-common/src/telemetry.rs` against Python equivalents.
 
 #### I-1: Session caching matches Python behavior ✅
@@ -600,7 +600,7 @@ Ran both CLIs against the real Deadline Cloud API with profile `viknith-us-west-
 
 #### I-2: User-agent format matches Python ✅
 
-- Both produce: `app/deadline-client#<version> submitter/<name>#<ver> cli-command/<cmd>`
+- Both produce: `app/deadline-api#<version> submitter/<name>#<ver> cli-command/<cmd>`
 - Rust uses `AppName` on the SDK config builder; Python uses `user_agent_extra` on
   botocore Config. Different mechanism, same wire format.
 

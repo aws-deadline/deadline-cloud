@@ -16,7 +16,7 @@ where no crate exists.
 | `deadline-models` | §19 (models & data classes), §25 (manifest formats & decode), §33 (exceptions/errors), §51 (client exceptions), §52 (SubmitterInfo) | Already has `errors.rs`, `job_attachments.rs`, `path_format.rs`, `submitter_info.rs` |
 | `deadline-common` | §36 (path_utils) | Already has `path_utils.rs` |
 | `deadline-config` | §1 (config get/set/clear/read/write), §2 (profile resolution) | Already has `config_file.rs` |
-| `deadline-client` | §3–5 (session), §6–10 (API resource mgmt), §11–14 (API job lifecycle), §34 (AWS client helpers) | Has `api.rs`, `session.rs` stubs |
+| `deadline-api` | §3–5 (session), §6–10 (API resource mgmt), §11–14 (API job lifecycle), §34 (AWS client helpers) | Has `api.rs`, `session.rs` stubs |
 | `deadline-job-bundle` | §15–18 (loading, parameters, submission, history) | Has `loader.rs`, `parameters.rs`, `submission.rs` stubs |
 | `deadline-job-attachments` | §20–24 (hashing, upload, download, sync, caches), §26–32 (path mapping, glob, VFS, progress, permissions), §35 (incremental downloads) | Has `asset_manifests.rs`, `caches.rs`, `download.rs`, `upload.rs`, `models.rs`, `progress_tracker.rs`, `vfs.rs` stubs |
 | `deadline-cli` | §37–49 (all CLI commands) | Has `main.rs` stub only |
@@ -32,12 +32,12 @@ where no crate exists.
 
 Sections 30 and 31 describe a public API layer (`attachment_download`, `attachment_upload`,
 `manifest_snapshot`, `manifest_diff`, `manifest_download`, `manifest_upload`, etc.) that
-sits above both `deadline-client` and `deadline-job-attachments`. These are the functions
+sits above both `deadline-api` and `deadline-job-attachments`. These are the functions
 that external consumers (CLI, MCP, GUI) call.
 
 **Options:**
 - (a) Add these as a public module in `deadline-job-attachments` (e.g., `pub mod api;`)
-- (b) Add these as a module in `deadline-client` (e.g., `pub mod attachment_api;`)
+- (b) Add these as a module in `deadline-api` (e.g., `pub mod attachment_api;`)
 - (c) Create a new `deadline-job-attachments-api` crate
 
 **Recommendation:** Option (a) — add `pub mod api;` to `deadline-job-attachments/src/lib.rs`.
@@ -71,19 +71,19 @@ with its own persistence format (JSON checkpoint files).
 
 **Recommendation:** Add `pub mod incremental_download;` to `deadline-job-attachments`.
 
-### Finding 5: `deadline-client` missing telemetry module (§14)
+### Finding 5: `deadline-api` missing telemetry module (§14)
 
 Section 14 (24 test cases) covers the telemetry client. No module exists in the Rust
 scaffolding. Telemetry is cross-cutting and used by CLI, MCP, and API layers.
 
-**Recommendation:** Add `pub mod telemetry;` to `deadline-client`.
+**Recommendation:** Add `pub mod telemetry;` to `deadline-api`.
 
-### Finding 6: `deadline-client` missing auth/login module (§6)
+### Finding 6: `deadline-api` missing auth/login module (§6)
 
 Section 6 (18 test cases) covers login/logout via Deadline Cloud Monitor subprocess
 management. This is distinct from session management (§3–5) and needs its own module.
 
-**Recommendation:** Add `pub mod auth;` to `deadline-client`.
+**Recommendation:** Add `pub mod auth;` to `deadline-api`.
 
 ### Finding 7: `deadline-models` error variants incomplete
 
@@ -104,7 +104,7 @@ Section 25 (32 test cases) covers manifest format types (`HashAlgorithm`, `Manif
 `ManifestModelRegistry`, `BaseAssetManifest`, `AssetManifest`). These are not in
 `deadline-models` — they're expected in `deadline-job-attachments::asset_manifests`, which
 is correct. But the `HashAlgorithm` enum should live in `deadline-models` since it's
-referenced by both `deadline-job-attachments` and `deadline-client`.
+referenced by both `deadline-job-attachments` and `deadline-api`.
 
 **Recommendation:** Add `HashAlgorithm` enum to `deadline-models`.
 
@@ -192,7 +192,7 @@ Some sections are split too finely for the Rust crate structure:
 - §30 (public API attachment) + §31 (public API manifest) → both map to the same module.
   Already in the same file, which is good.
 - §3 (session) + §4 (auth status) + §5 (queue credentials) → all map to
-  `deadline-client::session`. Already in the same file.
+  `deadline-api::session`. Already in the same file.
 
 ### 4d. GUI test cases are in scope
 
@@ -228,8 +228,8 @@ and will need new sections as they are implemented:
    - `deadline-job-attachments/src/permissions.rs`
    - `deadline-job-attachments/src/incremental_download.rs`
    - `deadline-job-attachments/src/api.rs`
-   - `deadline-client/src/telemetry.rs`
-   - `deadline-client/src/auth.rs`
+   - `deadline-api/src/telemetry.rs`
+   - `deadline-api/src/auth.rs`
 4. **Expand `deadline-models` error types** per Finding #7
 5. **Add `HashAlgorithm` enum** to `deadline-models` per Finding #8
 
@@ -248,7 +248,7 @@ and will need new sections as they are implemented:
 | `deadline-models` | §19, §25, §33, §51, §52 | 101 |
 | `deadline-common` | §36 | 14 |
 | `deadline-config` | §1, §2 | 88 |
-| `deadline-client` | §3–14, §34 | 268 |
+| `deadline-api` | §3–14, §34 | 268 |
 | `deadline-job-bundle` | §15–18 | 174 |
 | `deadline-job-attachments` | §20–24, §26–32, §35 | 556 |
 | `deadline-cli` | §37–49 | 224 |

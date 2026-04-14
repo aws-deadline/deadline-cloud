@@ -11,7 +11,7 @@
 
 ## Section 6: API — login/logout
 
-> **Rust crate:** `deadline-client` · **Module:** `auth`
+> **Rust crate:** `deadline-api` · **Module:** `auth`
 >
 > **Logic under test:** Login launches the Deadline Cloud Monitor (DCM) executable as a
 > subprocess and polls `check_authentication_status` in a loop until authenticated.
@@ -50,7 +50,7 @@
 
 ## Section 7: API — list (farms/queues/jobs/fleets/storage)
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Paginated list API wrapper that concatenates all pages into a
 > single result. For farms, queues, jobs, and fleets, the `principalId` is auto-injected
@@ -118,7 +118,7 @@
 
 ## Section 8: API — queue parameters
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Fetching all queue environment templates, extracting their
 > `parameterDefinitions`, deduplicating by name, auto-detecting UI controls, and
@@ -145,7 +145,7 @@
 
 ## Section 9: API — queue credentials (assume role)
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Thin wrappers around `AssumeQueueRoleForUser` and
 > `AssumeQueueRoleForRead` Deadline API calls. These return temporary credentials
@@ -173,20 +173,20 @@
 
 ## Section 10: API — storage profile for queue
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Fetching a storage profile from the Deadline API and mapping
 > the response into a `StorageProfile` struct with typed `fileSystemLocations` and
 > a case-insensitive `osFamily` enum.
 
-### `get_storage_profile_for_queue(farm_id, queue_id, storage_profile_id, deadline_client?, config?) -> StorageProfile`
+### `get_storage_profile_for_queue(farm_id, queue_id, storage_profile_id, deadline_api?, config?) -> StorageProfile`
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
 | 1 | Happy path | Valid IDs, response has file system locations | Returns `StorageProfile` with `storageProfileId`, `displayName`, `osFamily`, and `fileSystemLocations` list | |
 | 2 | Happy path | Response has no `fileSystemLocations` key | Returns `StorageProfile` with empty `fileSystemLocations` list | |
-| 3 | Happy path | `deadline_client` is not provided | Creates a new Deadline client internally | |
-| 4 | Happy path | `deadline_client` is provided | Uses the provided client directly | |
+| 3 | Happy path | `deadline_api` is not provided | Creates a new Deadline client internally | |
+| 4 | Happy path | `deadline_api` is provided | Uses the provided client directly | |
 | 5 | Happy path | `osFamily` value is case-insensitive (e.g., `"WINDOWS"` or `"Windows"`) | Correctly parsed into `StorageProfileOperatingSystemFamily` enum | Enum supports case-insensitive lookup |
 
 ---

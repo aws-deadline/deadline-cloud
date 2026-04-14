@@ -6,8 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-deadline-models = { workspace = true }
-deadline-client = { workspace = true }
+deadline-api = { workspace = true }
 deadline-job-attachments = { workspace = true }
 deadline-config = { workspace = true }
 serde = { workspace = true }

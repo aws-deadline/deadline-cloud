@@ -4,14 +4,14 @@ use std::path::{Path, PathBuf};
 use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::primitives::ByteStream;
 use deadline_config::ini::IniConfig;
-use deadline_models::errors::JobAttachmentsError;
-use deadline_models::path_format::PathFormat;
+use crate::errors::JobAttachmentsError;
+use crate::models::PathFormat;
 
 use crate::asset_manifests::{hash_data, hash_file, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
 use crate::caches::{HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry};
 use crate::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
-    JobAttachmentS3Settings, ManifestProperties, PathFormatExt, StorageProfile, join_s3_paths,
+    JobAttachmentS3Settings, ManifestProperties, StorageProfile, join_s3_paths,
 };
 use crate::progress_tracker::{ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics};
 use crate::s3::compute_upload_config;

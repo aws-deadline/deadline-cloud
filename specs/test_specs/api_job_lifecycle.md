@@ -11,7 +11,7 @@
 
 ## Section 11: API — submit job bundle
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** The full job submission pipeline: read template, merge parameters,
 > resolve PATH defaults, validate symlink containment, hash and upload attachments,
@@ -80,7 +80,7 @@
 | 36 | Happy path | `/mnt/prod` and `/mnt/prod/project` are both in known paths | `/mnt/prod/project` is filtered out (redundant) | TRIE-based prefix filtering |
 | 37 | Boundary values | Single known path | Returned as-is | |
 
-### `wait_for_create_job_to_complete(farm_id, queue_id, job_id, deadline_client, continue_callback) -> (bool, string)`
+### `wait_for_create_job_to_complete(farm_id, queue_id, job_id, deadline_api, continue_callback) -> (bool, string)`
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
@@ -94,7 +94,7 @@
 
 ## Section 12: API — job monitoring & logs
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Polling a job until it reaches a terminal state (SUCCEEDED,
 > FAILED, CANCELED, SUSPENDED, NOT_COMPATIBLE) with exponential backoff. Collecting
@@ -155,7 +155,7 @@
 
 ## Section 13: API — diagnostics (get/list/search)
 
-> **Rust crate:** `deadline-client` · **Module:** `api`
+> **Rust crate:** `deadline-api` · **Module:** `api`
 >
 > **Logic under test:** Thin wrappers around Deadline API calls for retrieving job,
 > session, step, and task details. `search_jobs` builds filter expressions from
@@ -216,7 +216,7 @@
 
 ## Section 14: API — telemetry
 
-> **Rust crate:** `deadline-client` · **Module:** `telemetry`
+> **Rust crate:** `deadline-api` · **Module:** `telemetry`
 >
 > **Logic under test:** Telemetry client that queues events and sends them asynchronously
 > via HTTP to a management-prefixed endpoint. Supports opt-out via env var or config.

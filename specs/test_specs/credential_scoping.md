@@ -11,7 +11,7 @@
 
 ## Section 53: Credential scoping for non-Deadline AWS services
 
-> **Rust crate:** `deadline-client` · **Module:** `session`, `log_retrieval`
+> **Rust crate:** `deadline-api` · **Module:** `session`, `log_retrieval`
 > **CLI crate:** `deadline-cli` · **Module:** `commands/job`, `commands/attachment`
 >
 > **Logic under test:** Operations that access CloudWatch Logs or S3 for

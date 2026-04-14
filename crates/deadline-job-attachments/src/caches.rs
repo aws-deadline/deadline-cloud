@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 use rusqlite::Connection;
 
 use crate::asset_manifests::HashAlgorithm;

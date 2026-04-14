@@ -1,11 +1,9 @@
 [workspace]
 members = [
-    "crates/deadline-models",
-    "crates/deadline-common",
     "crates/deadline-config",
     "crates/deadline-job-attachments",
     "crates/deadline-job-bundle",
-    "crates/deadline-client",
+    "crates/deadline-api",
     "crates/deadline-cli",
     "crates/deadline-mcp",
     "crates/deadline-gui-ffi",
@@ -20,12 +18,10 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 # Internal crates
-deadline-models = { path = "crates/deadline-models" }
-deadline-common = { path = "crates/deadline-common" }
 deadline-config = { path = "crates/deadline-config" }
 deadline-job-attachments = { path = "crates/deadline-job-attachments" }
 deadline-job-bundle = { path = "crates/deadline-job-bundle" }
-deadline-client = { path = "crates/deadline-client" }
+deadline-api = { path = "crates/deadline-api" }
 deadline-mcp = { path = "crates/deadline-mcp" }
 deadline-gui-ffi = { path = "crates/deadline-gui-ffi" }
 deadline-test-server = { path = "crates/deadline-test-server" }

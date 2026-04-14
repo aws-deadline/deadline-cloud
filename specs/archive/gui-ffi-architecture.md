@@ -29,7 +29,7 @@ Rust for every operation:
 │  Python GUI widgets ──ctypes──► deadline-gui-ffi.dylib (Rust)       │
 │  (~15 files, pure                  │                                │
 │   layout, no logic)                ├── deadline-config (Rust)       │
-│                                    ├── deadline-client (Rust/SDK)   │
+│                                    ├── deadline-api (Rust/SDK)   │
 │                                    ├── deadline-job-bundle (Rust)   │
 │                                    └── deadline-job-attachments     │
 │                                         (Rust)                      │
@@ -243,7 +243,7 @@ The spike validates macOS. Linux and Windows are validated in CI.
 ```
 deadline-cli (binary)
 │
-├── [for headless commands] ──► deadline-client, deadline-config, etc.
+├── [for headless commands] ──► deadline-api, deadline-config, etc.
 │
 └── [for GUI commands] ──► spawns Python process
                                     │
@@ -254,7 +254,7 @@ deadline-cli (binary)
                                     ▼
                            deadline-gui-ffi (shared library)
                            ├── deadline-config
-                           ├── deadline-client
+                           ├── deadline-api
                            ├── deadline-job-bundle
                            ├── deadline-job-attachments
                            ├── deadline-models

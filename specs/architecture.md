@@ -5,35 +5,27 @@
 ```
 deadline-cli (binary)
 ├── deadline-config
-├── deadline-client
-│   ├── deadline-config
-│   └── deadline-models
+├── deadline-api
+│   └── deadline-config
 ├── deadline-job-bundle
-│   ├── deadline-client
+│   ├── deadline-api
 │   ├── deadline-job-attachments
-│   └── deadline-models
+│   └── deadline-config
 ├── deadline-job-attachments
-│   └── deadline-models
-├── deadline-mcp
-├── deadline-common
-└── deadline-models
+│   └── deadline-config
+└── deadline-mcp
 
 deadline-gui-ffi (shared library, C ABI)
 ├── deadline-config
-├── deadline-client
+├── deadline-api
 ├── deadline-job-bundle
-├── deadline-job-attachments
-├── deadline-common
-└── deadline-models
+└── deadline-job-attachments
 
 deadline-mcp (library, used by deadline-cli)
-├── rmcp
 ├── deadline-config
-├── deadline-client
+├── deadline-api
 ├── deadline-job-bundle
-├── deadline-job-attachments
-├── deadline-common
-└── deadline-models
+└── deadline-job-attachments
 
 deadline-test-server (dev-dependency of deadline-cli)
 ├── wiremock
@@ -51,11 +43,9 @@ gui/ (Python, not a Cargo crate)
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting. No business logic. For GUI commands, spawns a Python process that loads the GUI widgets + `deadline-gui-ffi`. |
 | `deadline-gui-ffi` | Shared library with C ABI. Exposes config, auth, API listing, submission, and telemetry to external callers (Python GUI, DCC plugins, Unreal). |
 | `deadline-config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
-| `deadline-client` | AWS API calls (Deadline Cloud service). Owns the SDK/HTTP interaction. |
-| `deadline-models` | Shared data types and error types. No I/O, no logic beyond construction and display. |
-| `deadline-common` | Utility functions shared across crates (path utils, formatting). |
+| `deadline-api` | AWS API calls (Deadline Cloud service), session/credential management, auth, telemetry, error types (`DeadlineError`), submitter info, path utilities, job monitoring types. Owns the SDK/HTTP interaction. |
 | `deadline-job-bundle` | Job bundle parsing, parameter validation, and submission orchestration. Owns the full lifecycle: load bundle → validate → merge parameters → upload attachments → CreateJob → poll for completion. |
-| `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. |
+| `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. Owns its error types (`JobAttachmentsError`), `PathFormat`, and file conflict resolution. Independent S3/STS clients. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
 | `deadline-mcp` | Library. MCP server logic invoked by `deadline-cli` via `deadline mcp-server`. Uses rmcp SDK. |
 | `gui/` (Python) | Qt QWidgets layout code (~15 files). Pure presentation — no business logic. Calls `deadline-gui-ffi` for every operation. |
@@ -69,7 +59,7 @@ deadline-cli
   → Clap parses args
   → Config loaded once via deadline-config
   → CLI flags applied as in-memory overrides
-  → Business logic via deadline-job-bundle, deadline-job-attachments, deadline-client
+  → Business logic via deadline-job-bundle, deadline-job-attachments, deadline-api
   → Output formatted and printed
 ```
 
@@ -120,7 +110,7 @@ ExtendScript (JSX)
   Rust errors to C-compatible error codes + message strings.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
   See [`TESTING.md`](TESTING.md).
-- **API responses:** All API functions in `deadline-client` use the
+- **API responses:** All API functions in `deadline-api` use the
   `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
   The CLI layer never sees SDK types. See [`specs/patterns.md § "AWS SDK for
   Rust Usage".

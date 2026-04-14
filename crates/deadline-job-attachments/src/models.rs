@@ -1,9 +1,30 @@
-use deadline_models::errors::JobAttachmentsError;
-pub use deadline_models::job_attachments::FileSystemLocationType;
-use deadline_models::job_attachments::JobAttachmentsFileSystem;
-use deadline_models::path_format::PathFormat;
+use crate::errors::JobAttachmentsError;
 
 use crate::asset_manifests::{hash_data, HashAlgorithm};
+
+// --- PathFormat ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathFormat {
+    Windows,
+    Posix,
+}
+
+// --- FileSystemLocationType ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileSystemLocationType {
+    Shared,
+    Local,
+}
+
+// --- JobAttachmentsFileSystem ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobAttachmentsFileSystem {
+    Copied,
+    Virtual,
+}
 
 // --- Helper functions ---
 
@@ -64,14 +85,8 @@ impl StorageProfileOperatingSystemFamily {
 
 // --- PathFormat extensions ---
 
-/// Extension trait adding host detection to PathFormat from deadline-models.
-pub trait PathFormatExt {
-    fn host() -> PathFormat;
-    fn as_str(&self) -> &'static str;
-}
-
-impl PathFormatExt for PathFormat {
-    fn host() -> PathFormat {
+impl PathFormat {
+    pub fn host() -> PathFormat {
         if cfg!(target_os = "windows") {
             PathFormat::Windows
         } else {
@@ -79,11 +94,15 @@ impl PathFormatExt for PathFormat {
         }
     }
 
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             PathFormat::Posix => "posix",
             PathFormat::Windows => "windows",
         }
+    }
+
+    pub fn get_host_path_format_string() -> &'static str {
+        Self::host().as_str()
     }
 }
 

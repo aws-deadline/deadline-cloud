@@ -141,11 +141,7 @@ after the core CLI commands are complete.
   `farm-0123456789abcdef0123456789abcdef`,
   `queue-0123456789abcdef0123456789abcdef`). Add a test helper that
   generates realistic IDs per resource type. Applies across all crates.
-- **Crate rename discussion**: Consider renaming `deadline-client` to
-  something more specific (e.g. `deadline-api` or `deadline-service`).
-  Currently it holds Deadline Cloud API calls, session/credential management,
-  auth, job monitoring, and log retrieval. The name "client" is ambiguous —
-  it could mean "the client library" (the whole workspace) or "the Deadline
-  service client" (what it actually is). With `deadline-job-attachments`
-  building its own S3/STS clients independently, the distinction matters.
+- **~~Crate rename discussion~~**: ✅ Done — renamed `deadline-client` to
+  `deadline-api`. Also dissolved `deadline-models` and `deadline-common`
+  into their consumer crates.
 

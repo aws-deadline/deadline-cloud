@@ -1,7 +1,7 @@
 use clap::Subcommand;
-use deadline_client::api;
+use deadline_api::api;
 use deadline_config::config_file;
-use deadline_common::telemetry::create_telemetry;
+use deadline_api::telemetry::create_telemetry;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
@@ -164,7 +164,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
-            match deadline_client::queue_parameters::get_queue_parameter_definitions(
+            match deadline_api::queue_parameters::get_queue_parameter_definitions(
                 &farm, &queue, Some(&config), None,
             ).await {
                 Ok(params) => {

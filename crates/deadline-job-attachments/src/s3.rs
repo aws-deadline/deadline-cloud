@@ -7,7 +7,7 @@
 
 use deadline_config::config_file::{get_setting, get_setting_with_config};
 use deadline_config::ini::IniConfig;
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 
 // --- Constants ---
 

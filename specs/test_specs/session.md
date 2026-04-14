@@ -11,7 +11,7 @@
 
 ## Section 3: Session — AWS session/client management
 
-> **Rust crate:** `deadline-client` · **Module:** `session`
+> **Rust crate:** `deadline-api` · **Module:** `session`
 >
 > **Logic under test:** Creating and caching AWS SDK sessions and service clients based
 > on the configured profile. Special handling for `"(default)"`, `"default"`, and `""`
@@ -46,11 +46,11 @@
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
-| 15 | Happy path | No session context set (all empty) | User agent contains `app/deadline-client#{version}` only | |
+| 15 | Happy path | No session context set (all empty) | User agent contains `app/deadline-api#{version}` only | |
 | 16 | Happy path | `session_context["submitter-name"]` is set to `"Blender"` | User agent contains `submitter/Blender` | |
 | 17 | Happy path | Both `submitter-name` and `submitter-version` are set | User agent contains `submitter/Blender#1.0` | |
 | 18 | Happy path | `session_context["cli-command-name"]` is set to `"deadline.bundle.submit"` | User agent contains `cli-command/deadline.bundle.submit` | |
-| 19 | Happy path | All context fields set | User agent is `app/deadline-client#{version} submitter/Name#Ver cli-command/Cmd` | Concatenated in order |
+| 19 | Happy path | All context fields set | User agent is `app/deadline-api#{version} submitter/Name#Ver cli-command/Cmd` | Concatenated in order |
 | 20 | Happy path | Additional options passed (e.g., `max_retry_attempts=3`) | Forwarded to the client config constructor | |
 
 ### `get_client(service_name, config?) -> service client`
@@ -75,7 +75,7 @@
 
 ## Section 4: Session — auth status & credential source
 
-> **Rust crate:** `deadline-client` · **Module:** `session`
+> **Rust crate:** `deadline-api` · **Module:** `session`
 >
 > **Logic under test:** Determining where credentials come from (Deadline Cloud Monitor
 > vs host-provided), checking authentication by calling STS, and probing Deadline API
@@ -127,14 +127,14 @@
 
 ## Section 5: Session — queue user credentials
 
-> **Rust crate:** `deadline-client` · **Module:** `session`
+> **Rust crate:** `deadline-api` · **Module:** `session`
 >
 > **Logic under test:** Obtaining temporary credentials via `AssumeQueueRoleForUser`,
 > wrapping them in a refreshable credential provider, and creating a new AWS session
 > with those credentials. Includes caching, fallback to config defaults, and specific
 > error messages for throttling, internal server errors, and access denied.
 
-### `get_queue_user_session(deadline_client, config?, farm_id?, queue_id?, queue_display_name?, force_refresh?) -> AWS session`
+### `get_queue_user_session(deadline_api, config?, farm_id?, queue_id?, queue_display_name?, force_refresh?) -> AWS session`
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
@@ -166,11 +166,11 @@
 | 17 | Error handling | `AssumeQueueRoleForUser` returns empty credentials (none) | Returns error with "Empty credentials received" | |
 | 18 | Error handling | `AssumeQueueRoleForUser` returns response with no `"credentials"` key | Returns error with "Empty credentials received" | |
 
-### `precache_clients(deadline_client?, config?, farm_id?, queue_id?, queue_display_name?) -> (deadline_client, s3_client)`
+### `precache_clients(deadline_api?, config?, farm_id?, queue_id?, queue_display_name?) -> (deadline_api, s3_client)`
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
-| 19 | Happy path | All parameters provided | Returns `(deadline_client, s3_client)` tuple; S3 client is pre-warmed | |
+| 19 | Happy path | All parameters provided | Returns `(deadline_api, s3_client)` tuple; S3 client is pre-warmed | |
 | 20 | Happy path | All optional params are none | Creates deadline client from config, reads farm/queue from settings, calls GetQueue for display name | |
 
 ---

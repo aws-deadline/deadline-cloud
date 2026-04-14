@@ -10,10 +10,8 @@ name = "deadline"
 path = "src/main.rs"
 
 [dependencies]
-deadline-models = { workspace = true }
-deadline-common = { workspace = true }
 deadline-config = { workspace = true }
-deadline-client = { workspace = true }
+deadline-api = { workspace = true }
 deadline-job-attachments = { workspace = true }
 deadline-job-bundle = { workspace = true }
 clap = { workspace = true }

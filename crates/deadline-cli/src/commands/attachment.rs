@@ -84,7 +84,7 @@ async fn resolve_s3_context(
         let uri = s3_root_uri
             .filter(|u| !u.is_empty())
             .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
-        let sdk_config = deadline_client::session::get_sdk_config(Some(config)).await;
+        let sdk_config = deadline_api::session::get_sdk_config(Some(config)).await;
         Ok(S3Context { sdk_config, s3_root_uri: uri })
     } else {
         // No --profile: derive S3 URI from queue settings, use queue-scoped credentials
@@ -97,7 +97,7 @@ async fn resolve_s3_context(
         let uri = match s3_root_uri.filter(|u| !u.is_empty()) {
             Some(u) => u,
             None => {
-                let queue = deadline_client::api::get_queue(&farm_id, &queue_id, Some(config), None)
+                let queue = deadline_api::api::get_queue(&farm_id, &queue_id, Some(config), None)
                     .await
                     .map_err(|e| CliError::Operation(e.to_string()))?;
                 let settings = queue
@@ -120,7 +120,7 @@ async fn resolve_s3_context(
 
         // Get queue-scoped credentials (unconditional — matches Python)
         let sdk_config =
-            deadline_client::session::get_queue_user_config(Some(&farm_id), Some(&queue_id), None, false, Some(config))
+            deadline_api::session::get_queue_user_config(Some(&farm_id), Some(&queue_id), None, false, Some(config))
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 

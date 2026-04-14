@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 
 // --- HashAlgorithm ---
 

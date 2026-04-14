@@ -634,7 +634,7 @@
 | 6 | Happy path | Called without arguments | Returns a session wrapping the default botocore session | |
 | 7 | Happy path | Called twice with same arguments | Returns the same cached session instance | |
 
-### `get_deadline_client(session?, endpoint_url?) -> client`
+### `get_deadline_api(session?, endpoint_url?) -> client`
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|

@@ -37,7 +37,7 @@ vs Level 2, snapshot workflow).
 | `deadline-gui-ffi` | C ABI shared library for Python GUI and DCC plugins |
 | `deadline-mcp` | MCP server for AI agent integration |
 | `deadline-config` | INI config file read/write, setting resolution |
-| `deadline-client` | AWS Deadline Cloud API calls |
+| `deadline-api` | AWS Deadline Cloud API, session, auth, telemetry |
 | `deadline-job-bundle` | Job bundle parsing, template loading, parameter validation |
 | `deadline-job-attachments` | Asset manifests, S3 upload/download, hash cache |
 | `deadline-models` | Shared data types and error types |

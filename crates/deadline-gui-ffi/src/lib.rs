@@ -31,7 +31,7 @@ pub unsafe extern "C" fn deadline_free_string(ptr: *mut c_char) {
 pub extern "C" fn deadline_get_credentials_source(
     _config_json: *const c_char,
 ) -> *mut c_char {
-    let source = deadline_client::auth::get_credentials_source(None);
+    let source = deadline_api::auth::get_credentials_source(None);
     let json = serde_json::json!({
         "credentials_source": source.to_string(),
     });
@@ -53,9 +53,9 @@ pub extern "C" fn deadline_check_auth_status(
     };
 
     let result = rt.block_on(async {
-        let source = deadline_client::auth::get_credentials_source(None);
-        let status = deadline_client::auth::check_authentication_status(None).await;
-        let api_available = deadline_client::auth::check_deadline_api_available(None).await;
+        let source = deadline_api::auth::get_credentials_source(None);
+        let status = deadline_api::auth::check_authentication_status(None).await;
+        let api_available = deadline_api::auth::check_deadline_api_available(None).await;
         serde_json::json!({
             "credentials_source": source.to_string(),
             "auth_status": status.to_string(),
@@ -94,13 +94,13 @@ pub extern "C" fn deadline_check_auth_status_with_progress(
 
     rt.block_on(async {
         notify("Checking credentials source...");
-        let source = deadline_client::auth::get_credentials_source(None);
+        let source = deadline_api::auth::get_credentials_source(None);
 
         notify("Checking authentication status...");
-        let status = deadline_client::auth::check_authentication_status(None).await;
+        let status = deadline_api::auth::check_authentication_status(None).await;
 
         notify("Checking API availability...");
-        let api_available = deadline_client::auth::check_deadline_api_available(None).await;
+        let api_available = deadline_api::auth::check_deadline_api_available(None).await;
 
         notify("Done");
 

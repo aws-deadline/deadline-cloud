@@ -287,7 +287,7 @@ fn main() {
         // Python equivalent: ContextTrackingCommand sets
         // session_context["cli-command-name"] = ctx.command_path.replace(" ", ".")
         let cmd_name = command_name(&command);
-        deadline_client::session::set_cli_command_name(&cmd_name);
+        deadline_api::session::set_cli_command_name(&cmd_name);
 
         let result = match command {
             Commands::Config { action } => commands::config::run(action),

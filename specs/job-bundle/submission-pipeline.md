@@ -53,7 +53,7 @@ create_job_from_job_bundle(params)
   ├── 11. Upload assets to S3 CAS (via deadline-job-attachments)
   │       Progress reported via upload_progress_callback
   ├── 12. Build CreateJob request (template + parameters + attachment metadata)
-  ├── 13. Call CreateJob API (via deadline-client)
+  ├── 13. Call CreateJob API (via deadline-api)
   ├── 14. Save job history snapshot to disk
   └── 15. Poll until job exits CREATE_IN_PROGRESS
           Exponential backoff: 0.3s initial, doubles each iteration,

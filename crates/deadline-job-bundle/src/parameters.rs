@@ -1,6 +1,6 @@
 use crate::loader::read_yaml_or_json_object;
 use crate::submission::AssetReferences;
-use deadline_models::errors::DeadlineError;
+use deadline_api::errors::DeadlineError;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 

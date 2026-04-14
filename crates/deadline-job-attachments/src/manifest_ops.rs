@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use deadline_models::errors::JobAttachmentsError;
+use crate::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::api::read_manifests;

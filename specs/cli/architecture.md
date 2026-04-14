@@ -5,7 +5,7 @@
 ```
 deadline-cli (binary)
 ├── deadline-config
-├── deadline-client
+├── deadline-api
 ├── deadline-job-bundle
 ├── deadline-job-attachments
 ├── deadline-mcp
