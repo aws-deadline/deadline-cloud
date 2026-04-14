@@ -68,11 +68,11 @@ pick and execute work items.
 | 7 | Job bundle | ✅ Done | §15-18 (174 cases) | §45 case 14 | `job_bundle.md`, `cli.md` | 1, 4 |
 | 8 | Job attachments: core | ✅ Done | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
 | 9 | Job attachments: transfer | ✅ Done | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
-| 10 | Job attachments: orchestration | Not started | §23, §26-29, §32, §35 (325 cases) | §47 (26 cases) | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
+| 10 | Job attachments: orchestration | ✅ Done | §27, §32, §33 | §46 (15 cases), §47 snapshot/diff/upload | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | — | §44 cases 25-26 | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | — | §44 cases 6-9 | `cli.md` | 6 |
-| 13 | Job download & sync-output | Not started | — | §44 cases 10-16, §42 cases 14-26 | `cli.md` | 10 |
+| 13 | Job download & sync-output | Not started | §26 (19 cases), §35 (61 cases) | §44 cases 10-16, §42 cases 14-26, §47 download | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 14 | Handle web URL | Not started | — | §48 (14 cases) | `cli.md` | 13 |
 | 15 | Job requeue-tasks | ✅ Done | — | §44 cases 29-42 | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | — | §44 cases 1-5 | `cli.md` | 6 |
@@ -90,6 +90,28 @@ pick and execute work items.
 
 **Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
 after the core CLI commands are complete.
+
+**Scope changes:**
+- **#10**: Originally scoped as §23, §26-29, §32, §35 (325 cases). Reduced
+  to §27, §32, §33 — the upload-side orchestration and utilities that were
+  already implemented in work items #8-9. Sections removed:
+  - §23 (AssetSync: sync_inputs/sync_outputs/cleanup_session) — worker agent
+    only, never called by any CLI command.
+  - §26 (path mapping from storage profiles) — moved to #13, needed by
+    `queue sync-output` and `job download-output`.
+  - §28 (VFS) — worker agent only, already deferred.
+  - §29 (OS file permissions) — worker agent only, never called by any CLI
+    command.
+  - §35 (incremental downloads) — moved to #13, needed by `queue sync-output`.
+  - §47 manifest download — moved to #13 (requires OutputDownloader + queue
+    role assumption, same infrastructure as `job download-output`).
+- **#11**: Dependency on #10 removed. The upload library functions it needs
+  (`prepare_paths_for_upload`, `hash_assets_and_create_manifest`,
+  `upload_assets`) were completed in #9. #11 now depends only on #7 and #9.
+- **#13**: Expanded to include download-side orchestration from old #10:
+  §26 path mapping from storage profiles (19 cases), §35 incremental
+  downloads (61 cases), §47 manifest download CLI, plus the original
+  `job download-output` and `queue sync-output` CLI commands.
 
 **Deferred features within completed items:**
 - **#6**: `deadline job trace-schedule` (§44 cases 27-28) is EXPERIMENTAL
