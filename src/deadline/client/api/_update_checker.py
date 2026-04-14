@@ -113,11 +113,10 @@ def _is_update_notification_enabled() -> bool:
 def _fetch_manifest() -> Dict[str, Any]:
     """Fetch and parse the remote manifest JSON.
 
-    On macOS, bundled Python environments (e.g. inside Cinema 4D) often
-    cannot locate the system CA certificate store.  When the default SSL
-    context fails, this function retries using botocore's bundled CA
-    certificate bundle (which includes Amazon Root CA 1) so that the
-    connection is still fully verified.
+    Uses botocore's bundled CA certificate bundle (which includes Amazon
+    Root CA 1) so that the connection succeeds even in bundled Python
+    environments (e.g. inside Cinema 4D or Blender) that cannot locate
+    the system CA certificate store.
 
     Raises:
         urllib.error.URLError: On network errors.
@@ -127,16 +126,6 @@ def _fetch_manifest() -> Dict[str, Any]:
         UnicodeDecodeError: On encoding errors.
     """
     req = urllib.request.Request(MANIFEST_URL)
-
-    try:
-        with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError:
-        if sys.platform != "darwin":
-            raise
-
-    # macOS fallback: retry with botocore's bundled CA certificate bundle.
-    logger.debug("Default SSL verification failed on macOS, retrying with botocore CA bundle")
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_verify_locations(_get_botocore_ca_bundle())

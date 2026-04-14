@@ -483,3 +483,65 @@ class MyCustomWidget(QWidget):
 Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`.
 
 This will profile the current `deadline` command and open the results in an interactive window.
+
+# Manual Test Cases
+
+These are the manual test cases for the client software release cycle, covering Deadline CLI and job attachments across Linux, Windows, and macOS.
+
+## Deadline CLI Tests
+
+| Test Case | Test Steps | Notes |
+|---|---|---|
+| Pre-requisite: Uninstall any previous versions of the Deadline Cloud Submitter Installer | Update PATH if necessary. | |
+| Verify Deadline CLI can be successfully installed using the staged individual installer | Run the staged individual installer and verify that it can install. | |
+| Verify correct version of Deadline CLI is being tested | Verify correct version using `deadline --version` command. | |
+| Verify user can modify workstation configuration settings using Deadline GUI (`deadline config gui`) | Run `deadline config gui` and verify dialogue loads as expected. Verify User can authenticate using DCM Profile using Login button. Using a DCM Profile, verify correct farm/queue resources are pulled, and the existing config can be modified. Verify User can Logout of DCM Profile using Logout button. Verify User can authenticate using an AWS Profile. Using an AWS Profile, verify correct farm/queue resources are pulled, and the existing config can be modified. | |
+| Verify user can modify workstation configuration settings using `deadline config set` | Once settings are modified, verify settings were modified correctly using: 1. `deadline config show` 2. `deadline config get <setting_name>` 3. `deadline config gui` (verify modified settings appear correctly in the GUI). Verify settings can be modified back to default using `deadline config clear`. | |
+| Verify user can authenticate/login using DCM Profile: `deadline auth login` | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. | Would need to set using DCM profile first. |
+| Verify user can logout of DCM Profile: `deadline auth logout` | In deadline config gui, you should see the profile name with a red 'X' beside it in the bottom left. There should be a button to log in on the right. | |
+| `deadline auth login` using AWS profile | Run `deadline config gui`, select an AWS profile that uses IAM credentials, and run `deadline auth login`. Confirm that there is an error like "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor". | Verify Login is not supported when using AWS profile. |
+| Verify user can authenticate using AWS profile | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. There should be no option to logout. | Need to set AWS region environment variable in Terminal. |
+| Submit a render job using `deadline bundle submit` | `deadline bundle submit <path_to_job_bundle_dir>`. Verify job bundle can be submitted successfully to the farm (and any job attachments uploaded successfully to s3). Verify correct job information appears in DCM and job can be completed successfully. | |
+| Submit a render job using `deadline bundle gui-submit --browse` | Verify job bundle can be selected and GUI Submitter dialogue loads correctly with correct default settings based on the job bundle, including any job attachments and host requirements. Verify job bundle can be submitted successfully to the farm. Verify job bundle is created upon submission in the users' job history directory. Verify correct job information appears in DCM and job can be completed successfully. | |
+| Submit a render job using `--output json` option (success) | Launch GUI Submitter using `deadline bundle gui-submit --output json <path> > output.txt`. Click submit. When the submission succeeds, click Ok. Close the submitter. Open output.txt and ensure it is JSON structured like: `{"status": "SUBMITTED", "jobId": "<job-id>", "jobHistoryBundleDirectory": "<path>"}` | |
+| Submit a render job using `--output json` option (cancel) | Launch GUI Submitter using `deadline bundle gui-submit --output json <path> > output.txt`. Click submit. Immediately click cancel before the submission completes. Close the submitter. Open output.txt and ensure it is JSON exactly like: `{"status": "CANCELED"}` | |
+| Submit a render job using a submitter name | Launch GUI Submitter using `deadline bundle gui-submit --submitter-name Testing <path>`. Click submit. Wait for the submission to complete. Click Ok. Ensure the submission process exits. | |
+| Verify 'Load a different job bundle' button in GUI Submitter | Launch GUI Submitter using `deadline bundle gui-submit --browse`, select a job bundle. Verify correct defaults/details. Hit 'Load a different job bundle' button and select a second job bundle. Verify correct defaults/details for the second bundle. | |
+| Verify 'Export job bundle' button in GUI Submitter | | |
+| Verify all GUI Submitter dialogue controls work | Verify all dropdown options, menus, input fields, toggles, checkboxes, radio buttons work as expected. Verify all tabs: Shared job settings, Job-specific settings, Job attachments, Host requirements (both 'Run on all worker hosts' and 'Run on worker hosts that meet the following requirements' options). | |
+| `deadline job download-output` | Verify job output can be successfully downloaded using command. | |
+| Verify download output for a job in DCM browser | With the Deadline CLI registered as the download handler, verify download output for a job in DCM browser. | macOS: handler not currently supported, must use direct CLI commands. |
+| Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
+| `deadline job cancel` | Verify existing/running jobs can be successfully canceled. Verify job shows as Canceled in DCM. | |
+| `deadline job get` | Verify correct information is displayed. | |
+| `deadline job list` | Verify correct information is displayed (can check DCM for info). | |
+| `deadline job trace-schedule` | | |
+| `deadline fleet get` | Verify correct information is displayed. | |
+| `deadline fleet list` | Verify correct information is displayed. | |
+| `deadline worker get` | Verify correct information is displayed. | Include `--fleet-id` and `--worker-id` parameter. |
+| `deadline worker list` | Verify correct information is displayed. | Include `--fleet-id` parameter. |
+| `deadline handle-web-url --install` | | macOS: Verify 'Installing the web URL handler is not supported on OS darwin' message appears. |
+| `deadline handle-web-url --uninstall` | | macOS: Verify 'Uninstalling the web URL handler is not supported on OS darwin' message appears. |
+| `deadline --help` | Verify correct information is displayed. | |
+| `deadline -h` | Verify correct information is displayed. | |
+| `deadline --log-level ERROR` | Must include command after level (e.g. `deadline --log-level ERROR farm list`). | |
+| `deadline --log-level WARNING` | | |
+| `deadline --log-level INFO` | | |
+| `deadline --log-level DEBUG` | | |
+
+## Job Attachments Tests
+
+| Test Case | Test Steps | Notes |
+|---|---|---|
+| Submit render job with job attachments | | |
+| Verify job attachments are uploaded to s3 during the render submission process | | |
+| `deadline attachment upload` command | | |
+| `deadline attachment download` command | | |
+| `deadline manifest snapshot` | | |
+| `deadline manifest diff` command | | |
+| `deadline manifest download` | | |
+| `deadline manifest upload` | | |
+| Path mapping rules | | |
+| `deadline job download-output` with overwrite files option | Download output to a folder where output already exists, select overwrite. | |
+| `deadline job download-output` with skip option | Download output to a folder where output already exists, select skip. | |
+| `deadline job download-output` with create copy/append option | Download output to a folder where output already exists, select create copy/append. | |

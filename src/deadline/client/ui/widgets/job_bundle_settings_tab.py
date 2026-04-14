@@ -102,11 +102,7 @@ class JobBundleSettingsWidget(QWidget):
 
             # Load the template to get the bundle name
             template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-            name = (
-                template.get("name", "Job bundle submission")
-                if template
-                else "Job bundle submission"
-            )
+            name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
             job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
             job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
 

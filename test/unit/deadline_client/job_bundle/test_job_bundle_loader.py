@@ -16,6 +16,8 @@ import yaml
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle.loader import (
     parse_yaml_or_json_content,
+    read_yaml_or_json,
+    read_yaml_or_json_object,
     validate_directory_symlink_containment,
 )
 from deadline.client.job_bundle.parameters import read_job_bundle_parameters
@@ -301,3 +303,52 @@ steps:
 
         with pytest.raises(DeadlineOperationError, match="Hidden parameter.*missing a value"):
             read_job_bundle_parameters(temp_job_bundle_dir)
+
+
+class TestReadYamlOrJson:
+    def test_reads_yaml(self, tmp_path):
+        (tmp_path / "template.yaml").write_text("name: test")
+        contents, file_type = read_yaml_or_json(str(tmp_path), "template", True)
+        assert contents == "name: test"
+        assert file_type == "YAML"
+
+    def test_reads_json(self, tmp_path):
+        (tmp_path / "template.json").write_text('{"name": "test"}')
+        contents, file_type = read_yaml_or_json(str(tmp_path), "template", True)
+        assert contents == '{"name": "test"}'
+        assert file_type == "JSON"
+
+    def test_raises_when_both_exist(self, tmp_path):
+        (tmp_path / "template.yaml").write_text("name: test")
+        (tmp_path / "template.json").write_text('{"name": "test"}')
+        with pytest.raises(DeadlineOperationError, match="both.*json and.*yaml"):
+            read_yaml_or_json(str(tmp_path), "template", True)
+
+    def test_raises_when_required_and_missing(self, tmp_path):
+        with pytest.raises(DeadlineOperationError, match="lacks a"):
+            read_yaml_or_json(str(tmp_path), "template", True)
+
+    def test_returns_empty_when_not_required_and_missing(self, tmp_path):
+        contents, file_type = read_yaml_or_json(str(tmp_path), "template", False)
+        assert contents == ""
+        assert file_type == ""
+
+
+class TestReadYamlOrJsonObject:
+    def test_reads_yaml(self, tmp_path):
+        (tmp_path / "template.yaml").write_text("name: test")
+        result = read_yaml_or_json_object(str(tmp_path), "template", True)
+        assert result == {"name": "test"}
+
+    def test_reads_json(self, tmp_path):
+        (tmp_path / "template.json").write_text('{"name": "test"}')
+        result = read_yaml_or_json_object(str(tmp_path), "template", True)
+        assert result == {"name": "test"}
+
+    def test_raises_when_required_and_missing(self, tmp_path):
+        with pytest.raises(DeadlineOperationError):
+            read_yaml_or_json_object(str(tmp_path), "template", True)
+
+    def test_returns_none_when_not_required_and_missing(self, tmp_path):
+        result = read_yaml_or_json_object(str(tmp_path), "template", False)
+        assert result is None

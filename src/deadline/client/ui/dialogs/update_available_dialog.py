@@ -12,10 +12,11 @@ from typing import Optional
 
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QDialog,
-    QDialogButtonBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -79,7 +80,7 @@ class UpdateAvailableDialog(QDialog):
         self.user_downloaded = False
 
         self.setWindowTitle(tr("New version available"))
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(450)
 
         self._build_ui()
 
@@ -131,30 +132,34 @@ class UpdateAvailableDialog(QDialog):
         # Add spacing before buttons
         layout.addSpacing(12)
 
-        # Button box - consistent with other dialogs
-        self.button_box = QDialogButtonBox(Qt.Horizontal)
-
+        # Manual button layout for consistent ordering across platforms
         _button_base = "border: 1px solid #888; border-radius: 6px; padding: 3px 12px;"
-
-        self.dismiss_button = self.button_box.addButton(QDialogButtonBox.Close)
-        self.dismiss_button.setText(tr("Dismiss"))
-        self.dismiss_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
 
         self.dont_remind_button = QPushButton(tr("Don't remind me again"))
         self.dont_remind_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
-        self.button_box.addButton(self.dont_remind_button, QDialogButtonBox.DestructiveRole)
+        self.dont_remind_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.dont_remind_button.clicked.connect(self._on_dont_remind_clicked)
+
+        self.dismiss_button = QPushButton(tr("Dismiss"))
+        self.dismiss_button.setStyleSheet(f"QPushButton {{ {_button_base} }}")
+        self.dismiss_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.dismiss_button.clicked.connect(self.accept)
 
         self.download_button = QPushButton(tr("Download installer"))
         self.download_button.setStyleSheet(
             f"QPushButton {{ {_button_base} background-color: {_COLOR_ACCENT}; color: white; }}"
         )
-        self.button_box.addButton(self.download_button, QDialogButtonBox.AcceptRole)
+        self.download_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.download_button.clicked.connect(self._on_download_clicked)
 
-        self.button_box.rejected.connect(self.accept)
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        button_layout.addWidget(self.dont_remind_button)
+        button_layout.addStretch(1)
+        button_layout.addWidget(self.dismiss_button)
+        button_layout.addWidget(self.download_button)
 
-        layout.addWidget(self.button_box)
+        layout.addLayout(button_layout)
         self.setLayout(layout)
 
     def _on_download_clicked(self) -> None:

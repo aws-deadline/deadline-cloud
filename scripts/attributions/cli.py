@@ -248,7 +248,7 @@ _ADDITIONAL_ATTRIBUTIONS = [
 
 # Some packages specify their license but do not include it in the repository/package
 # We attribute these manually using _ADDITIONAL_ATTRIBUTIONS
-_EXPECTED_MISSING_LICENSE = {"pywin32"}
+_EXPECTED_MISSING_LICENSE: set[str] = {"pywin32"}
 
 # Mapping from import/module names used in the PyInstaller allowlist's DEPENDENCIES
 # to the package names used in attributions. Only needed when they differ.
@@ -537,6 +537,9 @@ _PLATFORM_CONDITIONAL_PACKAGES: dict[str, list[str]] = {
     "Windows": ["colorama"],
 }
 
+# Packages that can only be installed on Windows (have native extensions)
+_WINDOWS_ONLY_PACKAGES: set[str] = {"pywin32"}
+
 # Inverse lookup: package name -> set of platforms it belongs to
 _PACKAGE_PLATFORMS: dict[str, set[str]] = {}
 for _plat, _pkgs in _PLATFORM_CONDITIONAL_PACKAGES.items():
@@ -555,7 +558,13 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
         uv_pip(["install", repository_root], venv, dev)
         # Install all platform-conditional packages so pip-licenses discovers
         # them regardless of which OS we're running on.
-        all_conditional = [pkg for pkgs in _PLATFORM_CONDITIONAL_PACKAGES.values() for pkg in pkgs]
+        # Skip Windows-only packages when not on Windows.
+        all_conditional = [
+            pkg
+            for pkgs in _PLATFORM_CONDITIONAL_PACKAGES.values()
+            for pkg in pkgs
+            if platform.system() == "Windows" or pkg not in _WINDOWS_ONLY_PACKAGES
+        ]
         if all_conditional:
             uv_pip(["install", *all_conditional], venv, dev)
         if platform.system() == "Windows":
@@ -590,10 +599,13 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
             name = package["Name"]
             license_text = package["LicenseText"]
             notice_text = package["NoticeText"]
+            # Skip "expected missing but found" check for Windows-only packages on Windows
+            # (they use _ADDITIONAL_ATTRIBUTIONS for their license text)
             if name in _EXPECTED_MISSING_LICENSE and license_text != "UNKNOWN":
-                raise RuntimeError(
-                    f"Expected pip-licenses to not find a license for {name} but one was found."
-                )
+                if name not in _WINDOWS_ONLY_PACKAGES or platform.system() != "Windows":
+                    raise RuntimeError(
+                        f"Expected pip-licenses to not find a license for {name} but one was found."
+                    )
             if license_text == "UNKNOWN" and notice_text != "UNKNOWN":
                 raise RuntimeError(
                     f"pip-licenses found a notices file for {name} but no license file. This case is not handled."

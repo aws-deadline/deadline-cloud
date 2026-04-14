@@ -59,6 +59,8 @@ def test_cli_bundle_known_paths_combine(fresh_deadline_config, temp_job_bundle_d
     config.set_setting("settings.auto_accept", "true")
 
     # Set known paths in config using OS-specific path separator
+    # Note: on Windows, backslashes are normalized to forward slashes in the config file,
+    # but get_setting converts them back to native format on read.
     config_path1 = "/path/from/config/1" if os.name != "nt" else "C:\\path\\from\\config\\1"
     config_path2 = "/path/from/config/2" if os.name != "nt" else "C:\\path\\from\\config\\2"
     config.set_setting("settings.known_asset_paths", os.pathsep.join([config_path1, config_path2]))

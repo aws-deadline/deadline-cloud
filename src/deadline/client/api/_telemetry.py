@@ -40,6 +40,23 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+def _swallow_exceptions(func: F) -> F:
+    """Decorator that catches all exceptions in telemetry functions to prevent
+    telemetry issues from affecting the main application flow."""
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            logger.debug(
+                "Swallowed exception in telemetry function %s", func.__name__, exc_info=True
+            )
+            return None
+
+    return cast(F, wrapper)
+
+
 def get_deadline_endpoint_url(
     config: Optional[ConfigParser] = None,
 ) -> str:
@@ -102,14 +119,23 @@ class TelemetryClient:
 
         # IDs for this session
         self.session_id: str = str(uuid.uuid4())
-        self.telemetry_id: str = self._get_telemetry_identifier(config=config)
+        try:
+            self.telemetry_id: str = self._get_telemetry_identifier(config=config)
+        except Exception:
+            logger.debug("Swallowed exception in telemetry __init__", exc_info=True)
+            self.telemetry_id = str(uuid.uuid4())
         # If a different base package is provided, include info from this library as supplementary info
         if package_name != "deadline-cloud-library":
             self._common_details["deadline-cloud-version"] = version
-        self._system_metadata = self._get_system_metadata(config=config)
+        try:
+            self._system_metadata = self._get_system_metadata(config=config)
+        except Exception:
+            logger.debug("Swallowed exception in telemetry __init__", exc_info=True)
+            self._system_metadata = {}
         self.set_opt_out(config=config)
         self.initialize(config=config)
 
+    @_swallow_exceptions
     def set_opt_out(self, config: Optional[ConfigParser] = None) -> None:
         """
         Checks whether telemetry has been opted out by checking the DEADLINE_CLOUD_TELEMETRY_OPT_OUT
@@ -128,6 +154,7 @@ class TelemetryClient:
             + ("not enabled." if self.telemetry_opted_out else "enabled.")
         )
 
+    @_swallow_exceptions
     def initialize(self, config: Optional[ConfigParser] = None) -> None:
         """
         Starts up the telemetry background thread after getting settings from the boto3 client.
@@ -138,31 +165,27 @@ class TelemetryClient:
         if self.telemetry_opted_out:
             return
 
-        try:
-            self.endpoint: str = self._get_prefixed_endpoint(
-                f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
-                TelemetryClient.ENDPOINT_PREFIX,
-            )
+        self.endpoint: str = self._get_prefixed_endpoint(
+            f"{get_deadline_endpoint_url(config=config)}/2023-10-12/telemetry",
+            TelemetryClient.ENDPOINT_PREFIX,
+        )
 
-            # Some environments might not have SSL, so we'll use the vendored botocore SSL context
-            from botocore.httpsession import create_urllib3_context, get_cert_path
+        # Some environments might not have SSL, so we'll use the vendored botocore SSL context
+        from botocore.httpsession import create_urllib3_context, get_cert_path
 
-            self._urllib3_context = create_urllib3_context()
-            self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
+        self._urllib3_context = create_urllib3_context()
+        self._urllib3_context.load_verify_locations(cafile=get_cert_path(True))
 
-            user_id, _ = get_user_and_identity_store_id(config=config)
-            if user_id:
-                self._system_metadata["user_id"] = user_id
+        user_id, _ = get_user_and_identity_store_id(config=config)
+        if user_id:
+            self._system_metadata["user_id"] = user_id
 
-            monitor_id: Optional[str] = get_monitor_id(config=config)
-            if monitor_id:
-                self._system_metadata["monitor_id"] = monitor_id
+        monitor_id: Optional[str] = get_monitor_id(config=config)
+        if monitor_id:
+            self._system_metadata["monitor_id"] = monitor_id
 
-            self._initialized = True
-            self._start_threads()
-        except Exception:
-            # Silently swallow any exceptions
-            return
+        self._initialized = True
+        self._start_threads()
 
     @property
     def is_initialized(self) -> bool:
@@ -212,6 +235,7 @@ class TelemetryClient:
 
         return metadata
 
+    @_swallow_exceptions
     def _exit_cleanly(self):
         try:
             self.event_queue.put_nowait(None)
@@ -325,6 +349,7 @@ class TelemetryClient:
         # Possibility to add stack trace here
         self.record_event("com.amazon.rum.deadline.error", event_details, from_gui=from_gui)
 
+    @_swallow_exceptions
     def record_event(
         self, event_type: str, event_details: Dict[str, Any], *, from_gui: bool = False
     ):

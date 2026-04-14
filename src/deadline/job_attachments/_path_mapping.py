@@ -162,7 +162,7 @@ class _PathMappingRuleApplier:
             destination_path = next_trie_entry.get(".")
             if destination_path:
                 matched_destination_path = destination_path
-                matched_remaining_parts = parts[i + 1 :]
+                matched_remaining_parts = tuple(parts[i + 1 :])
             trie_entry = next_trie_entry
 
         if matched_destination_path is None:

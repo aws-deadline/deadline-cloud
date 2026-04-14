@@ -123,6 +123,7 @@ def show_job_bundle_submitter(
     submitter_info: Optional[SubmitterInfo] = None,
     known_asset_paths: Optional[list[str]] = None,
     job_parameters: Optional[list[dict[str, Any]]] = None,
+    name: Optional[str] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -271,9 +272,8 @@ def show_job_bundle_submitter(
     )
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
-    name = "Job bundle submission"
-    if template:
-        name = template.get("name", name)
+    if name is None:
+        name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
 
     if not os.path.isdir(input_job_bundle_dir):
         raise DeadlineOperationError(f"Input Job Bundle Dir is not valid: {input_job_bundle_dir}")
