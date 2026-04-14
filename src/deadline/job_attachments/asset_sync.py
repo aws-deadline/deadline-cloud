@@ -54,6 +54,7 @@ from .exceptions import (
 from .vfs import VFSProcessManager
 from .models import (
     Attachments,
+    FileConflictResolution as _FileConflictResolution,
     JobAttachmentsFileSystem,
     JobAttachmentS3Settings,
     ManifestProperties,
@@ -301,6 +302,7 @@ class AssetSync:
         fs_permission_settings: Optional[FileSystemPermissionSettings] = None,
         merged_manifests_by_root: dict[str, BaseAssetManifest] = dict(),
         on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+        conflict_resolution: _FileConflictResolution = _FileConflictResolution.CREATE_COPY,
     ) -> SummaryStatistics:
         """
         Args:
@@ -331,6 +333,7 @@ class AssetSync:
                 session=self.session,
                 on_downloading_files=on_downloading_files,
                 logger=self.logger,
+                conflict_resolution=conflict_resolution,
             ).convert_to_summary_statistics()
         except JobAttachmentsS3ClientError as exc:
             if exc.status_code == 404:
@@ -495,13 +498,16 @@ class AssetSync:
                 on_mount_complete=on_vfs_mount_complete,
             )
         else:
-            # Copied Download flow
+            # Copied Download flow — always use OVERWRITE since the worker downloads
+            # into a fresh session directory. CREATE_COPY would create duplicate files
+            # with "(1)" suffixes when step dependency outputs overlap with inputs.
             summary_statistics = self.copied_download(
                 s3_settings=s3_settings,
                 session_dir=session_dir,
                 fs_permission_settings=fs_permission_settings,
                 merged_manifests_by_root=merged_manifests_by_root,
                 on_downloading_files=on_downloading_files,
+                conflict_resolution=_FileConflictResolution.OVERWRITE,
             )
 
         self._record_attachment_mtimes(merged_manifests_by_root)
