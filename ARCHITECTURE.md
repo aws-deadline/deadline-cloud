@@ -9,6 +9,8 @@ deadline-cli (binary)
 │   ├── deadline-config
 │   └── deadline-models
 ├── deadline-job-bundle
+│   ├── deadline-client
+│   ├── deadline-job-attachments
 │   └── deadline-models
 ├── deadline-job-attachments
 │   └── deadline-models
@@ -52,7 +54,7 @@ gui/ (Python, not a Cargo crate)
 | `deadline-client` | AWS API calls (Deadline Cloud service). Owns the SDK/HTTP interaction. |
 | `deadline-models` | Shared data types and error types. No I/O, no logic beyond construction and display. |
 | `deadline-common` | Utility functions shared across crates (path utils, formatting). |
-| `deadline-job-bundle` | Job bundle directory parsing, template loading, parameter resolution. |
+| `deadline-job-bundle` | Job bundle parsing, parameter validation, and submission orchestration. Owns the full lifecycle: load bundle → validate → merge parameters → upload attachments → CreateJob → poll for completion. |
 | `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
 | `deadline-mcp` | Library. MCP server logic invoked by `deadline-cli` via `deadline mcp-server`. Uses rmcp SDK. |

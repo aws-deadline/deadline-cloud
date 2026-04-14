@@ -1041,13 +1041,18 @@ name = "deadline-job-bundle"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "deadline-client",
+ "deadline-config",
+ "deadline-job-attachments",
  "deadline-models",
+ "log",
  "regex",
  "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
  "test-case",
+ "tokio",
 ]
 
 [[package]]

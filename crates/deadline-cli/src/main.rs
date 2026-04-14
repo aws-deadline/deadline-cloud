@@ -95,6 +95,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::manifest::ManifestAction,
     },
+    /// Submit Open Job Description job bundles to a Deadline Cloud queue
+    Bundle {
+        #[command(subcommand)]
+        action: commands::bundle::BundleAction,
+    },
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -190,6 +195,9 @@ fn command_name(cmd: &Commands) -> String {
             commands::manifest::ManifestAction::Diff { .. } => "diff",
             commands::manifest::ManifestAction::Download { .. } => "download",
             commands::manifest::ManifestAction::Upload { .. } => "upload",
+        }),
+        Commands::Bundle { action } => ("bundle", match action {
+            commands::bundle::BundleAction::Submit { .. } => "submit",
         }),
     };
     format!("deadline.{group}.{action}")
@@ -291,6 +299,7 @@ fn main() {
             Commands::Worker { action } => commands::worker::run(action),
             Commands::Attachment { action } => commands::attachment::run(action),
             Commands::Manifest { action } => commands::manifest::run(action),
+            Commands::Bundle { action } => commands::bundle::run(action),
         };
         if let Err(e) = result {
             match e {

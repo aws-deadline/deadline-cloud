@@ -124,10 +124,11 @@ Implemented: config, auth (login/logout/status), farm list/get, queue
 list/get/export-credentials, fleet list/get, worker list/get, job
 list/get/search/wait/logs/cancel/requeue-tasks, attachment
 download/upload, manifest snapshot/diff/download/upload, bundle
-gui-submit, config gui.
+submit/gui-submit, config gui.
 
 Gaps:
-- `bundle submit` (headless job submission) — blocked on work item #11
+- `bundle submit --json` output format
+- `bundle submit --save-debug-snapshot` mode
 - `job download-output` / `job sync-output` — blocked on work item #13
 - `handle-web-url` — blocked on work item #14
 - `job trace-schedule` — experimental, deferred

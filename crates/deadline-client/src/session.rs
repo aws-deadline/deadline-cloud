@@ -172,6 +172,23 @@ impl SessionCache {
         if let Some(r) = region {
             builder = builder.region(r);
         }
+        // Propagate the global endpoint URL override if set. This is
+        // needed for tests (stub server) and custom endpoint configs.
+        // The AWS SDK reads per-service env vars (AWS_ENDPOINT_URL_STS,
+        // AWS_ENDPOINT_URL_S3) when building service clients from an
+        // SdkConfig loaded via aws_config::load_defaults(), but NOT
+        // from a manually-built SdkConfig. So we set the global
+        // endpoint_url which applies to all services built from this
+        // config.
+        if let Some(url) = base_config.endpoint_url() {
+            builder = builder.endpoint_url(url);
+        } else if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
+            // Fallback: if per-service STS endpoint is set but no global
+            // endpoint, use it as the global endpoint for this config.
+            // This ensures STS and S3 clients built from queue-scoped
+            // configs reach the stub server in tests.
+            builder = builder.endpoint_url(url);
+        }
         let sdk_config = builder.build();
         self.cached_queue_configs.insert(key, sdk_config.clone());
         Ok(sdk_config)

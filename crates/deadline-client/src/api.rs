@@ -725,3 +725,183 @@ pub async fn update_task(
         }).await
     }).await
 }
+
+// ---------------------------------------------------------------------------
+// Job creation
+// ---------------------------------------------------------------------------
+
+/// Convert our JSON attachments into the SDK's typed Attachments struct.
+fn build_sdk_attachments(att: &Value) -> Result<aws_sdk_deadline::types::Attachments, DeadlineError> {
+    let fs_str = att.get("fileSystem").and_then(|v| v.as_str()).unwrap_or("COPIED");
+    let file_system: aws_sdk_deadline::types::JobAttachmentsFileSystem = fs_str.into();
+
+    let mut builder = aws_sdk_deadline::types::Attachments::builder().file_system(file_system);
+
+    if let Some(manifests) = att.get("manifests").and_then(|v| v.as_array()) {
+        for m in manifests {
+            let mut mb = aws_sdk_deadline::types::ManifestProperties::builder();
+            if let Some(v) = m.get("rootPath").and_then(|v| v.as_str()) {
+                mb = mb.root_path(v);
+            }
+            if let Some(v) = m.get("rootPathFormat").and_then(|v| v.as_str()) {
+                let fmt: aws_sdk_deadline::types::PathFormat = v.into();
+                mb = mb.root_path_format(fmt);
+            }
+            if let Some(v) = m.get("inputManifestPath").and_then(|v| v.as_str()) {
+                mb = mb.input_manifest_path(v);
+            }
+            if let Some(v) = m.get("inputManifestHash").and_then(|v| v.as_str()) {
+                mb = mb.input_manifest_hash(v);
+            }
+            if let Some(v) = m.get("fileSystemLocationName").and_then(|v| v.as_str()) {
+                mb = mb.file_system_location_name(v);
+            }
+            if let Some(dirs) = m.get("outputRelativeDirectories").and_then(|v| v.as_array()) {
+                for d in dirs {
+                    if let Some(s) = d.as_str() {
+                        mb = mb.output_relative_directories(s);
+                    }
+                }
+            }
+            builder = builder.manifests(mb.build().map_err(|e| {
+                DeadlineError::OperationError(format!("Failed to build manifest properties: {e}"))
+            })?);
+        }
+    }
+
+    builder.build().map_err(|e| {
+        DeadlineError::OperationError(format!("Failed to build attachments: {e}"))
+    })
+}
+
+/// Call CreateJob API. The `args` map should contain farmId, queueId,
+/// template, templateType, priority, and optionally parameters, attachments,
+/// storageProfileId, maxFailedTasksCount, maxRetriesPerTask, maxWorkerCount,
+/// targetTaskRunStatus.
+pub async fn create_job(
+    args: &serde_json::Map<String, Value>,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("create_job", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+
+        let farm_id = args.get("farmId").and_then(|v| v.as_str()).unwrap_or("");
+        let queue_id = args.get("queueId").and_then(|v| v.as_str()).unwrap_or("");
+        let template = args.get("template").and_then(|v| v.as_str()).unwrap_or("");
+        let template_type: aws_sdk_deadline::types::JobTemplateType = args
+            .get("templateType")
+            .and_then(|v| v.as_str())
+            .unwrap_or("YAML")
+            .into();
+        let priority = args.get("priority").and_then(|v| v.as_i64()).unwrap_or(50) as i32;
+
+        let mut req = client
+            .create_job()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .template(template)
+            .template_type(template_type)
+            .priority(priority);
+
+        if let Some(v) = args.get("storageProfileId").and_then(|v| v.as_str()) {
+            req = req.storage_profile_id(v);
+        }
+        if let Some(v) = args.get("maxFailedTasksCount").and_then(|v| v.as_i64()) {
+            req = req.max_failed_tasks_count(v as i32);
+        }
+        if let Some(v) = args.get("maxRetriesPerTask").and_then(|v| v.as_i64()) {
+            req = req.max_retries_per_task(v as i32);
+        }
+        if let Some(v) = args.get("maxWorkerCount").and_then(|v| v.as_i64()) {
+            req = req.max_worker_count(v as i32);
+        }
+        if let Some(v) = args.get("targetTaskRunStatus").and_then(|v| v.as_str()) {
+            let status: aws_sdk_deadline::types::CreateJobTargetTaskRunStatus = v.into();
+            req = req.target_task_run_status(status);
+        }
+        if let Some(params) = args.get("parameters").and_then(|v| v.as_object()) {
+            for (name, value) in params {
+                let param = if let Some(s) = value.get("string").and_then(|v| v.as_str()) {
+                    aws_sdk_deadline::types::JobParameter::String(s.to_string())
+                } else if let Some(s) = value.get("int").and_then(|v| v.as_str()) {
+                    aws_sdk_deadline::types::JobParameter::Int(s.to_string())
+                } else if let Some(s) = value.get("float").and_then(|v| v.as_str()) {
+                    aws_sdk_deadline::types::JobParameter::Float(s.to_string())
+                } else if let Some(s) = value.get("path").and_then(|v| v.as_str()) {
+                    aws_sdk_deadline::types::JobParameter::Path(s.to_string())
+                } else {
+                    continue;
+                };
+                req = req.parameters(name.clone(), param);
+            }
+        }
+        if let Some(att) = args.get("attachments") {
+            let att_builder = build_sdk_attachments(att)?;
+            req = req.attachments(att_builder);
+        }
+
+        capture_send(|cap| async move {
+            req.customize().interceptor(cap).send().await.map(|_| ())
+        })
+        .await
+    })
+    .await
+}
+
+/// Poll GetJob until the job exits CREATE_IN_PROGRESS.
+/// Returns (success, lifecycle_status_message).
+pub async fn wait_for_create_job_to_complete(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    config: Option<&IniConfig>,
+    continue_callback: impl Fn() -> bool,
+) -> Result<(bool, String), DeadlineError> {
+    let initial_delay = std::time::Duration::from_millis(300);
+    let max_delay = std::time::Duration::from_secs(5);
+    let timeout = std::time::Duration::from_secs(300);
+
+    let start = std::time::Instant::now();
+    let mut delay = initial_delay;
+
+    tokio::time::sleep(initial_delay).await;
+
+    loop {
+        if start.elapsed() >= timeout {
+            return Err(DeadlineError::OperationError(format!(
+                "Timed out after {} seconds while waiting for Job to be created: {job_id}",
+                timeout.as_secs()
+            )));
+        }
+
+        if !continue_callback() {
+            return Err(DeadlineError::OperationError(
+                "CreateJob wait was canceled".into(),
+            ));
+        }
+
+        let job = get_job(farm_id, queue_id, job_id, config, None).await?;
+
+        let status = job
+            .get("lifecycleStatus")
+            .or_else(|| job.get("state"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let message = job
+            .get("lifecycleStatusMessage")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        match status {
+            "CREATE_IN_PROGRESS" => {
+                tokio::time::sleep(delay).await;
+                delay = std::cmp::min(delay * 2, max_delay);
+            }
+            "CREATE_FAILED" => return Ok((false, message)),
+            _ => return Ok((true, message)),
+        }
+    }
+}

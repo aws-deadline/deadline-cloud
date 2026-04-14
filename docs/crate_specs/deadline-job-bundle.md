@@ -1,17 +1,23 @@
 # deadline-job-bundle
 
-Job bundle directory parsing, template loading, parameter validation and
-resolution, asset reference extraction, and job history directory creation.
+Job bundle parsing, validation, and submission. Handles the full lifecycle
+of a job bundle: loading the directory, validating templates, resolving
+parameters, and orchestrating the submission pipeline (attachment upload,
+CreateJob API call, creation polling).
 
 ## Role in the System
 
-Handles everything about a job bundle *before* it touches AWS. Parses the
-bundle directory structure, validates templates against the OpenJD spec,
-resolves parameters (merging user values, queue environment values, and
-defaults), and extracts asset references for the attachment subsystem.
+The single entry point for job submission. Consumers hand it a bundle
+directory and parameters; it gives back a job ID. Internally it composes
+the API layer, the attachment engine, and its own parsing logic into a
+complete pipeline.
 
-Consumers: `deadline-cli` (bundle submit, gui-submit), `deadline-gui-ffi`
-(submission dialog).
+Consumers: `deadline-cli` (bundle submit), `deadline-gui-ffi`
+(submission dialog), `deadline-mcp` (submit_job tool).
+
+Dependencies: `deadline-client` (API calls, credentials, telemetry),
+`deadline-job-attachments` (hashing, S3 upload), `deadline-models`
+(shared types and errors).
 
 ## Key Concepts
 
@@ -34,14 +40,20 @@ are checked after coercion.
 **PATH parameters drive asset references.** A PATH parameter's `dataFlow`
 and `objectType` determine whether it contributes to input files, input
 directories, output directories, or referenced paths. This is how the
-attachment subsystem knows what to upload/download without parsing the
-template's step scripts.
+attachment engine knows what to upload without parsing the template's
+step scripts.
 
 **Queue environment parameters merge with job parameters.** Queue
 environments can define parameters that override or supplement the job
 template's parameters. Same-name parameters must agree on type. The merge
 logic handles conflicts and app-specific parameters (names containing
 `:` like `deadline:priority`).
+
+**Submission is a pipeline, not a single call.** The orchestration
+validates the bundle, loads and merges parameters, resolves attachments,
+uploads to S3, calls CreateJob, and polls until the job exits
+CREATE_IN_PROGRESS. Each phase can fail independently with a specific
+error.
 
 ## Behavior & Contracts
 
@@ -77,6 +89,25 @@ underscore only). Job name truncated to 128 characters.
 **YAML serialization:** `deadline_yaml_dump` preserves insertion order
 (no key sorting) and uses block literal style for multi-line strings.
 
+**Job submission:** Orchestrates the full submission pipeline: validates
+the bundle, loads and merges parameters, expands input directories to
+file lists, builds the known asset paths list, hashes and uploads
+attachments, calls CreateJob, and polls until the job exits
+CREATE_IN_PROGRESS. Input directory expansion walks recursively; empty
+directories become referenced paths, missing directories error or warn
+depending on whether the caller requires paths to exist. Known asset
+paths are deduplicated via TRIE-based prefix filtering. When files exist
+outside known paths, the behavior depends on auto_accept: with
+auto_accept and no GUI, submission is canceled; without auto_accept, the
+caller's confirmation callback is invoked. Debug snapshot mode saves the
+CreateJob args and scripts to disk without submitting.
+
+**Job creation polling:** After calling CreateJob, polls GetJob with
+exponential backoff (0.3s initial, doubles each iteration, capped at 5s,
+300s timeout). Checks `lifecycleStatus` first, falls back to legacy
+`state` field. Returns success/failure with the status message. Supports
+cancellation via a caller-provided callback.
+
 ## Design Decisions
 
 **Parameters are `serde_json::Value`, not typed structs.** A parameter
@@ -90,9 +121,16 @@ control, one is inferred: STRING→LINE_EDIT, PATH→CHOOSE_DIRECTORY or
 CHOOSE_INPUT_FILE (based on objectType/dataFlow), INT/FLOAT→SPIN_BOX,
 anything with allowedValues→DROPDOWN_LIST.
 
-**No dependency on `deadline-config`.** The history directory path is
-passed as a parameter by the CLI layer. This keeps the crate focused on
-bundle logic without coupling to config file mechanics.
+**Orchestration lives here, not in the API layer.** The submission
+pipeline composes API calls, bundle parsing, and attachment handling into
+a single operation. Placing it in this crate keeps the API layer thin
+(just API calls) and avoids a separate orchestration crate. All three
+entry points (CLI, GUI FFI, MCP) depend on this crate for submission.
+
+**Storage profile parsed from raw JSON.** The storage profile API returns
+raw JSON. The submission orchestration parses this into a typed struct
+rather than adding serde derives to the model types. This keeps the
+parsing localized to the one call site that needs it.
 
 ## Gotchas & Constraints
 
@@ -113,11 +151,23 @@ bundle logic without coupling to config file mechanics.
 - `read_yaml_or_json_object` returns `None` for absent optional files.
   Callers must handle the `None` case — don't assume files exist.
 
+- The submission orchestration depends on `deadline-client` for API calls
+  and `deadline-job-attachments` for S3 upload. This makes the crate
+  heavier than a pure parsing library — it transitively includes the AWS
+  SDK. This is intentional: submission is the primary use case for bundle
+  parsing, and separating them would force all three consumers to
+  duplicate the orchestration.
+
 ## Status & Gaps
 
-Fully implemented for the current scope.
+Implemented: template loading, parameter validation and merging, PATH
+resolution, asset reference extraction, job history directory creation,
+YAML serialization, frame range parsing, job submission orchestration
+(bundle validation → parameter merging → attachment upload → CreateJob →
+creation polling).
 
 Gaps:
-- `create_job_from_job_bundle` orchestration (the actual submission API
-  call) lives in `deadline-client`, not here. This crate only prepares
-  the bundle data.
+- Asset path summary message (file count and path listing before upload)
+- Unknown path confirmation prompt (interactive callback flow)
+- `--json` output format for submission results
+- `--save-debug-snapshot` mode

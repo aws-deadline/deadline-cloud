@@ -55,3 +55,5 @@ pub mod telemetry;
 pub mod errors;
 pub mod sts;
 pub mod cloudwatch;
+pub mod bundle;
+pub mod s3;

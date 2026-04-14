@@ -8,3 +8,4 @@ pub mod worker;
 pub mod helpers;
 pub mod attachment;
 pub mod manifest;
+pub mod bundle;

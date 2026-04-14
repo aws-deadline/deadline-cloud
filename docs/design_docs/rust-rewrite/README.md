@@ -69,7 +69,7 @@ pick and execute work items.
 | 8 | Job attachments: core | ✅ Done | §19-20, §24-25, §33 (123 cases) | — | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
 | 9 | Job attachments: transfer | ✅ Done | §21-22, §30-31, §34 (226 cases) | §46 (15 cases) | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
 | 10 | Job attachments: orchestration | ✅ Done | §27, §32, §33 | §46 (15 cases), §47 snapshot/diff/upload | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
-| 11 | Submit job bundle | Not started | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
+| 11 | Submit job bundle | ✅ Done | §11 (42 cases) | §45 cases 1-13 | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | — | §44 cases 25-26 | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | — | §44 cases 6-9 | `cli.md` | 6 |
 | 13 | Job download & sync-output | Not started | §26 (19 cases), §35 (61 cases) | §44 cases 10-16, §42 cases 14-26, §47 download | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |

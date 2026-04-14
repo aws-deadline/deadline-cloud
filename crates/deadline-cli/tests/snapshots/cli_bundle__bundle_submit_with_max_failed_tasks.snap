@@ -1,0 +1,41 @@
+---
+source: crates/deadline-cli/tests/cli_bundle.rs
+info:
+  program: deadline
+  args:
+    - bundle
+    - submit
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYNhoi3/case6
+    - "--yes"
+    - "--max-failed-tasks-count"
+    - "10"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:62917"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:62917"
+    AWS_ENDPOINT_URL_S3: "http://localhost:62917"
+    AWS_ENDPOINT_URL_STS: "http://localhost:62917"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYNhoi3/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYNhoi3
+---
+success: true
+exit_code: 0
+----- stdout -----
+Submitting to Queue: Test Queue
+
+Waiting for Job to be created...
+Submitted job bundle:
+   [TEMP_PATH]
+Job created successfully
+job-0123456789abcdef0123456789abcdef
+
+----- stderr -----

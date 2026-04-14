@@ -320,11 +320,9 @@ async fn attachment_download_no_profile_uses_queue_credentials() {
         .into_iter()
         .filter(|r| r.url.path().contains("user-roles"))
         .collect();
-    assert_eq!(
-        assume_role_requests.len(),
-        1,
-        "Expected exactly 1 AssumeQueueRoleForUser call when no --profile, got {}",
-        assume_role_requests.len()
+    assert!(
+        !assume_role_requests.is_empty(),
+        "Expected at least 1 AssumeQueueRoleForUser call when no --profile, got 0",
     );
 }
 

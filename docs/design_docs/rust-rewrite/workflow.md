@@ -179,11 +179,44 @@ implementation.
 
 ### 2. Update the crate spec
 
-Write up the feature's behavior and implementation approach in the relevant
-`docs/crate_specs/<crate>.md`. Describe what it does and how it should work in
-Rust, but keep it at the design level — no code blocks unless they're
-needed to show a non-obvious interface or data format. This becomes the
-reference for both the tests and the implementation.
+Update the relevant `docs/crate_specs/<crate>.md` with the feature's
+observable behavior. This is a summary — callers need to know what the
+feature does and what contracts it provides, not how it's built internally.
+
+If the feature introduces new architecture or non-obvious design choices
+that aren't adequately captured by the crate spec and test specs, write a
+design doc in `docs/design_docs/` (not `docs/design_docs/rust-rewrite/` —
+that directory is for rewrite process docs that won't be maintained after
+migration). Most work items don't need a separate design doc — the crate
+spec covers the behavioral contracts, the test specs cover the cases, and
+the Step 0 plan in the session captures the rationale.
+
+**Crate spec structure.** Every spec follows this section order:
+
+```
+# <crate name>
+<one-line description>
+
+## Role in the System       — what it does, who consumes it
+## Key Concepts             — the mental model a reader needs
+## Behavior & Contracts     — observable behavior callers can rely on
+## Design Decisions         — why choices were made, with tradeoffs
+## Gotchas & Constraints    — things that will bite you
+## Status & Gaps            — brief list of what's done and what's not
+```
+
+**Writing rules:**
+- Describe *what the system does*, not *how the code is structured*.
+  Write for a human who needs to understand the behavior, not an agent
+  reading source code.
+- No function names, struct names, or module paths. Say "the submission
+  orchestration polls until the job exits CREATE_IN_PROGRESS" not
+  "`wait_for_create_job_to_complete` polls `GetJob`".
+- New features go into the existing sections — add a bold-labeled
+  paragraph to Behavior & Contracts, a bullet to Design Decisions, etc.
+  Don't create new top-level sections or subsections under Status & Gaps.
+- Status & Gaps is a brief inventory. One line per feature area in the
+  "Implemented" sentence, one bullet per gap. No implementation details.
 
 ### 3. Red — Write failing tests
 

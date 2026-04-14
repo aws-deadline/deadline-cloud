@@ -15,7 +15,7 @@ row with status "Not started" whose dependencies are all "✅ Done".
    Always run the Python CLI to verify Rust output before accepting
    snapshots (workflow Step 5).
 
-2. **All tests pass.** The full workspace test suite is green (804 tests).
+2. **All tests pass.** The full workspace test suite is green (841 tests).
    If a test fails, it's a real regression.
 
 3. **VFS (§28, 89 cases) is deferred** per migration strategy. Skip it
@@ -28,6 +28,20 @@ row with status "Not started" whose dependencies are all "✅ Done".
 
 5. **Mock error helpers omit message text.** All error mocks in
    `errors.rs` omit the `message` field from the JSON body — only
-   `__type` is included. Do not add a `message` parameter — tests must
-   not assert on AWS service error message text. See TESTING.md
-   § "Mock Error Response Rules".
+   `__type` is included. See TESTING.md for rules.
+
+6. **`deadline-job-bundle` now owns submission orchestration.** It depends
+   on `deadline-client` (API calls) and `deadline-job-attachments` (S3
+   upload). This was an architecture change made during work item #11.
+   See `ARCHITECTURE.md` for the updated dependency graph.
+
+7. **Queue-scoped SdkConfig propagates endpoint URLs.** The
+   `get_queue_user_config` function in `session.rs` now propagates
+   endpoint URL overrides to the queue-scoped config. This was a bug
+   fix discovered during #11 — without it, S3/STS clients built from
+   queue credentials would hit real AWS endpoints instead of the stub
+   server in tests.
+
+8. **`bundle submit` remaining gaps:** Asset path summary message,
+   unknown path confirmation prompt, `--json` output, and
+   `--save-debug-snapshot` are not yet implemented.

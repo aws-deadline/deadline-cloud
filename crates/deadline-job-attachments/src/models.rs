@@ -450,6 +450,36 @@ pub struct StorageProfile {
     pub file_system_locations: Vec<FileSystemLocation>,
 }
 
+impl StorageProfile {
+    /// Parse from the raw JSON returned by GetStorageProfileForQueue.
+    pub fn from_json(v: &serde_json::Value) -> Option<Self> {
+        Some(StorageProfile {
+            storage_profile_id: v.get("storageProfileId")?.as_str()?.to_string(),
+            display_name: v.get("displayName")?.as_str()?.to_string(),
+            os_family: v.get("osFamily")?.as_str()?.parse().ok()?,
+            file_system_locations: v
+                .get("fileSystemLocations")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|loc| {
+                            Some(FileSystemLocation {
+                                name: loc.get("name")?.as_str()?.to_string(),
+                                path: loc.get("path")?.as_str()?.to_string(),
+                                location_type: match loc.get("type")?.as_str()? {
+                                    "LOCAL" => FileSystemLocationType::Local,
+                                    "SHARED" => FileSystemLocationType::Shared,
+                                    _ => return None,
+                                },
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+    }
+}
+
 // --- AssetRootGroup ---
 
 #[derive(Debug, Clone)]
@@ -889,5 +919,58 @@ mod tests {
         assert_eq!(profile.storage_profile_id, "sp-abc123");
         assert_eq!(profile.display_name, "My Profile");
         assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Linux);
+    }
+
+    // === StorageProfile::from_json ===
+
+    #[test]
+    fn storage_profile_from_json_full_response() {
+        let json = serde_json::json!({
+            "storageProfileId": "sp-abc123",
+            "displayName": "My Profile",
+            "osFamily": "LINUX",
+            "fileSystemLocations": [
+                {"name": "Local Root", "path": "/mnt/local", "type": "LOCAL"},
+                {"name": "Shared Root", "path": "/mnt/shared", "type": "SHARED"},
+            ]
+        });
+        let profile = StorageProfile::from_json(&json).unwrap();
+        assert_eq!(profile.storage_profile_id, "sp-abc123");
+        assert_eq!(profile.display_name, "My Profile");
+        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Linux);
+        assert_eq!(profile.file_system_locations.len(), 2);
+        assert_eq!(profile.file_system_locations[0].location_type, FileSystemLocationType::Local);
+        assert_eq!(profile.file_system_locations[1].location_type, FileSystemLocationType::Shared);
+    }
+
+    #[test]
+    fn storage_profile_from_json_no_locations() {
+        let json = serde_json::json!({
+            "storageProfileId": "sp-xyz",
+            "displayName": "Empty",
+            "osFamily": "WINDOWS",
+        });
+        let profile = StorageProfile::from_json(&json).unwrap();
+        assert!(profile.file_system_locations.is_empty());
+        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Windows);
+    }
+
+    #[test]
+    fn storage_profile_from_json_missing_required_field_returns_none() {
+        let json = serde_json::json!({
+            "displayName": "No ID",
+            "osFamily": "LINUX",
+        });
+        assert!(StorageProfile::from_json(&json).is_none());
+    }
+
+    #[test]
+    fn storage_profile_from_json_invalid_os_family_returns_none() {
+        let json = serde_json::json!({
+            "storageProfileId": "sp-abc",
+            "displayName": "Bad OS",
+            "osFamily": "INVALID",
+        });
+        assert!(StorageProfile::from_json(&json).is_none());
     }
 }

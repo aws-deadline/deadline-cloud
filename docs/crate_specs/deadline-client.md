@@ -85,6 +85,11 @@ optional `TelemetryClient` and record latency events. If `None`, an
 ephemeral client is created internally. Telemetry never affects the API
 call result.
 
+**CreateJob and creation polling:** Exposes the CreateJob API call and a
+polling function that waits for a job to exit CREATE_IN_PROGRESS. These
+are thin API wrappers — the submission orchestration that calls them
+lives in `deadline-job-bundle`.
+
 ## Design Decisions
 
 **Struct-owned state instead of module-level caches.** `SessionCache`
@@ -146,10 +151,9 @@ Implemented: session management, auth, login/logout, all list/get/search
 operations for farms/queues/fleets/jobs/workers/sessions/steps/tasks,
 queue credentials, queue parameters, job monitoring, log retrieval
 (with DCM credential scoping for queue and fleet roles),
-telemetry integration.
+telemetry integration, CreateJob API call and creation polling.
 
 Gaps:
-- `create_job_from_job_bundle` (job submission) — blocked on work item #11
 - `job trace-schedule` support APIs — experimental, deferred
 - Smithy model response filtering (would eliminate extra-field differences
   from boto3) — low priority, extra fields are harmless
