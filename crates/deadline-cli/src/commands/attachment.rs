@@ -1,5 +1,6 @@
 use clap::Subcommand;
 use deadline_config::config_file;
+use deadline_config::ini::IniConfig;
 use deadline_job_attachments::api::{attachment_download, attachment_upload};
 use deadline_job_attachments::models::FileConflictResolution;
 use deadline_job_attachments::s3;
@@ -55,7 +56,75 @@ fn parse_conflict_resolution(s: &str) -> Result<FileConflictResolution, String> 
         "SKIP" => Ok(FileConflictResolution::Skip),
         "OVERWRITE" => Ok(FileConflictResolution::Overwrite),
         "CREATE_COPY" => Ok(FileConflictResolution::CreateCopy),
-        other => Err(format!("Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY")),
+        other => Err(format!(
+            "Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY"
+        )),
+    }
+}
+
+/// Resolved S3 credentials and URI for attachment operations.
+struct S3Context {
+    sdk_config: aws_config::SdkConfig,
+    s3_root_uri: String,
+}
+
+/// Resolve S3 credentials and root URI based on whether --profile was provided.
+///
+/// When --profile is provided: use profile credentials directly, require --s3-root-uri.
+/// When --profile is absent: call get_queue() to derive S3 URI from queue settings,
+/// then call get_queue_user_config() to get queue-scoped credentials (unconditional,
+/// matching Python's get_queue_user_boto3_session pattern).
+async fn resolve_s3_context(
+    profile: &Option<String>,
+    s3_root_uri: Option<String>,
+    config: &IniConfig,
+) -> Result<S3Context, CliError> {
+    if profile.is_some() {
+        // --profile provided: use profile credentials, require explicit S3 URI
+        let uri = s3_root_uri
+            .filter(|u| !u.is_empty())
+            .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
+        let sdk_config = deadline_client::session::get_sdk_config(Some(config)).await;
+        Ok(S3Context { sdk_config, s3_root_uri: uri })
+    } else {
+        // No --profile: derive S3 URI from queue settings, use queue-scoped credentials
+        let farm_id = config_file::get_setting_with_config("defaults.farm_id", config)
+            .map_err(|e| CliError::Operation(e.to_string()))?;
+        let queue_id = config_file::get_setting_with_config("defaults.queue_id", config)
+            .map_err(|e| CliError::Operation(e.to_string()))?;
+
+        // Derive S3 root URI from queue's jobAttachmentSettings (unless explicitly provided)
+        let uri = match s3_root_uri.filter(|u| !u.is_empty()) {
+            Some(u) => u,
+            None => {
+                let queue = deadline_client::api::get_queue(&farm_id, &queue_id, Some(config), None)
+                    .await
+                    .map_err(|e| CliError::Operation(e.to_string()))?;
+                let settings = queue
+                    .get("jobAttachmentSettings")
+                    .filter(|s| s.get("s3BucketName").and_then(|b| b.as_str()).is_some_and(|b| !b.is_empty()));
+                match settings {
+                    Some(s) => {
+                        let bucket = s["s3BucketName"].as_str().unwrap();
+                        let prefix = s["rootPrefix"].as_str().unwrap_or("");
+                        format!("s3://{bucket}/{prefix}")
+                    }
+                    None => {
+                        return Err(CliError::Operation(format!(
+                            "Queue {queue_id} has no attachment settings"
+                        )));
+                    }
+                }
+            }
+        };
+
+        // Get queue-scoped credentials (unconditional — matches Python)
+        let sdk_config =
+            deadline_client::session::get_queue_user_config(Some(&farm_id), Some(&queue_id), None, false, Some(config))
+                .await
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+
+        Ok(S3Context { sdk_config, s3_root_uri: uri })
     }
 }
 
@@ -71,7 +140,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
             manifests, s3_root_uri, path_mapping_rules,
             farm_id, queue_id, profile, conflict_resolution, json,
         } => {
-            let mut config = deadline_config::config_file::read_config()
+            let mut config = config_file::read_config()
                 .map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
@@ -81,30 +150,15 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 &[],
             )?;
 
-            // Resolve S3 root URI
-            let uri = match s3_root_uri {
-                Some(u) if profile.is_some() => u,
-                _ => {
-                    // Derive from queue settings
-                    let q_id = config_file::get_setting_with_config("defaults.queue_id", &config)
-                        .map_err(|e| CliError::Operation(e.to_string()))?;
-                    let f_id = config_file::get_setting_with_config("defaults.farm_id", &config)
-                        .map_err(|e| CliError::Operation(e.to_string()))?;
-                    if q_id.is_empty() || f_id.is_empty() {
-                        return Err(CliError::Operation("No valid s3 root path available".into()));
-                    }
-                    s3_root_uri.unwrap_or_default()
-                }
-            };
-
-            if uri.is_empty() {
-                return Err(CliError::Operation("No valid s3 root path available".into()));
-            }
+            let ctx = resolve_s3_context(&profile, s3_root_uri, &config).await?;
 
             // Resolve conflict resolution
             let resolution = conflict_resolution.unwrap_or_else(|| {
-                let setting = config_file::get_setting_with_config("settings.conflict_resolution", &config)
-                    .unwrap_or_default();
+                let setting = config_file::get_setting_with_config(
+                    "settings.conflict_resolution",
+                    &config,
+                )
+                .unwrap_or_default();
                 match setting.to_uppercase().as_str() {
                     "SKIP" => FileConflictResolution::Skip,
                     "OVERWRITE" => FileConflictResolution::Overwrite,
@@ -112,21 +166,22 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 }
             });
 
-            let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                .load().await;
-            let s3_client = s3::build_s3_client(&sdk_config, Some(&config));
-            let account_id = s3::get_account_id(&sdk_config).await
+            let s3_client = s3::build_s3_client(&ctx.sdk_config, Some(&config));
+            let account_id = s3::get_account_id(&ctx.sdk_config)
+                .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
             let stats = attachment_download(
-                &manifests.iter().map(|s| s.as_str().to_string()).collect::<Vec<_>>(),
-                &uri,
+                &manifests,
+                &ctx.s3_root_uri,
                 &s3_client,
                 &account_id,
                 path_mapping_rules.as_deref(),
                 None,
                 resolution,
-            ).await.map_err(|e| CliError::Operation(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| CliError::Operation(e.to_string()))?;
 
             if json {
                 println!("{}", serde_json::to_string(&stats.stats).unwrap_or_default());
@@ -139,7 +194,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
             manifests, root_dirs, path_mapping_rules, s3_root_uri,
             upload_manifest_path, farm_id, queue_id, profile, json: _,
         } => {
-            let mut config = deadline_config::config_file::read_config()
+            let mut config = config_file::read_config()
                 .map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
@@ -149,22 +204,16 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 &[],
             )?;
 
-            let uri = match s3_root_uri {
-                Some(u) if profile.is_some() => u,
-                _ => {
-                    return Err(CliError::Operation("No valid s3 root path available".into()));
-                }
-            };
+            let ctx = resolve_s3_context(&profile, s3_root_uri, &config).await?;
 
-            let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                .load().await;
-            let s3_client = s3::build_s3_client(&sdk_config, Some(&config));
-            let account_id = s3::get_account_id(&sdk_config).await
+            let s3_client = s3::build_s3_client(&ctx.sdk_config, Some(&config));
+            let account_id = s3::get_account_id(&ctx.sdk_config)
+                .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
             let _result = attachment_upload(
                 &manifests,
-                &uri,
+                &ctx.s3_root_uri,
                 &s3_client,
                 &account_id,
                 &root_dirs,
@@ -172,7 +221,9 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 upload_manifest_path.as_deref(),
                 None,
                 Some(&config),
-            ).await.map_err(|e| CliError::Operation(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| CliError::Operation(e.to_string()))?;
 
             Ok(())
         }

@@ -13,7 +13,7 @@
 //! Worker log credential scoping (§53 cases 6-8) is tested at Level 1
 //! in `deadline-client` since `get_worker_logs` is not exposed via CLI.
 
-use deadline_test_server::deadline_api::{cloudwatch, jobs, queue_resources, sessions};
+use deadline_test_server::deadline_api::{cloudwatch, jobs, queue_resources, queues, sessions, sts};
 use deadline_test_server::TestHarness;
 use serde_json::json;
 
@@ -244,6 +244,298 @@ async fn job_logs_non_dcm_user_uses_base_credentials() {
         assume_role_requests.len(),
         0,
         "Expected 0 AssumeQueueRoleForUser calls for non-DCM user, got {}",
+        assume_role_requests.len()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §53 case 13: `attachment download` no --profile — uses queue credentials
+// AssumeQueueRoleForUser MUST be called unconditionally (not DCM-gated).
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn attachment_download_no_profile_uses_queue_credentials() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    // Mock get_queue to return jobAttachmentSettings
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data"
+            }
+        }),
+    )
+    .await;
+
+    // AssumeQueueRoleForUser — MUST be called when no --profile
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        queue_role_credentials(),
+    )
+    .await;
+
+    // STS GetCallerIdentity for get_account_id
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Write a minimal manifest file
+    let manifest_path = harness.config_dir.path().join("test.manifest");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&json!({
+            "manifestVersion": "2023-03-03",
+            "hashAlg": "xxh128",
+            "totalSize": 100,
+            "paths": [{"path": "test.txt", "hash": "abc123", "size": 100, "mtime": 1000}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Run attachment download — S3 will fail (no mock) but we verify
+    // AssumeQueueRoleForUser was called
+    let _output = harness
+        .cli(&[
+            "attachment",
+            "download",
+            "--manifests",
+            manifest_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run");
+
+    // Verify AssumeQueueRoleForUser was called
+    let assume_role_requests: Vec<_> = harness
+        .server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("user-roles"))
+        .collect();
+    assert_eq!(
+        assume_role_requests.len(),
+        1,
+        "Expected exactly 1 AssumeQueueRoleForUser call when no --profile, got {}",
+        assume_role_requests.len()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §53 case 14: `attachment download` with --profile — skips queue role
+// AssumeQueueRoleForUser MUST NOT be called when --profile is provided.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn attachment_download_with_profile_skips_queue_credentials() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    // STS GetCallerIdentity for get_account_id
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Write a minimal manifest file
+    let manifest_path = harness.config_dir.path().join("test.manifest");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&json!({
+            "manifestVersion": "2023-03-03",
+            "hashAlg": "xxh128",
+            "totalSize": 100,
+            "paths": [{"path": "test.txt", "hash": "abc123", "size": 100, "mtime": 1000}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Run with --profile and --s3-root-uri — should use profile creds directly
+    let _output = harness
+        .cli(&[
+            "attachment",
+            "download",
+            "--manifests",
+            manifest_path.to_str().unwrap(),
+            "--s3-root-uri",
+            "s3://bucket/prefix",
+            "--profile",
+            "test-profile",
+        ])
+        .output()
+        .expect("failed to run");
+
+    // Verify AssumeQueueRoleForUser was NOT called
+    let assume_role_requests: Vec<_> = harness
+        .server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("user-roles"))
+        .collect();
+    assert_eq!(
+        assume_role_requests.len(),
+        0,
+        "Expected 0 AssumeQueueRoleForUser calls with --profile, got {}",
+        assume_role_requests.len()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §53 case 15: `attachment upload` no --profile — uses queue credentials
+// AssumeQueueRoleForUser MUST be called unconditionally (not DCM-gated).
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn attachment_upload_no_profile_uses_queue_credentials() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    // Mock get_queue to return jobAttachmentSettings
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data"
+            }
+        }),
+    )
+    .await;
+
+    // AssumeQueueRoleForUser — MUST be called when no --profile
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        queue_role_credentials(),
+    )
+    .await;
+
+    // STS GetCallerIdentity for get_account_id
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Write a minimal manifest file
+    let manifest_path = harness.config_dir.path().join("test.manifest");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&json!({
+            "manifestVersion": "2023-03-03",
+            "hashAlg": "xxh128",
+            "totalSize": 100,
+            "paths": [{"path": "test.txt", "hash": "abc123", "size": 100, "mtime": 1000}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Create a root dir with a test file
+    let root_dir = harness.config_dir.path().join("upload_root");
+    std::fs::create_dir_all(&root_dir).unwrap();
+    std::fs::write(root_dir.join("test.txt"), "test content").unwrap();
+
+    // Run attachment upload — S3 will fail (no mock) but we verify
+    // AssumeQueueRoleForUser was called
+    let _output = harness
+        .cli(&[
+            "attachment",
+            "upload",
+            "--manifests",
+            manifest_path.to_str().unwrap(),
+            "--root-dirs",
+            root_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run");
+
+    // Verify AssumeQueueRoleForUser was called
+    let assume_role_requests: Vec<_> = harness
+        .server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("user-roles"))
+        .collect();
+    assert_eq!(
+        assume_role_requests.len(),
+        1,
+        "Expected exactly 1 AssumeQueueRoleForUser call when no --profile, got {}",
+        assume_role_requests.len()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §53 case 16: `attachment upload` with --profile — skips queue role
+// AssumeQueueRoleForUser MUST NOT be called when --profile is provided.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn attachment_upload_with_profile_skips_queue_credentials() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    // STS GetCallerIdentity for get_account_id
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Write a minimal manifest file
+    let manifest_path = harness.config_dir.path().join("test.manifest");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&json!({
+            "manifestVersion": "2023-03-03",
+            "hashAlg": "xxh128",
+            "totalSize": 100,
+            "paths": [{"path": "test.txt", "hash": "abc123", "size": 100, "mtime": 1000}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Create a root dir with a test file
+    let root_dir = harness.config_dir.path().join("upload_root");
+    std::fs::create_dir_all(&root_dir).unwrap();
+    std::fs::write(root_dir.join("test.txt"), "test content").unwrap();
+
+    // Run with --profile and --s3-root-uri — should use profile creds directly
+    let _output = harness
+        .cli(&[
+            "attachment",
+            "upload",
+            "--manifests",
+            manifest_path.to_str().unwrap(),
+            "--root-dirs",
+            root_dir.to_str().unwrap(),
+            "--s3-root-uri",
+            "s3://bucket/prefix",
+            "--profile",
+            "test-profile",
+        ])
+        .output()
+        .expect("failed to run");
+
+    // Verify AssumeQueueRoleForUser was NOT called
+    let assume_role_requests: Vec<_> = harness
+        .server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("user-roles"))
+        .collect();
+    assert_eq!(
+        assume_role_requests.len(),
+        0,
+        "Expected 0 AssumeQueueRoleForUser calls with --profile, got {}",
         assume_role_requests.len()
     );
 }

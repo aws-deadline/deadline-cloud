@@ -53,6 +53,10 @@ pub fn build_s3_client(
         .retry_config(aws_config::retry::RetryConfig::standard())
         .force_path_style(false);
 
+    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_S3") {
+        s3_config_builder = s3_config_builder.endpoint_url(url).force_path_style(true);
+    }
+
     if let Ok(app_name) = aws_sdk_s3::config::AppName::new(S3_USER_AGENT_EXTRA.to_string()) {
         s3_config_builder = s3_config_builder.app_name(app_name);
     }

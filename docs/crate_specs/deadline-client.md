@@ -149,9 +149,6 @@ queue credentials, queue parameters, job monitoring, log retrieval
 telemetry integration.
 
 Gaps:
-- `attachment download/upload` CLI does not use `get_queue_user_config` —
-  always uses base credentials. Python calls `get_queue_user_boto3_session`
-  unconditionally when no `--profile`. Work item #15f.
 - `create_job_from_job_bundle` (job submission) — blocked on work item #11
 - `job trace-schedule` support APIs — experimental, deferred
 - Smithy model response filtering (would eliminate extra-field differences
