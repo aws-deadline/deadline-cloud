@@ -328,7 +328,7 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
 mod tests {
     use super::*;
 
-    // === §25: HashAlgorithm ===
+    // === : HashAlgorithm ===
 
     #[test]
     fn hash_algorithm_from_str_xxh128() {
@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(HashAlgorithm::Xxh128.to_string(), "xxh128");
     }
 
-    // === §25: hash_file ===
+    // === : hash_file ===
 
     #[test]
     fn hash_file_basic() {
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(file_hash, data_hash);
     }
 
-    // === §25: hash_data ===
+    // === : hash_data ===
 
     #[test]
     fn hash_data_basic() {
@@ -412,7 +412,7 @@ mod tests {
         assert_ne!(h1, h2);
     }
 
-    // === §25: ManifestVersion ===
+    // === : ManifestVersion ===
 
     #[test]
     fn manifest_version_from_str() {
@@ -425,7 +425,7 @@ mod tests {
         assert_eq!(ManifestVersion::V2023_03_03.to_string(), "2023-03-03");
     }
 
-    // === §25: decode_manifest ===
+    // === : decode_manifest ===
 
     fn valid_manifest_json() -> String {
         serde_json::json!({
@@ -601,7 +601,7 @@ mod tests {
         assert!(err.to_string().contains("totalSize must be an integer"));
     }
 
-    // === §25: AssetManifest::encode ===
+    // === : AssetManifest::encode ===
 
     #[test]
     fn encode_manifest_canonical_json() {
@@ -711,7 +711,7 @@ mod tests {
         assert!(a_pos < e_pos, "a.txt should sort before é.txt in UTF-16 BE");
     }
 
-    // === §25: AssetManifest::new validation ===
+    // === : AssetManifest::new validation ===
 
     #[test]
     fn asset_manifest_new_unsupported_hash_alg() {
@@ -729,7 +729,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // === §25: Round-trip encode/decode ===
+    // === : Round-trip encode/decode ===
 
     #[test]
     fn manifest_encode_decode_round_trip() {

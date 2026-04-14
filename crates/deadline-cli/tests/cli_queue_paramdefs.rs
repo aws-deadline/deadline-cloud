@@ -22,7 +22,7 @@ fn env_template(name: &str, params: &[serde_json::Value]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: one environment with one parameter (§8 case 1)
+// Happy path: one environment with one parameter
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -55,7 +55,7 @@ async fn queue_paramdefs_one_env_one_param() {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: multiple environments sorted by priority (§8 case 2)
+// Happy path: multiple environments sorted by priority
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -106,7 +106,7 @@ async fn queue_paramdefs_multiple_envs_sorted_by_priority() {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: no environments returns empty list (§8 case 5)
+// Happy path: no environments returns empty list
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -123,7 +123,7 @@ async fn queue_paramdefs_no_environments_returns_empty() {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: duplicate param name with identical definition (§8 case 7)
+// Happy path: duplicate param name with identical definition
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -164,7 +164,7 @@ async fn queue_paramdefs_duplicate_identical_keeps_one() {
 }
 
 // ---------------------------------------------------------------------------
-// Error: duplicate param name with different definitions (§8 case 6)
+// Error: duplicate param name with different definitions
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -203,7 +203,7 @@ async fn queue_paramdefs_duplicate_different_errors() {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: parameter with existing groupLabel preserved (§8 case 3)
+// Happy path: parameter with existing groupLabel preserved
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -238,7 +238,7 @@ async fn queue_paramdefs_existing_group_label_preserved() {
 }
 
 // ---------------------------------------------------------------------------
-// Happy path: env template with no parameterDefinitions (§8 case 10)
+// Happy path: env template with no parameterDefinitions
 // ---------------------------------------------------------------------------
 
 #[tokio::test]

@@ -1,4 +1,4 @@
-//! §15: Job bundle — loading & parsing
+//! : Job bundle — loading & parsing
 //!
 //! Tests for file discovery (JSON vs YAML, mutual exclusion), symlink
 //! containment validation, YAML/JSON parsing, and deadline_yaml_dump.

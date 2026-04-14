@@ -1,4 +1,4 @@
-//! Level 1 tests for the public API module (§30, batch 9d).
+//! Level 1 tests for the public API module (, batch 9d).
 //!
 //! Tests for `read_manifests`, `process_path_mapping`,
 //! `attachment_download`, and `attachment_upload`.
@@ -68,10 +68,10 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
 }
 
 // =====================================================================
-// §30 cases 32-36: read_manifests
+//  cases 32-36: read_manifests
 // =====================================================================
 
-// §30 case 32: Two valid manifest file paths → map keyed by base filename
+// Two valid manifest file paths → map keyed by base filename
 #[test]
 fn read_manifests_two_valid_files_returns_map() {
     let dir = TempDir::new().unwrap();
@@ -92,7 +92,7 @@ fn read_manifests_two_valid_files_returns_map() {
     assert!(result.contains_key("manifest_b.manifest"));
 }
 
-// §30 case 33: One path does not exist → error listing invalid paths
+// One path does not exist → error listing invalid paths
 #[test]
 fn read_manifests_one_invalid_path_errors() {
     let dir = TempDir::new().unwrap();
@@ -109,7 +109,7 @@ fn read_manifests_one_invalid_path_errors() {
     assert!(msg.contains("nonexistent.manifest"), "expected bad path in: {msg}");
 }
 
-// §30 case 34: All paths invalid → error listing all
+// All paths invalid → error listing all
 #[test]
 fn read_manifests_all_invalid_paths_errors() {
     let bad1 = "/tmp/no_such_1.manifest".to_string();
@@ -121,14 +121,14 @@ fn read_manifests_all_invalid_paths_errors() {
     assert!(msg.contains("no_such_2"), "expected second path in: {msg}");
 }
 
-// §30 case 35: Empty list → empty map
+// Empty list → empty map
 #[test]
 fn read_manifests_empty_list_returns_empty() {
     let result = read_manifests(&[]).unwrap();
     assert!(result.is_empty());
 }
 
-// §30 case 36: File exists but invalid content → decode error
+// File exists but invalid content → decode error
 #[test]
 fn read_manifests_invalid_content_errors() {
     let dir = TempDir::new().unwrap();
@@ -145,10 +145,10 @@ fn read_manifests_invalid_content_errors() {
 }
 
 // =====================================================================
-// §30 cases 25-31: process_path_mapping
+//  cases 25-31: process_path_mapping
 // =====================================================================
 
-// §30 case 25: Valid JSON file with top-level list
+// Valid JSON file with top-level list
 #[test]
 fn process_path_mapping_top_level_list() {
     let dir = TempDir::new().unwrap();
@@ -164,7 +164,7 @@ fn process_path_mapping_top_level_list() {
     assert_eq!(result[0].destination_path, "/dst");
 }
 
-// §30 case 26: Valid JSON with nested path_mapping_rules key
+// Valid JSON with nested path_mapping_rules key
 #[test]
 fn process_path_mapping_nested_key() {
     let dir = TempDir::new().unwrap();
@@ -181,7 +181,7 @@ fn process_path_mapping_nested_key() {
     assert_eq!(result[0].source_path, "C:\\src");
 }
 
-// §30 case 27: Path mapping file does not exist → error
+// Path mapping file does not exist → error
 #[test]
 fn process_path_mapping_file_not_found_errors() {
     let err = process_path_mapping(Some("/nonexistent/rules.json"), &[]).unwrap_err();
@@ -189,7 +189,7 @@ fn process_path_mapping_file_not_found_errors() {
     assert!(msg.contains("not valid"), "expected 'not valid' in: {msg}");
 }
 
-// §30 case 28: root_dirs with two valid directories
+// root_dirs with two valid directories
 #[test]
 fn process_path_mapping_root_dirs() {
     let dir1 = TempDir::new().unwrap();
@@ -211,7 +211,7 @@ fn process_path_mapping_root_dirs() {
     assert!(result[0].source_path_format.is_empty());
 }
 
-// §30 case 29: One root_dir does not exist → error
+// One root_dir does not exist → error
 #[test]
 fn process_path_mapping_invalid_root_dir_errors() {
     let dir = TempDir::new().unwrap();
@@ -227,14 +227,14 @@ fn process_path_mapping_invalid_root_dir_errors() {
     assert!(msg.contains("not valid"), "expected 'not valid' in: {msg}");
 }
 
-// §30 case 30: Neither provided → empty list
+// Neither provided → empty list
 #[test]
 fn process_path_mapping_neither_returns_empty() {
     let result = process_path_mapping(None, &[]).unwrap();
     assert!(result.is_empty());
 }
 
-// §30 case 31: Both provided → concatenated
+// Both provided → concatenated
 #[test]
 fn process_path_mapping_both_concatenated() {
     let dir = TempDir::new().unwrap();
@@ -257,10 +257,10 @@ fn process_path_mapping_both_concatenated() {
 }
 
 // =====================================================================
-// §30 cases 1-10: attachment_download
+//  cases 1-10: attachment_download
 // =====================================================================
 
-// §30 case 1: Two manifests with matching path mapping rules
+// Two manifests with matching path mapping rules
 #[tokio::test]
 async fn attachment_download_with_path_mapping_rules() {
     let dir = TempDir::new().unwrap();
@@ -328,7 +328,7 @@ async fn attachment_download_with_path_mapping_rules() {
     assert!(result.stats.processed_files > 0 || result.stats.total_files > 0);
 }
 
-// §30 case 2: Manifest with no matching rule → downloads to cwd/filename
+// Manifest with no matching rule → downloads to cwd/filename
 #[tokio::test]
 async fn attachment_download_no_matching_rule_uses_cwd() {
     let dir = TempDir::new().unwrap();
@@ -365,7 +365,7 @@ async fn attachment_download_no_matching_rule_uses_cwd() {
     assert_eq!(result.stats.total_files, 1);
 }
 
-// §30 case 3: No path mapping rules → all to cwd
+// No path mapping rules → all to cwd
 #[tokio::test]
 async fn attachment_download_no_rules_downloads_to_cwd() {
     let dir = TempDir::new().unwrap();
@@ -401,7 +401,7 @@ async fn attachment_download_no_rules_downloads_to_cwd() {
     assert_eq!(result.stats.total_files, 1);
 }
 
-// §30 case 4: Manifest file path does not exist → error
+// Manifest file path does not exist → error
 #[tokio::test]
 async fn attachment_download_invalid_manifest_path_errors() {
     let server = MockServer::start().await;
@@ -422,7 +422,7 @@ async fn attachment_download_invalid_manifest_path_errors() {
     assert!(err.to_string().contains("not valid"));
 }
 
-// §30 case 5: Two manifests resolve to same destination → error
+// Two manifests resolve to same destination → error
 #[tokio::test]
 async fn attachment_download_duplicate_destination_errors() {
     let dir = TempDir::new().unwrap();
@@ -471,7 +471,7 @@ async fn attachment_download_duplicate_destination_errors() {
     assert!(msg.contains("already in use"), "expected 'already in use' in: {msg}");
 }
 
-// §30 case 7: Malformed S3 root URI → error
+// Malformed S3 root URI → error
 #[tokio::test]
 async fn attachment_download_malformed_s3_uri_errors() {
     let dir = TempDir::new().unwrap();
@@ -503,7 +503,7 @@ async fn attachment_download_malformed_s3_uri_errors() {
     );
 }
 
-// §30 case 9: Empty manifests list → empty summary
+// Empty manifests list → empty summary
 #[tokio::test]
 async fn attachment_download_empty_manifests_returns_empty() {
     let server = MockServer::start().await;
@@ -526,10 +526,10 @@ async fn attachment_download_empty_manifests_returns_empty() {
 }
 
 // =====================================================================
-// §30 cases 11-24: attachment_upload
+//  cases 11-24: attachment_upload
 // =====================================================================
 
-// §30 case 11: Manifests with root_dirs provided
+// Manifests with root_dirs provided
 #[tokio::test]
 async fn attachment_upload_with_root_dirs() {
     let dir = TempDir::new().unwrap();
@@ -582,7 +582,7 @@ async fn attachment_upload_with_root_dirs() {
     assert!(result[0].source_path.is_some());
 }
 
-// §30 case 13: Both path_mapping_rules and root_dirs → error
+// Both path_mapping_rules and root_dirs → error
 #[tokio::test]
 async fn attachment_upload_both_rules_and_dirs_errors() {
     let dir = TempDir::new().unwrap();
@@ -619,7 +619,7 @@ async fn attachment_upload_both_rules_and_dirs_errors() {
     );
 }
 
-// §30 case 14: Neither path_mapping_rules nor root_dirs → error
+// Neither path_mapping_rules nor root_dirs → error
 #[tokio::test]
 async fn attachment_upload_neither_rules_nor_dirs_errors() {
     let dir = TempDir::new().unwrap();
@@ -653,7 +653,7 @@ async fn attachment_upload_neither_rules_nor_dirs_errors() {
     );
 }
 
-// §30 case 15: Manifest filename doesn't match any rule → error
+// Manifest filename doesn't match any rule → error
 #[tokio::test]
 async fn attachment_upload_no_matching_rule_errors() {
     let dir = TempDir::new().unwrap();
@@ -690,7 +690,7 @@ async fn attachment_upload_no_matching_rule_errors() {
     );
 }
 
-// §30 case 16: Manifest file path does not exist → error
+// Manifest file path does not exist → error
 #[tokio::test]
 async fn attachment_upload_invalid_manifest_path_errors() {
     let server = MockServer::start().await;
@@ -713,7 +713,7 @@ async fn attachment_upload_invalid_manifest_path_errors() {
     assert!(err.to_string().contains("not valid"));
 }
 
-// §30 case 23: Malformed S3 root URI → error
+// Malformed S3 root URI → error
 #[tokio::test]
 async fn attachment_upload_malformed_s3_uri_errors() {
     let dir = TempDir::new().unwrap();
@@ -752,7 +752,7 @@ async fn attachment_upload_malformed_s3_uri_errors() {
     );
 }
 
-// §30 case 24: Root directory does not exist → error
+// Root directory does not exist → error
 #[tokio::test]
 async fn attachment_upload_invalid_root_dir_errors() {
     let dir = TempDir::new().unwrap();
@@ -783,10 +783,10 @@ async fn attachment_upload_invalid_root_dir_errors() {
 }
 
 // =====================================================================
-// Missing §30 cases — added in Step 6 audit
+// Missing  cases — added in Step 6 audit
 // =====================================================================
 
-// §30 case 6: S3 root URI parsed into bucket and CAS prefix
+// S3 root URI parsed into bucket and CAS prefix
 #[tokio::test]
 async fn attachment_download_parses_s3_uri_into_bucket_and_prefix() {
     let dir = TempDir::new().unwrap();
@@ -835,7 +835,7 @@ async fn attachment_download_parses_s3_uri_into_bucket_and_prefix() {
     assert_eq!(result.stats.total_files, 1);
 }
 
-// §30 case 8: conflict_resolution=CREATE_COPY passed through
+// conflict_resolution=CREATE_COPY passed through
 #[tokio::test]
 async fn attachment_download_conflict_resolution_create_copy() {
     let dir = TempDir::new().unwrap();
@@ -889,7 +889,7 @@ async fn attachment_download_conflict_resolution_create_copy() {
     assert_eq!(result.stats.processed_files, 1);
 }
 
-// §30 case 10: Hash match in filename selects correct destination
+// Hash match in filename selects correct destination
 #[tokio::test]
 async fn attachment_download_hash_match_selects_correct_destination() {
     let dir = TempDir::new().unwrap();
@@ -958,7 +958,7 @@ async fn attachment_download_hash_match_selects_correct_destination() {
     assert!(dest_b.path().join("file_b.txt").exists());
 }
 
-// §30 case 12: Upload with path_mapping_rules file (no root_dirs)
+// Upload with path_mapping_rules file (no root_dirs)
 #[tokio::test]
 async fn attachment_upload_with_path_mapping_rules_file() {
     let dir = TempDir::new().unwrap();
@@ -1016,7 +1016,7 @@ async fn attachment_upload_with_path_mapping_rules_file() {
     assert_eq!(result[0].source_path.as_deref(), Some(source.path().to_str().unwrap()));
 }
 
-// §30 case 17: ASCII source path → asset-root metadata
+// ASCII source path → asset-root metadata
 #[tokio::test]
 async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
     let dir = TempDir::new().unwrap();
@@ -1069,7 +1069,7 @@ async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
     drop(put_mock); // verify expectations
 }
 
-// §30 case 20: upload_manifest_path provided → manifest uploaded
+// upload_manifest_path provided → manifest uploaded
 #[tokio::test]
 async fn attachment_upload_with_manifest_path_uploads_manifest() {
     let dir = TempDir::new().unwrap();
@@ -1122,7 +1122,7 @@ async fn attachment_upload_with_manifest_path_uploads_manifest() {
     );
 }
 
-// §30 case 21: upload_manifest_path not provided → manifest not uploaded
+// upload_manifest_path not provided → manifest not uploaded
 #[tokio::test]
 async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
     let dir = TempDir::new().unwrap();
@@ -1171,7 +1171,7 @@ async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
     assert_eq!(result[0].output_manifest_path, manifest_name);
 }
 
-// §30 case 22: Multiple manifests → returns in same order as input
+// Multiple manifests → returns in same order as input
 #[tokio::test]
 async fn attachment_upload_multiple_manifests_preserves_order() {
     let dir = TempDir::new().unwrap();

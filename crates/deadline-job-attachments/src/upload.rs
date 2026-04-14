@@ -1114,7 +1114,7 @@ mod tests {
         path
     }
 
-    // === §20 case 1: Happy path — input files, output dirs, referenced paths ===
+    // === Happy path — input files, output dirs, referenced paths ===
 
     #[test]
     fn prepare_paths_groups_inputs_outputs_references() {
@@ -1138,7 +1138,7 @@ mod tests {
         assert!(!result.asset_groups.is_empty());
     }
 
-    // === §20 case 2: Input path relative to SHARED location is excluded ===
+    // === Input path relative to SHARED location is excluded ===
 
     #[test]
     fn prepare_paths_shared_location_input_excluded() {
@@ -1170,7 +1170,7 @@ mod tests {
         assert_eq!(result.total_input_files, 0);
     }
 
-    // === §20 case 3: Input path relative to LOCAL location grouped under that root ===
+    // === Input path relative to LOCAL location grouped under that root ===
 
     #[test]
     fn prepare_paths_local_location_groups_under_root() {
@@ -1206,7 +1206,7 @@ mod tests {
         );
     }
 
-    // === §20 case 4: Multiple input files share common parent ===
+    // === Multiple input files share common parent ===
 
     #[test]
     fn prepare_paths_common_parent_grouped_together() {
@@ -1231,7 +1231,7 @@ mod tests {
         );
     }
 
-    // === §20 case 6: Non-existent input with require_paths_exist=true errors ===
+    // === Non-existent input with require_paths_exist=true errors ===
 
     #[test]
     fn prepare_paths_missing_input_require_exist_errors() {
@@ -1250,7 +1250,7 @@ mod tests {
         );
     }
 
-    // === §20 case 7: Non-existent input with require_paths_exist=false moves to referenced ===
+    // === Non-existent input with require_paths_exist=false moves to referenced ===
 
     #[test]
     fn prepare_paths_missing_input_no_require_moves_to_referenced() {
@@ -1273,7 +1273,7 @@ mod tests {
         assert_eq!(result.total_input_files, 1);
     }
 
-    // === §20 case 8: Directory classified as input file errors ===
+    // === Directory classified as input file errors ===
 
     #[test]
     fn prepare_paths_directory_as_input_file_errors() {
@@ -1296,7 +1296,7 @@ mod tests {
         );
     }
 
-    // === §20 case 9: Empty inputs/outputs/references returns empty group ===
+    // === Empty inputs/outputs/references returns empty group ===
 
     #[test]
     fn prepare_paths_all_empty_returns_empty() {
@@ -1306,7 +1306,7 @@ mod tests {
         assert_eq!(result.total_input_bytes, 0);
     }
 
-    // === §20 case 10: Empty strings in input paths are filtered out ===
+    // === Empty strings in input paths are filtered out ===
 
     #[test]
     fn prepare_paths_empty_strings_filtered() {
@@ -1322,7 +1322,7 @@ mod tests {
         assert_eq!(result.total_input_files, 0);
     }
 
-    // === §20 case 11: Output path relative to SHARED location excluded ===
+    // === Output path relative to SHARED location excluded ===
 
     #[test]
     fn prepare_paths_shared_location_output_excluded() {
@@ -1353,7 +1353,7 @@ mod tests {
         assert!(result.asset_groups.is_empty());
     }
 
-    // === §20 case 12: Referenced path relative to SHARED location excluded ===
+    // === Referenced path relative to SHARED location excluded ===
 
     #[test]
     fn prepare_paths_shared_location_reference_excluded() {
@@ -1385,7 +1385,7 @@ mod tests {
         assert!(result.asset_groups.is_empty());
     }
 
-    // === §20 case 13: hash_assets_and_create_manifest single group with inputs ===
+    // === hash_assets_and_create_manifest single group with inputs ===
 
     #[test]
     fn hash_assets_creates_manifest_for_single_group() {
@@ -1416,7 +1416,7 @@ mod tests {
         assert_eq!(stats.processed_files + stats.skipped_files, 2);
     }
 
-    // === §20 case 14: Group with outputs but no inputs has None manifest ===
+    // === Group with outputs but no inputs has None manifest ===
 
     #[test]
     fn hash_assets_output_only_group_has_no_manifest() {
@@ -1446,7 +1446,7 @@ mod tests {
         assert!(manifests[0].asset_manifest.is_none());
     }
 
-    // === §20 case 15: Multiple groups produce multiple manifests ===
+    // === Multiple groups produce multiple manifests ===
 
     #[test]
     fn hash_assets_multiple_groups_multiple_manifests() {
@@ -1487,7 +1487,7 @@ mod tests {
         assert!(manifests[1].asset_manifest.is_some());
     }
 
-    // === §20 case 16: New file (not in cache) is hashed and cached ===
+    // === New file (not in cache) is hashed and cached ===
 
     #[test]
     fn hash_assets_new_file_hashed_and_cached() {
@@ -1516,7 +1516,7 @@ mod tests {
         assert_eq!(stats.skipped_files, 0);
     }
 
-    // === §20 case 17: Cached unmodified file uses cached hash (skipped) ===
+    // === Cached unmodified file uses cached hash (skipped) ===
 
     #[test]
     fn hash_assets_cached_unmodified_file_skipped() {
@@ -1563,7 +1563,7 @@ mod tests {
         assert_eq!(stats2.processed_files, 0);
     }
 
-    // === §20 case 18: Cached file with different mtime is re-hashed ===
+    // === Cached file with different mtime is re-hashed ===
 
     #[test]
     fn hash_assets_modified_file_rehashed() {
@@ -1613,7 +1613,7 @@ mod tests {
         assert_eq!(stats2.skipped_files, 0);
     }
 
-    // === §20 case 19: Callback returns false cancels with error ===
+    // === Callback returns false cancels with error ===
 
     #[test]
     fn hash_assets_callback_cancel_returns_error() {
@@ -1641,7 +1641,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // === §20 case 20: Progress tracker reports progress for each file ===
+    // === Progress tracker reports progress for each file ===
 
     #[test]
     fn hash_assets_reports_progress() {
@@ -1677,7 +1677,7 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === §20 case 21: Manifest paths are POSIX-style relative paths ===
+    // === Manifest paths are POSIX-style relative paths ===
 
     #[test]
     fn hash_assets_manifest_paths_are_posix_relative() {
@@ -1714,7 +1714,7 @@ mod tests {
         );
     }
 
-    // === §20 case 22: File mtime stored as microseconds (integer) ===
+    // === File mtime stored as microseconds (integer) ===
 
     #[test]
     fn hash_assets_mtime_is_microseconds_integer() {
@@ -1747,7 +1747,7 @@ mod tests {
         );
     }
 
-    // === §20 case 24: Empty file list returns None manifest ===
+    // === Empty file list returns None manifest ===
 
     #[test]
     fn hash_assets_empty_inputs_returns_none_manifest() {

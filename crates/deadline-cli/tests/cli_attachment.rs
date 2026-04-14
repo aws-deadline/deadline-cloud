@@ -1,10 +1,10 @@
-//! Level 2 tests for `deadline attachment` subcommands (§46, batch 9e-3).
+//! Level 2 tests for `deadline attachment` subcommands.
 
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
 
 // =====================================================================
-// §46 case 4: attachment download — no S3 root URI
+// attachment download — no S3 root URI
 // =====================================================================
 
 #[tokio::test]
@@ -18,7 +18,7 @@ async fn attachment_download_no_s3_uri_exits_with_error() {
 }
 
 // =====================================================================
-// §46 case 15: attachment upload — missing required args
+// attachment upload — missing required args
 // =====================================================================
 
 #[tokio::test]

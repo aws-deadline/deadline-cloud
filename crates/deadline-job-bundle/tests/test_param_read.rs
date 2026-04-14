@@ -1,4 +1,4 @@
-//! §16: Job bundle — parameters: read_job_bundle_parameters (cases 66-80)
+//! : Job bundle — parameters: read_job_bundle_parameters (cases 66-80)
 
 use deadline_job_bundle::parameters::read_job_bundle_parameters;
 use std::fs;
@@ -25,7 +25,7 @@ fn make_bundle(
     dir
 }
 
-// §16.66: Valid template with parameters and parameter_values
+// .66: Valid template with parameters and parameter_values
 #[test]
 fn read_params_valid_template_with_values() {
     let template = serde_json::json!({
@@ -44,7 +44,7 @@ fn read_params_valid_template_with_values() {
     assert_eq!(params[0]["value"], "10");
 }
 
-// §16.67: Template is not a dict
+// .67: Template is not a dict
 #[test]
 fn read_params_template_not_dict_returns_error() {
     let dir = TempDir::new().unwrap();
@@ -56,7 +56,7 @@ fn read_params_template_not_dict_returns_error() {
     );
 }
 
-// §16.68: Template missing specificationVersion
+// .68: Template missing specificationVersion
 #[test]
 fn read_params_missing_spec_version_returns_error() {
     let template = serde_json::json!({"name": "Test"});
@@ -68,7 +68,7 @@ fn read_params_missing_spec_version_returns_error() {
     );
 }
 
-// §16.69: Unsupported specificationVersion
+// .69: Unsupported specificationVersion
 #[test]
 fn read_params_unsupported_spec_version_returns_error() {
     let template = serde_json::json!({
@@ -82,7 +82,7 @@ fn read_params_unsupported_spec_version_returns_error() {
     );
 }
 
-// §16.70: parameterDefinitions is not a list
+// .70: parameterDefinitions is not a list
 #[test]
 fn read_params_param_defs_not_list_returns_error() {
     let template = serde_json::json!({
@@ -97,7 +97,7 @@ fn read_params_param_defs_not_list_returns_error() {
     );
 }
 
-// §16.71: Template has no parameterDefinitions
+// .71: Template has no parameterDefinitions
 #[test]
 fn read_params_no_param_defs_returns_empty() {
     let template = serde_json::json!({
@@ -108,7 +108,7 @@ fn read_params_no_param_defs_returns_empty() {
     assert!(params.is_empty());
 }
 
-// §16.72: Parameter value for name not in template (kept as-is)
+// .72: Parameter value for name not in template (kept as-is)
 #[test]
 fn read_params_extra_param_value_kept() {
     let template = serde_json::json!({
@@ -130,7 +130,7 @@ fn read_params_extra_param_value_kept() {
     assert!(params.iter().any(|p| p["name"] == "deadline:priority"));
 }
 
-// §16.73: PATH parameter with relative default and no value → absolute
+// .73: PATH parameter with relative default and no value → absolute
 #[test]
 fn read_params_path_relative_default_made_absolute() {
     let dir = TempDir::new().unwrap();
@@ -155,7 +155,7 @@ fn read_params_path_relative_default_made_absolute() {
     );
 }
 
-// §16.74: PATH parameter with absolute default path → error
+// .74: PATH parameter with absolute default path → error
 #[test]
 fn read_params_path_absolute_default_returns_error() {
     let template = serde_json::json!({
@@ -172,7 +172,7 @@ fn read_params_path_absolute_default_returns_error() {
     );
 }
 
-// §16.75: PATH parameter with relative default resolving outside bundle → error
+// .75: PATH parameter with relative default resolving outside bundle → error
 #[test]
 fn read_params_path_default_outside_bundle_returns_error() {
     let template = serde_json::json!({
@@ -189,7 +189,7 @@ fn read_params_path_default_outside_bundle_returns_error() {
     );
 }
 
-// §16.76: PATH parameter with allowedValues and relative default → NOT made absolute
+// .76: PATH parameter with allowedValues and relative default → NOT made absolute
 #[test]
 fn read_params_path_with_allowed_values_default_not_resolved() {
     let template = serde_json::json!({
@@ -217,7 +217,7 @@ fn read_params_path_with_allowed_values_default_not_resolved() {
     }
 }
 
-// §16.77: HIDDEN parameter with no value and no default → error
+// .77: HIDDEN parameter with no value and no default → error
 #[test]
 fn read_params_hidden_no_value_no_default_returns_error() {
     let template = serde_json::json!({
@@ -238,7 +238,7 @@ fn read_params_hidden_no_value_no_default_returns_error() {
     );
 }
 
-// §16.78: Multiple HIDDEN parameters missing values → error lists all names
+// .78: Multiple HIDDEN parameters missing values → error lists all names
 #[test]
 fn read_params_multiple_hidden_missing_lists_all() {
     let template = serde_json::json!({
@@ -255,7 +255,7 @@ fn read_params_multiple_hidden_missing_lists_all() {
     assert!(msg.contains("Secret2"), "Expected 'Secret2' in error, got: {msg}");
 }
 
-// §16.79: HIDDEN parameter with a default value → no error
+// .79: HIDDEN parameter with a default value → no error
 #[test]
 fn read_params_hidden_with_default_succeeds() {
     let template = serde_json::json!({
@@ -274,7 +274,7 @@ fn read_params_hidden_with_default_succeeds() {
     assert!(result.is_ok());
 }
 
-// §16.80: No parameter_values file exists
+// .80: No parameter_values file exists
 #[test]
 fn read_params_no_param_values_file_uses_defaults() {
     let template = serde_json::json!({

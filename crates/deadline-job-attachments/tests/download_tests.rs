@@ -1,4 +1,4 @@
-//! Level 1 tests for the download engine (§22, batch 9c).
+//! Level 1 tests for the download engine (, batch 9c).
 //!
 //! These tests use wiremock to stub S3 API responses and real temp
 //! directories for file I/O. No mocking libraries.
@@ -98,7 +98,7 @@ async fn mock_s3_get_object(server: &MockServer, body: &[u8]) {
 }
 
 // =====================================================================
-// §22 cases 19-24: merge_asset_manifests
+//  cases 19-24: merge_asset_manifests
 // =====================================================================
 
 #[test]
@@ -193,7 +193,7 @@ fn merge_recalculates_total_size_after_dedup() {
 }
 
 // =====================================================================
-// §22 cases 8-18: download_file
+//  cases 8-18: download_file
 // =====================================================================
 
 #[tokio::test]
@@ -561,7 +561,7 @@ async fn download_file_create_copy_generates_unique_name() {
 }
 
 // =====================================================================
-// §22 cases 1-7: download_files_from_manifests
+//  cases 1-7: download_files_from_manifests
 // =====================================================================
 
 #[tokio::test]
@@ -704,7 +704,7 @@ async fn download_files_from_manifests_skip_existing_tracks_skipped() {
 }
 
 // =====================================================================
-// §22 cases 25-30: get_output_manifests_by_asset_root
+//  cases 25-30: get_output_manifests_by_asset_root
 // =====================================================================
 
 #[tokio::test]

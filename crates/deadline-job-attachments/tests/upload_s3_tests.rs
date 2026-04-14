@@ -1,4 +1,4 @@
-//! Level 1 tests for the S3 upload engine (§21, batch 9b).
+//! Level 1 tests for the S3 upload engine (, batch 9b).
 //!
 //! These tests use wiremock to stub S3 API responses and real temp
 //! directories for file I/O. No mocking libraries.
@@ -95,7 +95,7 @@ async fn mock_s3_put_object_success(server: &MockServer) {
 }
 
 // =====================================================================
-// §21 case 1: upload_assets — happy path with input files
+// upload_assets — happy path with input files
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_returns_stats_and_attachments_with_manifest_paths() {
@@ -153,7 +153,7 @@ async fn upload_assets_returns_stats_and_attachments_with_manifest_paths() {
 }
 
 // =====================================================================
-// §21 case 2: upload_assets — manifest with no input files (output only)
+// upload_assets — manifest with no input files (output only)
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_output_only_manifest_has_no_input_path() {
@@ -190,7 +190,7 @@ async fn upload_assets_output_only_manifest_has_no_input_path() {
 }
 
 // =====================================================================
-// §21 case 3: upload_assets — missing farm_id errors
+// upload_assets — missing farm_id errors
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_missing_farm_id_errors() {
@@ -216,7 +216,7 @@ async fn upload_assets_missing_farm_id_errors() {
 }
 
 // =====================================================================
-// §21 case 4: upload_assets — callback cancellation mid-upload
+// upload_assets — callback cancellation mid-upload
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_callback_cancel_returns_error() {
@@ -256,7 +256,7 @@ async fn upload_assets_callback_cancel_returns_error() {
 }
 
 // =====================================================================
-// §21 case 5: upload_assets — multiple manifests with different roots
+// upload_assets — multiple manifests with different roots
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_multiple_manifests_each_gets_properties() {
@@ -315,7 +315,7 @@ async fn upload_assets_multiple_manifests_each_gets_properties() {
 }
 
 // =====================================================================
-// §21 case 6: upload_assets — force_s3_check=true bypasses cache
+// upload_assets — force_s3_check=true bypasses cache
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_force_s3_check_bypasses_cache() {
@@ -355,7 +355,7 @@ async fn upload_assets_force_s3_check_bypasses_cache() {
 }
 
 // =====================================================================
-// §21 case 7: upload_assets — force_s3_check=false uses cache
+// upload_assets — force_s3_check=false uses cache
 // =====================================================================
 #[tokio::test]
 async fn upload_assets_default_uses_s3_check_cache() {
@@ -394,7 +394,7 @@ async fn upload_assets_default_uses_s3_check_cache() {
 }
 
 // =====================================================================
-// §21 case 8: snapshot_assets — copies files to local directory
+// snapshot_assets — copies files to local directory
 // =====================================================================
 #[tokio::test]
 async fn snapshot_assets_copies_files_to_local_dir() {
@@ -428,7 +428,7 @@ async fn snapshot_assets_copies_files_to_local_dir() {
 }
 
 // =====================================================================
-// §21 case 9: snapshot_assets — missing farm_id errors
+// snapshot_assets — missing farm_id errors
 // =====================================================================
 #[tokio::test]
 async fn snapshot_assets_missing_farm_id_errors() {
@@ -449,7 +449,7 @@ async fn snapshot_assets_missing_farm_id_errors() {
 }
 
 // =====================================================================
-// §21 case 10: snapshot_assets — callback cancel
+// snapshot_assets — callback cancel
 // =====================================================================
 #[tokio::test]
 async fn snapshot_assets_callback_cancel_returns_error() {
@@ -480,7 +480,7 @@ async fn snapshot_assets_callback_cancel_returns_error() {
 }
 
 // =====================================================================
-// §21 case 11: upload_input_files — small files uploaded in parallel
+// upload_input_files — small files uploaded in parallel
 // =====================================================================
 #[tokio::test]
 async fn upload_input_files_small_files_uploaded() {
@@ -518,7 +518,7 @@ async fn upload_input_files_small_files_uploaded() {
 }
 
 // =====================================================================
-// §21 case 14: upload_input_files — file already in S3 is skipped
+// upload_input_files — file already in S3 is skipped
 // =====================================================================
 #[tokio::test]
 async fn upload_input_files_existing_file_skipped() {
@@ -555,7 +555,7 @@ async fn upload_input_files_existing_file_skipped() {
 }
 
 // =====================================================================
-// §21 case 15: upload_input_files — file in S3 check cache is skipped
+// upload_input_files — file in S3 check cache is skipped
 // =====================================================================
 #[tokio::test]
 async fn upload_input_files_cached_file_skipped_without_s3_call() {
@@ -605,7 +605,7 @@ async fn upload_input_files_cached_file_skipped_without_s3_call() {
 }
 
 // =====================================================================
-// §21 case 16: upload_input_files — cancellation after batch
+// upload_input_files — cancellation after batch
 // =====================================================================
 #[tokio::test]
 async fn upload_input_files_cancel_after_batch_returns_error() {
@@ -642,7 +642,7 @@ async fn upload_input_files_cancel_after_batch_returns_error() {
 }
 
 // =====================================================================
-// §21 case 17: upload_file_to_s3 — valid file uploads
+// upload_file_to_s3 — valid file uploads
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_valid_file_succeeds() {
@@ -671,7 +671,7 @@ async fn upload_file_to_s3_valid_file_succeeds() {
 }
 
 // =====================================================================
-// §21 case 18: upload_file_to_s3 — directory is silently skipped
+// upload_file_to_s3 — directory is silently skipped
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_directory_silently_skipped() {
@@ -690,7 +690,7 @@ async fn upload_file_to_s3_directory_silently_skipped() {
 }
 
 // =====================================================================
-// §21 case 19: upload_file_to_s3 — non-existent path silently skipped
+// upload_file_to_s3 — non-existent path silently skipped
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_nonexistent_silently_skipped() {
@@ -709,7 +709,7 @@ async fn upload_file_to_s3_nonexistent_silently_skipped() {
 }
 
 // =====================================================================
-// §21 case 20: upload_file_to_s3 — S3 403 non-KMS error
+// upload_file_to_s3 — S3 403 non-KMS error
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_403_non_kms_returns_s3_client_error() {
@@ -744,7 +744,7 @@ async fn upload_file_to_s3_403_non_kms_returns_s3_client_error() {
 }
 
 // =====================================================================
-// §21 case 21: upload_file_to_s3 — S3 403 KMS error
+// upload_file_to_s3 — S3 403 KMS error
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_403_kms_returns_kms_guidance() {
@@ -779,7 +779,7 @@ async fn upload_file_to_s3_403_kms_returns_kms_guidance() {
 }
 
 // =====================================================================
-// §21 case 22: upload_file_to_s3 — S3 404 error
+// upload_file_to_s3 — S3 404 error
 // =====================================================================
 #[tokio::test]
 async fn upload_file_to_s3_404_returns_bucket_guidance() {
@@ -814,7 +814,7 @@ async fn upload_file_to_s3_404_returns_bucket_guidance() {
 }
 
 // =====================================================================
-// §21 case 25: file_already_uploaded — object exists returns true
+// file_already_uploaded — object exists returns true
 // =====================================================================
 #[tokio::test]
 async fn file_already_uploaded_exists_returns_true() {
@@ -830,7 +830,7 @@ async fn file_already_uploaded_exists_returns_true() {
 }
 
 // =====================================================================
-// §21 case 26: file_already_uploaded — 404 returns false
+// file_already_uploaded — 404 returns false
 // =====================================================================
 #[tokio::test]
 async fn file_already_uploaded_404_returns_false() {
@@ -846,7 +846,7 @@ async fn file_already_uploaded_404_returns_false() {
 }
 
 // =====================================================================
-// §21 case 27: file_already_uploaded — 403 returns error
+// file_already_uploaded — 403 returns error
 // =====================================================================
 #[tokio::test]
 async fn file_already_uploaded_403_returns_error() {
@@ -866,7 +866,7 @@ async fn file_already_uploaded_403_returns_error() {
 }
 
 // =====================================================================
-// §21 case 28: file_already_uploaded — transport error
+// file_already_uploaded — transport error
 // =====================================================================
 #[tokio::test]
 async fn file_already_uploaded_transport_error() {

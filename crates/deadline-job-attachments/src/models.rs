@@ -485,7 +485,7 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // === §19: JobAttachmentS3Settings ===
+    // === : JobAttachmentS3Settings ===
 
     #[test]
     fn s3_settings_from_root_path_simple() {
@@ -639,7 +639,7 @@ mod tests {
         );
     }
 
-    // === §19: ManifestProperties ===
+    // === : ManifestProperties ===
 
     #[test]
     fn manifest_properties_to_json_all_fields() {
@@ -728,7 +728,7 @@ mod tests {
         assert_eq!(metadata["file-system-location-name"], "my-location");
     }
 
-    // === §19: StorageProfileOperatingSystemFamily ===
+    // === : StorageProfileOperatingSystemFamily ===
 
     #[test_case("windows", StorageProfileOperatingSystemFamily::Windows ; "lowercase windows")]
     #[test_case("WINDOWS", StorageProfileOperatingSystemFamily::Windows ; "uppercase windows")]
@@ -750,7 +750,7 @@ mod tests {
         assert_eq!(host, StorageProfileOperatingSystemFamily::Windows);
     }
 
-    // === §19: PathFormat ===
+    // === : PathFormat ===
 
     #[test]
     fn path_format_host() {
@@ -761,7 +761,7 @@ mod tests {
         assert_eq!(host, PathFormat::Posix);
     }
 
-    // === §19: Attachments ===
+    // === : Attachments ===
 
     #[test]
     fn attachments_default_file_system_is_copied() {
@@ -787,7 +787,7 @@ mod tests {
         assert_eq!(json["manifests"].as_array().unwrap().len(), 1);
     }
 
-    // === §19: PathMappingRule ===
+    // === : PathMappingRule ===
 
     #[test]
     fn path_mapping_rule_hashed_source_path() {
@@ -804,7 +804,7 @@ mod tests {
         assert_eq!(hash, hash2);
     }
 
-    // === §19: Helper functions ===
+    // === : Helper functions ===
 
     #[test]
     fn join_s3_paths_basic() {

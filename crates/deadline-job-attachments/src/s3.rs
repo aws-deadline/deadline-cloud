@@ -199,7 +199,7 @@ mod tests {
     use deadline_config::config_file::set_setting_in_config;
     use deadline_config::ini::IniConfig;
 
-    // === §34 cases 1-3: Constants ===
+    // ===  cases 1-3: Constants ===
 
     #[test]
     fn s3_connect_timeout_is_30_seconds() {
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(S3_RETRIES_MODE, "standard");
     }
 
-    // === §34 case 11: build_s3_client produces configured client ===
+    // === build_s3_client produces configured client ===
 
     #[test]
     fn build_s3_client_returns_client() {
@@ -228,7 +228,7 @@ mod tests {
         assert!(std::mem::size_of_val(&client) > 0);
     }
 
-    // === §34 case 13: pool connections from config ===
+    // === pool connections from config ===
 
     #[test]
     fn build_s3_client_uses_pool_connections_from_config() {
@@ -242,7 +242,7 @@ mod tests {
         let _client = build_s3_client(&sdk_config, Some(&config));
     }
 
-    // === §34 case 14: user agent includes job attachments identifier ===
+    // === user agent includes job attachments identifier ===
 
     #[test]
     fn s3_user_agent_contains_job_attachments() {
@@ -250,7 +250,7 @@ mod tests {
         assert!(S3_USER_AGENT_EXTRA.starts_with("S3A/Deadline/NA/JobAttachments/"));
     }
 
-    // === §34 cases 17-20: get_s3_max_pool_connections ===
+    // ===  cases 17-20: get_s3_max_pool_connections ===
 
     #[test]
     fn get_s3_max_pool_connections_valid_integer() {
@@ -284,7 +284,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // === §34 case 27: get_account_id returns account string ===
+    // === get_account_id returns account string ===
 
     #[tokio::test]
     async fn get_account_id_returns_account_from_sts() {

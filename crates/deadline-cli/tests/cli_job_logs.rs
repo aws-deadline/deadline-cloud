@@ -23,10 +23,10 @@ fn insta_settings() -> insta::Settings {
 }
 
 // ---------------------------------------------------------------------------
-// Session logs: explicit session_id, returns log events (case 16)
-// Also covers: log group/stream pattern (case 21), trailing whitespace
-// stripped (case 30), ingestion_time present (case 28), missing
-// ingestion_time (case 29 — second event has no ingestionTime)
+// Session logs: explicit session_id, returns log events
+// Also covers: log group/stream pattern, trailing whitespace
+// stripped, ingestion_time present, missing
+// ingestion_time (second event has no ingestionTime)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -55,7 +55,7 @@ async fn job_logs_with_session_id_prints_events() {
 }
 
 // ---------------------------------------------------------------------------
-// Session auto-selection: ongoing session preferred (case 17)
+// Session auto-selection: ongoing session preferred
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -88,7 +88,7 @@ async fn job_logs_auto_selects_ongoing_session() {
 }
 
 // ---------------------------------------------------------------------------
-// Session auto-selection: no ongoing, most recently ended (case 18)
+// Session auto-selection: no ongoing, most recently ended
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -119,7 +119,7 @@ async fn job_logs_auto_selects_most_recently_ended() {
 }
 
 // ---------------------------------------------------------------------------
-// No sessions found for job (case 20)
+// No sessions found for job
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -137,7 +137,7 @@ async fn job_logs_no_sessions_exits_with_error() {
 }
 
 // ---------------------------------------------------------------------------
-// ResourceNotFoundException returns no-logs message (case 26)
+// ResourceNotFoundException returns no-logs message
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -202,7 +202,7 @@ async fn job_logs_json_output_with_next_token() {
 }
 
 // ---------------------------------------------------------------------------
-// Pagination token passthrough (case 25)
+// Pagination token passthrough
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -241,7 +241,7 @@ async fn job_logs_next_token_passed_through() {
 }
 
 // ---------------------------------------------------------------------------
-// Timestamp format: local (case 20)
+// Timestamp format: local
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -278,7 +278,7 @@ async fn job_logs_timestamp_format_local() {
 }
 
 // ---------------------------------------------------------------------------
-// Timestamp format: relative (case 21)
+// Timestamp format: relative
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -315,7 +315,7 @@ async fn job_logs_timestamp_format_relative() {
 }
 
 // ---------------------------------------------------------------------------
-// Timestamp format in JSON output uses the formatter too (case 19-21)
+// Timestamp format in JSON output uses the formatter too
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -351,10 +351,10 @@ async fn job_logs_json_timestamp_format_utc() {
 }
 
 // ===========================================================================
-// #15c: Job logs auto-selection messages (§44 cases 17-21)
+// #15c: Job logs auto-selection messages
 // ===========================================================================
 
-// §44.18: Auto-select single session → prints "Using the only available session"
+// Auto-select single session → prints "Using the only available session"
 #[tokio::test]
 async fn job_logs_auto_select_single_session_prints_message() {
     let harness = TestHarness::new().await;
@@ -384,7 +384,7 @@ async fn job_logs_auto_select_single_session_prints_message() {
     );
 }
 
-// §44.19: Auto-select from multiple sessions → prints "Using the latest session"
+// Auto-select from multiple sessions → prints "Using the latest session"
 #[tokio::test]
 async fn job_logs_auto_select_multiple_sessions_prints_message() {
     let harness = TestHarness::new().await;

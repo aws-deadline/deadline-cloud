@@ -42,7 +42,7 @@ fn make_test_manifest() -> AssetManifest {
 }
 
 // =====================================================================
-// §31 cases 25-26: manifest_upload
+//  cases 25-26: manifest_upload
 // =====================================================================
 
 #[tokio::test]
@@ -110,7 +110,7 @@ async fn manifest_upload_without_prefix_uploads_to_manifests_root() {
 }
 
 // =====================================================================
-// §31 case 27: manifest_upload metadata
+// manifest_upload metadata
 // =====================================================================
 
 #[tokio::test]
@@ -146,7 +146,7 @@ async fn manifest_upload_sets_file_system_location_name_metadata() {
 }
 
 // =====================================================================
-// §31 case 37: manifest_download — job with no attachments
+// manifest_download — job with no attachments
 // =====================================================================
 
 #[tokio::test]
@@ -179,7 +179,7 @@ async fn manifest_download_no_attachments_returns_empty() {
 }
 
 // =====================================================================
-// §31 case 29: manifest_download — input manifests
+// manifest_download — input manifests
 // =====================================================================
 
 #[tokio::test]
@@ -235,7 +235,7 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
 }
 
 // =====================================================================
-// §31 case 31: manifest_download — asset_type=INPUT skips outputs
+// manifest_download — asset_type=INPUT skips outputs
 // =====================================================================
 
 #[tokio::test]

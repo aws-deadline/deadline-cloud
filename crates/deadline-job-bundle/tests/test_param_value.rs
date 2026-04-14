@@ -1,4 +1,4 @@
-//! §16: Job bundle — parameter value validation & coercion (cases 49-65)
+//! : Job bundle — parameter value validation & coercion (cases 49-65)
 
 use deadline_job_bundle::parameters::validate_job_parameter_value;
 use test_case::test_case;

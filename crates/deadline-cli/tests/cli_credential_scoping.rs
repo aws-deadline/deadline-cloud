@@ -1,4 +1,4 @@
-//! Level 2 tests for credential scoping (§53 cases 3, 11-12).
+//! Level 2 tests for credential scoping.
 //!
 //! Tests that `job logs` uses queue-scoped credentials for DCM users
 //! and base credentials for non-DCM users.
@@ -10,7 +10,7 @@
 //! If queue role assumption fails for a DCM user, the error is propagated
 //! (matching Python's behavior — it raises DeadlineOperationError).
 //!
-//! Worker log credential scoping (§53 cases 6-8) is tested at Level 1
+//! Worker log credential scoping is tested at Level 1
 //! in `deadline-client` since `get_worker_logs` is not exposed via CLI.
 
 use deadline_test_server::deadline_api::{cloudwatch, jobs, queue_resources, queues, sessions, sts};
@@ -87,7 +87,7 @@ fn queue_role_credentials() -> serde_json::Value {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 11: DCM profile — `job logs` uses queue-scoped credentials
+// DCM profile — `job logs` uses queue-scoped credentials
 // AssumeQueueRoleForUser MUST be called for DCM users.
 // ---------------------------------------------------------------------------
 
@@ -173,7 +173,7 @@ async fn job_logs_dcm_user_uses_queue_scoped_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 12: Non-DCM profile — `job logs` uses base credentials
+// Non-DCM profile — `job logs` uses base credentials
 // AssumeQueueRoleForUser MUST NOT be called for non-DCM users.
 // ---------------------------------------------------------------------------
 
@@ -249,7 +249,7 @@ async fn job_logs_non_dcm_user_uses_base_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 13: `attachment download` no --profile — uses queue credentials
+// `attachment download` no --profile — uses queue credentials
 // AssumeQueueRoleForUser MUST be called unconditionally (not DCM-gated).
 // ---------------------------------------------------------------------------
 
@@ -329,7 +329,7 @@ async fn attachment_download_no_profile_uses_queue_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 14: `attachment download` with --profile — skips queue role
+// `attachment download` with --profile — skips queue role
 // AssumeQueueRoleForUser MUST NOT be called when --profile is provided.
 // ---------------------------------------------------------------------------
 
@@ -388,7 +388,7 @@ async fn attachment_download_with_profile_skips_queue_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 15: `attachment upload` no --profile — uses queue credentials
+// `attachment upload` no --profile — uses queue credentials
 // AssumeQueueRoleForUser MUST be called unconditionally (not DCM-gated).
 // ---------------------------------------------------------------------------
 
@@ -475,7 +475,7 @@ async fn attachment_upload_no_profile_uses_queue_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 16: `attachment upload` with --profile — skips queue role
+// `attachment upload` with --profile — skips queue role
 // AssumeQueueRoleForUser MUST NOT be called when --profile is provided.
 // ---------------------------------------------------------------------------
 
@@ -541,7 +541,7 @@ async fn attachment_upload_with_profile_skips_queue_credentials() {
 }
 
 // ---------------------------------------------------------------------------
-// §53 case 3: DCM user, AssumeQueueRoleForUser fails — error propagated
+// DCM user, AssumeQueueRoleForUser fails — error propagated
 // Python raises DeadlineOperationError("Failed to get queue credentials: ...").
 // Rust must propagate the error, NOT fall back to base credentials.
 // ---------------------------------------------------------------------------

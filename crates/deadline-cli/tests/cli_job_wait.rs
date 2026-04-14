@@ -1,8 +1,8 @@
 //! Level 2 tests for `deadline job wait` subcommand.
 //!
-//! Covers wait_for_job_completion (cases 1-15) and CLI job wait (cases 22-24).
-//! Cases 9-10 (callbacks) are partially covered via verbose/json output behavior.
-//! Case 6 (exponential backoff timing) is not directly testable at Level 2.
+//! Covers job completion polling and CLI wait output formatting.
+//! Callbacks are partially covered via verbose/json output behavior.
+//! Exponential backoff timing is not directly testable at Level 2.
 
 use deadline_test_server::TestHarness;
 use deadline_test_server::deadline_api::{jobs, sessions};

@@ -166,7 +166,7 @@ async fn job_requeue_tasks_with_parameters_shows_param_format() {
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--yes"]));
 }
 
-// §44 case 35: step with no matching tasks prints message and continues
+// step with no matching tasks prints message and continues
 #[tokio::test]
 async fn job_requeue_tasks_step_with_no_matching_tasks() {
     let harness = TestHarness::new().await;

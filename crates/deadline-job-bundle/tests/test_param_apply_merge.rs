@@ -1,4 +1,4 @@
-//! §16: Job bundle — parameters: apply, merge, UI control, difference (cases 81-118)
+//! : Job bundle — parameters: apply, merge, UI control, difference (cases 81-118)
 
 use deadline_job_bundle::parameters::{
     apply_job_parameters, get_ui_control_for_parameter_definition, merge_queue_job_parameters,
@@ -8,7 +8,7 @@ use deadline_job_bundle::submission::AssetReferences;
 
 // ── apply_job_parameters (cases 81-93) ──────────────────────────────
 
-// §16.81: Job parameter provides a value for a template parameter
+// .81: Job parameter provides a value for a template parameter
 #[test]
 fn apply_params_sets_value() {
     let job_params = vec![serde_json::json!({"name": "Frame", "value": "10"})];
@@ -18,7 +18,7 @@ fn apply_params_sets_value() {
     assert_eq!(params[0]["value"], "10");
 }
 
-// §16.82: PATH parameter value is relative → made absolute relative to CWD
+// .82: PATH parameter value is relative → made absolute relative to CWD
 #[test]
 fn apply_params_path_relative_made_absolute() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": "relative/path"})];
@@ -32,7 +32,7 @@ fn apply_params_path_relative_made_absolute() {
     );
 }
 
-// §16.83: PATH parameter with allowedValues and relative value → NOT made absolute
+// .83: PATH parameter with allowedValues and relative value → NOT made absolute
 #[test]
 fn apply_params_path_with_allowed_values_not_resolved() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": "relative"})];
@@ -46,7 +46,7 @@ fn apply_params_path_with_allowed_values_not_resolved() {
     assert_eq!(params[0]["value"], "relative");
 }
 
-// §16.84: PATH parameter value is empty string → skipped
+// .84: PATH parameter value is empty string → skipped
 #[test]
 fn apply_params_path_empty_value_skipped() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": ""})];
@@ -58,7 +58,7 @@ fn apply_params_path_empty_value_skipped() {
     assert!(asset_refs.input_filenames.is_empty());
 }
 
-// §16.85: Parameter has no value and no default → error
+// .85: Parameter has no value and no default → error
 #[test]
 fn apply_params_no_value_no_default_returns_error() {
     let job_params: Vec<serde_json::Value> = vec![];
@@ -72,7 +72,7 @@ fn apply_params_no_value_no_default_returns_error() {
     );
 }
 
-// §16.86: PATH with dataFlow=IN and objectType=DIRECTORY → input_directories
+// .86: PATH with dataFlow=IN and objectType=DIRECTORY → input_directories
 #[test]
 fn apply_params_path_in_directory_adds_to_input_dirs() {
     let job_params = vec![serde_json::json!({"name": "In", "value": "/input/dir"})];
@@ -84,7 +84,7 @@ fn apply_params_path_in_directory_adds_to_input_dirs() {
     assert!(asset_refs.input_directories.contains("/input/dir"));
 }
 
-// §16.87: PATH with dataFlow=IN and objectType=FILE → input_filenames
+// .87: PATH with dataFlow=IN and objectType=FILE → input_filenames
 #[test]
 fn apply_params_path_in_file_adds_to_input_filenames() {
     let job_params = vec![serde_json::json!({"name": "In", "value": "/input/file.txt"})];
@@ -96,7 +96,7 @@ fn apply_params_path_in_file_adds_to_input_filenames() {
     assert!(asset_refs.input_filenames.contains("/input/file.txt"));
 }
 
-// §16.88: PATH with dataFlow=OUT and objectType=DIRECTORY → output_directories
+// .88: PATH with dataFlow=OUT and objectType=DIRECTORY → output_directories
 #[test]
 fn apply_params_path_out_directory_adds_to_output_dirs() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": "/output/dir"})];
@@ -108,7 +108,7 @@ fn apply_params_path_out_directory_adds_to_output_dirs() {
     assert!(asset_refs.output_directories.contains("/output/dir"));
 }
 
-// §16.89: PATH with dataFlow=OUT and objectType=FILE → parent dir to output_directories
+// .89: PATH with dataFlow=OUT and objectType=FILE → parent dir to output_directories
 #[test]
 fn apply_params_path_out_file_adds_parent_to_output_dirs() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": "/output/dir/file.exr"})];
@@ -124,7 +124,7 @@ fn apply_params_path_out_file_adds_parent_to_output_dirs() {
     );
 }
 
-// §16.90: PATH with dataFlow=INOUT → both input and output
+// .90: PATH with dataFlow=INOUT → both input and output
 #[test]
 fn apply_params_path_inout_adds_to_both() {
     let job_params = vec![serde_json::json!({"name": "IO", "value": "/io/dir"})];
@@ -137,7 +137,7 @@ fn apply_params_path_inout_adds_to_both() {
     assert!(asset_refs.output_directories.contains("/io/dir"));
 }
 
-// §16.91: PATH with dataFlow=NONE → referenced_paths
+// .91: PATH with dataFlow=NONE → referenced_paths
 #[test]
 fn apply_params_path_none_adds_to_referenced() {
     let job_params = vec![serde_json::json!({"name": "Ref", "value": "/ref/path"})];
@@ -149,7 +149,7 @@ fn apply_params_path_none_adds_to_referenced() {
     assert!(asset_refs.referenced_paths.contains("/ref/path"));
 }
 
-// §16.92: PATH with invalid dataFlow → error
+// .92: PATH with invalid dataFlow → error
 #[test]
 fn apply_params_path_invalid_data_flow_returns_error() {
     let job_params = vec![serde_json::json!({"name": "P", "value": "/path"})];
@@ -165,7 +165,7 @@ fn apply_params_path_invalid_data_flow_returns_error() {
     );
 }
 
-// §16.93: Non-PATH parameter → no asset reference modification
+// .93: Non-PATH parameter → no asset reference modification
 #[test]
 fn apply_params_non_path_no_asset_refs() {
     let job_params = vec![serde_json::json!({"name": "Frame", "value": "10"})];
@@ -177,7 +177,7 @@ fn apply_params_non_path_no_asset_refs() {
 
 // ── merge_queue_job_parameters (cases 94-103) ───────────────────────
 
-// §16.94: No overlapping parameter names → union
+// .94: No overlapping parameter names → union
 #[test]
 fn merge_params_no_overlap_returns_union() {
     let job = vec![serde_json::json!({"name": "A", "type": "STRING", "default": "a"})];
@@ -186,7 +186,7 @@ fn merge_params_no_overlap_returns_union() {
     assert_eq!(result.len(), 2);
 }
 
-// §16.95: Overlapping parameter with same type → merged
+// .95: Overlapping parameter with same type → merged
 #[test]
 fn merge_params_same_type_merged() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING", "default": "job"})];
@@ -197,7 +197,7 @@ fn merge_params_same_type_merged() {
     assert_eq!(result[0]["default"], "job");
 }
 
-// §16.96: Overlapping parameter with different types → error
+// .96: Overlapping parameter with different types → error
 #[test]
 fn merge_params_different_types_returns_error() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING"})];
@@ -209,7 +209,7 @@ fn merge_params_different_types_returns_error() {
     );
 }
 
-// §16.97: Job parameter has value, queue has same name → value copied
+// .97: Job parameter has value, queue has same name → value copied
 #[test]
 fn merge_params_value_copied_to_merged() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING", "value": "hello"})];
@@ -218,7 +218,7 @@ fn merge_params_value_copied_to_merged() {
     assert_eq!(result[0]["value"], "hello");
 }
 
-// §16.98: Value-only parameter for a queue parameter → merged
+// .98: Value-only parameter for a queue parameter → merged
 #[test]
 fn merge_params_value_only_for_queue_param() {
     let job = vec![serde_json::json!({"name": "P", "value": "hello"})];
@@ -227,7 +227,7 @@ fn merge_params_value_only_for_queue_param() {
     assert_eq!(result[0]["value"], "hello");
 }
 
-// §16.99: Value-only parameter not in queue and no ":" → error
+// .99: Value-only parameter not in queue and no ":" → error
 #[test]
 fn merge_params_value_only_undefined_returns_error() {
     let job = vec![serde_json::json!({"name": "Unknown", "value": "x"})];
@@ -239,7 +239,7 @@ fn merge_params_value_only_undefined_returns_error() {
     );
 }
 
-// §16.100: Value-only parameter with ":" in name → accepted
+// .100: Value-only parameter with ":" in name → accepted
 #[test]
 fn merge_params_value_only_with_colon_accepted() {
     let job = vec![serde_json::json!({"name": "deadline:priority", "value": "50"})];
@@ -248,7 +248,7 @@ fn merge_params_value_only_with_colon_accepted() {
     assert_eq!(result.len(), 1);
 }
 
-// §16.101: queue_id provided and mismatch → error includes queue_id
+// .101: queue_id provided and mismatch → error includes queue_id
 #[test]
 fn merge_params_mismatch_with_queue_id_in_error() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING"})];
@@ -260,7 +260,7 @@ fn merge_params_mismatch_with_queue_id_in_error() {
     );
 }
 
-// §16.102: queue_id not provided and mismatch → error says "queue" without ID
+// .102: queue_id not provided and mismatch → error says "queue" without ID
 #[test]
 fn merge_params_mismatch_without_queue_id_says_queue() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING"})];
@@ -272,7 +272,7 @@ fn merge_params_mismatch_without_queue_id_says_queue() {
     );
 }
 
-// §16.103: Overlapping parameter with different defaults but same type → merged
+// .103: Overlapping parameter with different defaults but same type → merged
 #[test]
 fn merge_params_different_defaults_same_type_succeeds() {
     let job = vec![serde_json::json!({"name": "P", "type": "STRING", "default": "a"})];
@@ -285,7 +285,7 @@ fn merge_params_different_defaults_same_type_succeeds() {
 
 // ── get_ui_control_for_parameter_definition (cases 104-113) ─────────
 
-// §16.104: Explicit userInterface.control set
+// .104: Explicit userInterface.control set
 #[test]
 fn ui_control_explicit_control_returned() {
     let param = serde_json::json!({
@@ -298,7 +298,7 @@ fn ui_control_explicit_control_returned() {
     );
 }
 
-// §16.105: STRING with no control and no allowedValues → LINE_EDIT
+// .105: STRING with no control and no allowedValues → LINE_EDIT
 #[test]
 fn ui_control_string_default_line_edit() {
     let param = serde_json::json!({"name": "P", "type": "STRING"});
@@ -308,7 +308,7 @@ fn ui_control_string_default_line_edit() {
     );
 }
 
-// §16.106: PATH with objectType=DIRECTORY → CHOOSE_DIRECTORY
+// .106: PATH with objectType=DIRECTORY → CHOOSE_DIRECTORY
 #[test]
 fn ui_control_path_directory_choose_directory() {
     let param = serde_json::json!({
@@ -320,7 +320,7 @@ fn ui_control_path_directory_choose_directory() {
     );
 }
 
-// §16.107: PATH with objectType=FILE and dataFlow=OUT → CHOOSE_OUTPUT_FILE
+// .107: PATH with objectType=FILE and dataFlow=OUT → CHOOSE_OUTPUT_FILE
 #[test]
 fn ui_control_path_file_out_choose_output() {
     let param = serde_json::json!({
@@ -332,7 +332,7 @@ fn ui_control_path_file_out_choose_output() {
     );
 }
 
-// §16.108: PATH with objectType=FILE and dataFlow=IN → CHOOSE_INPUT_FILE
+// .108: PATH with objectType=FILE and dataFlow=IN → CHOOSE_INPUT_FILE
 #[test]
 fn ui_control_path_file_in_choose_input() {
     let param = serde_json::json!({
@@ -344,7 +344,7 @@ fn ui_control_path_file_in_choose_input() {
     );
 }
 
-// §16.109: INT with no control and no allowedValues → SPIN_BOX
+// .109: INT with no control and no allowedValues → SPIN_BOX
 #[test]
 fn ui_control_int_default_spin_box() {
     let param = serde_json::json!({"name": "P", "type": "INT"});
@@ -354,7 +354,7 @@ fn ui_control_int_default_spin_box() {
     );
 }
 
-// §16.110: Any parameter with allowedValues and no explicit control → DROPDOWN_LIST
+// .110: Any parameter with allowedValues and no explicit control → DROPDOWN_LIST
 #[test]
 fn ui_control_with_allowed_values_dropdown() {
     let param = serde_json::json!({
@@ -366,7 +366,7 @@ fn ui_control_with_allowed_values_dropdown() {
     );
 }
 
-// §16.111: Explicit control SPIN_BOX for STRING → error
+// .111: Explicit control SPIN_BOX for STRING → error
 #[test]
 fn ui_control_spin_box_for_string_returns_error() {
     let param = serde_json::json!({
@@ -380,7 +380,7 @@ fn ui_control_spin_box_for_string_returns_error() {
     );
 }
 
-// §16.112: Explicit control DROPDOWN_LIST but no allowedValues → error
+// .112: Explicit control DROPDOWN_LIST but no allowedValues → error
 #[test]
 fn ui_control_dropdown_without_allowed_values_returns_error() {
     let param = serde_json::json!({
@@ -394,7 +394,7 @@ fn ui_control_dropdown_without_allowed_values_returns_error() {
     );
 }
 
-// §16.113: Unsupported parameter type → error
+// .113: Unsupported parameter type → error
 #[test]
 fn ui_control_unsupported_type_returns_error() {
     let param = serde_json::json!({"name": "P", "type": "BOOLEAN"});
@@ -407,7 +407,7 @@ fn ui_control_unsupported_type_returns_error() {
 
 // ── parameter_definition_difference (cases 114-118) ─────────────────
 
-// §16.114: Two identical parameters → empty list
+// .114: Two identical parameters → empty list
 #[test]
 fn param_diff_identical_returns_empty() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "default": "x"});
@@ -416,7 +416,7 @@ fn param_diff_identical_returns_empty() {
     assert!(diff.is_empty());
 }
 
-// §16.115: Parameters differ in type → returns ["type"]
+// .115: Parameters differ in type → returns ["type"]
 #[test]
 fn param_diff_type_differs() {
     let a = serde_json::json!({"name": "P", "type": "STRING"});
@@ -425,7 +425,7 @@ fn param_diff_type_differs() {
     assert!(diff.contains(&"type".to_string()));
 }
 
-// §16.116: Parameters differ in allowedValues (compared as sets)
+// .116: Parameters differ in allowedValues (compared as sets)
 #[test]
 fn param_diff_allowed_values_as_sets() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["a", "b"]});
@@ -434,7 +434,7 @@ fn param_diff_allowed_values_as_sets() {
     assert!(diff.contains(&"allowedValues".to_string()));
 }
 
-// §16.116b: Same allowedValues in different order → no difference
+// .116b: Same allowedValues in different order → no difference
 #[test]
 fn param_diff_allowed_values_same_set_no_diff() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["b", "a"]});
@@ -443,7 +443,7 @@ fn param_diff_allowed_values_same_set_no_diff() {
     assert!(!diff.contains(&"allowedValues".to_string()));
 }
 
-// §16.117: ignore_missing=true and one parameter lacks a field → not reported
+// .117: ignore_missing=true and one parameter lacks a field → not reported
 #[test]
 fn param_diff_ignore_missing_skips_absent_field() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "minLength": 5});
@@ -452,7 +452,7 @@ fn param_diff_ignore_missing_skips_absent_field() {
     assert!(!diff.contains(&"minLength".to_string()));
 }
 
-// §16.118: ignore_missing=false and one parameter lacks a field → reported
+// .118: ignore_missing=false and one parameter lacks a field → reported
 #[test]
 fn param_diff_no_ignore_missing_reports_absent_field() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "minLength": 5});

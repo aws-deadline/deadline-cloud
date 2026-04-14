@@ -1,4 +1,4 @@
-//! §16: Job bundle — parameter validation (cases 1-48)
+//! : Job bundle — parameter validation (cases 1-48)
 //!
 //! Tests for validate_job_parameter, validate_user_interface_spec,
 //! and validate_user_interface_file_filter.

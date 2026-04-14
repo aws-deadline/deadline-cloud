@@ -299,7 +299,7 @@ impl S3CheckCache {
 mod tests {
     use super::*;
 
-    // === §24: HashCache construction ===
+    // === : HashCache construction ===
 
     #[test]
     fn hash_cache_new_creates_db() {
@@ -326,7 +326,7 @@ mod tests {
         assert!(entry.is_none());
     }
 
-    // === §24: HashCache put_entry / get_entry ===
+    // === : HashCache put_entry / get_entry ===
 
     #[test]
     fn hash_cache_put_and_get_whole_file() {
@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(result.file_hash, "whole_hash");
     }
 
-    // === §24: HashCacheEntry validation ===
+    // === : HashCacheEntry validation ===
 
     #[test]
     fn hash_cache_entry_byte_range_end_must_exceed_start() {
@@ -454,7 +454,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // === §24: S3CheckCache construction ===
+    // === : S3CheckCache construction ===
 
     #[test]
     fn s3_check_cache_new_creates_db() {
@@ -464,7 +464,7 @@ mod tests {
         assert!(dir.path().join("s3_check_cache.db").exists());
     }
 
-    // === §24: S3CheckCache put_entry / get_entry ===
+    // === : S3CheckCache put_entry / get_entry ===
 
     #[test]
     fn s3_check_cache_put_and_get_fresh_entry() {
@@ -557,7 +557,7 @@ mod tests {
         assert!(result.is_none());
     }
 
-    // === §24: default_cache_dir ===
+    // === : default_cache_dir ===
 
     #[test]
     fn default_cache_dir_uses_home() {

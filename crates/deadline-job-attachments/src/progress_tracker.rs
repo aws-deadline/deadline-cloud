@@ -349,7 +349,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    // === §32 case 1: Create with callback ===
+    // === Create with callback ===
 
     #[test]
     fn progress_tracker_new_with_callback_stores_it() {
@@ -368,7 +368,7 @@ mod tests {
         assert!(tracker.continue_reporting());
     }
 
-    // === §32 case 2: Create without callback ===
+    // === Create without callback ===
 
     #[test]
     fn progress_tracker_new_without_callback_defaults_to_noop() {
@@ -382,7 +382,7 @@ mod tests {
         assert!(tracker.report_progress());
     }
 
-    // === §32 case 3: increase_processed increments counters ===
+    // === increase_processed increments counters ===
 
     #[test]
     fn increase_processed_increments_files_and_bytes() {
@@ -398,7 +398,7 @@ mod tests {
         assert_eq!(stats.processed_bytes, 1000);
     }
 
-    // === §32 case 4: increase_skipped increments counters ===
+    // === increase_skipped increments counters ===
 
     #[test]
     fn increase_skipped_increments_files_and_bytes() {
@@ -414,7 +414,7 @@ mod tests {
         assert_eq!(stats.skipped_bytes, 500);
     }
 
-    // === §32 case 5: report_progress fires callback when time elapsed ===
+    // === report_progress fires callback when time elapsed ===
 
     #[test]
     fn report_progress_fires_callback_after_time_interval() {
@@ -438,7 +438,7 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === §32 case 6: report_progress fires callback when chunk complete ===
+    // === report_progress fires callback when chunk complete ===
 
     #[test]
     fn report_progress_fires_callback_on_chunk_complete() {
@@ -463,7 +463,7 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === §32 case 7: report_progress fires callback at 100% ===
+    // === report_progress fires callback at 100% ===
 
     #[test]
     fn report_progress_fires_callback_at_100_percent() {
@@ -484,7 +484,7 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === §32 case 8: callback returns false sets continue_reporting to false ===
+    // === callback returns false sets continue_reporting to false ===
 
     #[test]
     fn report_progress_callback_returns_false_cancels() {
@@ -502,7 +502,7 @@ mod tests {
         assert!(!tracker.continue_reporting());
     }
 
-    // === §32 case 9: continue_reporting already false returns false without callback ===
+    // === continue_reporting already false returns false without callback ===
 
     #[test]
     fn report_progress_already_cancelled_returns_false_without_callback() {
@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(call_count.load(Ordering::SeqCst), count_after_cancel);
     }
 
-    // === §32 case 10: get_summary_statistics returns correct values ===
+    // === get_summary_statistics returns correct values ===
 
     #[test]
     fn get_summary_statistics_returns_correct_totals() {
@@ -553,7 +553,7 @@ mod tests {
         assert!((stats.transfer_rate - 1000.0).abs() < f64::EPSILON);
     }
 
-    // === §32 case 11: total_time is 0 means transfer_rate is 0 ===
+    // === total_time is 0 means transfer_rate is 0 ===
 
     #[test]
     fn get_summary_statistics_zero_time_zero_rate() {
@@ -569,7 +569,7 @@ mod tests {
         assert!((stats.transfer_rate - 0.0).abs() < f64::EPSILON);
     }
 
-    // === §32 case 12: SummaryStatistics aggregate sums fields ===
+    // === SummaryStatistics aggregate sums fields ===
 
     #[test]
     fn summary_statistics_aggregate_sums_all_fields() {
@@ -605,7 +605,7 @@ mod tests {
         assert!((s1.transfer_rate - 2000.0 / 3.0).abs() < 0.01);
     }
 
-    // === §32 case 14: SummaryStatistics Display ===
+    // === SummaryStatistics Display ===
 
     #[test]
     fn summary_statistics_display_multiple_files() {
@@ -625,7 +625,7 @@ mod tests {
         assert!(output.contains("Total processing time of 1.23456 seconds"));
     }
 
-    // === §32 case 15: SummaryStatistics Display singular file ===
+    // === SummaryStatistics Display singular file ===
 
     #[test]
     fn summary_statistics_display_singular_file() {
@@ -644,7 +644,7 @@ mod tests {
         assert!(!output.contains("1 files"), "should not have plural 'files' for count 1");
     }
 
-    // === §32 case 16: track_progress with file_done=true increments both ===
+    // === track_progress with file_done=true increments both ===
 
     #[test]
     fn track_progress_file_done_increments_files_and_bytes() {
@@ -660,7 +660,7 @@ mod tests {
         assert_eq!(stats.processed_files, 1);
     }
 
-    // === §32 case 17: track_progress with file_done=false only increments bytes ===
+    // === track_progress with file_done=false only increments bytes ===
 
     #[test]
     fn track_progress_not_file_done_only_increments_bytes() {

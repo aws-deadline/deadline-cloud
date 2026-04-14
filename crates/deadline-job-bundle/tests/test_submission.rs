@@ -1,4 +1,4 @@
-//! §17: Job bundle — submission & asset references
+//! : Job bundle — submission & asset references
 
 use deadline_job_bundle::submission::{parse_frame_range, split_parameter_args, AssetReferences};
 use std::collections::BTreeSet;

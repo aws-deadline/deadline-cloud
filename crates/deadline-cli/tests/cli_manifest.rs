@@ -1,4 +1,4 @@
-//! Level 2 tests for `deadline manifest` subcommands (§47, batch 9e-3).
+//! Level 2 tests for `deadline manifest` subcommands.
 //!
 //! These test the CLI binary as a subprocess, exercising the full stack:
 //! CLI arg parsing → manifest_ops → diff → hashing → file I/O.
@@ -9,7 +9,7 @@ use std::fs;
 use tempfile::TempDir;
 
 // =====================================================================
-// §47 case 1: manifest snapshot — happy path
+// manifest snapshot — happy path
 // =====================================================================
 
 #[tokio::test]
@@ -46,7 +46,7 @@ async fn manifest_snapshot_creates_manifest_file() {
 }
 
 // =====================================================================
-// §47 case 2: manifest snapshot — --destination
+// manifest snapshot — --destination
 // =====================================================================
 
 #[tokio::test]
@@ -82,7 +82,7 @@ async fn manifest_snapshot_writes_to_destination() {
 }
 
 // =====================================================================
-// §47 case 4: manifest snapshot — --name
+// manifest snapshot — --name
 // =====================================================================
 
 #[tokio::test]
@@ -113,7 +113,7 @@ async fn manifest_snapshot_uses_provided_name() {
 }
 
 // =====================================================================
-// §47 case 7: manifest snapshot — --include and --exclude
+// manifest snapshot — --include and --exclude
 // =====================================================================
 
 #[tokio::test]
@@ -145,7 +145,7 @@ async fn manifest_snapshot_include_exclude_filters() {
 }
 
 // =====================================================================
-// §47 case 8: manifest snapshot — root doesn't exist
+// manifest snapshot — root doesn't exist
 // =====================================================================
 
 #[tokio::test]
@@ -157,7 +157,7 @@ async fn manifest_snapshot_nonexistent_root_exits_with_error() {
 }
 
 // =====================================================================
-// §47 case 12: manifest diff — happy path with JSON output
+// manifest diff — happy path with JSON output
 // =====================================================================
 
 #[tokio::test]
@@ -221,7 +221,7 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
 }
 
 // =====================================================================
-// §47 case 5: manifest snapshot --diff
+// manifest snapshot --diff
 // =====================================================================
 
 #[tokio::test]
@@ -284,7 +284,7 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
 }
 
 // =====================================================================
-// §47 case 15: manifest diff — manifest doesn't exist
+// manifest diff — manifest doesn't exist
 // =====================================================================
 
 #[tokio::test]
@@ -299,7 +299,7 @@ async fn manifest_diff_nonexistent_manifest_exits_with_error() {
 }
 
 // =====================================================================
-// §47 case 16: manifest diff — root doesn't exist
+// manifest diff — root doesn't exist
 // =====================================================================
 
 #[tokio::test]
@@ -316,7 +316,7 @@ async fn manifest_diff_nonexistent_root_exits_with_error() {
 }
 
 // =====================================================================
-// §47 case 26: manifest upload — manifest doesn't exist
+// manifest upload — manifest doesn't exist
 // =====================================================================
 
 #[tokio::test]
@@ -330,7 +330,7 @@ async fn manifest_upload_nonexistent_file_exits_with_error() {
 }
 
 // =====================================================================
-// §47 case 22: manifest download — dir doesn't exist
+// manifest download — dir doesn't exist
 // =====================================================================
 
 #[tokio::test]

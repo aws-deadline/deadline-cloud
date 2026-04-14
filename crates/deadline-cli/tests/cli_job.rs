@@ -136,10 +136,10 @@ async fn job_get_sends_latency_telemetry() {
 }
 
 // ===========================================================================
-// #12b: deadline job search (§44 cases 6-9)
+// deadline job search
 // ===========================================================================
 
-// §44.6: job search with --filter-expressions JSON
+// job search with --filter-expressions JSON
 #[tokio::test]
 async fn job_search_with_filter_expressions() {
     let harness = TestHarness::new().await;
@@ -153,7 +153,7 @@ async fn job_search_with_filter_expressions() {
     ]));
 }
 
-// §44.7: job search with file:// filter
+// job search with file:// filter
 #[tokio::test]
 async fn job_search_with_file_filter() {
     let harness = TestHarness::new().await;
@@ -171,7 +171,7 @@ async fn job_search_with_file_filter() {
     ]));
 }
 
-// §44.8: job search with --sort-expressions
+// job search with --sort-expressions
 #[tokio::test]
 async fn job_search_with_sort_expressions() {
     let harness = TestHarness::new().await;
@@ -185,7 +185,7 @@ async fn job_search_with_sort_expressions() {
     ]));
 }
 
-// §44.9: job search with pagination
+// job search with pagination
 #[tokio::test]
 async fn job_search_with_pagination() {
     let harness = TestHarness::new().await;
@@ -201,7 +201,7 @@ async fn job_search_with_pagination() {
 }
 
 // ===========================================================================
-// #15b: deadline job get [SEARCH_TERM] (§44 cases 1-5 extensions)
+// deadline job get [SEARCH_TERM]
 // ===========================================================================
 
 // job get with search term that is a job ID → treated as --job-id
