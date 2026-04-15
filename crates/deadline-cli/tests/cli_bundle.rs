@@ -743,3 +743,32 @@ async fn bundle_submit_create_failed_includes_job_id() {
         "Expected job ID '{JOB}' in CREATE_FAILED error, got:\n{stdout}"
     );
 }
+
+// =====================================================================
+// AUDIT-021: --job-attachments-file-system rejects invalid values
+// =====================================================================
+
+#[tokio::test]
+async fn bundle_submit_invalid_file_system_value_exits_with_error() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    let bundle_dir = create_bundle(&harness, "bad_fs");
+    let _guard = bundle_settings().bind_to_scope();
+    let output = harness.cmd(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--job-attachments-file-system", "INVALID",
+    ]).output().unwrap();
+    let all_output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(
+        !output.status.success(),
+        "Expected error for invalid --job-attachments-file-system, but command succeeded"
+    );
+    assert!(
+        all_output.contains("invalid value 'INVALID'") || all_output.contains("COPIED"),
+        "Expected clap validation error mentioning valid values, got:\n{all_output}"
+    );
+}

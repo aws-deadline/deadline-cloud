@@ -54,7 +54,7 @@ pub enum BundleAction {
         target_task_run_status: Option<String>,
 
         /// How workers access job attachments (COPIED or VIRTUAL)
-        #[arg(long)]
+        #[arg(long, value_parser = ["COPIED", "VIRTUAL"])]
         job_attachments_file_system: Option<String>,
 
         /// Skip confirmation prompts
@@ -195,7 +195,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 upload_progress_callback: Some(Box::new(move |meta| {
                     upload_progress.lock().unwrap().callback(meta.progress as u64)
                 })),
-                continue_callback: None,
+                continue_callback: Some(Box::new(|| crate::common::should_continue())),
             };
 
             let job_id = create_job_from_job_bundle(submit_params).await

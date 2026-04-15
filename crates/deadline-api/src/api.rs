@@ -905,3 +905,52 @@ pub async fn wait_for_create_job_to_complete(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    async fn setup_env(server: &MockServer) {
+        let url = format!("http://localhost:{}", server.address().port());
+        unsafe {
+            std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
+            std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+            std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+            std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn wait_for_create_job_cancels_when_callback_returns_false() {
+        let server = MockServer::start().await;
+        setup_env(&server).await;
+
+        // Mock GetJob returning CREATE_IN_PROGRESS (would loop forever without cancellation)
+        Mock::given(method("GET"))
+            .and(path_regex(".*/jobs/job-abc"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "jobId": "job-abc",
+                "lifecycleStatus": "CREATE_IN_PROGRESS",
+                "lifecycleStatusMessage": "Creating...",
+            })))
+            .mount(&server)
+            .await;
+
+        // Pass a callback that always returns false (simulates SIGINT)
+        let result = wait_for_create_job_to_complete(
+            "farm-abc", "queue-abc", "job-abc", None, || false,
+        ).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("canceled"),
+            "Expected cancellation error, got: {err}"
+        );
+    }
+}

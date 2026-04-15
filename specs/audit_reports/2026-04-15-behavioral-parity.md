@@ -11,8 +11,8 @@ credential scoping wiring, crate consolidation, and verification of previous fix
 |----------|-------|-------|-----------|
 | Critical | 0     | 0     | 0         |
 | High     | 1     | 1     | 0         |
-| Medium   | 2     | 0     | 2         |
-| Low      | 1     | 0     | 1         |
+| Medium   | 2     | 2     | 0         |
+| Low      | 2     | 0     | 2         |
 
 All 7 fixes from the April 10 audit verified as correctly applied (including F-1).
 Crate consolidation verified clean — no regressions.
@@ -64,7 +64,7 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 - **Python behavior:** Uses `click.Choice([e.value for e in JobAttachmentsFileSystem])`
   — rejects invalid values at the CLI layer.
 - **Rust behavior:** No `value_parser` constraint. Invalid values silently become `COPIED`.
-- **Resolution:** Pending — add `value_parser = ["COPIED", "VIRTUAL"]`.
+- **Resolution:** Fixed — added `value_parser = ["COPIED", "VIRTUAL"]`.
 
 ### AUDIT-022: `continue_callback` not wired for SIGINT during polling
 
@@ -75,7 +75,7 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
   `sigint_handler.continue_operation`. SIGINT during polling cancels the wait.
 - **Rust behavior:** CLI sets `continue_callback: None`, which becomes always-true.
   SIGINT during CreateJob polling is ignored.
-- **Resolution:** Pending — wire `continue_callback` to `should_continue()`.
+- **Resolution:** Fixed — wired `continue_callback` to `should_continue()`.
 
 ### AUDIT-026: No test for invalid parameter name regex
 
@@ -85,6 +85,16 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 - **Rust behavior:** Regex validation exists but only invalid format (missing `=`) is
   tested. No test for invalid name like `123bad=value`.
 - **Resolution:** Pending — add a snapshot test.
+
+### AUDIT-029: Missing regression test for CloudWatch error formatting
+
+- **Category:** Regression guard
+- **Priority:** Low
+- **Command/Function:** `cw_sdk_err()` in `log_retrieval.rs`
+- **Rust behavior:** Error formatting extracts error codes correctly (F-1 fix), but
+  has no regression test. If refactored, could silently regress to generic "service error".
+- **Resolution:** Pending — add a Level 2 test that mocks CloudWatch 403 and asserts
+  output contains `AccessDeniedException`.
 
 ---
 
@@ -97,7 +107,7 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 | AUDIT-025 | Submitter name "CLI" vs "deadline-cloud-cli" | Python also defaults to `"CLI"`. No difference exists. |
 | AUDIT-027 | Priority hardcoded before overwrite | Python uses the same pattern (`"priority": 50` then overwrite). Not dead code — it's the default. |
 | AUDIT-028 | Fleet-scoped config missing endpoint URL | Worker logs not exposed via CLI. Not a parity gap for current scope. |
-| AUDIT-029 | Missing CloudWatch AccessDeniedException test | Test coverage gap, not a behavioral parity issue. |
+| AUDIT-029 | Missing CloudWatch AccessDeniedException test | Test coverage gap, not a behavioral parity issue. Moved to Low as regression guard for F-1 fix. |
 
 ---
 
@@ -106,6 +116,7 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 | # | ID | Priority | Category | Status |
 |---|-----|----------|----------|--------|
 | 1 | AUDIT-019 | High | Bug | ✅ Fixed |
-| 2 | AUDIT-021 | Medium | Bug | Pending |
-| 3 | AUDIT-022 | Medium | Bug | Pending |
+| 2 | AUDIT-021 | Medium | Bug | ✅ Fixed |
+| 3 | AUDIT-022 | Medium | Bug | ✅ Fixed |
 | 4 | AUDIT-026 | Low | Coverage | Pending |
+| 5 | AUDIT-029 | Low | Regression guard | Pending |

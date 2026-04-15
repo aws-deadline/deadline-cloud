@@ -6,9 +6,9 @@ consulting the Work Items table in `specs/progress.md`.
 ## Active Work Item
 
 Fixing audit findings from `specs/audit_reports/2026-04-15-behavioral-parity.md`.
-Batch 1 complete: AUDIT-019 fixed (known-paths warning), AUDIT-024 fixed (job ID in error).
-AUDIT-020 deferred — matches Python CLI behavior (no history in CLI path), spec updated.
-Remaining: Medium batch (AUDIT-021, AUDIT-022) and Low batch.
+Batch 1 (High) complete: AUDIT-019 fixed.
+Batch 2 (Medium) complete: AUDIT-021 fixed (value validation), AUDIT-022 fixed (SIGINT).
+Remaining: Low batch (AUDIT-026, AUDIT-029).
 
 Consult the Work Items table in `specs/progress.md`
 and pick the first row with status "Not started" whose dependencies
