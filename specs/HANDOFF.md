@@ -5,7 +5,10 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active Work Item
 
-None. Consult the Work Items table in `specs/progress.md`
+None. Latest audit: `specs/audit_reports/2026-04-15-behavioral-parity.md`
+(2 High, 4 Medium, 5 Low findings — see report for details).
+
+Consult the Work Items table in `specs/progress.md`
 and pick the first row with status "Not started" whose dependencies
 are all "✅ Done".
 
