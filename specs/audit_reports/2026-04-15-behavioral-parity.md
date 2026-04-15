@@ -12,7 +12,7 @@ credential scoping wiring, crate consolidation, and verification of previous fix
 | Critical | 0     | 0     | 0         |
 | High     | 1     | 1     | 0         |
 | Medium   | 2     | 2     | 0         |
-| Low      | 2     | 0     | 2         |
+| Low      | 2     | 2     | 0         |
 
 All 7 fixes from the April 10 audit verified as correctly applied (including F-1).
 Crate consolidation verified clean — no regressions.
@@ -84,7 +84,7 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 - **Command/Function:** `parse_parameters()` in `bundle.rs`
 - **Rust behavior:** Regex validation exists but only invalid format (missing `=`) is
   tested. No test for invalid name like `123bad=value`.
-- **Resolution:** Pending — add a snapshot test.
+- **Resolution:** Fixed — snapshot test added. Verified: removing regex check causes test failure.
 
 ### AUDIT-029: Missing regression test for CloudWatch error formatting
 
@@ -93,8 +93,8 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 - **Command/Function:** `cw_sdk_err()` in `log_retrieval.rs`
 - **Rust behavior:** Error formatting extracts error codes correctly (F-1 fix), but
   has no regression test. If refactored, could silently regress to generic "service error".
-- **Resolution:** Pending — add a Level 2 test that mocks CloudWatch 403 and asserts
-  output contains `AccessDeniedException`.
+- **Resolution:** Fixed — Level 2 test added. Verified: breaking `cw_sdk_err()` produces
+  `"service error"` instead of `"AccessDeniedException"`, caught by test.
 
 ---
 
@@ -118,5 +118,5 @@ Zero missing re-exports. All downstream `Cargo.toml` files correct. No regressio
 | 1 | AUDIT-019 | High | Bug | ✅ Fixed |
 | 2 | AUDIT-021 | Medium | Bug | ✅ Fixed |
 | 3 | AUDIT-022 | Medium | Bug | ✅ Fixed |
-| 4 | AUDIT-026 | Low | Coverage | Pending |
-| 5 | AUDIT-029 | Low | Regression guard | Pending |
+| 4 | AUDIT-026 | Low | Coverage | ✅ Fixed |
+| 5 | AUDIT-029 | Low | Regression guard | ✅ Fixed |

@@ -689,7 +689,7 @@ async fn bundle_submit_with_cli_overrides() {
 }
 
 // =====================================================================
-// AUDIT-019: files outside known paths should produce a warning
+// files outside known paths should produce a warning
 // =====================================================================
 
 #[tokio::test]
@@ -712,7 +712,7 @@ async fn bundle_submit_files_outside_known_paths_shows_warning() {
 }
 
 // =====================================================================
-// AUDIT-024: CREATE_FAILED error should include job ID
+// CREATE_FAILED error should include job ID
 // =====================================================================
 
 #[tokio::test]
@@ -745,7 +745,7 @@ async fn bundle_submit_create_failed_includes_job_id() {
 }
 
 // =====================================================================
-// AUDIT-021: --job-attachments-file-system rejects invalid values
+// --job-attachments-file-system rejects invalid values
 // =====================================================================
 
 #[tokio::test]
@@ -771,4 +771,20 @@ async fn bundle_submit_invalid_file_system_value_exits_with_error() {
         all_output.contains("invalid value 'INVALID'") || all_output.contains("COPIED"),
         "Expected clap validation error mentioning valid values, got:\n{all_output}"
     );
+}
+
+// =====================================================================
+// invalid parameter name (starts with digit) exits with error
+// =====================================================================
+
+#[tokio::test]
+async fn bundle_submit_invalid_parameter_name_exits_with_error() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    let bundle_dir = create_bundle(&harness, "bad_param_name");
+    let _guard = bundle_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--parameter", "123Invalid=value",
+    ]));
 }

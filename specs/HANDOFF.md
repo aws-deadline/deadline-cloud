@@ -5,10 +5,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active Work Item
 
-Fixing audit findings from `specs/audit_reports/2026-04-15-behavioral-parity.md`.
-Batch 1 (High) complete: AUDIT-019 fixed.
-Batch 2 (Medium) complete: AUDIT-021 fixed (value validation), AUDIT-022 fixed (SIGINT).
-Remaining: Low batch (AUDIT-026, AUDIT-029).
+None. All findings from `specs/audit_reports/2026-04-15-behavioral-parity.md` resolved.
 
 Consult the Work Items table in `specs/progress.md`
 and pick the first row with status "Not started" whose dependencies

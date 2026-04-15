@@ -34,3 +34,18 @@ pub async fn mock_get_log_events_not_found(server: &MockServer) {
         .mount(server)
         .await;
 }
+
+/// Mount a CloudWatch GetLogEvents AccessDeniedException.
+pub async fn mock_get_log_events_access_denied(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))
+        .respond_with(
+            ResponseTemplate::new(403).set_body_json(json!({
+                "__type": "AccessDeniedException",
+                "message": "User is not authorized to access this resource"
+            })),
+        )
+        .expect(1..=3) // SDK may retry once or twice
+        .mount(server)
+        .await;
+}

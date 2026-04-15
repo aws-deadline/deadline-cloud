@@ -488,3 +488,42 @@ async fn job_logs_auto_select_ongoing_from_multiple_prints_latest_message() {
         "Expected 'Using the latest session' (not 'only'), got:\n{stdout}"
     );
 }
+
+// =====================================================================
+// CloudWatch AccessDeniedException shows error code, not generic "service error"
+// =====================================================================
+
+#[tokio::test]
+async fn job_logs_cloudwatch_access_denied_shows_error_code() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({
+            "sessionId": "session-abc",
+            "lifecycleStatus": "ENDED",
+            "startedAt": "2024-12-18T01:00:00Z",
+            "endedAt": "2024-12-18T02:00:00Z",
+            "fleetId": "fleet-abc",
+            "workerId": "worker-001",
+        }),
+    ]).await;
+
+    cloudwatch::mock_get_log_events_access_denied(&harness.server).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    let output = harness.cmd(&["job", "logs"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!output.status.success(), "Expected failure, got success");
+    assert!(
+        stdout.contains("AccessDeniedException"),
+        "Expected 'AccessDeniedException' in error, got:\n{stdout}"
+    );
+}
