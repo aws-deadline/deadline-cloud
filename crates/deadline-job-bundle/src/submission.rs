@@ -364,7 +364,39 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
             }
         }
 
-        let _known_paths = filter_redundant_known_paths(&known_paths);
+        let known_paths = filter_redundant_known_paths(&known_paths);
+
+        // Warn about files outside known paths
+        if !asset_references.input_filenames.is_empty() {
+            let outside: Vec<&String> = asset_references.input_filenames.iter()
+                .filter(|f| !known_paths.iter().any(|kp| {
+                    let kp_sep = if kp.ends_with(std::path::MAIN_SEPARATOR) {
+                        kp.clone()
+                    } else {
+                        format!("{kp}{}", std::path::MAIN_SEPARATOR)
+                    };
+                    f.starts_with(&kp_sep) || *f == kp
+                }))
+                .collect();
+            if !outside.is_empty() {
+                print(&format!(
+                    "Warning: {} file(s) found outside of known asset paths:",
+                    outside.len()
+                ));
+                for f in outside.iter().take(10) {
+                    print(&format!("  {f}"));
+                }
+                if outside.len() > 10 {
+                    print(&format!("  ... and {} more", outside.len() - 10));
+                }
+                if !params.auto_accept {
+                    let should_continue = params.continue_callback.as_ref().map_or(true, |cb| cb());
+                    if !should_continue {
+                        return Err(op_err("Submission canceled by user.".into()));
+                    }
+                }
+            }
+        }
 
         let queue_sdk_config = session::get_queue_user_config(
             Some(&farm_id), Some(&queue_id),
@@ -496,7 +528,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     ).await?;
 
     if !success {
-        return Err(op_err(status_message));
+        return Err(op_err(format!("Job {job_id} creation failed: {status_message}")));
     }
 
     print(&format!("Submitted job bundle:\n   {}", params.job_bundle_dir));

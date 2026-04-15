@@ -687,3 +687,59 @@ async fn bundle_submit_with_cli_overrides() {
         "--farm-id", FARM, "--queue-id", QUEUE,
     ]));
 }
+
+// =====================================================================
+// AUDIT-019: files outside known paths should produce a warning
+// =====================================================================
+
+#[tokio::test]
+async fn bundle_submit_files_outside_known_paths_shows_warning() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    // The input files in create_bundle_with_attachments are in a temp dir
+    // which is NOT a known asset path, so a warning should appear.
+    let bundle_dir = create_bundle_with_attachments(&harness, "known_paths_warn");
+    let _guard = bundle_settings().bind_to_scope();
+    let output = harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("outside of known asset paths"),
+        "Expected known-paths warning in output, got:\n{stdout}"
+    );
+}
+
+// =====================================================================
+// AUDIT-024: CREATE_FAILED error should include job ID
+// =====================================================================
+
+#[tokio::test]
+async fn bundle_submit_create_failed_includes_job_id() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
+        "jobId": JOB,
+        "lifecycleStatus": "CREATE_FAILED",
+        "lifecycleStatusMessage": "Template validation failed",
+    })).await;
+    let bundle_dir = create_bundle(&harness, "create_failed_jobid");
+    let _guard = bundle_settings().bind_to_scope();
+    let output = harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(JOB),
+        "Expected job ID '{JOB}' in CREATE_FAILED error, got:\n{stdout}"
+    );
+}
