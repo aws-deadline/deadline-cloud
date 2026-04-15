@@ -1,12 +1,6 @@
-# Rust Rewrite
+# Progress
 
-Migrating all AWS Deadline Cloud client software from Python to Rust.
-The Python source lives at `../deadline-cloud-python`.
-
-## Why Rust?
-
-Speed, type safety, and development velocity. See `migration_strategy.md` for
-the full rationale, downstream dependency analysis, and phased rollout plan.
+AWS Deadline Cloud Rust CLI — work item tracking.
 
 ## Getting started
 
@@ -15,20 +9,7 @@ and gates all planning and implementation work.
 
 ## Reference Material
 
-- `migration_strategy.md` — Goals, GUI strategy, DCC plugin constraints,
-  downstream dependency analysis, phased rollout, decision record
-- `workflow.md` — Development workflow: study Python → update spec → red →
-  green → verify against Python CLI → refactor → update docs.
-  Also documents AWS SDK for Rust usage patterns.
-- `gui_ffi_architecture.md` — Detailed diagrams of the FFI layer: threading
-  model, callback flow, memory ownership, data flow for auth status and
-  progress reporting, risk table for the spike.
-- `data_flow.md` — Persistent data formats (INI config, job bundle layout,
-  manifest JSON, cache schemas, checkpoint format)
-- `python_observations.md` — Behavioral notes and ambiguities discovered during
-  analysis
-- `test_specs/` — Behavioral test specifications (52 sections, ~1,300 cases).
-  Used as the implementation checklist — not maintained after tests are written.
+Historical migration documents are in `specs/archive/`.
 
 ## Progress
 
@@ -81,7 +62,7 @@ pick and execute work items.
 | 15e | Behavioral parity audit | Not started | — | — | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | §53 cases 1-10 | §53 cases 11-16 | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | TBD | — | — | 1-14 |
-| 17 | MCP server | Deferred | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
+| 17 | MCP server | ✅ Done | §49, §50 | — | `cli.md`, `mcp.md` | 1-14 |
 
 **Status key:** ✅ Done · In progress · Not started · Deferred (blocked on CLI completion)
 

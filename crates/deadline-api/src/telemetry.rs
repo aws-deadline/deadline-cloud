@@ -94,8 +94,8 @@ impl TelemetryClient {
 
     /// Start the background sender thread with optional DCM metadata.
     /// `user_id`, `monitor_id`, and `account_id` come from the caller
-    /// (via `deadline-client::auth` and STS). The caller provides them
-    /// because `deadline-common` cannot depend on `deadline-client`.
+    /// (via `deadline_api::auth` and STS). The caller provides them
+    /// so the telemetry module doesn't need to resolve credentials itself.
     pub fn initialize_with_metadata(
         &mut self,
         endpoint_url: &str,
@@ -467,7 +467,7 @@ pub fn create_telemetry(config: Option<&deadline_config::ini::IniConfig>) -> Tel
 }
 
 /// Create a TelemetryClient with optional DCM metadata and account ID.
-/// Callers in `deadline-client` pass `user_id` and `monitor_id` from
+/// Callers in `deadline-api` pass `user_id` and `monitor_id` from
 /// `auth::get_user_and_identity_store_id()` and `auth::get_monitor_id()`,
 /// and `account_id` from STS `GetCallerIdentity`.
 pub fn create_telemetry_with_metadata(

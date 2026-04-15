@@ -31,9 +31,6 @@ deadline-test-server (dev-dependency of deadline-cli)
 ├── wiremock
 ├── tempfile
 └── assert_cmd
-
-gui/ (Python, not a Cargo crate)
-└── loads deadline-gui-ffi shared library via ctypes
 ```
 
 ## Crate Responsibilities
@@ -48,7 +45,6 @@ gui/ (Python, not a Cargo crate)
 | `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. Owns its error types (`JobAttachmentsError`), `PathFormat`, and file conflict resolution. Independent S3/STS clients. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
 | `deadline-mcp` | Library. MCP server logic invoked by `deadline-cli` via `deadline mcp-server`. Uses rmcp SDK. |
-| `gui/` (Python) | Qt QWidgets layout code (~15 files). Pure presentation — no business logic. Calls `deadline-gui-ffi` for every operation. |
 
 ## Data Flows
 
@@ -70,7 +66,7 @@ All Rust, one process, direct function calls.
 ```
 deadline-cli
   → Spawns Python process
-  → Python loads gui/ widgets + deadline-gui-ffi.so via ctypes
+  → Python loads GUI widgets + deadline-gui-ffi.so via ctypes
   → Python shows QDialog
   → User interacts with dialog
   → Every button click / dropdown load calls deadline-gui-ffi → Rust
@@ -89,7 +85,7 @@ Maya Python plugin
   → Builds scene_data dict
   → Loads deadline-gui-ffi.so via ctypes (one-time)
   → Calls ffi.list_farms(), ffi.list_queues() to populate GUI dropdowns
-  → Shows Python QWidgets submit dialog (from gui/ package)
+  → Shows Python QWidgets submit dialog
   → User clicks Submit
   → Calls ffi.submit_job(scene_data) → Rust does everything
   → Returns job_id
@@ -109,7 +105,7 @@ ExtendScript (JSX)
   catches errors at the top level and prints them. The FFI layer converts
   Rust errors to C-compatible error codes + message strings.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
-  See [`TESTING.md`](TESTING.md).
+  See [`testing.md`](testing.md).
 - **API responses:** All API functions in `deadline-api` use the
   `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
   The CLI layer never sees SDK types. See [`specs/patterns.md § "AWS SDK for
@@ -120,5 +116,5 @@ ExtendScript (JSX)
 - **Credential scoping:** Non-Deadline AWS clients (CloudWatch Logs, S3)
   that access queue-scoped or fleet-scoped resources must use scoped
   credentials when the user is logged in via DCM. See
-  [`PATTERNS.md`](PATTERNS.md) § "Credential Scoping for Non-Deadline
+  [`patterns.md`](patterns.md) § "Credential Scoping for Non-Deadline
   AWS Services".

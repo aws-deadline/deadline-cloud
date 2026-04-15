@@ -11,7 +11,7 @@
 //! (matching Python's behavior — it raises DeadlineOperationError).
 //!
 //! Worker log credential scoping is tested at Level 1
-//! in `deadline-client` since `get_worker_logs` is not exposed via CLI.
+//! in `deadline-api` since `get_worker_logs` is not exposed via CLI.
 
 use deadline_test_server::deadline_api::{cloudwatch, jobs, queue_resources, queues, sessions, sts};
 use deadline_test_server::TestHarness;

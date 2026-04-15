@@ -1,4 +1,6 @@
-# Development Workflow
+# Development Workflow (Archived)
+
+> Earlier version. Current workflow: [specs/workflow.md](../workflow.md).
 
 The workflow for porting each feature from the Python CLI to Rust.
 

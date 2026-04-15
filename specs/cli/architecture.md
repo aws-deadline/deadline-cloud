@@ -8,9 +8,7 @@ deadline-cli (binary)
 ├── deadline-api
 ├── deadline-job-bundle
 ├── deadline-job-attachments
-├── deadline-mcp
-├── deadline-common
-└── deadline-models
+└── deadline-mcp
 ```
 
 Thin orchestration layer. Parses user arguments, delegates to library crates

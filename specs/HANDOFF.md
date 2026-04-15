@@ -12,8 +12,8 @@ are all "✅ Done".
 ## Critical Context for New Sessions
 
 1. **Python source is at `../deadline-cloud-python`** (sibling directory).
-   Always run the Python CLI to verify Rust output before accepting
-   snapshots (workflow Step 3).
+   Use it for behavioral parity verification when auditing ported
+   commands, not for new Rust-only features.
 
 2. **All tests pass.** The full workspace test suite is green.
    If a test fails, it's a real regression.
@@ -34,9 +34,7 @@ are all "✅ Done".
    on `deadline-api` (API calls) and `deadline-job-attachments` (S3
    upload). See `specs/architecture.md` for the dependency graph.
 
-7. **Crate consolidation completed.** `deadline-models` and
-   `deadline-common` were dissolved into `deadline-api` and
-   `deadline-job-attachments`. Error types, telemetry, path utils,
-   and submitter info now live in their natural consumer crates.
-   Import paths changed: `deadline_models::errors::DeadlineError` →
-   `deadline_api::errors::DeadlineError`, etc.
+7. **Historical note: crate consolidation.** Early iterations had
+   `deadline-models` and `deadline-common` as separate crates. These
+   were dissolved into `deadline-api` and `deadline-job-attachments`
+   because the separation added dependency complexity without value.

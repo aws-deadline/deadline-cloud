@@ -1,4 +1,6 @@
-# GUI FFI Architecture
+# GUI FFI Architecture (Archived)
+
+> Historical spike document. Current spec: [specs/gui-ffi/architecture.md](../gui-ffi/architecture.md).
 
 How the Rust shared library (`deadline-gui-ffi`) connects Python GUI
 widgets to Rust business logic. This document covers the interaction

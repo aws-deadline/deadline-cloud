@@ -101,8 +101,9 @@ model filtering step could eliminate both — see
 `specs/api/architecture.md` § "Future Improvements".
 - **Float precision:** `serde_json` parses JSON `1.0` as integer `1`
   when there is no fractional part. Python preserves `1.0`. Affects
-  fields like `costScaleFactor`. **Action item:** investigate
-  `serde_json` float preservation or post-processing.
+  fields like `costScaleFactor`. Accepted difference — `serde_json`
+  behavior is standard; post-processing would add complexity for
+  minimal user impact.
 
 ### DateTime format: display vs machine-readable
 

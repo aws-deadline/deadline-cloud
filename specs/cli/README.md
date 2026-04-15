@@ -7,8 +7,7 @@ crates. The user-facing entry point for the `deadline` binary.
 Consumers: end users via the `deadline` binary.
 
 Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
-`deadline-job-attachments`, `deadline-common`, `deadline-models`,
-`deadline-mcp`, `deadline-test-server` (dev).
+`deadline-job-attachments`, `deadline-mcp`, `deadline-test-server` (dev).
 
 ## Document Index
 

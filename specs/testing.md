@@ -394,7 +394,7 @@ cargo test
 cargo test -p deadline-cli
 
 # Just unit tests for a specific crate
-cargo test -p deadline-common
+cargo test -p deadline-api
 
 # Specific test
 cargo test -p deadline-cli farm_list_with_valid_creds

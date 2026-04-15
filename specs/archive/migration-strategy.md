@@ -1,4 +1,6 @@
-# Migration Strategy
+# Migration Strategy (Archived)
+
+> Historical decision record from project inception. For current status see [specs/progress.md](../progress.md).
 
 Full migration of all AWS Deadline Cloud client software from Python to Rust.
 This covers the CLI, the shared GUI, and all DCC submitter

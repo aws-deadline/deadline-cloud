@@ -1,5 +1,5 @@
 ---
-status: complete
+status: archived
 last_verified: e0346ce1aba96dee825d2c650f064d8740fa99aa
 release_tag: "0.54.2"
 scope: "Every persistent data structure that the tool reads from or writes to disk. Covers the configuration file INI format and section naming conventions, the job bundle directory layout and file discovery rules, the asset manifest JSON structure and versioning, the hash cache and S3 check cache SQLite schemas, the job history directory layout, and the incremental download checkpoint file format. Does not cover the semantics of individual configuration settings (see configuration_schema.md), how the configuration system is used by commands (see configuration.md), or the behavioral flows that produce or consume these structures (see the relevant feature pages)."

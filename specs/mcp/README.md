@@ -6,8 +6,7 @@ invoked by `deadline-cli` via `deadline mcp-server`.
 Consumers: `deadline-cli`.
 
 Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`,
-`deadline-job-bundle`, `deadline-job-attachments`, `deadline-common`,
-`deadline-models`.
+`deadline-job-bundle`, `deadline-job-attachments`.
 
 ## Document Index
 
@@ -17,4 +16,4 @@ Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`,
 
 ## Status
 
-Deferred — ships after core CLI commands are complete.
+Implemented — MCP server with tool registration, telemetry, and error handling.

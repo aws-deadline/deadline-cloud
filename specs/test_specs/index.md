@@ -71,4 +71,3 @@
 | # | Section | Status | Phase |
 |---|---------|--------|-------|
 | TBD | GUI FFI: C ABI contract, JSON exchange, callbacks | Not started | Phase 3 |
-| TBD | MCP server: tool registration, telemetry, error handling | Not started | Phase 5 |

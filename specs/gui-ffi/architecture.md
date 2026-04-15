@@ -8,7 +8,7 @@ DCC plugins ──ctypes.CDLL──► deadline-gui-ffi
 ```
 
 Depends on: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
-`deadline-job-attachments`, `deadline-common`, `deadline-models`.
+`deadline-job-attachments`.
 
 ## Module Layout
 
@@ -139,7 +139,7 @@ DCC plugins (Maya, Blender, etc.) follow the same pattern without the
 CLI binary. The plugin is ~150 lines of Python that:
 1. Queries the DCC for scene data (render layers, cameras, etc.)
 2. Loads the Rust shared library via `ctypes.CDLL`
-3. Shows the submission dialog (Python Qt widgets from `gui/`)
+3. Shows the submission dialog (Python Qt widgets)
 4. Calls Rust for every operation (list farms, submit job, etc.)
 
 ## Risks and Failure Modes

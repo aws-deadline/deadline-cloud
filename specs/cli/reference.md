@@ -468,7 +468,7 @@ Calls `ListTasks`, outputs tasks array as YAML.
 
 ## `deadline bundle` (partial)
 
-### `deadline bundle submit` 🔲
+### `deadline bundle submit` ✅
 
 | Flag | Description |
 |------|-------------|
@@ -657,7 +657,7 @@ job submission dialog. No flags beyond `--profile`.
 
 ---
 
-## `deadline mcp-server` 🔲
+## `deadline mcp-server` ✅
 
 No flags. Starts a stdio-based MCP server for AI agent integration.
 

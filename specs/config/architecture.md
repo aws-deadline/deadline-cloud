@@ -7,7 +7,6 @@ deadline-cli ──► deadline-config    ← this crate
 deadline-api ──► deadline-config
 deadline-gui-ffi ──► deadline-config
 deadline-job-attachments ──► (indirect via deadline-api)
-deadline-common ──► (no dependency on config)
 ```
 
 The foundational crate. Provides config file I/O and setting resolution.

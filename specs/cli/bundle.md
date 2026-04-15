@@ -88,7 +88,7 @@ The two flags use `overrides_with` in clap so the last one wins if both are spec
 
 | Aspect | Python | Rust |
 |--------|--------|------|
-| Parameter format | `-p Name=Value`, `file://`, inline JSON | `-p Name=Value` only |
+| Parameter format | `-p Name=Value`, `file://`, inline JSON | `-p Name=Value`, `file://`, inline JSON |
 | GUI submit | `bundle gui-submit` command | Not yet implemented |
 | `--json` output | Supported | Not yet implemented |
 | `--save-debug-snapshot` | Supported | Not yet implemented |

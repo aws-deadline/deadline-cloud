@@ -26,7 +26,7 @@ cargo test -p deadline-config  # single crate
 cargo insta review             # review new/changed output snapshots
 ```
 
-See [TESTING.md](TESTING.md) for the test philosophy (no mocking, Level 1
+See [specs/testing.md](specs/testing.md) for the test philosophy (no mocking, Level 1
 vs Level 2, snapshot workflow).
 
 ## Crates
@@ -40,11 +40,9 @@ vs Level 2, snapshot workflow).
 | `deadline-api` | AWS Deadline Cloud API, session, auth, telemetry |
 | `deadline-job-bundle` | Job bundle parsing, template loading, parameter validation |
 | `deadline-job-attachments` | Asset manifests, S3 upload/download, hash cache |
-| `deadline-models` | Shared data types and error types |
-| `deadline-common` | Shared utilities (path helpers, formatting) |
 | `deadline-test-server` | Test-only wiremock stub server |
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the crate dependency graph and
+See [specs/architecture.md](specs/architecture.md) for the crate dependency graph and
 data flows.
 
 ## Documentation

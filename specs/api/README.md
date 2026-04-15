@@ -5,7 +5,7 @@ service, STS, and CloudWatch Logs. The bridge between business logic and AWS.
 
 Consumers: `deadline-cli`, `deadline-gui-ffi`, `deadline-mcp`.
 
-Dependencies: `deadline-config`, `deadline-models`, `deadline-common` (telemetry).
+Dependencies: `deadline-config`.
 
 ## Document Index
 

@@ -1,7 +1,7 @@
 # Development Workflow
 
 How to implement features, fix bugs, and maintain quality in deadline-cloud-rs.
-Adapted from the [openjd-rs porting methodology](specs/rust-port-agent-method.md)
+Adapted from the [openjd-rs porting methodology](archive/rust-rewrite-workflow.md)
 with front-loaded testing and spec-as-quality-tool.
 
 ## Session Start

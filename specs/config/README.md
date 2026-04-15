@@ -5,7 +5,7 @@ settings through a hierarchical section naming scheme. The foundational crate
 that nearly every other crate depends on. No AWS dependencies.
 
 Consumers: `deadline-cli`, `deadline-api`, `deadline-gui-ffi`,
-`deadline-job-attachments`, `deadline-common`.
+`deadline-job-attachments`.
 
 ## Document Index
 

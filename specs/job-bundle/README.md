@@ -11,7 +11,7 @@ Consumers: `deadline-cli` (bundle submit), `deadline-gui-ffi` (submission
 dialog), `deadline-mcp` (submit_job tool).
 
 Dependencies: `deadline-api` (API calls), `deadline-job-attachments`
-(hashing, S3 upload), `deadline-models` (shared types).
+(hashing, S3 upload), `deadline-config`.
 
 ## Document Index
 

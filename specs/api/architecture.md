@@ -17,7 +17,8 @@ service crates for Deadline, STS, or CloudWatch. Exception:
 ```
 src/
 ├── lib.rs              # Re-exports: session, auth, api, job_monitoring,
-│                       #   log_retrieval, queue_parameters, raw_response
+│                       #   log_retrieval, queue_parameters, raw_response,
+│                       #   errors, submitter_info, path_utils, telemetry
 ├── session.rs          # SessionCache (LazyLock<Mutex>), SessionContext (user-agent),
 │                       #   SdkConfig caching per profile, queue credential provider,
 │                       #   get_queue_scoped_config, get_queue_user_config
@@ -34,8 +35,14 @@ src/
 │                       #   collects failed task details, exponential backoff
 ├── log_retrieval.rs    # get_session_logs, get_worker_logs: CloudWatch Logs integration,
 │                       #   session auto-selection, fleet-scoped credential resolution
-└── queue_parameters.rs # get_queue_parameter_definitions: fetches queue environments,
-                        #   parses YAML templates, extracts and deduplicates parameters
+├── queue_parameters.rs # get_queue_parameter_definitions: fetches queue environments,
+│                       #   parses YAML templates, extracts and deduplicates parameters
+├── errors.rs           # DeadlineError (6 variants), formerly in deadline-models
+├── submitter_info.rs   # SubmitterInfo struct, YamlValue enum, formerly in deadline-models
+├── path_utils.rs       # human_readable_file_size, summarize_paths, sanitize_path_for_filename,
+│                       #   formerly in deadline-common
+└── telemetry.rs        # TelemetryClient: background thread + mpsc channel + ureq HTTP,
+                        #   formerly in deadline-common
 ```
 
 ## Key Design Decisions
