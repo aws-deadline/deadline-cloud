@@ -21,6 +21,7 @@ Consumers: `deadline-cli` (attachment/manifest commands), `deadline-gui-ffi`
 | [s3-transfer.md](s3-transfer.md) | Upload/download engine, CAS addressing, progress tracking |
 | [path-grouping.md](path-grouping.md) | Storage profiles, asset root resolution, symlink rejection |
 | [path-mapping.md](path-mapping.md) | Path mapping rules from storage profiles, trie-based transform |
+| [incremental-download.md](incremental-download.md) | Incremental download state checkpoint persistence |
 
 ## Status
 

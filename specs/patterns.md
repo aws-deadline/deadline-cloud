@@ -207,3 +207,42 @@ Non-DCM users (e.g. IAM users with direct permissions, SSO profiles
 without DCM) may already have the necessary permissions on their base
 credentials. Queue/fleet role assumption would fail for these users.
 The DCM check gates the credential flow correctly.
+
+## Serialization: API Responses vs Owned File Formats
+
+Two distinct patterns exist for JSON serialization in this codebase.
+Choose based on who controls the schema.
+
+### API responses → `serde_json::Value`
+
+API responses use `ResponseBodyCapture` to capture raw JSON as
+`serde_json::Value`. This is necessary because AWS SDK output types
+don't implement `serde::Serialize` (see above). The CLI layer formats
+and prints `Value` directly. Model types that parse API responses use
+manual `from_json(&Value)` methods (e.g. `StorageProfile::from_json`).
+
+**Use for:** anything that comes from or goes to an AWS API.
+
+### Owned file formats → `#[derive(Serialize, Deserialize)]`
+
+For file formats we control (checkpoint files, state persistence,
+config structures we write and read back), use serde derives:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MyState {
+    pub required_field: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optional_field: Option<String>,
+    #[serde(default)]
+    pub defaulted_field: Vec<Item>,
+}
+```
+
+This gives compile-time field validation, automatic error messages for
+missing/malformed fields, and eliminates manual JSON object construction.
+The schema is under our control so there's no SDK compatibility concern.
+
+**Use for:** checkpoint files, incremental download state, any
+persistent data format owned by this codebase.

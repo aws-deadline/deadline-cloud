@@ -4,6 +4,7 @@ pub mod caches;
 pub mod diff;
 pub mod download;
 pub mod errors;
+pub mod incremental_download;
 pub mod manifest_ops;
 pub mod models;
 pub mod path_mapping;

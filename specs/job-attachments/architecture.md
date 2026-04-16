@@ -49,6 +49,8 @@ src/
 ├── path_mapping.rs     # generate_path_mapping_rules (from storage profiles),
 │                       #   PathMappingRuleApplier (trie-based longest-prefix matcher),
 │                       #   transform/strict_transform with Windows case-insensitive matching
+├── incremental_download.rs # IncrementalDownloadJob, IncrementalDownloadState,
+│                       #   checkpoint JSON persistence with atomic file writes
 └── vfs.rs              # Placeholder (empty) — virtual filesystem, deferred
 ```
 
