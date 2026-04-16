@@ -328,6 +328,15 @@ a Level 2 test when:
   gives sub-millisecond feedback. The Level 2 test covers the integration
   path; the Level 1 tests cover the combinatorial space.
 
+- **The function is a shared foundation used by 3+ modules.** Even if
+  CLI-reachable, add Level 1 tests when a function is called from many
+  places and contains non-trivial logic (parsing, branching — not thin
+  wrappers). A bug in a heavily-reused function causes confusing Level 2
+  failures far from the root cause. Example: `auth::get_user_and_identity_store_id`
+  is called from 7 sites across 4 modules — a Level 1 test pinpoints
+  parsing regressions that Level 2 tests would surface as mysterious
+  `farm list` or `job logs` failures.
+
 **Remove** a Level 1 test only when the Level 2 test asserts on the exact
 same observable output with the same precision. If the CLI snapshot captures
 the full error message verbatim, the Level 1 test for that error is

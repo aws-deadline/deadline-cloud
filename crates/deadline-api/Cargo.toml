@@ -26,3 +26,4 @@ ureq = "3"
 test-case = { workspace = true }
 wiremock = { workspace = true }
 serial_test = { workspace = true }
+tempfile = { workspace = true }
