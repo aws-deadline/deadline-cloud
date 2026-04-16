@@ -5,31 +5,31 @@ info:
   args:
     - queue
     - sync-output
-    - "--dry-run"
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp1ANZqU
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpXHvUl3
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60167"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60167"
-    AWS_ENDPOINT_URL_S3: "http://localhost:60167"
-    AWS_ENDPOINT_URL_STS: "http://localhost:60167"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60171"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60171"
+    AWS_ENDPOINT_URL_S3: "http://localhost:60171"
+    AWS_ENDPOINT_URL_STS: "http://localhost:60171"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpW1M9I1/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpW1M9I1
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpdFxtX1/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpdFxtX1
 ---
-success: true
-exit_code: 0
+success: false
+exit_code: 1
 ----- stdout -----
+Failed to list session actions for session-001: Unknown: No message
 
 ----- stderr -----
 Ignoring all storage profiles.
@@ -48,10 +48,3 @@ Retrieving updated data from Deadline Cloud...
 
 Categorizing 0 checkpoint jobs against 1 download candidate jobs...
 ...categorization completed
-
-Summary of paths to download:
-  (no files to download)
-
-Skipping downloads due to DRY RUN
-
-This is a DRY RUN so the checkpoint was not saved

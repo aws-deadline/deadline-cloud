@@ -5,37 +5,37 @@ info:
   args:
     - queue
     - sync-output
-    - "--bootstrap-lookback-minutes"
-    - "60"
+    - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpHFWdse
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpbxr9o3
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:58597"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58597"
-    AWS_ENDPOINT_URL_S3: "http://localhost:58597"
-    AWS_ENDPOINT_URL_STS: "http://localhost:58597"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60168"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60168"
+    AWS_ENDPOINT_URL_S3: "http://localhost:60168"
+    AWS_ENDPOINT_URL_STS: "http://localhost:60168"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpP9p8KB/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpP9p8KB
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpL5Liyc/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpL5Liyc
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
+Ignoring all storage profiles.
 Started incremental download for queue: Test Queue
 Checkpoint: [PATH]
 
-Checkpoint not found, lookback is 60 minutes
+Checkpoint not found, lookback is 0 minutes
 Initializing from: [TIMESTAMP]
 
 Updating download state across time interval:
@@ -45,7 +45,7 @@ Updating download state across time interval:
 Retrieving updated data from Deadline Cloud...
 ...retrieval completed
 
-Categorizing 0 checkpoint jobs against 0 download candidate jobs...
+Categorizing 0 checkpoint jobs against 1 download candidate jobs...
 ...categorization completed
 
 Summary of paths to download:
