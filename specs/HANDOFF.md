@@ -5,7 +5,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active Work Item
 
-**#13: Job download & sync-output** — Batches A, B, C1 complete. C2 next.
+**#13: Job download & sync-output** — Batches A, B, C1, C2 complete. C3 next.
 
 ### Completed: Batch A (`job download-output`)
 
@@ -20,32 +20,33 @@ consulting the Work Items table in `specs/progress.md`.
 ### Completed: Batch C1 (IncrementalDownloadState)
 
 - `incremental_download.rs`: `IncrementalDownloadJob`, `IncrementalDownloadState`
-- Serde-based serialization (owned file format pattern, documented in `patterns.md`)
-- Atomic file persistence via `tempfile::NamedTempFile` + `persist()`
+- Serde-based serialization, atomic file persistence
 - 22 Level 1 tests, all passing
-- Added `tempfile` as regular dependency (was dev-only)
-- Added serialization pattern guidance to `specs/patterns.md`
 
-### Next: Batch C2 (Manifest S3 download pipeline)
+### Completed: Batch C2 (Manifest S3 download pipeline)
 
-- `add_output_manifests_from_s3` — match S3 manifest keys to session actions
-- `download_all_manifests_with_absolute_paths` — download + path mapping
-- `merge_absolute_path_manifest_list` — timestamp-ordered merge
-- `download_file` — S3 CAS download with conflict resolution
-- `download_manifest_paths` — orchestrate parallel downloads with progress
-- Test spec: section 35 cases 23-61 (39 cases)
-- Python source: `_incremental_downloads/_manifest_s3_downloads.py` (667 lines)
+- `add_output_manifests_from_s3`: match S3 keys to session actions by
+  session action ID regex and root path hash
+- `make_manifest_paths_absolute`: join paths with root, apply path mapping,
+  collect unmapped paths
+- `merge_absolute_path_manifest_list`: timestamp-ordered case-insensitive merge
+- Reuses existing `download_file` from `download.rs` — no fork
+- 17 Level 1 tests, all passing
 
-### Then: Batch C3 (CLI `queue sync-output`)
+### Next: Batch C3 (CLI `queue sync-output`)
 
-- Full orchestration, job categorization, PID lock, CLI command
+- Full orchestration: job categorization (7 categories), session retrieval,
+  storage profile loading, path mapping rule creation, checkpoint management
+- PID file lock for concurrency control
+- CLI argument parsing, dry-run
 - Test spec: section 42 cases 14-26 (13 cases)
+- Python source: `cli/_incremental_download.py` (1,271 lines)
 
 ## Critical Context for New Sessions
 
 1. **Python source is at `../deadline-cloud-python`** (sibling directory).
 
-2. **All tests pass.** 949 tests across all crates.
+2. **All tests pass.** 966 tests across all crates.
 
 3. **Development workflow is in `specs/workflow.md`.** Follow the
    7-step loop. Step 3 now includes a CLI comparison gate.

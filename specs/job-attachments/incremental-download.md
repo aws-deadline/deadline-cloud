@@ -46,3 +46,44 @@ which is compatible with Python's `datetime.fromisoformat()`.
   ISO 8601 and interoperable.
 - Python's `_datetimes_to_str` recursively converts boto3 datetime objects.
   Not needed in Rust since API responses arrive as strings via `ResponseBodyCapture`.
+
+## Manifest S3 Download Pipeline
+
+Functions for the incremental download flow that compose with the existing
+`download.rs` engine.
+
+### `add_output_manifests_from_s3`
+
+Matches S3 manifest keys to session actions by:
+1. Extracting session action ID from key via regex (`sessionaction-{id}-{index}/`)
+2. Hashing each job manifest's `fileSystemLocationName + rootPath` with xxh128
+3. Finding which root path hash appears in the S3 key
+4. Setting the `outputManifestPath` on the matching session action's manifests array
+
+Skips session actions that already have a `manifests` field. Returns early
+if the job has no attachments or no keys to process.
+
+### `make_manifest_paths_absolute`
+
+Converts relative manifest paths to absolute by joining with the root path:
+- POSIX source: joins with `/`
+- Windows source: joins with `\`
+
+If a `PathMappingRuleApplier` is provided, applies `strict_transform` to
+each absolute path. Paths that fail mapping are removed from the manifest
+and recorded in `output_unmapped_paths`.
+
+### `merge_absolute_path_manifest_list`
+
+Merges manifests ordered by last-modified timestamp. Sorts by timestamp
+first (earlier processed first), then inserts paths into a HashMap keyed
+by lowercased path. Later entries overwrite earlier ones, so the most
+recent version of each file wins. Case-insensitive dedup matches Python's
+`os.path.normcase` behavior.
+
+### Download orchestration
+
+The actual file download reuses `download::download_file` from `download.rs`.
+The incremental pipeline passes absolute paths (manifest paths are already
+joined with root and mapped), so `download_file` receives them via its
+existing interface. No fork of the download engine.
