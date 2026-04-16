@@ -1,0 +1,14 @@
+#[path = "suite/history.rs"]
+mod history;
+#[path = "suite/loader.rs"]
+mod loader;
+#[path = "suite/param_apply_merge.rs"]
+mod param_apply_merge;
+#[path = "suite/param_read.rs"]
+mod param_read;
+#[path = "suite/param_validation.rs"]
+mod param_validation;
+#[path = "suite/param_value.rs"]
+mod param_value;
+#[path = "suite/submission.rs"]
+mod submission;

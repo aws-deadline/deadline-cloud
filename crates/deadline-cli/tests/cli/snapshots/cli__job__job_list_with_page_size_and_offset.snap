@@ -1,0 +1,44 @@
+---
+source: crates/deadline-cli/tests/cli/job.rs
+info:
+  program: deadline
+  args:
+    - job
+    - list
+    - "--page-size"
+    - "1"
+    - "--item-offset"
+    - "3"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61361"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61361"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61361"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpbogWHX/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpbogWHX
+---
+success: true
+exit_code: 0
+----- stdout -----
+Displaying 1 of 12 Jobs starting at 3
+
+- name: CLI Job
+  jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
+  taskRunStatus: RUNNING
+  startedAt: 2023-01-27 07:37:53+00:00
+  endedAt: 2023-01-27 07:39:17+00:00
+  createdBy: b801f3c0-c071-70bc-b869-6804bc732408
+  createdAt: 2023-01-27 07:34:41+00:00
+  estimatedTimeRemaining: N/A
+
+
+----- stderr -----

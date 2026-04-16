@@ -1,0 +1,42 @@
+---
+source: crates/deadline-cli/tests/cli/diagnostics.rs
+info:
+  program: deadline
+  args:
+    - job
+    - list-sessions
+    - "--job-id"
+    - job-001
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61256"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61256"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61256"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmSYxFq/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmSYxFq
+---
+success: true
+exit_code: 0
+----- stdout -----
+- sessionId: session-001
+  fleetId: fleet-abc
+  workerId: worker-001
+  startedAt: 2024-12-18 00:00:00+00:00
+  lifecycleStatus: ENDED
+- sessionId: session-002
+  fleetId: fleet-abc
+  workerId: worker-002
+  startedAt: 2024-12-18 00:30:00+00:00
+  lifecycleStatus: STARTED
+
+
+----- stderr -----

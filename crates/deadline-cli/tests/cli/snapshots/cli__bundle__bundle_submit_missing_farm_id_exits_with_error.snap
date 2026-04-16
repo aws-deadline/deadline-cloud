@@ -1,0 +1,32 @@
+---
+source: crates/deadline-cli/tests/cli/bundle.rs
+info:
+  program: deadline
+  args:
+    - bundle
+    - submit
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpEP9VLC/no_farm
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:62916"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:62916"
+    AWS_ENDPOINT_URL_S3: "http://localhost:62916"
+    AWS_ENDPOINT_URL_STS: "http://localhost:62916"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpEP9VLC/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpEP9VLC
+---
+success: false
+exit_code: 2
+----- stdout -----
+Missing '--farm-id' or default Farm ID configuration
+
+----- stderr -----
