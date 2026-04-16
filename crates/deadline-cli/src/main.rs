@@ -168,6 +168,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::queue::QueueAction::ExportCredentials { .. } => "export-credentials",
             commands::queue::QueueAction::GetStorageProfile { .. } => "get-storage-profile",
             commands::queue::QueueAction::Paramdefs { .. } => "paramdefs",
+            commands::queue::QueueAction::SyncOutput { .. } => "sync-output",
         }),
         Commands::Job { action } => ("job", match action {
             commands::job::JobAction::List { .. } => "list",

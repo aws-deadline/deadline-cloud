@@ -1,0 +1,37 @@
+---
+source: crates/deadline-cli/tests/cli/queue_sync_output.rs
+info:
+  program: deadline
+  args:
+    - queue
+    - sync-output
+    - "--checkpoint-dir"
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpSvTRJp
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:57018"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:57018"
+    AWS_ENDPOINT_URL_S3: "http://localhost:57018"
+    AWS_ENDPOINT_URL_STS: "http://localhost:57018"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp1wyc0q/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp1wyc0q
+---
+success: false
+exit_code: 1
+----- stdout -----
+The sync-output operation requires a storage profile defined in the deadline client configuration or provided with the --storage-profile-id option.
+
+Storage profiles are used to generate path mappings when a job was submitted from a machine with a different operating system or file system mount locations than the machine downloading outputs. See https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/modeling-your-shared-filesystem-locations-with-storage-profiles.html for more information.
+
+If you only submit and download jobs from the same operating system and mount locations, you can use the --ignore-storage-profiles option.
+
+----- stderr -----

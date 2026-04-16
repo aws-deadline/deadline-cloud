@@ -1,0 +1,49 @@
+---
+source: crates/deadline-cli/tests/cli/queue_sync_output.rs
+info:
+  program: deadline
+  args:
+    - queue
+    - sync-output
+    - "--force-bootstrap"
+    - "--bootstrap-lookback-minutes"
+    - "30"
+    - "--checkpoint-dir"
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpO94TCK
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:57002"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:57002"
+    AWS_ENDPOINT_URL_S3: "http://localhost:57002"
+    AWS_ENDPOINT_URL_STS: "http://localhost:57002"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpke1D0v/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpke1D0v
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Started incremental download for queue: Test Queue
+Checkpoint: [PATH]
+
+Bootstrap forced, lookback is 30 minutes
+Initializing from: [TIMESTAMP]
+
+Updating download state across time interval:
+    From: [TIMESTAMP]
+      To: [TIMESTAMP]
+
+Summary of paths to download:
+  (no files to download)
+
+Checkpoint saved

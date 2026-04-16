@@ -87,3 +87,42 @@ The actual file download reuses `download::download_file` from `download.rs`.
 The incremental pipeline passes absolute paths (manifest paths are already
 joined with root and mapped), so `download_file` receives them via its
 existing interface. No fork of the download engine.
+
+## CLI: `deadline queue sync-output`
+
+CLI command that downloads new job attachment output for all jobs in a queue.
+
+### Arguments
+
+- `--bootstrap-lookback-minutes` — minutes to look back on first run (default 0)
+- `--checkpoint-dir` — directory for checkpoint files (default `~/.deadline/incremental_download`)
+- `--force-bootstrap` — force re-initialization from lookback
+- `--ignore-storage-profiles` — skip path mapping, download to original paths
+- `--storage-profile-id` — override configured storage profile
+- `--conflict-resolution` — SKIP, OVERWRITE (default), CREATE_COPY
+- `--dry-run` — simulate without downloading or saving checkpoint
+- `--json` — output as JSON
+
+### Validation order
+
+1. Mutual exclusion: `--storage-profile-id` and `--ignore-storage-profiles`
+2. Expand and create checkpoint directory
+3. Check directory is writable
+4. Resolve storage profile (from config or `--storage-profile-id`)
+5. Get queue, verify `jobAttachmentSettings` exists
+6. Acquire PID lock
+7. Load or bootstrap checkpoint
+8. Validate checkpoint storage profile matches current
+
+### Checkpoint file naming
+
+`{queue_id}_{storage_profile_id_or_ignore-storage-profiles}_download_checkpoint.json`
+
+PID lock file: same name with `.pid` suffix.
+
+### PID file lock
+
+RAII-based lock using atomic file operations:
+- Acquire: write PID to temp file, hard link (POSIX) or rename (Windows) to lock path
+- Stale detection: if lock exists, check if holder PID is alive via `kill(pid, 0)`
+- Release: on drop, remove lock file if our PID still matches

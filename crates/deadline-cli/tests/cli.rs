@@ -34,6 +34,8 @@ mod queue;
 mod queue_paramdefs;
 #[path = "cli/queue_resources.rs"]
 mod queue_resources;
+#[path = "cli/queue_sync_output.rs"]
+mod queue_sync_output;
 #[path = "cli/root.rs"]
 mod root;
 #[path = "cli/suggest.rs"]
