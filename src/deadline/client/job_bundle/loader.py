@@ -108,8 +108,8 @@ def read_yaml_or_json_object(
     Args:
         job_bundle_dir (str): The directory containing the job bundle.
         filename (str): The filename, without extension, to look for.
-        required (bool): Whether this file is required. If not required and its missing,
-                         the function returns ("", "").
+        required (bool): Whether this file is required. If not required and missing,
+                         the function returns None.
     """
     file_contents, file_type = read_yaml_or_json(bundle_dir, filename, required)
     if file_contents and file_type:

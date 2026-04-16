@@ -539,7 +539,14 @@ def download_file(
                 f"Unknown choice for file conflict resolution: {file_conflict_resolution}"
             )
 
-    local_file_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        local_file_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise OSError(
+            f"Failed to create download directory '{local_file_path.parent}': {e}. "
+            "If this path was configured on a different operating system, re-run the "
+            "download and choose a valid local path when prompted."
+        ) from e
 
     future: concurrent.futures.Future
 

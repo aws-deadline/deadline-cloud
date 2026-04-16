@@ -123,6 +123,7 @@ def show_job_bundle_submitter(
     submitter_info: Optional[SubmitterInfo] = None,
     known_asset_paths: Optional[list[str]] = None,
     job_parameters: Optional[list[dict[str, Any]]] = None,
+    name: Optional[str] = None,
 ) -> Optional[SubmitJobToDeadlineDialog]:
     """
     Opens an AWS Deadline Cloud job submission dialog for the provided job bundle.
@@ -239,6 +240,22 @@ def show_job_bundle_submitter(
             data=asset_references.to_dict(),
         )
 
+        # Copy hooks configuration and set original bundle path for script resolution
+        for hooks_filename in ("hooks.yaml", "hooks.json"):
+            hooks_src = os.path.join(settings.input_job_bundle_dir, hooks_filename)
+            if os.path.isfile(hooks_src):
+                import shutil
+
+                hooks_dst = os.path.join(job_bundle_dir, hooks_filename)
+                shutil.copy2(hooks_src, hooks_dst)
+
+                # Write the original bundle path so hooks can resolve scripts
+                hooks_origin_file = os.path.join(job_bundle_dir, ".hooks_origin")
+                with open(hooks_origin_file, "w") as f:
+                    f.write(os.path.abspath(settings.input_job_bundle_dir))
+
+                break  # Only copy one (yaml takes precedence)
+
         return {
             "known_asset_paths": [os.path.abspath(settings.input_job_bundle_dir)],
             "job_parameters": parameter_values,
@@ -255,9 +272,8 @@ def show_job_bundle_submitter(
     )
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
-    name = "Job bundle submission"
-    if template:
-        name = template.get("name", name)
+    if name is None:
+        name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
 
     if not os.path.isdir(input_job_bundle_dir):
         raise DeadlineOperationError(f"Input Job Bundle Dir is not valid: {input_job_bundle_dir}")

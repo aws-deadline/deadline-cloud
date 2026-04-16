@@ -9,7 +9,8 @@ pytest-xdist == 3.*
 freezegun == 1.*
 types-pyyaml == 6.*
 twine == 6.*
-mypy == 1.*
+mypy == 1.13.*; python_version <= '3.8'
+mypy == 1.*; python_version > '3.8'
 ruff == 0.15.*
 import-linter == 2.*
 moto == 5.*

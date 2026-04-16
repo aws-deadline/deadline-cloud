@@ -65,6 +65,7 @@ _SETTING_QUEUE_ID = "defaults.queue_id"
 SETTINGS: Dict[str, Dict[str, Any]] = {
     "deadline-cloud-monitor.path": {
         "default": "",
+        "is_path": True,
         "description": "The filesystem path to Deadline Cloud monitor, set during login process.",
     },
     "defaults.aws_profile_name": {
@@ -76,6 +77,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     "settings.job_history_dir": {
         "default": DEFAULT_JOB_HISTORY_DIR,
         "depend": "defaults.aws_profile_name",
+        "is_path": True,
         "description": "The directory in which to place the job submission history for this AWS profile name.",
     },
     _SETTING_FARM_ID: {
@@ -143,6 +145,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "settings.known_asset_paths": {
         "default": "",  # OS-specific path separator delimited list
+        "is_path_list": True,
         "description": "A list of paths that should not generate warnings when outside storage profile locations, separated by the OS path list separator (semicolon on Windows, colon on Linux/macOS).",
     },
     "settings.locale": {
@@ -156,6 +159,22 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "When 'true', always verify files exist in S3 via HEAD request before skipping upload "
             "(most reliable but slower, skips cache integrity check since every file is verified). "
             "When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default)."
+        ),
+    },
+    "settings.allow_bundle_hooks": {
+        "default": "false",
+        "description": (
+            "Allow execution of hooks defined in job bundle hooks.yaml/hooks.json files. "
+            "When 'true', bundle hooks will run with a confirmation prompt (unless auto_accept is enabled). "
+            "When 'false', bundle hooks are ignored."
+        ),
+    },
+    "settings.allow_environment_hooks": {
+        "default": "false",
+        "description": (
+            "Allow execution of hooks from DEADLINE_HOOKS_DIR environment variable. "
+            "When 'true', hooks from the directory specified by DEADLINE_HOOKS_DIR will run. "
+            "When 'false', environment hooks are ignored."
         ),
     },
     "settings.submitter_update_notification": {
@@ -395,9 +414,45 @@ def get_setting(setting_name: str, config: Optional[ConfigParser] = None) -> str
     result: Optional[str] = config.get(section, name, fallback=None)
 
     if result is None:
-        return _get_default_from_setting_config(setting_config, config=config)
-    else:
-        return result
+        result = _get_default_from_setting_config(setting_config, config=config)
+
+    # Convert stored forward-slash paths back to native OS format.
+    # This also normalizes defaults (e.g. job_history_dir) which use
+    # os.path.join and produce backslashes on Windows.
+    if setting_config.get("is_path") and result:
+        result = _normalize_path_from_config(result)
+    elif setting_config.get("is_path_list") and result:
+        result = os.pathsep.join(
+            _normalize_path_from_config(p) for p in result.split(os.pathsep) if p
+        )
+
+    return result
+
+
+def _normalize_path_for_config(path_value: str) -> str:
+    """
+    Normalizes a filesystem path for storage in the config file by replacing
+    backslashes with forward slashes on Windows. This prevents corruption when
+    the config file is rewritten by tools (like Deadline Cloud Monitor) that may
+    interpret backslashes as escape characters in INI-style config values.
+
+    Forward slashes work correctly on all platforms including Windows.
+    Only performs replacement on Windows.
+    """
+    if os.name == "nt":
+        return path_value.replace("\\", "/")
+    return path_value
+
+
+def _normalize_path_from_config(path_value: str) -> str:
+    """
+    Converts a path read from the config file to the native OS format.
+    Paths are stored with forward slashes to prevent corruption, but consumers
+    on Windows expect native backslash paths.
+    """
+    if os.name == "nt":
+        return path_value.replace("/", "\\")
+    return path_value
 
 
 def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = None):
@@ -416,6 +471,13 @@ def set_setting(setting_name: str, value: str, config: Optional[ConfigParser] = 
 
     # Get the type of the default to validate it is an AWS Deadline Cloud setting, and retrieve its type
     setting_config = _get_setting_config(setting_name)
+
+    # Normalize path values to use forward slashes, preventing corruption when
+    # the config file is rewritten by tools that interpret backslashes as escapes.
+    if setting_config.get("is_path") and value:
+        value = _normalize_path_for_config(value)
+    elif setting_config.get("is_path_list") and value:
+        value = os.pathsep.join(_normalize_path_for_config(p) for p in value.split(os.pathsep) if p)
 
     # If no config was provided, then read from disk and signal to write it later
     if not config:

@@ -418,6 +418,7 @@ def bundle_submit(
     'OR --submitter-info \'{"submitter_name": "MyApp", "additional_info": {"render_engine": "Cycles"}}\' '
     "OR --submitter-info file://path/to/submitter.json",
 )
+@click.option("--name", help="The job name to use in place of the one in the job bundle.")
 @_handle_error
 def bundle_gui_submit(
     parameter,
@@ -428,6 +429,7 @@ def bundle_gui_submit(
     known_asset_path,
     submitter_name,
     submitter_info,
+    name,
     **args,
 ):
     """
@@ -473,6 +475,7 @@ def bundle_gui_submit(
             submitter_info=submitter_info,
             known_asset_paths=known_asset_path,
             job_parameters=parameter,
+            name=name,
         )
 
         if not submitter:
