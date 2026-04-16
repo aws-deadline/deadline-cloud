@@ -35,3 +35,43 @@ pub async fn mock_s3_list_empty(server: &MockServer) {
         .mount(server)
         .await;
 }
+
+/// Mount an S3 ListObjectsV2 response that returns the given keys.
+pub async fn mock_s3_list_objects(server: &MockServer, keys: &[&str]) {
+    let contents: String = keys
+        .iter()
+        .map(|k| format!("<Contents><Key>{k}</Key><Size>100</Size></Contents>"))
+        .collect();
+    Mock::given(method("GET"))
+        .and(query_param("list-type", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>bucket</Name>
+  <KeyCount>{}</KeyCount>
+  <MaxKeys>1000</MaxKeys>
+  <IsTruncated>false</IsTruncated>
+  {}
+</ListBucketResult>"#,
+            keys.len(),
+            contents,
+        )))
+        .mount(server)
+        .await;
+}
+
+/// Mount an S3 GetObject response for a specific key with the given body.
+pub async fn mock_s3_get_object(server: &MockServer, key: &str, body: &[u8]) {
+    use wiremock::matchers::path;
+    // S3 path-style: /<bucket>/<key>
+    // With endpoint override, the SDK uses path-style addressing
+    Mock::given(method("GET"))
+        .and(path(format!("/{key}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(body.to_vec())
+                .insert_header("last-modified", "Thu, 15 Jun 2024 10:30:00 GMT"),
+        )
+        .mount(server)
+        .await;
+}

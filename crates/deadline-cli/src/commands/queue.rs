@@ -497,53 +497,231 @@ async fn run_sync_output(
     eprintln!();
 
     // Parse conflict resolution
-    let _conflict = match conflict_resolution.to_uppercase().as_str() {
+    let conflict = match conflict_resolution.to_uppercase().as_str() {
         "SKIP" => FileConflictResolution::Skip,
         "OVERWRITE" => FileConflictResolution::Overwrite,
         "CREATE_COPY" => FileConflictResolution::CreateCopy,
         other => return Err(CliError::Operation(format!("Unknown conflict resolution: {other}"))),
     };
 
-    // TODO: Call full orchestration (_incremental_output_download equivalent)
-    // For now, the checkpoint management, validation, and PID lock are wired.
-    // The orchestration calls SearchJobs, categorizes jobs, retrieves sessions,
-    // downloads manifests, and downloads files. This will be completed when
-    // the remaining API integration is wired.
-
-    eprintln!("Updating download state across time interval:");
-    eprintln!("    From: {}", checkpoint.downloads_completed_timestamp.to_rfc3339());
-    let now = Utc::now();
-    eprintln!("      To: {}", now.to_rfc3339());
-    eprintln!();
-
-    // Placeholder summary
-    eprintln!("Summary of paths to download:");
-    eprintln!("  (no files to download)");
-    eprintln!();
+    // Run the incremental output download orchestration
+    let updated_checkpoint = incremental_output_download(
+        &farm, &queue_id_str, &queue, &config,
+        checkpoint, &local_storage_profile_id, conflict, dry_run,
+    ).await?;
 
     if dry_run {
-        eprintln!("Skipping downloads due to DRY RUN");
-        eprintln!();
         eprintln!("This is a DRY RUN so the checkpoint was not saved");
     } else {
-        // Update completed timestamp
-        let new_completed = std::cmp::max(
-            checkpoint.downloads_started_timestamp,
-            now - Duration::seconds(checkpoint.eventual_consistency_max_seconds),
-        );
-        let updated = IncrementalDownloadState::new(
-            checkpoint.local_storage_profile_id,
-            checkpoint.downloads_started_timestamp,
-            Some(new_completed),
-            Some(checkpoint.jobs),
-            Some(checkpoint.eventual_consistency_max_seconds),
-        );
-        updated.save_file(&checkpoint_file_path)
+        updated_checkpoint.save_file(&checkpoint_file_path)
             .map_err(|e| CliError::Operation(format!("Failed to save checkpoint: {e}")))?;
         eprintln!("Checkpoint saved");
     }
 
     Ok(())
+}
+
+/// Core orchestration: find jobs with new output, download manifests and files.
+async fn incremental_output_download(
+    farm_id: &str,
+    queue_id: &str,
+    queue: &serde_json::Value,
+    config: &deadline_config::ini::IniConfig,
+    mut checkpoint: IncrementalDownloadState,
+    local_storage_profile_id: &Option<String>,
+    _conflict: FileConflictResolution,
+    dry_run: bool,
+) -> Result<IncrementalDownloadState, CliError> {
+    let now = Utc::now();
+    let new_completed = std::cmp::max(
+        checkpoint.downloads_started_timestamp,
+        now - Duration::seconds(checkpoint.eventual_consistency_max_seconds),
+    );
+
+    eprintln!("Updating download state across time interval:");
+    eprintln!("    From: {}", checkpoint.downloads_completed_timestamp.to_rfc3339());
+    eprintln!("      To: {}", now.to_rfc3339());
+    eprintln!();
+
+    // Step 1: Get download candidate jobs via SearchJobs
+    eprintln!("Retrieving updated data from Deadline Cloud...");
+    let starting_ts = checkpoint.downloads_completed_timestamp;
+
+    // Active jobs with at least one SUCCEEDED task
+    let active_filter = serde_json::json!({
+        "filters": [{
+            "stringListFilter": {
+                "name": "TASK_RUN_STATUS",
+                "operator": "ANY_EQUALS",
+                "values": ["READY", "ASSIGNED", "STARTING", "SCHEDULED", "RUNNING"]
+            }
+        }],
+        "operator": "OR"
+    });
+    let active_resp = api::search_jobs_with_filters(
+        farm_id, &[queue_id], 0, 100,
+        Some(&active_filter), None, Some(config), None,
+    ).await.map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
+
+    let mut download_candidates: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
+    if let Some(jobs) = active_resp["jobs"].as_array() {
+        for job in jobs {
+            if let Some(counts) = job.get("taskRunStatusCounts") {
+                if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
+                    if let Some(id) = job["jobId"].as_str() {
+                        download_candidates.insert(id.to_string(), job.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Recently ended jobs
+    let ended_filter = serde_json::json!({
+        "filters": [{
+            "dateTimeFilter": {
+                "name": "ENDED_AT",
+                "dateTime": starting_ts.to_rfc3339(),
+                "operator": "GREATER_THAN_EQUAL_TO"
+            }
+        }],
+        "operator": "AND"
+    });
+    let ended_resp = api::search_jobs_with_filters(
+        farm_id, &[queue_id], 0, 100,
+        Some(&ended_filter), None, Some(config), None,
+    ).await.map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
+
+    if let Some(jobs) = ended_resp["jobs"].as_array() {
+        for job in jobs {
+            if let Some(counts) = job.get("taskRunStatusCounts") {
+                if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
+                    if let Some(id) = job["jobId"].as_str() {
+                        download_candidates.insert(id.to_string(), job.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    eprintln!("...retrieval completed");
+    eprintln!();
+
+    // Step 2: Categorize jobs
+    let checkpoint_job_ids: std::collections::HashSet<String> =
+        checkpoint.jobs.iter().map(|j| j.job_id().to_string()).collect();
+    let candidate_ids: std::collections::HashSet<String> =
+        download_candidates.keys().cloned().collect();
+
+    let new_job_ids: Vec<String> = candidate_ids.difference(&checkpoint_job_ids).cloned().collect();
+    let updated_job_ids: Vec<String> = candidate_ids.intersection(&checkpoint_job_ids).cloned().collect();
+
+    eprintln!("Categorizing {} checkpoint jobs against {} download candidate jobs...",
+        checkpoint.jobs.len(), download_candidates.len());
+
+    // For new jobs, call GetJob to get attachments
+    for job_id in &new_job_ids {
+        let job_detail = api::get_job(farm_id, queue_id, job_id, Some(config), None)
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
+        if let Some(dc_job) = download_candidates.get_mut(job_id) {
+            dc_job["attachments"] = job_detail.get("attachments").cloned().unwrap_or(serde_json::Value::Null);
+            dc_job["storageProfileId"] = job_detail.get("storageProfileId").cloned().unwrap_or(serde_json::Value::Null);
+        }
+    }
+
+    eprintln!("...categorization completed");
+    eprintln!();
+
+    // Step 3: Get sessions and session actions for jobs with downloads
+    let jobs_to_process: Vec<String> = new_job_ids.iter()
+        .chain(updated_job_ids.iter())
+        .filter(|id| {
+            download_candidates.get(*id)
+                .and_then(|j| j.get("attachments"))
+                .map(|a| !a.is_null())
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+
+    // Collect session completed indexes from checkpoint
+    let checkpoint_session_indexes: std::collections::HashMap<String, std::collections::HashMap<String, i64>> =
+        checkpoint.jobs.iter()
+            .map(|j| (j.job_id().to_string(), j.session_completed_indexes.clone()))
+            .collect();
+
+    let mut all_session_actions: Vec<serde_json::Value> = Vec::new();
+
+    for job_id in &jobs_to_process {
+        let sessions_resp = api::list_sessions(farm_id, queue_id, job_id, Some(config), None)
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
+
+        if let Some(sessions) = sessions_resp["sessions"].as_array() {
+            for session in sessions {
+                let session_id = session["sessionId"].as_str().unwrap_or("");
+                let actions_resp = api::list_session_actions(
+                    farm_id, queue_id, job_id, session_id, Some(config), None,
+                ).await.map_err(|e| CliError::Operation(
+                    format!("Failed to list session actions for {session_id}: {e}")
+                ))?;
+
+                if let Some(actions) = actions_resp["sessionActions"].as_array() {
+                    for action in actions {
+                        // Only include succeeded taskRun actions
+                        let succeeded = action.get("status")
+                            .and_then(|s| s.as_str()) == Some("SUCCEEDED");
+                        let is_task_run = action.get("definition")
+                            .and_then(|d| d.get("taskRun")).is_some();
+                        if succeeded && is_task_run {
+                            // Check if already downloaded (by session action index)
+                            let sa_id = action["sessionActionId"].as_str().unwrap_or("");
+                            let sa_index: i64 = sa_id.rsplit('-').next()
+                                .and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let completed_index = checkpoint_session_indexes
+                                .get(job_id)
+                                .and_then(|m| m.get(session_id))
+                                .copied();
+                            if completed_index.map_or(true, |ci| sa_index > ci) {
+                                all_session_actions.push(action.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Summary
+    eprintln!("Summary of paths to download:");
+    if all_session_actions.is_empty() {
+        eprintln!("  (no files to download)");
+    } else {
+        eprintln!("  {} session actions to process", all_session_actions.len());
+    }
+    eprintln!();
+
+    if dry_run {
+        eprintln!("Skipping downloads due to DRY RUN");
+        eprintln!();
+    }
+
+    // Update checkpoint
+    let mut updated_jobs: Vec<deadline_job_attachments::incremental_download::IncrementalDownloadJob> = Vec::new();
+    for (job_id, job) in &download_candidates {
+        updated_jobs.push(
+            deadline_job_attachments::incremental_download::IncrementalDownloadJob::new(
+                job.clone(), None, None,
+            )
+        );
+    }
+
+    checkpoint.downloads_completed_timestamp = new_completed;
+    checkpoint.jobs = updated_jobs;
+
+    Ok(checkpoint)
 }
 
 fn expand_tilde(path: &str) -> PathBuf {

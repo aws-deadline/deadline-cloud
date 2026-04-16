@@ -91,3 +91,22 @@ pub async fn mock_update_task(
         .mount(server)
         .await;
 }
+
+pub async fn mock_list_session_actions(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_id: &str,
+    session_actions: &[Value],
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions/{session_id}/session-actions"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "sessionActions": session_actions })),
+        )
+        .mount(server)
+        .await;
+}
