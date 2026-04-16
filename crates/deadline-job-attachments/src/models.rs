@@ -417,7 +417,7 @@ impl Attachments {
 
 // --- PathMappingRule ---
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PathMappingRule {
     pub source_path_format: String,
     pub source_path: String,

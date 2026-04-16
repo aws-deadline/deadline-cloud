@@ -20,6 +20,7 @@ Consumers: `deadline-cli` (attachment/manifest commands), `deadline-gui-ffi`
 | [hash-cache.md](hash-cache.md) | SQLite hash cache, S3 check cache, integrity verification |
 | [s3-transfer.md](s3-transfer.md) | Upload/download engine, CAS addressing, progress tracking |
 | [path-grouping.md](path-grouping.md) | Storage profiles, asset root resolution, symlink rejection |
+| [path-mapping.md](path-mapping.md) | Path mapping rules from storage profiles, trie-based transform |
 
 ## Status
 
@@ -27,14 +28,13 @@ Implemented: hashing, manifest encode/decode, hash cache, S3 check cache,
 progress tracking, path grouping, manifest creation, S3 upload/download,
 manifest merging, output manifest retrieval, attachment download/upload API,
 manifest snapshot/diff/merge/upload/download, OutputDownloader (job output
-download orchestration).
+download orchestration), path mapping from storage profiles.
 
 Gaps:
 - Job attachments orchestration (`submit_job_attachments` full flow)
 - VFS (virtual filesystem) — deferred
 - Parallel S3 transfer — proven in spike, not yet in production paths
 - File permission management on download
-- Cross-OS path remapping on download (path mapping from storage profiles)
 
 ## Gotchas & Constraints
 

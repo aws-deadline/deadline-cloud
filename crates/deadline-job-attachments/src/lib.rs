@@ -6,6 +6,7 @@ pub mod download;
 pub mod errors;
 pub mod manifest_ops;
 pub mod models;
+pub mod path_mapping;
 pub mod progress_tracker;
 pub mod s3;
 pub mod upload;

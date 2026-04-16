@@ -5,7 +5,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active Work Item
 
-**#13: Job download & sync-output** — Batch A complete. Batch B next.
+**#13: Job download & sync-output** — Batch A complete. Batch B complete. Batch C next.
 
 ### Completed: Batch A (`job download-output`)
 
@@ -26,13 +26,19 @@ consulting the Work Items table in `specs/progress.md`.
 - Conflict resolution interactive prompt (when neither flag nor `--yes`)
 - Test case 44-10 (happy path with full S3 download through stubs)
 
-### Next: Batch B (Path mapping from storage profiles)
+### Completed: Batch B (Path mapping from storage profiles)
 
-- `generate_path_mapping_rules` + `PathMappingRuleApplier` (trie)
-- Test spec: `test_specs/job_attachments_orchestration.md` section 26 (19 cases)
-- Foundation for `queue sync-output` (Batch C)
+- New module: `crates/deadline-job-attachments/src/path_mapping.rs`
+- `generate_path_mapping_rules()`: matches storage profile locations by name,
+  determines format from OS family
+- `PathMappingRuleApplier`: trie-based longest-prefix matcher with
+  `transform()` and `strict_transform()`
+- Windows paths matched case-insensitively, output preserves original case
+- 37 Level 1 tests, all passing
+- Spec: `specs/job-attachments/path-mapping.md`
+- Added `PartialEq` derive to `PathMappingRule` in `models.rs`
 
-### Then: Batch C (`queue sync-output` + incremental downloads)
+### Next: Batch C (`queue sync-output` + incremental downloads)
 
 - `IncrementalDownloadState`, checkpoint persistence, job categorization,
   PID file lock, full incremental download orchestration
@@ -43,7 +49,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 1. **Python source is at `../deadline-cloud-python`** (sibling directory).
 
-2. **All tests pass.** 890 tests across all crates.
+2. **All tests pass.** 927 tests across all crates.
 
 3. **Development workflow is in `specs/workflow.md`.** Follow the
    7-step loop. Step 3 now includes a CLI comparison gate.
