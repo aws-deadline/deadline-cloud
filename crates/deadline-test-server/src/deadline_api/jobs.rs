@@ -39,6 +39,24 @@ pub async fn mock_get_job(server: &MockServer, farm_id: &str, queue_id: &str, jo
         .await;
 }
 
+pub async fn mock_get_step(server: &MockServer, farm_id: &str, queue_id: &str, job_id: &str, step: Value) {
+    let step_id = step["stepId"].as_str().unwrap_or("step-mock");
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(step))
+        .mount(server)
+        .await;
+}
+
+pub async fn mock_get_task(server: &MockServer, farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task: Value) {
+    let task_id = task["taskId"].as_str().unwrap_or("task-mock");
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks/{task_id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(task))
+        .mount(server)
+        .await;
+}
+
 /// Mount an UpdateJob response (PATCH). Used by `deadline job cancel`.
 pub async fn mock_update_job(server: &MockServer, farm_id: &str, queue_id: &str, job_id: &str) {
     Mock::given(method("PATCH"))

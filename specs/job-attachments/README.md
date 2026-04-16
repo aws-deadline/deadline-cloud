@@ -26,14 +26,15 @@ Consumers: `deadline-cli` (attachment/manifest commands), `deadline-gui-ffi`
 Implemented: hashing, manifest encode/decode, hash cache, S3 check cache,
 progress tracking, path grouping, manifest creation, S3 upload/download,
 manifest merging, output manifest retrieval, attachment download/upload API,
-manifest snapshot/diff/merge/upload/download.
+manifest snapshot/diff/merge/upload/download, OutputDownloader (job output
+download orchestration).
 
 Gaps:
 - Job attachments orchestration (`submit_job_attachments` full flow)
 - VFS (virtual filesystem) — deferred
 - Parallel S3 transfer — proven in spike, not yet in production paths
 - File permission management on download
-- Cross-OS path remapping on download
+- Cross-OS path remapping on download (path mapping from storage profiles)
 
 ## Gotchas & Constraints
 

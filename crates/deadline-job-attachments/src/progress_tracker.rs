@@ -16,14 +16,18 @@ fn human_readable_file_size(size_in_bytes: u64) -> String {
             if *postfix == "B" {
                 return format!("{} {postfix}", rounded as u64);
             } else {
-                return format!("{rounded:.1} {postfix}");
+                let s = format!("{rounded:.2}");
+                let s = s.trim_end_matches('0').trim_end_matches('.');
+                return format!("{s} {postfix}");
             }
         }
         converted /= 1000.0;
     }
 
     let rounded = (converted * 100.0).round() / 100.0;
-    format!("{rounded:.1} {}", postfixes.last().unwrap())
+    let s = format!("{rounded:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    format!("{s} {}", postfixes.last().unwrap())
 }
 
 // --- ProgressStatus ---

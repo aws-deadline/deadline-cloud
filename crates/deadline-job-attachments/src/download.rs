@@ -378,7 +378,7 @@ pub async fn download_file(
 
     // Report progress
     if let Some(tracker) = progress_tracker {
-        tracker.increase_processed(1, 0);
+        tracker.increase_processed(1, file_bytes as u64);
         tracker.report_progress();
     }
 
@@ -830,6 +830,96 @@ async fn get_manifests_by_session_action_id(
     }
 
     Ok(outputs)
+}
+
+// =========================================================================
+// OutputDownloader — orchestrates job output download
+// =========================================================================
+
+/// Handler for downloading output files from a job, with optional step/task
+/// granularity. Wraps `get_output_manifests_by_asset_root` and
+/// `download_files_from_manifests`.
+pub struct OutputDownloader {
+    s3_settings: JobAttachmentS3Settings,
+    outputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    s3_client: S3Client,
+    account_id: String,
+}
+
+impl OutputDownloader {
+    /// Create a new downloader by fetching output manifests from S3.
+    pub async fn new(
+        s3_settings: JobAttachmentS3Settings,
+        farm_id: &str,
+        queue_id: &str,
+        job_id: &str,
+        step_id: Option<&str>,
+        task_id: Option<&str>,
+        session_action_id: Option<&str>,
+        s3_client: S3Client,
+        account_id: String,
+    ) -> Result<Self, JobAttachmentsError> {
+        let outputs_by_root = get_output_manifests_by_asset_root(
+            &s3_settings, farm_id, queue_id, job_id,
+            step_id, task_id, session_action_id,
+            &s3_client, &account_id,
+        ).await?;
+        Ok(Self { s3_settings, outputs_by_root, s3_client, account_id })
+    }
+
+    /// Get output file paths grouped by asset root.
+    pub fn get_output_paths_by_root(&self) -> HashMap<String, Vec<String>> {
+        let mut result = HashMap::new();
+        for (root, manifests) in &self.outputs_by_root {
+            let paths: Vec<String> = manifests
+                .iter()
+                .flat_map(|m| m.paths.iter().map(|p| p.path.clone()))
+                .collect();
+            if !paths.is_empty() {
+                result.insert(root.clone(), paths);
+            }
+        }
+        result
+    }
+
+    /// Change the root path for a set of output files.
+    pub fn set_root_path(&mut self, original_root: &str, new_root: &str) {
+        if original_root == new_root {
+            return;
+        }
+        if let Some(manifests) = self.outputs_by_root.remove(original_root) {
+            self.outputs_by_root
+                .entry(new_root.to_string())
+                .or_default()
+                .extend(manifests);
+        }
+    }
+
+    /// Download all output files to their respective root directories.
+    pub async fn download_job_output(
+        &self,
+        file_conflict_resolution: FileConflictResolution,
+        on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
+        // Flatten manifests: merge per-root into single manifest per root
+        let mut manifests_by_root = HashMap::new();
+        for (root, manifest_list) in &self.outputs_by_root {
+            if let Some(merged) = merge_asset_manifests(manifest_list)? {
+                manifests_by_root.insert(root.clone(), merged);
+            }
+        }
+
+        let cas_prefix = self.s3_settings.full_cas_prefix()?;
+        download_files_from_manifests(
+            &self.s3_settings.s3_bucket_name,
+            &manifests_by_root,
+            Some(&cas_prefix),
+            &self.s3_client,
+            &self.account_id,
+            on_downloading_files,
+            file_conflict_resolution,
+        ).await
+    }
 }
 
 #[cfg(test)]

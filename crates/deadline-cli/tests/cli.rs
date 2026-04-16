@@ -44,3 +44,5 @@ mod telemetry;
 mod worker;
 #[path = "cli/smoke.rs"]
 mod smoke;
+#[path = "cli/job_download.rs"]
+mod job_download;

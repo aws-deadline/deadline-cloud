@@ -18,6 +18,7 @@ monitoring, log retrieval, cancellation, and task requeuing.
 | `job logs` | ✅ | Retrieve session logs from CloudWatch |
 | `job cancel` | ✅ | Cancel a running job |
 | `job requeue-tasks` | ✅ | Requeue failed/canceled/suspended tasks |
+| `job download-output` | ✅ | Download job output attachments from S3 |
 
 All accept `--profile`, `--farm-id`, `--queue-id`. Most also accept `--job-id`.
 
@@ -266,6 +267,75 @@ as `job list`.
 
 On error, `suggest_resources_on_client_error` lists available jobs/queues.
 
+## `job download-output`
+
+Options: `--step-id`, `--task-id`, `--conflict-resolution` (SKIP/OVERWRITE/CREATE_COPY),
+`--yes`, `--output verbose|json`.
+
+Requires: farm_id, queue_id, job_id. `--task-id` requires `--step-id`.
+
+### Execution Flow
+
+1. Validate `--task-id` requires `--step-id` (exit 2 if missing)
+2. GetJob to retrieve job name and attachments
+3. If `--step-id`: GetStep to retrieve step name
+4. If `--task-id`: GetTask to retrieve task parameters and `latestSessionActionId`
+5. Print start message
+6. GetQueue for `jobAttachmentSettings` (S3 bucket + root prefix)
+7. Build S3 client with queue-scoped credentials (`get_queue_scoped_config`:
+   DCM users get queue role, non-DCM users use base credentials)
+8. Create `OutputDownloader` → fetches output manifests from S3
+9. If no output paths → print "no output" message and return
+10. On Windows: check `LongPathsEnabled` registry key, warn if paths exceed 260 chars
+11. Print path summary (files grouped by directory with sequence detection)
+12. Resolve conflict resolution: CLI flag > config setting > default (CREATE_COPY)
+13. Download with progress bar, print summary
+
+### Start Message
+
+- Job only: `Downloading output from Job 'X'`
+- With step: `Downloading output from Job 'X' Step 'Y'`
+- With task: `Downloading output from Job 'X' Step 'Y' Task {Frame=1}`
+- Task with no params: `...Task {}`
+
+### No Output Message
+
+```
+There are no output files available for download at this moment. Please
+verify that the Job/Step/Task you are trying to download output from has
+completed successfully.
+```
+
+### Download Summary
+
+```
+Download Summary:
+    Downloaded 7 files totaling 700.91 KB.
+    Total download time of 0.27198 seconds at 2.58 MB/s.
+    Download locations (total file counts):
+        /path/to/root (7 files)
+```
+
+### JSON Output Mode (`--output json`)
+
+Uses JSON line protocol with `messageType` field:
+- `{"messageType": "title", "value": "job name"}` — start
+- `{"messageType": "summary", "value": "...", "fileCount": N, "files": [...]}` — completion
+- `{"messageType": "error", "value": "..."}` — error (exit 1)
+
+### Credential Scoping
+
+Uses `get_queue_scoped_config` for the S3 client. DCM users get queue
+role credentials via `AssumeQueueRoleForUser`. Non-DCM users use their
+base AWS credentials. Same pattern as `attachment download`.
+
+### Not Yet Implemented
+
+- Interactive root-editing loop (users can only use `--yes` path for now)
+- Cross-OS root path mismatch interactive prompt
+- Conflict resolution interactive prompt (when neither `--conflict-resolution`
+  nor `--yes` is provided)
+
 ## Differences from Python CLI
 
 | Aspect | Python | Rust |
@@ -275,3 +345,4 @@ On error, `suggest_resources_on_client_error` lists available jobs/queues.
 | Estimated time | Separate helper function | Inline in `print_job_details` |
 | `job wait` progress | Callback-based | Closure passed to `wait_for_job_completion` |
 | `job requeue-tasks` | `--step-id`, `--task-ids` filters | `--run-status` filter only |
+| `job download-output` | Interactive root-editing loop, conflict prompt | `--yes` path only (interactive prompts deferred) |

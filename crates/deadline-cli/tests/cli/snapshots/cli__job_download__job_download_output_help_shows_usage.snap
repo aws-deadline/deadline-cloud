@@ -1,0 +1,46 @@
+---
+source: crates/deadline-cli/tests/cli/job_download.rs
+info:
+  program: deadline
+  args:
+    - job
+    - download-output
+    - "--help"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:56582"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:56582"
+    AWS_ENDPOINT_URL_S3: "http://localhost:56582"
+    AWS_ENDPOINT_URL_STS: "http://localhost:56582"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCaUoGT/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCaUoGT
+---
+success: true
+exit_code: 0
+----- stdout -----
+Download the output of a job saved as job attachments
+
+Usage: deadline job download-output [OPTIONS]
+
+Options:
+      --profile <PROFILE>                          
+      --farm-id <FARM_ID>                          
+      --queue-id <QUEUE_ID>                        
+      --job-id <JOB_ID>                            
+      --step-id <STEP_ID>                          
+      --task-id <TASK_ID>                          
+      --conflict-resolution <CONFLICT_RESOLUTION>  
+      --yes                                        
+      --output <OUTPUT>                            [default: verbose]
+  -h, --help                                       Print help
+
+----- stderr -----

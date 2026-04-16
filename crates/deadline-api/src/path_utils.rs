@@ -15,11 +15,14 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
         rounded = (converted * 100.0).round() / 100.0;
 
         if rounded < 1000.0 {
-            // For bytes, show as integer; for larger units, show one decimal
+            // For bytes, show as integer; for larger units, match Python's
+            // display: round to 2 decimals, strip trailing zeros
             if *postfix == "B" {
                 return format!("{} {postfix}", rounded as u64);
             } else {
-                return format!("{rounded:.1} {postfix}");
+                let s = format!("{rounded:.2}");
+                let s = s.trim_end_matches('0').trim_end_matches('.');
+                return format!("{s} {postfix}");
             }
         }
         converted /= 1000.0;
@@ -27,7 +30,9 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
 
     // Exceeded PB — show as large PB value
     let rounded = (converted * 100.0).round() / 100.0;
-    format!("{rounded:.1} {}", postfixes.last().unwrap())
+    let s = format!("{rounded:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    format!("{s} {}", postfixes.last().unwrap())
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +257,65 @@ pub fn summarize_paths_by_nested_directory(paths: &[&str]) -> Vec<PathSummary> {
     sequence_summaries
 }
 
+/// Create a human-readable summary of a list of file paths.
+///
+/// Groups files by common directory prefix and limits output to
+/// `max_entries` lines. Matches Python's `summarize_path_list`.
+pub fn summarize_path_list(paths: &[&str], max_entries: usize) -> String {
+    if paths.is_empty() {
+        return String::new();
+    }
+
+    // Group paths by parent directory
+    let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for path in paths {
+        let p = std::path::Path::new(path);
+        let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
+        by_dir.entry(dir).or_default().push(name);
+    }
+
+    let mut lines = Vec::new();
+
+    for (dir, files) in &by_dir {
+        let dir_display = if dir.is_empty() { "." } else { dir.as_str() };
+        let total = files.len();
+        let file_word = if total == 1 { "file" } else { "files" };
+
+        // Summarize the files within this directory by sequence
+        let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
+        let summaries = summarize_paths_by_sequence(&file_refs);
+
+        if summaries.len() == 1 && summaries[0].index_set.is_empty() && total == 1 {
+            // Single file, no directory grouping needed
+            lines.push(format!("{dir_display}/{} (1 file)\n", files[0]));
+        } else {
+            lines.push(format!("{dir_display}/ ({total} {file_word}):\n"));
+            let show = summaries.len().min(max_entries.saturating_sub(lines.len()));
+            for summary in &summaries[..show] {
+                if summary.index_set.is_empty() {
+                    lines.push(format!("  {} (1 file)\n", summary.path));
+                } else {
+                    let seq = int_set_to_range_expr(&summary.index_set);
+                    let count = summary.file_count;
+                    let fw = if count == 1 { "file" } else { "files" };
+                    lines.push(format!("  {} ({count} {fw}, sequence {seq})\n", summary.path));
+                }
+            }
+            if summaries.len() > show {
+                let remaining: usize = summaries[show..].iter().map(|s| s.file_count).sum();
+                lines.push(format!("  ... and {} more ({remaining} files)\n", summaries.len() - show));
+            }
+        }
+
+        if lines.len() >= max_entries {
+            break;
+        }
+    }
+
+    lines.join("")
+}
+
 /// Format a set of integers as a range expression (e.g., {1,2,3,5} → "1-3,5").
 pub fn int_set_to_range_expr(int_set: &BTreeSet<i64>) -> String {
     if int_set.is_empty() {
@@ -292,9 +356,9 @@ mod tests {
 
     #[test_case(0, "0 B" ; "zero bytes")]
     #[test_case(999, "999 B" ; "sub-kilobyte")]
-    #[test_case(1000, "1.0 KB" ; "exactly 1 KB")]
-    #[test_case(999_999, "1.0 MB" ; "rounds up to 1 MB")]
-    #[test_case(1_000_000, "1.0 MB" ; "exactly 1 MB")]
+    #[test_case(1000, "1 KB" ; "exactly 1 KB")]
+    #[test_case(999_999, "1 MB" ; "rounds up to 1 MB")]
+    #[test_case(1_000_000, "1 MB" ; "exactly 1 MB")]
     #[test_case(1_500_000_000, "1.5 GB" ; "fractional GB")]
     #[test_case(2_500_000_000_000_000, "2.5 PB" ; "petabytes")]
     fn human_readable_file_size_formats(input: u64, expected: &str) {

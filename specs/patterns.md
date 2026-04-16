@@ -121,8 +121,8 @@ must convert the space back to `T` when producing machine-readable
 timestamps. Known paths requiring RFC 3339:
 
 - `queue export-credentials` → `Expiration` field
-- Queue credential provider `expiry_time` (§5, not yet implemented)
-- Job submission datetime fields (§11, not yet implemented)
+- Queue credential provider `expiry_time` (not yet implemented)
+- Job submission datetime fields (not yet implemented)
 - **Fractional second precision:** The API returns milliseconds (e.g.
   `22:35:01.624Z`). boto3 parses into Python `datetime(microsecond=624000)`,
   and `str()` always displays 6 digits (`.624000`). We preserve the

@@ -110,7 +110,12 @@ For CLI commands that call AWS APIs, also check:
 - [ ] Run the Python CLI command and capture its exact output — this is
   the target you must match
 
-Update `specs/HANDOFF.md` with findings.
+Update `specs/HANDOFF.md` with findings, including:
+- A high-level plan explaining how you intend to write the tests and
+  implement the feature (which crates/modules change, what new types
+  are needed, how the CLI command wires to the library).
+- A cross-reference table mapping test spec cases to planned test names.
+- Any batching strategy if the work item is large.
 
 ### Step 2: Write exhaustive tests
 
@@ -149,10 +154,18 @@ For CLI commands that call AWS APIs, follow the patterns in
 After tests pass:
 1. Run `cargo build` (full workspace)
 2. Run `cargo test` (full test suite)
-3. Run both CLIs and compare output for key cases:
-   ```bash
-   diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
-   ```
+3. **Compare both CLIs against the real API.** This is a gate — do not
+   skip it.
+   - Run `deadline auth status` (Python CLI) to check authentication.
+     If not authenticated, ask the human to log in.
+   - Discover real resources: run `deadline farm list`, `deadline queue
+     list`, etc. to find IDs for comparison.
+   - For each key case, run both CLIs with the same arguments and diff:
+     ```bash
+     diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
+     ```
+   - Fix any output differences (field order, formatting, missing
+     fields) before proceeding.
 4. If snapshots were created, run `cargo insta review` after verifying
    each against Python output. **Do not use `INSTA_UPDATE=always`
    without reviewing each snapshot.**

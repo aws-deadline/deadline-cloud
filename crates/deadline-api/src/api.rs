@@ -362,6 +362,26 @@ pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option
     }).await
 }
 
+pub async fn get_step(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("get_step", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        capture_send(|cap| async move {
+            client.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}
+
+pub async fn get_task(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("get_task", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        capture_send(|cap| async move {
+            client.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id).task_id(task_id)
+                .customize().interceptor(cap).send().await.map(|_| ())
+        }).await
+    }).await
+}
+
 // ---------------------------------------------------------------------------
 // Worker
 // ---------------------------------------------------------------------------

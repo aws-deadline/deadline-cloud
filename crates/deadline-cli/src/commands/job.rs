@@ -7,6 +7,17 @@ use deadline_config::ini::IniConfig;
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
+fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
+    match s.to_uppercase().as_str() {
+        "SKIP" => Ok(deadline_job_attachments::models::FileConflictResolution::Skip),
+        "OVERWRITE" => Ok(deadline_job_attachments::models::FileConflictResolution::Overwrite),
+        "CREATE_COPY" => Ok(deadline_job_attachments::models::FileConflictResolution::CreateCopy),
+        other => Err(format!(
+            "Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY"
+        )),
+    }
+}
+
 /// Set up config from CLI options and extract required settings.
 /// Returns (config, farm_id, queue_id) or (config, farm_id, queue_id, job_id).
 fn setup_config(
@@ -146,6 +157,21 @@ pub enum JobAction {
         page_size: i32,
         #[arg(long, default_value = "0")]
         item_offset: i32,
+    },
+    /// Download the output of a job saved as job attachments
+    DownloadOutput {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        #[arg(long)] step_id: Option<String>,
+        #[arg(long)] task_id: Option<String>,
+        #[arg(long, value_parser = parse_conflict_resolution)]
+        conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value = "verbose")]
+        output: String,
     },
 }
 
@@ -675,6 +701,41 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             print_job_list(&resp, item_offset);
             Ok(())
         }
+        JobAction::DownloadOutput {
+            profile, farm_id, queue_id, job_id, step_id, task_id,
+            conflict_resolution, yes, output,
+        } => {
+            let is_json = output.eq_ignore_ascii_case("json");
+
+            // Validate --task-id requires --step-id
+            if task_id.is_some() && step_id.is_none() {
+                return Err(CliError::ExitCode {
+                    code: 2,
+                    message: "Missing option '--step-id' required with '--task-id'".into(),
+                });
+            }
+
+            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+            let farm = get(&config, "defaults.farm_id");
+            let queue_id_val = get(&config, "defaults.queue_id");
+            let job_id_val = get(&config, "defaults.job_id");
+
+            let result = download_output_impl(
+                &config, &farm, &queue_id_val, &job_id_val,
+                step_id.as_deref(), task_id.as_deref(),
+                conflict_resolution, is_json,
+            ).await;
+
+            match result {
+                Ok(()) => Ok(()),
+                Err(e) if is_json => {
+                    let error_one_liner = e.to_string().replace('\n', ". ");
+                    println!("{}", serde_json::json!({"messageType": "error", "value": error_one_liner}));
+                    std::process::exit(1);
+                }
+                Err(e) => Err(e),
+            }
+        }
     }
 }
 
@@ -919,4 +980,274 @@ fn parse_json_or_file_arg(arg: Option<&str>) -> Result<Option<serde_json::Value>
     let val: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| CliError::Operation(format!("Invalid JSON: {e}")))?;
     Ok(Some(val))
+}
+
+// ---------------------------------------------------------------------------
+// download-output implementation
+// ---------------------------------------------------------------------------
+
+/// Format the start message for download-output.
+fn download_start_message(
+    job_name: &str,
+    step_name: Option<&str>,
+    task_parameters: Option<&serde_json::Value>,
+    is_json: bool,
+) -> String {
+    if is_json {
+        serde_json::json!({"messageType": "title", "value": job_name}).to_string()
+    } else if let Some(sn) = step_name {
+        if let Some(params) = task_parameters {
+            let param_str = if let Some(obj) = params.as_object() {
+                if obj.is_empty() {
+                    "{}".to_string()
+                } else {
+                    let inner: Vec<String> = obj.iter().map(|(k, v)| {
+                        let val = v.as_object()
+                            .and_then(|m| m.values().next())
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        format!("{k}={val}")
+                    }).collect();
+                    format!("{{{}}}", inner.join(","))
+                }
+            } else {
+                "{}".to_string()
+            };
+            format!("Downloading output from Job '{job_name}' Step '{sn}' Task {param_str}")
+        } else {
+            format!("Downloading output from Job '{job_name}' Step '{sn}'")
+        }
+    } else {
+        format!("Downloading output from Job '{job_name}'")
+    }
+}
+
+/// Format the "no output" message.
+fn no_output_message(is_json: bool) -> String {
+    let msg = "There are no output files available for download at this moment. \
+               Please verify that the Job/Step/Task you are trying to download \
+               output from has completed successfully.";
+    if is_json {
+        serde_json::json!({"messageType": "summary", "value": msg}).to_string()
+    } else {
+        msg.to_string()
+    }
+}
+
+/// Check if a path exceeds Windows MAX_PATH and warn.
+#[cfg(windows)]
+fn check_windows_long_paths(output_paths_by_root: &std::collections::HashMap<String, Vec<String>>) {
+    const WINDOWS_MAX_PATH_LENGTH: usize = 260;
+    // Check if LongPathsEnabled registry key is set
+    let long_paths_enabled = (|| -> bool {
+        let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+        let key = hklm.open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem").ok()?;
+        let val: u32 = key.get_value("LongPathsEnabled").ok()?;
+        Some(val != 0)
+    })().unwrap_or(false);
+
+    if long_paths_enabled {
+        return;
+    }
+    for (root, paths) in output_paths_by_root {
+        for path in paths {
+            if root.len() + path.len() >= WINDOWS_MAX_PATH_LENGTH {
+                eprintln!(
+                    "\nWARNING: Found downloaded file paths that exceed Windows path length limit. \
+                     This may cause unexpected issues.\n\
+                     For details and a fix using the registry, see: \
+                     https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation\n"
+                );
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn check_windows_long_paths(_output_paths_by_root: &std::collections::HashMap<String, Vec<String>>) {
+    // No-op on non-Windows
+}
+
+/// Core implementation of `job download-output`.
+async fn download_output_impl(
+    config: &IniConfig,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    step_id: Option<&str>,
+    task_id: Option<&str>,
+    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    is_json: bool,
+) -> Result<(), CliError> {
+    use deadline_job_attachments::download::OutputDownloader;
+    use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
+    use deadline_job_attachments::s3;
+    use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
+
+    // Get job
+    let job = api::get_job(farm_id, queue_id, job_id, Some(config), None)
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+    let job_name = job["name"].as_str().unwrap_or("");
+
+    // Get optional step/task
+    let step_name = if let Some(sid) = step_id {
+        let step = api::get_step(farm_id, queue_id, job_id, sid, Some(config), None)
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+        Some(step["name"].as_str().unwrap_or("").to_string())
+    } else {
+        None
+    };
+
+    let task_params;
+    let session_action_id;
+    if let (Some(sid), Some(tid)) = (step_id, task_id) {
+        let task = api::get_task(farm_id, queue_id, job_id, sid, tid, Some(config), None)
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+        task_params = task.get("parameters").cloned();
+        session_action_id = task.get("latestSessionActionId")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+    } else {
+        task_params = None;
+        session_action_id = None;
+    }
+
+    // Print start message
+    let empty_params = serde_json::json!({});
+    let task_params_for_msg = if task_id.is_some() {
+        task_params.as_ref().or(Some(&empty_params))
+    } else {
+        None
+    };
+    println!("{}", download_start_message(
+        job_name,
+        step_name.as_deref(),
+        task_params_for_msg,
+        is_json,
+    ));
+
+    // Get queue for jobAttachmentSettings
+    let queue = api::get_queue(farm_id, queue_id, Some(config), None)
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+
+    let attachment_settings = queue.get("jobAttachmentSettings")
+        .ok_or_else(|| CliError::Operation(format!(
+            "Queue '{}' does not have job attachments configured.",
+            queue["displayName"].as_str().unwrap_or(queue_id)
+        )))?;
+
+    let bucket = attachment_settings["s3BucketName"].as_str().unwrap_or("");
+    let prefix = attachment_settings["rootPrefix"].as_str().unwrap_or("");
+    let s3_settings = JobAttachmentS3Settings {
+        s3_bucket_name: bucket.to_string(),
+        root_prefix: prefix.to_string(),
+    };
+
+    // Build S3 client with queue-scoped credentials
+    let sdk_config = deadline_api::session::get_queue_scoped_config(
+        farm_id, queue_id, Some(config),
+    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+
+    let s3_client = s3::build_s3_client(&sdk_config, Some(config));
+    let account_id = s3::get_account_id(&sdk_config)
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+
+    // Create OutputDownloader
+    let downloader = OutputDownloader::new(
+        s3_settings, farm_id, queue_id, job_id,
+        step_id, task_id, session_action_id.as_deref(),
+        s3_client, account_id,
+    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+
+    let output_paths = downloader.get_output_paths_by_root();
+
+    // No output available
+    if output_paths.is_empty() {
+        println!("{}", no_output_message(is_json));
+        return Ok(());
+    }
+
+    check_windows_long_paths(&output_paths);
+
+    // Build path summary for verbose output
+    if !is_json {
+        let all_paths: Vec<String> = output_paths.iter()
+            .flat_map(|(root, paths)| {
+                paths.iter().map(move |p| {
+                    let full = std::path::PathBuf::from(root).join(p);
+                    full.to_string_lossy().to_string()
+                })
+            })
+            .collect();
+        let path_refs: Vec<&str> = all_paths.iter().map(|s| s.as_str()).collect();
+        println!("\nSummary of file paths to download:");
+        let summary = summarize_path_list(&path_refs, 10);
+        for line in summary.lines() {
+            println!("  {line}");
+        }
+    }
+
+    // Resolve conflict resolution
+    let resolution = conflict_resolution.unwrap_or_else(|| {
+        let setting = config_file::get_setting_with_config("settings.conflict_resolution", config)
+            .unwrap_or_default();
+        match setting.to_uppercase().as_str() {
+            "SKIP" => FileConflictResolution::Skip,
+            "OVERWRITE" => FileConflictResolution::Overwrite,
+            _ => FileConflictResolution::CreateCopy,
+        }
+    });
+
+    // Download with progress
+    let progress_mgr = std::sync::Mutex::new(
+        crate::common::ProgressBarManager::new(100, "Downloading Outputs"),
+    );
+
+    let download_summary = downloader.download_job_output(
+        resolution,
+        Some(Box::new(move |meta| {
+            let new_progress = meta.progress as u64;
+            progress_mgr.lock().unwrap().callback(new_progress);
+            crate::common::should_continue()
+        })),
+    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+
+    // Print summary
+    if is_json {
+        println!("{}", serde_json::json!({
+            "messageType": "summary",
+            "value": format!("Downloaded {} files", download_summary.stats.processed_files),
+            "fileCount": download_summary.stats.processed_files,
+            "files": download_summary.downloaded_files,
+        }));
+    } else {
+        let paths_joined: String = download_summary.file_counts_by_root_directory.iter()
+            .map(|(dir, count)| {
+                let file_word = if *count > 1 { "files" } else { "file" };
+                format!("{dir} ({count} {file_word})")
+            })
+            .collect::<Vec<_>>()
+            .join("\n        ");
+        println!(
+            "Download Summary:\n\
+             \x20   Downloaded {} files totaling {}.\n\
+             \x20   Total download time of {} seconds at {}/s.\n\
+             \x20   Download locations (total file counts):\n\
+             \x20       {}",
+            download_summary.stats.processed_files,
+            human_readable_file_size(download_summary.stats.processed_bytes),
+            format!("{:.5}", download_summary.stats.total_time),
+            human_readable_file_size(download_summary.stats.transfer_rate as u64),
+            paths_joined,
+        );
+    }
+    println!();
+
+    Ok(())
 }
