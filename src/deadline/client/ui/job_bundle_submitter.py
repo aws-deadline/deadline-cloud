@@ -240,6 +240,22 @@ def show_job_bundle_submitter(
             data=asset_references.to_dict(),
         )
 
+        # Copy hooks configuration and set original bundle path for script resolution
+        for hooks_filename in ("hooks.yaml", "hooks.json"):
+            hooks_src = os.path.join(settings.input_job_bundle_dir, hooks_filename)
+            if os.path.isfile(hooks_src):
+                import shutil
+
+                hooks_dst = os.path.join(job_bundle_dir, hooks_filename)
+                shutil.copy2(hooks_src, hooks_dst)
+
+                # Write the original bundle path so hooks can resolve scripts
+                hooks_origin_file = os.path.join(job_bundle_dir, ".hooks_origin")
+                with open(hooks_origin_file, "w") as f:
+                    f.write(os.path.abspath(settings.input_job_bundle_dir))
+
+                break  # Only copy one (yaml takes precedence)
+
         return {
             "known_asset_paths": [os.path.abspath(settings.input_job_bundle_dir)],
             "job_parameters": parameter_values,

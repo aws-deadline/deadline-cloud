@@ -157,6 +157,22 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default)."
         ),
     },
+    "settings.allow_bundle_hooks": {
+        "default": "false",
+        "description": (
+            "Allow execution of hooks defined in job bundle hooks.yaml/hooks.json files. "
+            "When 'true', bundle hooks will run with a confirmation prompt (unless auto_accept is enabled). "
+            "When 'false', bundle hooks are ignored."
+        ),
+    },
+    "settings.allow_environment_hooks": {
+        "default": "false",
+        "description": (
+            "Allow execution of hooks from DEADLINE_HOOKS_DIR environment variable. "
+            "When 'true', hooks from the directory specified by DEADLINE_HOOKS_DIR will run. "
+            "When 'false', environment hooks are ignored."
+        ),
+    },
     "settings.submitter_update_notification": {
         "default": "true",
         "description": (
