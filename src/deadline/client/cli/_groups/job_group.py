@@ -480,73 +480,23 @@ def job_requeue_tasks(run_status: Optional[list[str]], **args):
     click.echo(f"\nRequeued a total of {total_count_requeued} tasks.")
 
 
-def _download_job_output(
+def _run_download_ux(
+    downloader: OutputDownloader,
+    output_paths_by_root: dict[str, list[str]],
+    root_path_format_mapping: dict[str, str],
+    is_json_format: bool,
     config: Optional[ConfigParser],
-    farm_id: str,
-    queue_id: str,
-    job_id: str,
-    step_id: Optional[str],
-    task_id: Optional[str],
-    is_json_format: bool = False,
+    label: str = "Outputs",
+    telemetry_metric: str = "download_job_output",
 ):
     """
-    Starts the download of job output and handles the progress reporting callback.
+    Shared UX flow for downloading files: root path confirmation, cross-OS mapping,
+    conflict resolution, progress bar, and summary. Used by both download-output and download-input.
     """
-    deadline = api.get_boto3_client("deadline", config=config)
-
     auto_accept = config_file.str2bool(
         config_file.get_setting("settings.auto_accept", config=config)
     )
     conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
-
-    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
-    step = {}
-    task = {}
-    session_action_id = None
-    if step_id:
-        step = deadline.get_step(farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id)
-    if task_id:
-        task = deadline.get_task(
-            farmId=farm_id,
-            queueId=queue_id,
-            jobId=job_id,
-            stepId=step_id,
-            taskId=task_id,
-        )
-        session_action_id = task.get("latestSessionActionId")
-
-    click.echo(
-        _get_start_message(job["name"], step.get("name"), task.get("parameters"), is_json_format)
-    )
-
-    queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
-
-    queue_role_session = api.get_queue_user_boto3_session(
-        deadline=deadline,
-        config=config,
-        farm_id=farm_id,
-        queue_id=queue_id,
-        queue_display_name=queue["displayName"],
-    )
-
-    # Get a dictionary mapping rootPath to rootPathFormat (OS) from job's manifests
-    root_path_format_mapping: dict[str, str] = {}
-    job_attachments = job.get("attachments", None)
-    if job_attachments:
-        job_attachments_manifests = job_attachments["manifests"]
-        for manifest in job_attachments_manifests:
-            root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
-
-    job_output_downloader = OutputDownloader(
-        s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
-        farm_id=farm_id,
-        queue_id=queue_id,
-        job_id=job_id,
-        step_id=step_id,
-        task_id=task_id,
-        session_action_id=session_action_id,
-        session=queue_role_session,
-    )
 
     def _check_and_warn_long_output_paths(
         output_paths_by_root: dict[str, list[str]],
@@ -560,25 +510,16 @@ def _download_job_output(
                             fg="yellow",
                         )
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-    # If no output paths were found, log a message and exit.
-    if output_paths_by_root == {}:
-        click.echo(_get_no_output_message(is_json_format))
-        return
-
     _check_and_warn_long_output_paths(output_paths_by_root)
 
-    # Check if the asset roots came from different OS. If so, prompt users to
-    # select alternative root paths to download to, (regardless of the auto-accept.)
+    # Check if the asset roots came from different OS
     asset_roots = list(output_paths_by_root.keys())
     for asset_root in asset_roots:
         root_path_format = root_path_format_mapping.get(asset_root, "")
         if root_path_format == "":
-            # There must be a corresponding root path format for each root path, by design.
             raise DeadlineOperationError(f"No root path format found for {asset_root}.")
         if PathFormat.get_host_path_format_string() != root_path_format:
             click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
-
             if not is_json_format:
                 new_root = click.prompt(
                     "> Please enter a new root path",
@@ -590,16 +531,12 @@ def _download_job_output(
                     json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
                 )[0]
                 _assert_valid_path(new_root)
+            downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-            job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
-
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-
+    output_paths_by_root = downloader.get_output_paths_by_root()
     _check_and_warn_long_output_paths(output_paths_by_root)
 
-    # Prompt users to confirm local root paths where they will download outputs to,
-    # and allow users to select different location to download files to if they want.
-    # (If auto-accept is enabled, automatically download to the default root paths.)
+    # Prompt users to confirm local root paths
     if not auto_accept:
         if not is_json_format:
             user_choice = ""
@@ -621,20 +558,17 @@ def _download_job_output(
                     default="y",
                 )
                 if user_choice == "n":
-                    click.echo("Output download canceled.")
+                    click.echo("Download canceled.")
                     return
                 elif user_choice != "y":
-                    # User selected an index to modify the root directory.
                     index_to_change = int(user_choice)
                     new_root = click.prompt(
                         "> Please enter the new root directory path, or press Enter to keep it unchanged",
                         type=click.Path(exists=False),
                         default=asset_roots[index_to_change],
                     )
-                    job_output_downloader.set_root_path(
-                        asset_roots[index_to_change], str(Path(new_root))
-                    )
-                    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                    downloader.set_root_path(asset_roots[index_to_change], str(Path(new_root)))
+                    output_paths_by_root = downloader.get_output_paths_by_root()
                     _check_and_warn_long_output_paths(output_paths_by_root)
         else:
             click.echo(
@@ -648,12 +582,11 @@ def _download_job_output(
             )
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
-                job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
+            output_paths_by_root = downloader.get_output_paths_by_root()
             _check_and_warn_long_output_paths(output_paths_by_root)
 
     if not is_json_format:
-        # Create and print a summary of all the paths to download
         all_output_paths: set[str] = set()
         for asset_root, output_paths in output_paths_by_root.items():
             all_output_paths.update(
@@ -662,9 +595,6 @@ def _download_job_output(
         click.echo("\nSummary of file paths to download:")
         click.echo(textwrap.indent(summarize_path_list(all_output_paths), "  "))
 
-    # If the conflict resolution option was not specified, auto-accept is false, and
-    # if there are any conflicting files in local, prompt users to select a resolution method.
-    # (skip, overwrite, or make a copy.)
     if conflict_resolution != FileConflictResolution.NOT_SELECTED.name:
         file_conflict_resolution = FileConflictResolution[conflict_resolution]
     elif auto_accept:
@@ -680,33 +610,27 @@ def _download_job_output(
                 default="3",
             )
             if user_choice == "n":
-                click.echo("Output download canceled.")
+                click.echo("Download canceled.")
                 return
             else:
-                resolution_choice_int = int(user_choice)
-                file_conflict_resolution = FileConflictResolution(resolution_choice_int)
+                file_conflict_resolution = FileConflictResolution(int(user_choice))
 
-    # TODO: remove logging level setting when the max number connections for boto3 client
-    # in Job Attachments library can be increased (currently using default number, 10, which
-    # makes it keep logging urllib3 warning messages when downloading large files)
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
 
-        @api.record_success_fail_telemetry_event(metric_name="download_job_output")
-        def _download_job_output(
+        @api.record_success_fail_telemetry_event(metric_name=telemetry_metric)
+        def _do_download(
             file_conflict_resolution: Optional[
                 FileConflictResolution
             ] = FileConflictResolution.CREATE_COPY,
             on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         ) -> DownloadSummaryStatistics:
-            return job_output_downloader.download_job_output(
+            return downloader.download_job_output(
                 file_conflict_resolution=file_conflict_resolution,
                 on_downloading_files=on_downloading_files,
             )
 
         if not is_json_format:
-            # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
-            # not annotating the type of download_progress.
-            with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
+            with click.progressbar(length=100, label=f"Downloading {label}") as download_progress:  # type: ignore[var-annotated]
 
                 def _update_download_progress(
                     download_metadata: ProgressReportMetadata,
@@ -716,7 +640,7 @@ def _download_job_output(
                         download_progress.update(new_progress)
                     return sigint_handler.continue_operation
 
-                download_summary: DownloadSummaryStatistics = _download_job_output(  # type: ignore
+                download_summary: DownloadSummaryStatistics = _do_download(  # type: ignore
                     file_conflict_resolution=file_conflict_resolution,
                     on_downloading_files=_update_download_progress,
                 )
@@ -728,16 +652,122 @@ def _download_job_output(
                 click.echo(
                     _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
                 )
-                # TODO: enable download cancellation for JSON format
                 return True
 
-            download_summary = _download_job_output(  # type: ignore
+            download_summary = _do_download(  # type: ignore
                 file_conflict_resolution=file_conflict_resolution,
                 on_downloading_files=_update_download_progress,
             )
 
     click.echo(_get_download_summary_message(download_summary, is_json_format))
     click.echo()
+
+
+def _validate_and_normalize_include_paths(filters: list[str]) -> list[str]:
+    """
+    Validates and normalizes path filters.
+    - Rejects filters containing '..' (path traversal prevention)
+    - Converts backslashes to forward slashes (Windows compatibility)
+    - Strips leading './'
+    - Normalizes '//' to '/'
+    """
+    normalized = []
+    for f in filters:
+        if ".." in f:
+            raise click.BadParameter(f"Path filter must not contain '..': {f}")
+        f = f.replace("\\", "/")
+        if f.startswith("./"):
+            f = f[2:]
+        while "//" in f:
+            f = f.replace("//", "/")
+        if f:
+            normalized.append(f)
+    return normalized
+
+
+def _get_job_download_context(config, farm_id, queue_id, job_id):
+    """Shared setup for download-output and download-input: fetches job, queue, and credentials."""
+    deadline = api.get_boto3_client("deadline", config=config)
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+    queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+    queue_role_session = api.get_queue_user_boto3_session(
+        deadline=deadline,
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
+    root_path_format_mapping: dict[str, str] = {}
+    job_attachments = job.get("attachments", None)
+    if job_attachments:
+        for manifest in job_attachments["manifests"]:
+            root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
+    return deadline, job, queue, queue_role_session, job_attachments, root_path_format_mapping
+
+
+def _download_job_output(
+    config: Optional[ConfigParser],
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    step_id: Optional[str],
+    task_id: Optional[str],
+    is_json_format: bool = False,
+    include_paths: Optional[list[str]] = None,
+):
+    """
+    Starts the download of job output and handles the progress reporting callback.
+    """
+    deadline, job, queue, queue_role_session, job_attachments, root_path_format_mapping = (
+        _get_job_download_context(config, farm_id, queue_id, job_id)
+    )
+
+    step = {}
+    task = {}
+    session_action_id = None
+    if step_id:
+        step = deadline.get_step(farmId=farm_id, queueId=queue_id, jobId=job_id, stepId=step_id)
+    if task_id:
+        task = deadline.get_task(
+            farmId=farm_id,
+            queueId=queue_id,
+            jobId=job_id,
+            stepId=step_id,
+            taskId=task_id,
+        )
+        session_action_id = task.get("latestSessionActionId")
+
+    click.echo(
+        _get_start_message(job["name"], step.get("name"), task.get("parameters"), is_json_format)
+    )
+
+    job_output_downloader = OutputDownloader(
+        s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+        step_id=step_id,
+        task_id=task_id,
+        session_action_id=session_action_id,
+        session=queue_role_session,
+        path_filters=include_paths,
+    )
+
+    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+    # If no output paths were found, log a message and exit.
+    if output_paths_by_root == {}:
+        click.echo(_get_no_output_message(is_json_format))
+        return
+
+    _run_download_ux(
+        downloader=job_output_downloader,
+        output_paths_by_root=output_paths_by_root,
+        root_path_format_mapping=root_path_format_mapping,
+        is_json_format=is_json_format,
+        config=config,
+        label="Outputs",
+        telemetry_metric="download_job_output",
+    )
 
 
 def _get_start_message(
@@ -915,6 +945,52 @@ def _assert_valid_path(path: str) -> None:
         raise ValueError(f"Path {path} is not an absolute path.")
 
 
+def _parse_filters_and_config(include_path, include_path_stdin, args):
+    """Shared setup for download-output and download-input CLI commands."""
+
+    filters = list(include_path)
+    if include_path_stdin:
+        # Read lines until EOF or an empty line (sentinel).
+        # The empty-line sentinel allows callers that cannot close stdin
+        # (e.g. Tauri IPC) to signal end-of-input.
+        for line in sys.stdin:
+            stripped = line.strip()
+            if not stripped:
+                break
+            filters.append(stripped)
+
+        # Reopen stdin from the terminal so interactive prompts (e.g. path
+        # confirmation) still work after the pipe is consumed.
+        # On Windows, /dev/tty doesn't exist — use CON instead.
+        try:
+            tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
+            sys.stdin = open(tty_path)  # noqa: SIM115
+        except OSError:
+            pass  # Non-interactive environment (CI, Tauri) — leave stdin as-is
+    if filters:
+        filters = _validate_and_normalize_include_paths(filters)
+
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+    return filters or None, config, farm_id, queue_id, job_id
+
+
+def _handle_download_error(e: Exception, is_json_format: bool, download_type: str):
+    """Shared error handling for download-output and download-input CLI commands."""
+    if is_json_format:
+        error_one_liner = str(e).replace("\n", ". ")
+        click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
+        sys.exit(1)
+    else:
+        if logging.DEBUG >= logger.getEffectiveLevel():
+            logger.exception("Exception details:")
+        raise DeadlineOperationError(f"Failed to download {download_type}:\n{e}") from e
+
+
 @cli_job.command(name="download-output")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -922,6 +998,16 @@ def _assert_valid_path(path: str) -> None:
 @click.option("--job-id", help="The job to use.")
 @click.option("--step-id", help="The step to use.")
 @click.option("--task-id", help="The task to use.")
+@click.option(
+    "--include-path",
+    multiple=True,
+    help="Download only files matching this relative path or directory prefix (trailing /). Repeatable.",
+)
+@click.option(
+    "--include-path-stdin",
+    is_flag=True,
+    help="Read path filters from stdin, one per line.",
+)
 @click.option(
     "--conflict-resolution",
     type=click.Choice(
@@ -954,7 +1040,7 @@ def _assert_valid_path(path: str) -> None:
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def job_download_output(step_id, task_id, output, **args):
+def job_download_output(step_id, task_id, output, include_path, include_path_stdin, **args):
     """
     Download the output of a Deadline Cloud job that was saved as job
     attachments.
@@ -964,27 +1050,25 @@ def job_download_output(step_id, task_id, output, **args):
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
-    # Get a temporary config object with the standard options handled
-    config = _apply_cli_options_to_config(
-        required_options={"farm_id", "queue_id", "job_id"}, **args
-    )
 
-    farm_id = config_file.get_setting("defaults.farm_id", config=config)
-    queue_id = config_file.get_setting("defaults.queue_id", config=config)
-    job_id = config_file.get_setting("defaults.job_id", config=config)
+    filters, config, farm_id, queue_id, job_id = _parse_filters_and_config(
+        include_path, include_path_stdin, args
+    )
     is_json_format = True if output == "json" else False
 
     try:
-        _download_job_output(config, farm_id, queue_id, job_id, step_id, task_id, is_json_format)
+        _download_job_output(
+            config,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            task_id,
+            is_json_format,
+            include_paths=filters,
+        )
     except Exception as e:
-        if is_json_format:
-            error_one_liner = str(e).replace("\n", ". ")
-            click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
-            sys.exit(1)
-        else:
-            if logging.DEBUG >= logger.getEffectiveLevel():
-                logger.exception("Exception details:")
-            raise DeadlineOperationError(f"Failed to download output:\n{e}") from e
+        _handle_download_error(e, is_json_format, "output")
 
 
 @cli_job.command(name="wait")

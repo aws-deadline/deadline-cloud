@@ -112,7 +112,7 @@ def fixture_default_attachments(farm_id, queue_id):
             ManifestProperties(
                 rootPath="/tmp",
                 rootPathFormat=PathFormat.POSIX,
-                inputManifestPath=f"assetRoot/Manifests/{farm_id}/{queue_id}/Inputs/0000/manifest_input",
+                inputManifestPath=f"{farm_id}/{queue_id}/Inputs/0000/manifest_input",
                 inputManifestHash="manifesthash",
                 outputRelativeDirectories=["test/outputs"],
             )

@@ -73,7 +73,6 @@ from .os_file_permission import (
 from ._utils import (
     _get_long_path_compatible_path,
     _is_relative_to,
-    _join_s3_paths,
 )
 from threading import Lock
 
@@ -325,7 +324,9 @@ def get_job_input_paths_by_asset_root(
 
     for manifest_properties in attachments.manifests:
         if manifest_properties.inputManifestPath:
-            key = _join_s3_paths(manifest_properties.inputManifestPath)
+            key = s3_settings.add_root_and_manifest_folder_prefix(
+                manifest_properties.inputManifestPath
+            )
             _, asset_manifest = get_asset_root_and_manifest_from_s3(
                 manifest_key=key,
                 s3_bucket=s3_settings.s3BucketName,
@@ -1243,6 +1244,47 @@ def mount_vfs_from_manifests(
         vfs_manager.start(session_dir=session_dir)
 
 
+def _matches_any_filter(file_path: str, filters: list[str]) -> bool:
+    """
+    Check if a file path matches any of the given filters.
+    - Exact match: filter "renders/frame_001.exr" matches only that path
+    - Directory prefix: filter "renders/" matches all paths starting with "renders/"
+    """
+    for f in filters:
+        if f.endswith("/"):
+            if file_path.startswith(f):
+                return True
+        else:
+            if file_path == f:
+                return True
+    return False
+
+
+def _filter_paths(
+    paths_by_root: dict[str, ManifestPathGroup],
+    path_filters: list[str],
+) -> dict[str, ManifestPathGroup]:
+    """
+    Filter ManifestPathGroups to only include files matching the given filters.
+    Each filter is an exact relative file path or a directory prefix (ending with '/').
+    Filters are matched against file paths across all asset roots.
+    """
+    filtered: dict[str, ManifestPathGroup] = {}
+    for root, group in paths_by_root.items():
+        filtered_group = ManifestPathGroup()
+        for hash_alg, file_list in group.files_by_hash_alg.items():
+            matching = [f for f in file_list if _matches_any_filter(f.path, path_filters)]
+            if matching:
+                if hash_alg not in filtered_group.files_by_hash_alg:
+                    filtered_group.files_by_hash_alg[hash_alg] = matching
+                else:
+                    filtered_group.files_by_hash_alg[hash_alg].extend(matching)
+                filtered_group.total_bytes += sum(f.size for f in matching)
+        if filtered_group.files_by_hash_alg:
+            filtered[root] = filtered_group
+    return filtered
+
+
 def _ensure_paths_within_directory(root_path: str, paths_relative_to_root: list[str]) -> None:
     """
     Validates the given paths to ensure that they are within the given root path.
@@ -1282,19 +1324,26 @@ class OutputDownloader:
         task_id: Optional[str] = None,
         session_action_id: Optional[str] = None,
         session: Optional[boto3.Session] = None,
+        path_filters: Optional[list[str]] = None,
+        _outputs_by_root: Optional[dict[str, ManifestPathGroup]] = None,
     ) -> None:
         self.s3_settings = s3_settings
         self.session = session
-        self.outputs_by_root = get_job_output_paths_by_asset_root(
-            s3_settings=s3_settings,
-            farm_id=farm_id,
-            queue_id=queue_id,
-            job_id=job_id,
-            step_id=step_id,
-            task_id=task_id,
-            session_action_id=session_action_id,
-            session=session,
-        )
+        if _outputs_by_root is not None:
+            self.outputs_by_root = _outputs_by_root
+        else:
+            self.outputs_by_root = get_job_output_paths_by_asset_root(
+                s3_settings=s3_settings,
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                step_id=step_id,
+                task_id=task_id,
+                session_action_id=session_action_id,
+                session=session,
+            )
+        if path_filters:
+            self.outputs_by_root = _filter_paths(self.outputs_by_root, path_filters)
 
     def get_output_paths_by_root(self) -> dict[str, list[str]]:
         """
