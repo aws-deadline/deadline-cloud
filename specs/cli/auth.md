@@ -32,6 +32,7 @@ Invalidates the session cache so subsequent API calls re-resolve credentials.
 ## `auth status`
 
 Options: `--profile`, `--output verbose|json` (default verbose).
+The `--output` comparison is case-insensitive (`JSON`, `Json`, `json` all work).
 
 Determines four pieces of information:
 - `profile_name` — display name of the active AWS profile
@@ -39,6 +40,9 @@ Determines four pieces of information:
   - NOT_VALID: the named profile doesn't exist in `~/.aws/config`
   - HOST_PROVIDED: profile exists but has no `monitor_id` key
   - DEADLINE_CLOUD_MONITOR_LOGIN: profile has `monitor_id` in its config section
+  - For the default profile (`(default)` or empty), checks the `[default]`
+    section in `~/.aws/config` for `monitor_id`. This matches Python's
+    `ConfigParser.get_scoped_config()` which always checks the default section.
 - `status` — `AwsAuthenticationStatus`: CONFIGURATION_ERROR, AUTHENTICATED, or NEEDS_LOGIN
   - Determined by calling STS `GetCallerIdentity`
 - `api_availability` — boolean, whether the Deadline API endpoint is reachable

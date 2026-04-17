@@ -384,16 +384,36 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             let sid = session_id.as_deref();
 
+            let start = start_time.as_deref().and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+                    .ok()
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+            });
+            let end = end_time.as_deref().and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+                    .ok()
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+            });
+
+            let (result, auto_select) = log_retrieval::get_session_logs(
+                &farm, &queue, sid, Some(&job), limit, start, end,
+                next_token.as_deref(), Some(&config),
+            ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
+
+            // Resolve the actual session ID (may have been auto-selected)
+            let resolved_session_id = match &auto_select {
+                SessionAutoSelect::OnlySession(id) | SessionAutoSelect::LatestSession(id) => id.as_str(),
+                SessionAutoSelect::Provided => session_id.as_deref().unwrap_or(&result.log_stream),
+            };
+
             // Get session start time for timestamp formatting (needed for relative mode)
-            let reference_start = if let Some(ref s) = session_id {
-                let sess = api::get_session(&farm, &queue, &job, s, Some(&config), None).await
+            let reference_start = {
+                let sess = api::get_session(&farm, &queue, &job, resolved_session_id, Some(&config), None).await
                     .map_err(|e| CliError::Operation(format!("Failed to get session: {e}")))?;
                 sess["startedAt"].as_str().and_then(|t| {
                     chrono::DateTime::parse_from_rfc3339(&t.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
                         .ok()
                 })
-            } else {
-                None
             };
 
             // Build timestamp formatter
@@ -407,26 +427,6 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
                 _ => crate::common::TimestampFormat::Utc,
             };
-
-            let start = start_time.as_deref().and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
-                    .ok()
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-            });
-            let end = end_time.as_deref().and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
-                    .ok()
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-            });
-
-            if !is_json {
-                // Header lines printed after session resolution so we have the actual session ID
-            }
-
-            let (result, auto_select) = log_retrieval::get_session_logs(
-                &farm, &queue, sid, Some(&job), limit, start, end,
-                next_token.as_deref(), Some(&config),
-            ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
 
             // Print auto-selection message then header (non-JSON only, matching Python order)
             if !is_json {
@@ -493,6 +493,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let queue = get(&config, "defaults.queue_id");
             let job_id = get(&config, "defaults.job_id");
             let mark_as = mark_as.to_uppercase();
+            const VALID_MARK_AS: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"];
+            if !VALID_MARK_AS.contains(&mark_as.as_str()) {
+                return Err(CliError::Operation(format!(
+                    "Invalid value for --mark-as: {mark_as}. Valid values: {}",
+                    VALID_MARK_AS.join(", ")
+                )));
+            }
             let auto_accept = is_auto_accept(&config);
 
             let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
@@ -565,6 +572,15 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             } else {
                 run_status.iter().map(|s| s.to_uppercase()).collect()
             };
+            const VALID_RUN_STATUSES: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"];
+            for status in &run_status_set {
+                if !VALID_RUN_STATUSES.contains(&status.as_str()) {
+                    return Err(CliError::Operation(format!(
+                        "Invalid value for --run-status: {status}. Valid values: {}",
+                        VALID_RUN_STATUSES.join(", ")
+                    )));
+                }
+            }
 
             let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
                 Ok(j) => j,

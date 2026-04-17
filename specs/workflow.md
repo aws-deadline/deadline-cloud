@@ -32,7 +32,7 @@ them to choose which one to work on. Do not pick autonomously.
 - **Improvements before new code.** Before adding new features, audit
   existing implementation against the Python source. Flag behavior gaps
   and cleanups. Implement improvements first.
-- **Commit per batch.** A batch is the complete loop (Steps 1-7) for a
+- **Commit per batch.** A batch is the complete loop (Steps 1-8) for a
   work item. Do not commit partway through — complete all steps including
   spec updates, then commit. The commit message covers the entire batch.
 - **Specs stay in sync with code.** Before committing, the relevant
@@ -125,8 +125,20 @@ For CLI commands that call AWS APIs, follow the patterns in
 After tests pass:
 1. Run `cargo build` (full workspace)
 2. Run `cargo test` (full test suite)
+3. If snapshots were created, run `cargo insta review` after verifying
+   each against Python output. **Do not use `INSTA_UPDATE=always`
+   without reviewing each snapshot.**
 
-**⛔ GATE: Compare both CLIs.** Do not skip this step.
+Refactor for clarity once green — but don't over-abstract.
+
+**⛔ GATE:** Update `specs/HANDOFF.md` with current step status.
+
+### Step 4: Compare both CLIs
+
+Run the Python CLI and the Rust CLI with the same arguments and diff
+the output. This catches differences that stub-server tests miss:
+field order, formatting, missing fields, error message wording.
+
 - Run `deadline auth status` (Python CLI) to check authentication.
   If not authenticated, ask the human to log in.
 - Discover real resources: run `deadline farm list`, `deadline queue
@@ -140,16 +152,11 @@ After tests pass:
 - If the command has no API calls (pure argument validation / URL
   parsing), compare error messages and exit codes for all error paths.
 
-3. If snapshots were created, run `cargo insta review` after verifying
-   each against Python output. **Do not use `INSTA_UPDATE=always`
-   without reviewing each snapshot.**
+**⛔ GATE:** Document any differences found in `specs/HANDOFF.md`.
+Fix differences before proceeding, or document accepted differences
+with rationale.
 
-Refactor for clarity once green — but don't over-abstract.
-
-**⛔ GATE:** Update `specs/HANDOFF.md` with current step status and
-any differences found during CLI comparison.
-
-### Step 4: Write spec
+### Step 5: Write spec
 
 Write or update the spec files in `specs/{crate}/` to reflect what was
 built. The spec describes the code as it exists — not aspirational design.
@@ -173,7 +180,7 @@ built. The spec describes the code as it exists — not aspirational design.
 - Internal helper function APIs
 - Module-internal wiring details
 
-### Step 5: Audit (spec ↔ code ↔ tests)
+### Step 6: Audit (spec ↔ code ↔ tests)
 
 This is the quality step. Compare three artifacts:
 
@@ -197,18 +204,18 @@ Check alignment:
 If there are no findings, state "Audit clean — no findings." Do not
 skip producing the list.
 
-### Step 6: Fix
+### Step 7: Fix
 
-Address findings from Step 5:
+Address findings from Step 6:
 - Bugs → fix code, verify tests catch the fix
 - Spec drift → update spec or code (whichever is wrong)
 - Missing coverage → add tests
 - Improvements → implement if low-risk, defer if not
 
-If fixes were significant, re-run Step 5 on the changed areas. Loop
+If fixes were significant, re-run Step 6 on the changed areas. Loop
 until the audit produces no actionable findings.
 
-### Step 7: Commit
+### Step 8: Commit
 
 1. Verify all tests pass: `cargo test`
 2. Verify specs are updated and accurate

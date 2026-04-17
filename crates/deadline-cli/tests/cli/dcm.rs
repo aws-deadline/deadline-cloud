@@ -67,3 +67,35 @@ async fn farm_list_non_dcm_does_not_inject_principal_id() {
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
+
+// AUDIT-005: DCM credentials in [default] profile should be detected
+#[tokio::test]
+async fn auth_status_default_profile_dcm_shows_monitor_login_source() {
+    let harness = TestHarness::new().await;
+    // Write AWS config with [default] section containing monitor_id
+    let aws_dir = harness.config_dir.path().join(".aws");
+    std::fs::create_dir_all(&aws_dir).unwrap();
+    std::fs::write(
+        aws_dir.join("config"),
+        "[default]\n\
+         region=us-west-2\n\
+         monitor_id=monitor-default123\n\
+         user_id=user-default-dcm\n\
+         identity_store_id=d-defaultstore\n",
+    ).unwrap();
+    // Use (default) profile — no explicit profile name set
+    harness.cli(&["config", "set", "defaults.aws_profile_name", "(default)"]).assert().success();
+
+    let output = harness.cli(&["auth", "status", "--output", "json"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("Expected JSON, got: {stdout}\nError: {e}"));
+    assert_eq!(
+        parsed["source"], "DEADLINE_CLOUD_MONITOR_LOGIN",
+        "Default profile with monitor_id should show DEADLINE_CLOUD_MONITOR_LOGIN, got: {}",
+        parsed["source"]
+    );
+}

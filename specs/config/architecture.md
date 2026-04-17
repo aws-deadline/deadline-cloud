@@ -114,6 +114,12 @@ exist for simple scripts and the GUI FFI.
 so sections and keys are sorted alphabetically when written. This produces clean
 diffs and prevents config file churn on write.
 
+**Keys are case-insensitive.** Keys are lowercased on parse, set, and get —
+matching Python's `ConfigParser` default behavior. Section names remain
+case-sensitive. This ensures config files written by Python (which lowercases
+keys) are read correctly, and manual edits with mixed-case keys (e.g.,
+`Farm_Id`) are found.
+
 **Atomic writes.** `write_config_to` writes to a temp file then renames. On POSIX,
 sets 0o600 permissions. This prevents partial writes from corrupting the config.
 

@@ -352,6 +352,9 @@ async fn bundle_submit_with_attachments_uploads_files() {
     setup_config(&harness);
     mock_submit_with_attachments(&harness).await;
     let bundle_dir = create_bundle_with_attachments(&harness, "case12");
+    // Set known_asset_paths so AUDIT-003 safety check doesn't cancel
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
     let _guard = bundle_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&[
         "bundle", "submit", &bundle_dir, "--yes",
@@ -692,13 +695,14 @@ async fn bundle_submit_with_cli_overrides() {
 // files outside known paths should produce a warning
 // =====================================================================
 
+// AUDIT-003: When --yes (auto_accept) is set and files are outside known
+// paths, Python cancels the submission as a safety measure. Rust must match.
 #[tokio::test]
-async fn bundle_submit_files_outside_known_paths_shows_warning() {
+async fn bundle_submit_auto_accept_unknown_paths_cancels() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
     mock_submit_with_attachments(&harness).await;
-    // The input files in create_bundle_with_attachments are in a temp dir
-    // which is NOT a known asset path, so a warning should appear.
+    // Input files are in a temp dir which is NOT a known asset path.
     let bundle_dir = create_bundle_with_attachments(&harness, "known_paths_warn");
     let _guard = bundle_settings().bind_to_scope();
     let output = harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
@@ -706,8 +710,12 @@ async fn bundle_submit_files_outside_known_paths_shows_warning() {
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("outside of known asset paths"),
-        "Expected known-paths warning in output, got:\n{stdout}"
+        !output.status.success(),
+        "Expected failure when auto_accept + unknown paths, got success:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("auto_accept") || stdout.contains("unknown paths") || stdout.contains("canceled"),
+        "Expected cancellation message mentioning auto_accept/unknown paths, got:\n{stdout}"
     );
 }
 

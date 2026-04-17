@@ -9,9 +9,9 @@
 
 | Priority | Count | Fixed | Remaining |
 |----------|-------|-------|-----------|
-| Critical | 4     | 0     | 4         |
-| High     | 10    | 0     | 10        |
-| Medium   | 22    | 0     | 22        |
+| Critical | 4     | 3     | 1         |
+| High     | 10    | 1     | 9         |
+| Medium   | 22    | 4     | 18        |
 | Low      | 20    | 0     | 20        |
 
 ## Methodology
@@ -48,7 +48,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Splits `settings.known_asset_paths` using `os.pathsep` (`:` on Unix, `;` on Windows). (`_submit_job_bundle.py:595`)
 - **Rust behavior:** Splits using `std::path::MAIN_SEPARATOR` (`/` on Unix, `\` on Windows) — the directory separator, not the path-list separator. (`submission.rs:346`)
 - **Impact:** On Unix, splits on `/`, destroying every absolute path. The known-asset-paths feature is completely broken in Rust.
-- **Resolution:** Pending
+- **Resolution:** Fixed — changed to path-list separator (`:` / `;`)
 
 ### AUDIT-003: `auto_accept` + unknown paths proceeds instead of canceling
 
@@ -58,7 +58,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** When `auto_accept=True` AND files exist outside known asset paths, submission is **canceled** with safety message. (`_submit_job_bundle.py:700-707`)
 - **Rust behavior:** When `auto_accept=True`, the unknown-path check is skipped entirely and submission **proceeds**. (`submission.rs:392`)
 - **Impact:** Rust silently uploads files from unexpected locations when `--yes` is used — opposite of Python's safety behavior.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-004: INI key case sensitivity mismatch
 
@@ -68,7 +68,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `ConfigParser` lowercases all keys. `Farm_Id = val` is stored as `farm_id`. (Python stdlib)
 - **Rust behavior:** `IniConfig` is case-sensitive. `Farm_Id` would not match `farm_id`. (`ini.rs:9`)
 - **Impact:** Config files with mixed-case keys (manual edits, external tools) silently lose values in Rust. Python-written configs work fine (already lowercase), but round-tripping through external editors could break.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ---
 
@@ -82,7 +82,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Creates a session even for default profile (profile_name=None), checks `get_scoped_config()` for `monitor_id`. (`_session.py:170-181`)
 - **Rust behavior:** When `resolve_profile_name()` returns `None`, immediately returns `HostProvided` without checking for `monitor_id`. (`auth.rs:82-96`)
 - **Impact:** DCM credentials in `[default]` AWS profile are not detected. Queue role assumption, auth status source, and login/logout all break for default-profile DCM users.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-006: `fleet get --queue-id` mode missing
 
@@ -186,7 +186,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `click.Choice(case_sensitive=False)` — `--output JSON` works. (`auth_group.py:80-84`)
 - **Rust behavior:** Case-sensitive comparison `output == "json"`. `--output JSON` silently falls through to verbose. (`commands/auth.rs:67`)
 - **Impact:** Scripts using uppercase `JSON` get wrong output format.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-016: `auth status` JSON key order differs
 
@@ -306,7 +306,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `click.Choice(["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"])` rejects invalid values. (`job_group.py:239`)
 - **Rust behavior:** Free-form `String` — invalid values like `"BANANA"` passed to API. (`job.rs:134`)
 - **Impact:** Confusing API errors instead of clean CLI usage errors.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-028: `job requeue-tasks --run-status` has no value validation
 
@@ -316,7 +316,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `click.Choice` rejects invalid values. (`job_group.py:334-338`)
 - **Rust behavior:** `Vec<String>` with no validation. (`job.rs:142`)
 - **Impact:** Typos silently requeue zero tasks with no warning.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-029: `job logs` relative timestamp bug for auto-selected sessions
 
@@ -326,7 +326,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Fetches session `startedAt` for auto-selected sessions. (`job_group.py:714-722`)
 - **Rust behavior:** `reference_start` is `None` for auto-selected sessions — falls back to `Utc::now()`. (`job.rs:399-406`)
 - **Impact:** Relative timestamps are wrong (relative to "now" instead of session start) in the common auto-select case.
-- **Resolution:** Pending
+- **Resolution:** Fixed
 
 ### AUDIT-030: `handle-web-url` macOS support missing
 

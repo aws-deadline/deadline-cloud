@@ -368,6 +368,11 @@ async fn job_logs_auto_select_single_session_prints_message() {
         json!({"sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z", "endedAt": "2024-12-18T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
     ]).await;
 
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc", "workerId": "worker-001",
+    })).await;
+
     cloudwatch::mock_get_log_events(&harness.server, &[
         json!({"timestamp": 1702857600000_i64, "message": "log line"}),
     ], None).await;
@@ -434,6 +439,11 @@ async fn job_logs_auto_select_json_no_message() {
         json!({"sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z", "endedAt": "2024-12-18T01:00:00Z", "fleetId": "fleet-abc", "workerId": "worker-001"}),
     ]).await;
 
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-only", "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc", "workerId": "worker-001",
+    })).await;
+
     cloudwatch::mock_get_log_events(&harness.server, &[
         json!({"timestamp": 1702857600000_i64, "message": "log line"}),
     ], None).await;
@@ -486,6 +496,57 @@ async fn job_logs_auto_select_ongoing_from_multiple_prints_latest_message() {
     assert!(
         stdout.contains("Using the latest session"),
         "Expected 'Using the latest session' (not 'only'), got:\n{stdout}"
+    );
+}
+
+// =====================================================================
+// AUDIT-029: relative timestamp for auto-selected sessions uses session startedAt
+// =====================================================================
+
+#[tokio::test]
+async fn job_logs_relative_timestamp_auto_selected_session_uses_session_start() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    // Auto-select: no --session-id, single session available
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+        json!({
+            "sessionId": "session-auto",
+            "startedAt": "2023-12-18T00:00:00Z",
+            "endedAt": "2023-12-18T01:00:00Z",
+            "fleetId": "fleet-abc",
+            "workerId": "worker-001",
+        }),
+    ]).await;
+
+    // mock_get_session needed because the fix fetches startedAt after auto-selection
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-auto",
+        "startedAt": "2023-12-18T00:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-001",
+    })).await;
+
+    // Event is 60 seconds after session start (2023-12-18T00:00:00Z = epoch 1702857600)
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857660000_i64, "message": "one minute in"}),
+    ], None).await;
+
+    let output = harness.cli(&["job", "logs", "--timestamp-format", "relative"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "got: {stdout}");
+    // Relative to session start (2023-12-18T00:00:00Z), event at +60s should show 0:01:00
+    // If the bug exists (falls back to now()), the delta would be huge (years), not 0:01:00
+    assert!(
+        stdout.contains("0:01:00"),
+        "Expected relative timestamp 0:01:00 (relative to session startedAt), got:\n{stdout}"
     );
 }
 

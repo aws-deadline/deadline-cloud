@@ -204,6 +204,24 @@ async fn auth_logout_dcm_monitor_fails() {
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
 
+// AUDIT-015: --output JSON (uppercase) should produce JSON, not verbose
+#[tokio::test]
+async fn auth_status_output_json_uppercase_produces_json() {
+    let harness = TestHarness::new().await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    farms::mock_list_farms(&harness.server, &[]).await;
+
+    let output = harness.cli(&["auth", "status", "--output", "JSON"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("Expected JSON output for --output JSON (uppercase), got: {stdout}\nError: {e}"));
+    assert_eq!(parsed["status"], "AUTHENTICATED");
+}
+
 // B-1: Non-existent profile should show Source: NOT_VALID, not HOST_PROVIDED
 #[tokio::test]
 async fn auth_status_nonexistent_profile_shows_not_valid() {

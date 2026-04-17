@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 /// An INI config: a map of section names → (key → value).
-/// Section names and keys are case-sensitive.
+/// Section names are case-sensitive. Keys are case-insensitive
+/// (lowercased on storage and lookup, matching Python's ConfigParser).
 #[derive(Debug, Clone, Default)]
 pub struct IniConfig {
     sections: BTreeMap<String, BTreeMap<String, String>>,
@@ -44,7 +45,7 @@ impl IniConfig {
             }
 
             if let Some(eq_pos) = line.find('=') {
-                let key = line[..eq_pos].trim().to_string();
+                let key = line[..eq_pos].trim().to_lowercase();
                 let value = line[eq_pos + 1..].trim().to_string();
 
                 match &current_section {
@@ -68,7 +69,7 @@ impl IniConfig {
     pub fn get(&self, section: &str, key: &str) -> Option<&str> {
         self.sections
             .get(section)
-            .and_then(|s| s.get(key))
+            .and_then(|s| s.get(&key.to_lowercase()))
             .map(|v| v.as_str())
     }
 
@@ -77,7 +78,7 @@ impl IniConfig {
         self.sections
             .entry(section.to_string())
             .or_default()
-            .insert(key.to_string(), value.to_string());
+            .insert(key.to_lowercase(), value.to_string());
     }
 
     /// Check if a section exists.
@@ -177,5 +178,27 @@ mod tests {
     fn missing_key_returns_none() {
         let ini = IniConfig::parse("[s]\na = b\n").unwrap();
         assert_eq!(ini.get("s", "nope"), None);
+    }
+
+    // ── AUDIT-004: INI key case insensitivity ───────────────────────
+
+    #[test]
+    fn parse_mixed_case_keys_lowercased() {
+        let ini = IniConfig::parse("[section]\nFarm_Id = farm-123\n").unwrap();
+        assert_eq!(ini.get("section", "farm_id"), Some("farm-123"));
+    }
+
+    #[test]
+    fn set_mixed_case_key_stored_lowercase() {
+        let mut ini = IniConfig::new();
+        ini.set("defaults", "AWS_Profile_Name", "myprofile");
+        assert_eq!(ini.get("defaults", "aws_profile_name"), Some("myprofile"));
+    }
+
+    #[test]
+    fn get_case_insensitive_lookup() {
+        let ini = IniConfig::parse("[s]\nkey = val\n").unwrap();
+        assert_eq!(ini.get("s", "KEY"), Some("val"));
+        assert_eq!(ini.get("s", "Key"), Some("val"));
     }
 }

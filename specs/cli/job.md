@@ -152,13 +152,14 @@ Requires: farm_id, queue_id, job_id.
 ### Execution Flow
 
 1. GetJob to retrieve job name
-2. If `--session-id` provided and `--timestamp-format relative`: GetSession
-   to retrieve `startedAt` for the reference time
-3. Call `log_retrieval::get_session_logs` (handles session auto-selection)
-4. Print auto-selection message (if applicable)
-5. Print header: log group, job ID, job name
-6. Print events or "No logs found"
-7. Print pagination hint if more logs available
+2. Call `log_retrieval::get_session_logs` (handles session auto-selection)
+3. Resolve the actual session ID (explicit or auto-selected)
+4. GetSession to retrieve `startedAt` for timestamp formatting
+5. Build timestamp formatter (utc/local/relative)
+6. Print auto-selection message (if applicable)
+7. Print header: log group, job ID, job name
+8. Print events or "No logs found"
+9. Print pagination hint if more logs available
 
 ### Session Auto-Selection
 
@@ -174,8 +175,9 @@ prints how the selection was made:
 - `relative` — time delta from session start time (e.g., `0:01:23.456789`)
 
 For relative mode, the reference time comes from the session's `startedAt`.
-If no session ID was provided (auto-selected), the reference defaults to
-`Utc::now()`.
+The session details are always fetched after session resolution (whether
+explicitly provided or auto-selected), so relative timestamps are correct
+in both cases.
 
 ### Verbose Output Format
 
@@ -202,9 +204,10 @@ Uses queue-scoped credentials via `get_session_logs` (which internally calls
 Options: `--mark-as` (default CANCELED), `--yes`.
 
 Requires: farm_id, queue_id, job_id. The `--mark-as` value is uppercased
-and passed directly to UpdateJob as the target status. No validation of
-the value is done at the CLI level — invalid values will be rejected by
-the API.
+and validated against `[SUSPENDED, CANCELED, FAILED, SUCCEEDED]`. Invalid
+values produce an error listing the valid choices (matching Python's
+`click.Choice` behavior). Exit code is 1 (Python uses 2 for Click usage
+errors — accepted difference since Rust validates post-parse).
 
 Flow:
 1. GetJob → print filtered summary (name, jobId, taskRunStatus, non-zero
@@ -225,7 +228,10 @@ Options: `--run-status` (repeatable), `--yes`.
 Requires: farm_id, queue_id, job_id.
 
 Default statuses when `--run-status` not provided: SUSPENDED, CANCELED, FAILED.
-All `--run-status` values are uppercased automatically.
+All `--run-status` values are uppercased and validated against
+`[SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE]`. Invalid values
+produce an error listing the valid choices. Exit code is 1 (Python uses 2
+— same accepted difference as `--mark-as`).
 
 Flow:
 1. GetJob → print job name and ID

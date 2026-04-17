@@ -50,14 +50,29 @@ fn read_aws_profile_key(profile_name: &str, key: &str) -> Option<String> {
 
     // Find the [profile <name>] section
     let section_header = format!("[profile {profile_name}]");
-    let section_start = content.find(&section_header)?;
+    read_aws_config_section(&content, &section_header, key)
+}
+
+/// Read a key from the `[default]` section of the AWS config file.
+fn read_aws_default_profile_key(key: &str) -> Option<String> {
+    let config_path = std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        format!("{home}/.aws/config")
+    });
+
+    let content = std::fs::read_to_string(&config_path).ok()?;
+    read_aws_config_section(&content, "[default]", key)
+}
+
+/// Shared helper: find a section header in AWS config text and extract a key.
+fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Option<String> {
+    let section_start = content.find(section_header)?;
     let after_header = &content[section_start + section_header.len()..];
 
-    // Read until next section or end of file
     for line in after_header.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
-            break; // next section
+            break;
         }
         if let Some((k, v)) = trimmed.split_once('=')
             && k.trim() == key {
@@ -84,8 +99,14 @@ pub fn get_credentials_source(
                 AwsCredentialsSource::HostProvided
             }
         }
-        // Default profile — check [default] section or [profile default]
-        None => AwsCredentialsSource::HostProvided,
+        // Default profile — check [default] section for monitor_id
+        None => {
+            if read_aws_default_profile_key("monitor_id").is_some() {
+                AwsCredentialsSource::DeadlineCloudMonitorLogin
+            } else {
+                AwsCredentialsSource::HostProvided
+            }
+        }
     }
 }
 
@@ -107,17 +128,21 @@ fn aws_profile_exists(profile_name: &str) -> bool {
 pub fn get_user_and_identity_store_id(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> (Option<String>, Option<String>) {
-    let profile_name = match session::resolve_profile_name(config) {
-        Some(name) => name,
-        None => return (None, None),
+    let profile_name = session::resolve_profile_name(config);
+
+    let read_key = |key: &str| -> Option<String> {
+        match &profile_name {
+            Some(name) => read_aws_profile_key(name, key),
+            None => read_aws_default_profile_key(key),
+        }
     };
 
-    if read_aws_profile_key(&profile_name, "monitor_id").is_none() {
+    if read_key("monitor_id").is_none() {
         return (None, None);
     }
 
-    let user_id = read_aws_profile_key(&profile_name, "user_id");
-    let identity_store_id = read_aws_profile_key(&profile_name, "identity_store_id");
+    let user_id = read_key("user_id");
+    let identity_store_id = read_key("identity_store_id");
     (user_id, identity_store_id)
 }
 
@@ -125,8 +150,10 @@ pub fn get_user_and_identity_store_id(
 pub fn get_monitor_id(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> Option<String> {
-    let profile_name = session::resolve_profile_name(config)?;
-    read_aws_profile_key(&profile_name, "monitor_id")
+    match session::resolve_profile_name(config) {
+        Some(name) => read_aws_profile_key(&name, "monitor_id"),
+        None => read_aws_default_profile_key("monitor_id"),
+    }
 }
 
 /// Check authentication by calling STS GetCallerIdentity.

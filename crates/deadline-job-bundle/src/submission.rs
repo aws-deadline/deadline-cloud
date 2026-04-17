@@ -343,7 +343,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
         let configured_known = get_setting("settings.known_asset_paths", params.config);
         if !configured_known.is_empty() {
-            known_paths.extend(configured_known.split(std::path::MAIN_SEPARATOR).map(String::from));
+            let path_list_sep = if cfg!(windows) { ';' } else { ':' };
+            known_paths.extend(configured_known.split(path_list_sep).map(String::from));
         }
 
         let known_param_names: std::collections::HashSet<String> = params.job_parameters.iter()
@@ -389,7 +390,10 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 if outside.len() > 10 {
                     print(&format!("  ... and {} more", outside.len() - 10));
                 }
-                if !params.auto_accept {
+                if params.auto_accept {
+                    print("Job submission canceled (settings.auto_accept enabled and there were unknown paths).");
+                    return Err(op_err("Job submission canceled (settings.auto_accept enabled and there were unknown paths).".into()));
+                } else {
                     let should_continue = params.continue_callback.as_ref().map_or(true, |cb| cb());
                     if !should_continue {
                         return Err(op_err("Submission canceled by user.".into()));
@@ -756,5 +760,19 @@ mod tests {
         expand_input_directories(&mut refs, false).unwrap();
 
         assert_eq!(refs.input_filenames.len(), 2);
+    }
+
+    // AUDIT-002: known_asset_paths must split on path-list separator (: on Unix, ; on Windows)
+    // not on directory separator (/ on Unix, \ on Windows)
+    #[test]
+    fn path_list_separator_splits_correctly() {
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        let input = "/mnt/shared:/home/user";
+        let paths: Vec<&str> = input.split(sep).collect();
+        assert_eq!(paths, vec!["/mnt/shared", "/home/user"]);
+
+        // Verify MAIN_SEPARATOR would destroy paths (the bug)
+        let bad: Vec<&str> = input.split(std::path::MAIN_SEPARATOR).collect();
+        assert!(bad.len() > 2, "MAIN_SEPARATOR splits paths incorrectly: {bad:?}");
     }
 }

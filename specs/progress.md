@@ -59,7 +59,7 @@ pick and execute work items.
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
-| 15e | Behavioral parity audit | Not started | — | 9 |
+| 15e | Behavioral parity audit | In progress | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | — | 1-14 |
 | 17 | MCP server | ✅ Done | `cli.md`, `mcp.md` | 1-14 |
@@ -104,6 +104,15 @@ after the core CLI commands are complete.
   `"farm-1"`, `"queue-1"`) with pseudorandomly generated IDs that follow
   the actual Deadline Cloud ID format. Add a test helper that generates
   realistic IDs per resource type. Applies across all crates.
+- **Exit code parity**: Rust uses exit code 1 for argument validation
+  errors (e.g. `--mark-as BANANA`, `--run-status BANANA`), while Python
+  uses exit code 2 (Click's `UsageError`). Align to exit code 2 for
+  argument validation failures to match Python. Affects `job cancel`,
+  `job requeue-tasks`, and any future commands with value validation.
+- **Test consolidation**: Audit test suite for redundant or overlapping
+  tests. Identify Level 1 tests fully subsumed by Level 2 snapshots
+  (per testing.md removal rule). Consolidate tests that exercise the
+  same code path with minor variations into parameterized test cases.
 - **~~Crate rename discussion~~**: ✅ Done — renamed `deadline-client` to
   `deadline-api`. Also dissolved `deadline-models` and `deadline-common`
   into their consumer crates.

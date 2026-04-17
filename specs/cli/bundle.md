@@ -84,6 +84,24 @@ Three-way precedence:
 
 The two flags use `overrides_with` in clap so the last one wins if both are specified.
 
+## Asset Path Safety
+
+When job attachments are present, the submission pipeline checks whether
+input files are within "known asset paths" — the bundle directory, storage
+profile locations, PATH-type parameter values, and paths from
+`settings.known_asset_paths` (split on `:` on Unix, `;` on Windows —
+the path-list separator, matching `os.pathsep` in Python).
+
+If files exist outside known paths:
+- **Interactive mode** (`--yes` not set): warns and prompts for confirmation
+- **Auto-accept mode** (`--yes` or `settings.auto_accept`): **cancels** the
+  submission with message "Job submission canceled (settings.auto_accept
+  enabled and there were unknown paths)." This is a safety measure — auto-accept
+  should not silently upload files from unexpected locations.
+
+This matches Python's behavior where `auto_accept=True` + unknown paths raises
+`DeadlineOperationCanceled`.
+
 ## Differences from Python CLI
 
 | Aspect | Python | Rust |

@@ -67,7 +67,7 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
     let auth_status = auth::check_authentication_status(config_ref).await;
     let api_available = auth::check_deadline_api_available(config_ref).await;
 
-    if output == "json" {
+    if output.eq_ignore_ascii_case("json") {
         let json = serde_json::json!({
             "profile_name": profile_name,
             "source": creds_source.to_string(),

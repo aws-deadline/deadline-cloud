@@ -69,6 +69,15 @@ async fn job_cancel_get_job_fails_prints_error_with_suggestions() {
     assert_cmd_snapshot!(harness.cmd(&["job", "cancel", "--yes"]));
 }
 
+// AUDIT-027: --mark-as BANANA should exit with error listing valid values
+#[tokio::test]
+async fn job_cancel_mark_as_invalid_value_exits_with_error() {
+    let harness = TestHarness::new().await;
+    setup(&harness).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "cancel", "--mark-as", "BANANA", "--yes"]));
+}
+
 // --- job requeue-tasks ---
 
 #[tokio::test]
@@ -187,6 +196,15 @@ async fn job_requeue_tasks_step_with_no_matching_tasks() {
     sessions::mock_update_task(&harness.server, FARM, QUEUE, JOB, "step-bbbb", "task-0002").await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--yes"]));
+}
+
+// AUDIT-028: --run-status BANANA should exit with error listing valid values
+#[tokio::test]
+async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
+    let harness = TestHarness::new().await;
+    setup(&harness).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--run-status", "BANANA", "--yes"]));
 }
 
 #[tokio::test]
