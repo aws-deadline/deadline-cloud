@@ -330,3 +330,141 @@ class TestTraceScheduleWithMockBackend:
         # No non-task runs
         assert "Non-Task Run Count: 0" in result.output
         assert "Non-Task Run Total Duration: 0:00:00" in result.output
+
+
+class TestTraceScheduleBatchBehavior:
+    """Tests that exercise the batch-get integration specifically."""
+
+    def _setup(self, deadline_mock: MagicMock, template: str):
+        backend = MockDeadlineBackend()
+        backend.set_mock_methods(deadline_mock)
+        helper = TestTraceScheduleWithMockBackend()
+        farm_id, queue_id, job_id = helper.setup_job(backend, deadline_mock, template)
+        config.set_setting("defaults.farm_id", farm_id)
+        config.set_setting("defaults.queue_id", queue_id)
+        return backend, helper, farm_id, queue_id, job_id
+
+    def test_uses_batch_get_task_and_batch_get_step(
+        self, fresh_deadline_config: str, deadline_mock: MagicMock
+    ):
+        backend, helper, farm_id, queue_id, job_id = self._setup(deadline_mock, SIX_TASK_TEMPLATE)
+        step_id = helper.get_step(backend, farm_id, queue_id, job_id)
+        task_ids = helper.get_tasks_for_step(backend, farm_id, queue_id, job_id, step_id)
+        # 2 sessions of 3 tasks each so there are multiple unique tasks.
+        backend.simulate_task_runs(job_id, step_id, task_ids[0:3], worker_id="worker-0")
+        backend.simulate_task_runs(job_id, step_id, task_ids[3:6], worker_id="worker-1")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["job", "trace-schedule", "--job-id", job_id])
+
+        assert result.exit_code == 0, result.output
+        # Single batch each is enough for 1 step and 6 tasks.
+        assert deadline_mock.batch_get_step.call_count == 1
+        assert deadline_mock.batch_get_task.call_count == 1
+        # Legacy per-item calls must NOT be used.
+        assert deadline_mock.get_step.call_count == 0
+        assert deadline_mock.get_task.call_count == 0
+
+    def test_batch_chunks_tasks_over_100(
+        self, fresh_deadline_config: str, deadline_mock: MagicMock
+    ):
+        # 150 tasks => 2 batches (100 + 50).
+        template = """
+specificationVersion: jobtemplate-2023-09
+name: Test
+steps:
+  - name: Render
+    parameterSpace:
+      taskParameterDefinitions:
+        - name: Frame
+          type: INT
+          range: "1-150"
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["{{Task.Param.Frame}}"]
+"""
+        backend, helper, farm_id, queue_id, job_id = self._setup(deadline_mock, template)
+        step_id = helper.get_step(backend, farm_id, queue_id, job_id)
+        backend.simulate_task_runs(job_id, step_id)  # all 150 tasks
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["job", "trace-schedule", "--job-id", job_id])
+
+        assert result.exit_code == 0, result.output
+        assert deadline_mock.batch_get_task.call_count == 2
+        sizes = [len(c.kwargs["identifiers"]) for c in deadline_mock.batch_get_task.call_args_list]
+        assert sorted(sizes) == [50, 100]
+        assert "Task Run Count: 150" in result.output
+
+    def test_transient_error_is_retried_and_trace_succeeds(
+        self, fresh_deadline_config: str, deadline_mock: MagicMock
+    ):
+        backend, helper, farm_id, queue_id, job_id = self._setup(deadline_mock, SIX_TASK_TEMPLATE)
+        step_id = helper.get_step(backend, farm_id, queue_id, job_id)
+        task_ids = helper.get_tasks_for_step(backend, farm_id, queue_id, job_id, step_id)
+        backend.simulate_task_runs(job_id, step_id, task_ids)
+
+        # One task throttles once, then succeeds.
+        backend.inject_batch_failure(
+            "BatchGetTask",
+            {
+                "farmId": farm_id,
+                "queueId": queue_id,
+                "jobId": job_id,
+                "stepId": step_id,
+                "taskId": task_ids[2],
+            },
+            code="ThrottlingException",
+            attempts=1,
+        )
+
+        runner = CliRunner()
+        # Patch time.sleep via the batch_get module to avoid slowing the test.
+        from deadline.client.cli._groups import _batch_get as bg
+
+        original_sleep = bg.time.sleep
+        bg.time.sleep = lambda _s: None
+        try:
+            result = runner.invoke(main, ["job", "trace-schedule", "--job-id", job_id])
+        finally:
+            bg.time.sleep = original_sleep
+
+        assert result.exit_code == 0, result.output
+        assert "Task Run Count: 6" in result.output
+        # Two total calls: initial plus one retry for the injected failure.
+        assert deadline_mock.batch_get_task.call_count == 2
+
+    def test_terminal_error_warns_and_continues(
+        self, fresh_deadline_config: str, deadline_mock: MagicMock
+    ):
+        backend, helper, farm_id, queue_id, job_id = self._setup(deadline_mock, SIX_TASK_TEMPLATE)
+        step_id = helper.get_step(backend, farm_id, queue_id, job_id)
+        task_ids = helper.get_tasks_for_step(backend, farm_id, queue_id, job_id, step_id)
+        backend.simulate_task_runs(job_id, step_id, task_ids)
+
+        # One task is terminally missing.
+        backend.inject_batch_failure(
+            "BatchGetTask",
+            {
+                "farmId": farm_id,
+                "queueId": queue_id,
+                "jobId": job_id,
+                "stepId": step_id,
+                "taskId": task_ids[0],
+            },
+            code="ResourceNotFoundException",
+            attempts=10,  # Effectively permanent.
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["job", "trace-schedule", "--job-id", job_id])
+
+        assert result.exit_code == 0, result.output
+        # The warning goes to stderr; click's CliRunner mixes it with .output
+        # by default.
+        assert "could not retrieve 1 task" in result.output
+        # All 6 task-run actions are still counted (the missing task just
+        # gets "<No Task Params>" as its event name).
+        assert "Task Run Count: 6" in result.output
