@@ -516,12 +516,6 @@ These are the manual test cases for the client software release cycle, covering 
 | `deadline worker list` | Verify correct information is displayed. | Include `--fleet-id` parameter. |
 | `deadline handle-web-url --install` | | macOS: Verify 'Installing the web URL handler is not supported on OS darwin' message appears. |
 | `deadline handle-web-url --uninstall` | | macOS: Verify 'Uninstalling the web URL handler is not supported on OS darwin' message appears. |
-| `deadline --help` | Verify correct information is displayed. | |
-| `deadline -h` | Verify correct information is displayed. | |
-| `deadline --log-level ERROR` | Must include command after level (e.g. `deadline --log-level ERROR farm list`). | |
-| `deadline --log-level WARNING` | | |
-| `deadline --log-level INFO` | | |
-| `deadline --log-level DEBUG` | | |
 
 ## Job Attachments Tests
 

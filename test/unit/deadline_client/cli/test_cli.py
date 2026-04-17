@@ -245,3 +245,60 @@ def test_submitter_version_in_user_agent():
     finally:
         # Restore original state
         session_context.update(original_context)
+
+
+def _run_deadline(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["deadline", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+class TestHelp:
+    """deadline --help and deadline -h should display correct information."""
+
+    def test_help_flag(self):
+        result = _run_deadline("--help")
+        assert result.returncode == 0
+        assert "Usage:" in result.stdout
+        assert "Interact with AWS Deadline Cloud" in result.stdout
+
+    def test_h_flag(self):
+        result = _run_deadline("-h")
+        assert result.returncode == 0
+        assert "Usage:" in result.stdout
+        assert "Interact with AWS Deadline Cloud" in result.stdout
+
+    def test_help_and_h_produce_same_output(self):
+        help_result = _run_deadline("--help")
+        h_result = _run_deadline("-h")
+        assert help_result.stdout == h_result.stdout
+
+
+class TestLogLevel:
+    """deadline --log-level {ERROR,WARNING,INFO,DEBUG} should control verbosity."""
+
+    @pytest.mark.parametrize("level", ["ERROR", "WARNING", "INFO", "DEBUG"])
+    def test_log_level_accepted(self, level):
+        result = _run_deadline("--log-level", level, "config", "--help")
+        assert result.returncode == 0
+
+    def test_debug_more_verbose_than_warning(self):
+        debug = _run_deadline("--log-level", "DEBUG", "config", "--help")
+        warning = _run_deadline("--log-level", "WARNING", "config", "--help")
+        assert debug.returncode == 0
+        assert warning.returncode == 0
+        debug_all = debug.stdout + debug.stderr
+        warning_all = warning.stdout + warning.stderr
+        assert len(debug_all) > len(warning_all)
+
+    def test_error_level_suppresses_debug_message(self):
+        result = _run_deadline("--log-level", "ERROR", "config", "--help")
+        combined = result.stdout + result.stderr
+        assert "Debug logging is on" not in combined
+
+    def test_invalid_log_level_rejected(self):
+        result = _run_deadline("--log-level", "TRACE", "config", "--help")
+        assert result.returncode != 0
