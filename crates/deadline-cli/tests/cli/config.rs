@@ -103,3 +103,155 @@ async fn config_get_no_dot_setting_uses_single_quotes() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&["config", "get", "bad_name"]));
 }
+
+// --- Config hierarchy tests ---
+// Port of Python test_config_settings_hierarchy: settings are stored
+// hierarchically (aws_profile → farm_id → queue_id). Switching a parent
+// scope resets child settings to defaults.
+
+#[tokio::test]
+async fn config_hierarchy_profile_farm_queue_scoping() {
+    let harness = TestHarness::new().await;
+
+    // Set settings from innermost to outermost, then switch profile
+    harness.cli(&["config", "set", "settings.storage_profile_id", "sp-for-farm-default"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-for-farm-default"]).assert().success();
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-for-profile-default"]).assert().success();
+    harness.cli(&["config", "set", "defaults.aws_profile_name", "NonDefaultProfile"]).assert().success();
+
+    // After switching profile, child settings should be defaults (empty)
+    assert_cmd_snapshot!("hierarchy_after_profile_switch",
+        harness.cmd(&["config", "get", "defaults.farm_id"]));
+
+    // Switch back to default profile — farm should be restored
+    harness.cli(&["config", "clear", "defaults.aws_profile_name"]).assert().success();
+    assert_cmd_snapshot!("hierarchy_farm_restored",
+        harness.cmd(&["config", "get", "defaults.farm_id"]));
+
+    // Queue should still be default (farm scope hasn't been cleared)
+    assert_cmd_snapshot!("hierarchy_queue_still_default",
+        harness.cmd(&["config", "get", "defaults.queue_id"]));
+
+    // Clear farm — queue should be restored
+    harness.cli(&["config", "clear", "defaults.farm_id"]).assert().success();
+    assert_cmd_snapshot!("hierarchy_queue_restored",
+        harness.cmd(&["config", "get", "defaults.queue_id"]));
+
+    // Storage profile should also be restored
+    assert_cmd_snapshot!("hierarchy_storage_profile_restored",
+        harness.cmd(&["config", "get", "settings.storage_profile_id"]));
+}
+
+// --- Config roundtrip tests ---
+// Port of Python test_config_settings_via_cli_roundtrip: each setting
+// roundtrips through get→set→get→clear→get via the CLI.
+
+#[tokio::test]
+async fn config_roundtrip_farm_id() {
+    let harness = TestHarness::new().await;
+
+    // Default is empty
+    assert_cmd_snapshot!("roundtrip_farm_id_default",
+        harness.cmd(&["config", "get", "defaults.farm_id"]));
+
+    // Set and verify
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-0123456789abcdef0123456789abcdef"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_farm_id_set",
+        harness.cmd(&["config", "get", "defaults.farm_id"]));
+
+    // Clear and verify default restored
+    harness.cli(&["config", "clear", "defaults.farm_id"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_farm_id_cleared",
+        harness.cmd(&["config", "get", "defaults.farm_id"]));
+}
+
+#[tokio::test]
+async fn config_roundtrip_aws_profile_name() {
+    let harness = TestHarness::new().await;
+
+    assert_cmd_snapshot!("roundtrip_profile_default",
+        harness.cmd(&["config", "get", "defaults.aws_profile_name"]));
+
+    harness.cli(&["config", "set", "defaults.aws_profile_name", "AnotherProfileName"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_profile_set",
+        harness.cmd(&["config", "get", "defaults.aws_profile_name"]));
+
+    harness.cli(&["config", "clear", "defaults.aws_profile_name"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_profile_cleared",
+        harness.cmd(&["config", "get", "defaults.aws_profile_name"]));
+}
+
+#[tokio::test]
+async fn config_roundtrip_auto_accept() {
+    let harness = TestHarness::new().await;
+
+    assert_cmd_snapshot!("roundtrip_auto_accept_default",
+        harness.cmd(&["config", "get", "settings.auto_accept"]));
+
+    harness.cli(&["config", "set", "settings.auto_accept", "true"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_auto_accept_set",
+        harness.cmd(&["config", "get", "settings.auto_accept"]));
+
+    harness.cli(&["config", "clear", "settings.auto_accept"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_auto_accept_cleared",
+        harness.cmd(&["config", "get", "settings.auto_accept"]));
+}
+
+#[tokio::test]
+async fn config_roundtrip_conflict_resolution() {
+    let harness = TestHarness::new().await;
+
+    assert_cmd_snapshot!("roundtrip_conflict_default",
+        harness.cmd(&["config", "get", "settings.conflict_resolution"]));
+
+    harness.cli(&["config", "set", "settings.conflict_resolution", "CREATE_COPY"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_conflict_set",
+        harness.cmd(&["config", "get", "settings.conflict_resolution"]));
+
+    harness.cli(&["config", "clear", "settings.conflict_resolution"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_conflict_cleared",
+        harness.cmd(&["config", "get", "settings.conflict_resolution"]));
+}
+
+#[tokio::test]
+async fn config_roundtrip_log_level() {
+    let harness = TestHarness::new().await;
+
+    assert_cmd_snapshot!("roundtrip_log_level_default",
+        harness.cmd(&["config", "get", "settings.log_level"]));
+
+    harness.cli(&["config", "set", "settings.log_level", "DEBUG"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_log_level_set",
+        harness.cmd(&["config", "get", "settings.log_level"]));
+
+    harness.cli(&["config", "clear", "settings.log_level"]).assert().success();
+    assert_cmd_snapshot!("roundtrip_log_level_cleared",
+        harness.cmd(&["config", "get", "settings.log_level"]));
+}
+
+// --- Config error path tests ---
+// Verify set/clear with unknown settings produce correct error messages.
+
+#[tokio::test]
+async fn config_set_unknown_setting_exits_with_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["config", "set", "settings.nonexistent", "value"]));
+}
+
+#[tokio::test]
+async fn config_clear_unknown_setting_exits_with_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["config", "clear", "settings.nonexistent"]));
+}
+
+#[tokio::test]
+async fn config_set_no_dot_setting_exits_with_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["config", "set", "bad_name", "value"]));
+}
+
+#[tokio::test]
+async fn config_clear_no_dot_setting_exits_with_error() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&["config", "clear", "bad_name"]));
+}

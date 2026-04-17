@@ -71,6 +71,102 @@ async fn queue_export_credentials_access_denied_prints_error() {
     assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
 }
 
+// --- queue export-credentials error paths ---
+// These supplement the existing access_denied test with additional error
+// scenarios from Python test_queue_export_credentials and L1 session.rs tests.
+
+#[tokio::test]
+async fn queue_export_credentials_auth_error_prints_error() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    queue_resources::mock_assume_queue_role_for_user_error(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        403,
+        "UnrecognizedClientException",
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
+}
+
+#[tokio::test]
+async fn queue_export_credentials_throttling_prints_error() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    queue_resources::mock_assume_queue_role_for_user_error(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        403,
+        "ThrottlingException",
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
+}
+
+#[tokio::test]
+async fn queue_export_credentials_internal_error_prints_error() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    queue_resources::mock_assume_queue_role_for_user_error(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        500,
+        "InternalServerException",
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
+}
+
+// ⚠️ BEHAVIORAL GAP: Empty/missing credentials produce null JSON output
+// instead of an error. Python raises KeyError when credentials fields are
+// missing. This is tracked as a finding from #15d audit — the CLI should
+// validate the credential response before formatting it.
+
+#[tokio::test]
+async fn queue_export_credentials_empty_credentials_outputs_nulls() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    // Response has credentials key but empty object
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        json!({
+            "credentials": {}
+        }),
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
+}
+
+#[tokio::test]
+async fn queue_export_credentials_missing_credentials_key_outputs_nulls() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    // Response has no credentials key at all
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        json!({}),
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
+}
+
 // --- storage profile ---
 
 #[tokio::test]
