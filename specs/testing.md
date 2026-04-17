@@ -46,6 +46,27 @@ breaks when you rename an internal function was written at the wrong level.
 
 ---
 
+## Bug-Driven Test Updates
+
+When a bug or limitation is found in existing code:
+
+1. **Triage:** Ask "which existing test should have caught this?" Look for
+   tests that cover the same code path but assert too weakly (e.g.,
+   accepted placeholder output, didn't check all fields, only checked
+   exit code without verifying the error message).
+2. **Strengthen or add:**
+   - If an existing test was too weak → update it to fail on the bug.
+   - If no existing test covers the code path → write a new test that
+     fails on the bug.
+3. **Fix:** Only after a failing test reproduces the bug, fix the code.
+4. **Verify:** The updated/new test now passes.
+
+Never fix a bug without a test that reproduces it first. This applies
+equally to bugs found during audits, live CLI comparison, or ad-hoc
+discovery.
+
+---
+
 ## Scenario Coverage
 
 For each interface (CLI command or public function), systematically consider
