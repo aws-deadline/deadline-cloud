@@ -587,3 +587,49 @@ async fn sync_output_search_jobs_fails_returns_error() {
         "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
+
+// =========================================================================
+// Multi-run lifecycle: job goes NEW → UNCHANGED across two runs
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_multi_run_job_unchanged_on_second_run() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Job with 1 succeeded task
+    let job = active_job("job-multi", "Multi Run Job", 1, 1);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
+        job_detail_with_attachments("job-multi", None)).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-multi", &[]).await;
+
+    // Run 1: bootstrap
+    harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).assert().success();
+
+    // Verify checkpoint was saved
+    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_ignore-storage-profiles_download_checkpoint.json");
+    assert!(checkpoint_file.exists(), "checkpoint should exist after run 1");
+
+    // Run 2: same job, same state → should be UNCHANGED
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("run 2 should execute");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "run 2 should succeed: {stderr}");
+    assert!(stderr.contains("Checkpoint found"), "should load checkpoint: {stderr}");
+    assert!(stderr.contains("UNCHANGED Job: Multi Run Job (job-multi)"),
+        "job should be unchanged on second run: {stderr}");
+    assert!(stderr.contains("unchanged: 1"), "summary should show 1 unchanged: {stderr}");
+}
