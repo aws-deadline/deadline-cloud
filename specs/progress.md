@@ -4,8 +4,8 @@ AWS Deadline Cloud Rust CLI — work item tracking.
 
 ## Getting started
 
-Read `workflow.md` and follow it. Step 0 contains the full reading checklist
-and gates all planning and implementation work.
+Read `workflow.md` and follow it. The Session Start section contains the
+full reading checklist and gates all planning and implementation work.
 
 ## Reference Material
 

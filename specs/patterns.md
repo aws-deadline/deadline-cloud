@@ -3,6 +3,51 @@
 Patterns and conventions for writing code in this workspace. Read this
 before implementing API calls or touching `deadline-api`.
 
+## Design Principles
+
+The goal is identical observable behavior, not identical internal structure.
+
+1. **Don't replicate Python's module structure.** Python uses module-level
+   functions with global caches because that's idiomatic Python. Rust
+   should use structs that own their state. If Python has five free
+   functions sharing a module-level dict, Rust probably wants one struct
+   with five methods.
+
+2. **Globals must earn their keep.** Prefer owned state on a struct
+   when the state needs different configurations per consumer or must
+   be isolated for testing. However, process-wide singletons (caches,
+   connection pools, configuration) are legitimate when the alternative
+   is threading a parameter through every function call. Use
+   `std::sync::Mutex<T>` with `std::sync::LazyLock` (Rust 1.80+) for
+   mutable globals. The underlying struct should still be usable
+   independently for cases that need a separate instance.
+
+3. **Every abstraction must earn its keep.** Before adding a type,
+   wrapper, conversion layer, or any indirection that the Python
+   doesn't have, ask: "what does this prevent or enable?" If the
+   answer is a concrete benefit (compile-time error catching, safety,
+   testability), add it. If the answer is "it's more Rust-like" or
+   "it feels cleaner," don't — that's complexity without value. The
+   simplest correct implementation wins.
+
+4. **Preserve observable behavior exactly.** Same output, same errors,
+   same exit codes, same caching semantics. The test specs define the
+   contract — internal structure is free to diverge.
+
+5. **Don't over-abstract.** If the Python is a simple function that
+   doesn't need to become a trait, don't make it one. Only introduce
+   abstractions that solve a real problem or optimize a process.
+
+6. **Ask "what would I design if the Python didn't exist?"** Read the
+   test spec and the Python source, then close the Python file and
+   design the Rust API from the behavioral requirements. Open the
+   Python again only to verify you haven't missed edge cases.
+
+7. **Implement behavior, don't mirror code.** The Python source is a
+   reference for *what the system does*, not *how to build it*. Read
+   Python to understand the behavioral contract, then implement that
+   contract in idiomatic Rust.
+
 ## AWS SDK for Rust Usage
 
 The Rust SDK (`aws-sdk-deadline`) differs from Python's boto3 in ways

@@ -1,8 +1,9 @@
 # Development Workflow
 
-How to implement features, fix bugs, and maintain quality in deadline-cloud-rs.
-Adapted from the [openjd-rs porting methodology](archive/rust-rewrite-workflow.md)
-with front-loaded testing and spec-as-quality-tool.
+Procedural steps for implementing features, fixing bugs, and maintaining
+quality in deadline-cloud-rs. This file is purely the loop — design
+philosophy lives in `specs/patterns.md`, cross-cutting audit methodology
+lives in `specs/audit.md`.
 
 ## Session Start
 
@@ -10,11 +11,15 @@ with front-loaded testing and spec-as-quality-tool.
 - [ ] `AGENTS.md` — repo conventions, build/test commands
 - [ ] `specs/architecture.md` — crate dependency graph, data flows, shared conventions
 - [ ] `specs/testing.md` — test philosophy, levels, no-mocking policy, snapshot workflow
-- [ ] `specs/patterns.md` — AWS SDK usage patterns, coding conventions
+- [ ] `specs/patterns.md` — design principles, AWS SDK usage patterns, coding conventions
 - [ ] `specs/workflow.md` — this file (the development loop you're following)
 2. Then, read `specs/HANDOFF.md`. If it has active work, resume from where it left off.
 3. If no active work, check the Work Items table in `specs/progress.md`
-   and pick the first "Not started" item whose dependencies are all done.
+   and identify all "Not started" items whose dependencies are all done.
+
+**⛔ GATE:** Present the candidate work items to the human and wait for
+them to choose which one to work on. Do not pick autonomously.
+
 4. Update `specs/HANDOFF.md` with the chosen work item.
 
 ## Rules
@@ -39,50 +44,7 @@ with front-loaded testing and spec-as-quality-tool.
 - **Full audits use the audit prompt.** For cross-cutting behavioral
   audits spanning multiple work items, follow `specs/audit.md`.
 
-## Design Principles
-
-The goal is identical observable behavior, not identical internal structure.
-
-1. **Don't replicate Python's module structure.** Python uses module-level
-   functions with global caches because that's idiomatic Python. Rust
-   should use structs that own their state. If Python has five free
-   functions sharing a module-level dict, Rust probably wants one struct
-   with five methods.
-
-2. **Globals must earn their keep.** Prefer owned state on a struct
-   when the state needs different configurations per consumer or must
-   be isolated for testing. However, process-wide singletons (caches,
-   connection pools, configuration) are legitimate when the alternative
-   is threading a parameter through every function call. Use
-   `std::sync::Mutex<T>` with `std::sync::LazyLock` (Rust 1.80+) for
-   mutable globals. The underlying struct should still be usable
-   independently for cases that need a separate instance.
-
-3. **Every abstraction must earn its keep.** Before adding a type,
-   wrapper, conversion layer, or any indirection that the Python
-   doesn't have, ask: "what does this prevent or enable?" If the
-   answer is a concrete benefit (compile-time error catching, safety,
-   testability), add it. If the answer is "it's more Rust-like" or
-   "it feels cleaner," don't — that's complexity without value. The
-   simplest correct implementation wins.
-
-4. **Preserve observable behavior exactly.** Same output, same errors,
-   same exit codes, same caching semantics. The test specs define the
-   contract — internal structure is free to diverge.
-
-5. **Don't over-abstract.** If the Python is a simple function that
-   doesn't need to become a trait, don't make it one. Only introduce
-   abstractions that solve a real problem or optimize a process.
-
-6. **Ask "what would I design if the Python didn't exist?"** Read the
-   test spec and the Python source, then close the Python file and
-   design the Rust API from the behavioral requirements. Open the
-   Python again only to verify you haven't missed edge cases.
-
-7. **Implement behavior, don't mirror code.** The Python source is a
-   reference for *what the system does*, not *how to build it*. Read
-   Python to understand the behavioral contract, then implement that
-   contract in idiomatic Rust.
+---
 
 ## The Loop
 
@@ -95,12 +57,14 @@ Read deeply — not just the happy path, but edge cases, surprising
 behaviors, error messages, and how the feature interacts with config,
 credentials, and other subsystems.
 
-Before studying, read the following files that are relevant to your task (in order, skip none):
+**Reading checklist** (in order, skip none):
 - [ ] `specs/{crate}/README.md` for the target crate — architecture, gotchas, status
 - [ ] `specs/{crate}/` topic files relevant to the feature
+- [ ] `specs/test_specs/` — find the section for this work item's test cases
 - [ ] `specs/cli/{command}.md` — when the work item involves CLI commands
 - [ ] `specs/python-observations.md` — behavioral notes and ambiguities
 - [ ] Python source for the feature being ported
+- [ ] Python tests for the feature being ported
 
 For CLI commands that call AWS APIs, also check:
 - [ ] The SDK operation docs on docs.rs for input/output types
@@ -109,7 +73,7 @@ For CLI commands that call AWS APIs, also check:
 - [ ] Run the Python CLI command and capture its exact output — this is
   the target you must match
 
-Update `specs/HANDOFF.md` with findings, including:
+**⛔ GATE:** Update `specs/HANDOFF.md` with findings before proceeding:
 - A high-level plan explaining how you intend to write the tests and
   implement the feature (which crates/modules change, what new types
   are needed, how the CLI command wires to the library).
@@ -121,10 +85,11 @@ Update `specs/HANDOFF.md` with findings, including:
 Write tests that define the behavioral contract before writing any
 implementation. Derive test cases from:
 
-1. The Python unit tests for the feature (port them to Rust equivalents)
-2. The Python CLI output (run it, capture it, assert on it)
-3. Edge cases discovered during Step 1
-4. Error paths — every error the Python code can produce
+1. The test spec section for this work item (`specs/test_specs/`)
+2. The Python unit tests for the feature (port them to Rust equivalents)
+3. The Python CLI output (run it, capture it, assert on it)
+4. Edge cases discovered during Step 1
+5. Error paths — every error the Python code can produce
 
 Prefer Level 2 (CLI subprocess) tests when the behavior is CLI-reachable.
 Use Level 1 (library unit) tests for behavior too low-level to assert
@@ -137,8 +102,10 @@ reference. Do not reason about what the output "would be."
 Run the tests and confirm they fail. If a test passes before
 implementation, it's not testing anything new.
 
-**Gate:** Present the test suite and your implementation plan. Wait for
-human approval before writing implementation code.
+**⛔ GATE:** Present the test suite and your implementation plan. Wait
+for human approval before writing implementation code.
+
+**⛔ GATE:** Update `specs/HANDOFF.md` with current step status.
 
 ### Step 3: Implement
 
@@ -153,23 +120,29 @@ For CLI commands that call AWS APIs, follow the patterns in
 After tests pass:
 1. Run `cargo build` (full workspace)
 2. Run `cargo test` (full test suite)
-3. **Compare both CLIs against the real API.** This is a gate — do not
-   skip it.
-   - Run `deadline auth status` (Python CLI) to check authentication.
-     If not authenticated, ask the human to log in.
-   - Discover real resources: run `deadline farm list`, `deadline queue
-     list`, etc. to find IDs for comparison.
-   - For each key case, run both CLIs with the same arguments and diff:
-     ```bash
-     diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
-     ```
-   - Fix any output differences (field order, formatting, missing
-     fields) before proceeding.
-4. If snapshots were created, run `cargo insta review` after verifying
+
+**⛔ GATE: Compare both CLIs.** Do not skip this step.
+- Run `deadline auth status` (Python CLI) to check authentication.
+  If not authenticated, ask the human to log in.
+- Discover real resources: run `deadline farm list`, `deadline queue
+  list`, etc. to find IDs for comparison.
+- For each key case, run both CLIs with the same arguments and diff:
+  ```bash
+  diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
+  ```
+- Fix any output differences (field order, formatting, missing
+  fields) before proceeding.
+- If the command has no API calls (pure argument validation / URL
+  parsing), compare error messages and exit codes for all error paths.
+
+3. If snapshots were created, run `cargo insta review` after verifying
    each against Python output. **Do not use `INSTA_UPDATE=always`
    without reviewing each snapshot.**
 
 Refactor for clarity once green — but don't over-abstract.
+
+**⛔ GATE:** Update `specs/HANDOFF.md` with current step status and
+any differences found during CLI comparison.
 
 ### Step 4: Write spec
 
@@ -197,7 +170,7 @@ built. The spec describes the code as it exists — not aspirational design.
 
 ### Step 5: Audit (spec ↔ code ↔ tests)
 
-This is the quality step adapted from openjd-rs. Compare three artifacts:
+This is the quality step. Compare three artifacts:
 
 1. **Specs** — `specs/{crate}/` files for the feature
 2. **Implementation** — `crates/{crate}/src/` source code
@@ -210,11 +183,14 @@ Check alignment:
 - Are there behaviors in the code that the spec doesn't mention?
 - Are there spec claims that no test verifies?
 
-Produce a findings list. For each finding, categorize:
+**⛔ GATE:** Produce a written findings list. For each finding, categorize:
 - **Bug** — code doesn't match intended behavior
 - **Spec drift** — spec says one thing, code does another
 - **Missing coverage** — behavior exists but no test covers it
 - **Improvement** — code works but could be cleaner/faster/safer
+
+If there are no findings, state "Audit clean — no findings." Do not
+skip producing the list.
 
 ### Step 6: Fix
 
@@ -234,24 +210,3 @@ until the audit produces no actionable findings.
 3. Update `specs/progress.md` work items table
 4. Clear `specs/HANDOFF.md` active work item
 5. Commit with a conventional commit message covering the full batch
-
-## Audit Methodology
-
-For cross-cutting behavioral parity audits spanning multiple work items,
-see `specs/audit.md`. Use when:
-- After completing a batch of new feature work
-- Before a release
-- After a major refactor touching output formatting or error handling
-
-The per-crate quality evaluation prompt (from openjd-rs):
-
-> Read the specs in `specs/{crate}/`. Read the implementation in
-> `crates/{crate}/src/`. Read the tests. Check that all three are
-> aligned: specs describe what the code does, code does what the specs
-> say, tests confirm the specs are correct. Flag any misalignment.
-> Write findings into a report.
-
-## AWS SDK for Rust Patterns
-
-See `specs/patterns.md` for SDK usage conventions: ResponseBodyCapture,
-credential scoping, telemetry wrapping, error formatting.
