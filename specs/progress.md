@@ -53,8 +53,8 @@ pick and execute work items.
 | 11 | Submit job bundle | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | `cli.md` | 6 |
-| 13 | Job download & sync-output | In progress | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
-| 14 | Handle web URL | Not started | `cli.md` | 13 |
+| 13 | Job download & sync-output | ✅ Done | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
+| 14 | Handle web URL | ✅ Done | `cli.md` | 13 |
 | 15 | Job requeue-tasks | ✅ Done | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |

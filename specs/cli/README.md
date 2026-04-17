@@ -25,6 +25,7 @@ Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
 | [attachment.md](attachment.md) | `deadline attachment` commands: download, upload (BETA) |
 | [manifest.md](manifest.md) | `deadline manifest` commands: snapshot, diff, download, upload (BETA) |
 | [output-formatting.md](output-formatting.md) | YAML/JSON output, cli_object_repr, boolean quoting |
+| [handle-web-url.md](handle-web-url.md) | `deadline handle-web-url`: protocol handler, install/uninstall |
 | [resource-suggestions.md](resource-suggestions.md) | Error-path resource suggestion behavior |
 | [reference.md](reference.md) | Complete CLI command reference (user-facing) |
 
@@ -34,12 +35,11 @@ Implemented: config, auth (login/logout/status), farm list/get, queue
 list/get/export-credentials, fleet list/get, worker list/get, job
 list/get/search/wait/logs/cancel/requeue-tasks/download-output, attachment
 download/upload, manifest snapshot/diff/download/upload, bundle
-submit/gui-submit.
+submit/gui-submit, handle-web-url.
 
 Gaps:
 - `bundle submit --json` output format
 - `bundle submit --save-debug-snapshot` mode
 - `job download-output` interactive prompts (root-editing, conflict resolution)
 - `queue sync-output`
-- `handle-web-url`
 - `job trace-schedule` — experimental, deferred

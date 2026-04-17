@@ -638,7 +638,7 @@ job submission dialog. No flags beyond `--profile`.
 
 ---
 
-## `deadline handle-web-url` 🔲
+## `deadline handle-web-url` ✅
 
 | Flag | Description |
 |------|-------------|

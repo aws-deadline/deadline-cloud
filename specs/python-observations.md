@@ -105,3 +105,11 @@ Extracted from code review of release 0.54.2. Grouped by feature area.
 35. `[SILENT FAILURE]` `job wait` extracts session IDs from `latestSessionActionId` by splitting on `-` and assuming `sessionaction-<uuid>-<number>`. If the format changes, extraction silently produces `None`.
 
 36. `[GAP]` `job logs` does not support following/tailing logs in real time. Users must re-run with `--next-token`.
+
+## Timestamp Display
+
+37. `[INCONSISTENCY]` Timestamp timezone handling is ad-hoc across commands with no stated policy. API response data (`farm get`, `fleet get`, `queue get`, `worker get`, `job get`, `job list`, `worker list`) passes through timestamps in UTC as returned by the API. But two places actively convert to local time: `job get --search-term` converts `createdAt` to local via `_format_timestamp()` (`_job_helpers.py:20`), and `queue sync-output` converts all progress timestamps ("Initializing from", "Continuing from", "From", "To") to local via `.astimezone().isoformat()`. This means `job get --search-term foo` shows `createdAt` in local time, but `job get --job-id <id>` on the same job shows `createdAt` in UTC.
+
+38. `[INCONSISTENCY]` Even within local-time displays, the format varies. `job get --search-term` uses `strftime("%Y-%m-%d %H:%M:%S %z")` producing `2024-12-18 16:37:38 -0800` (space separator, no colon in offset). `queue sync-output` uses `.astimezone().isoformat()` producing `2024-12-18T16:37:38-08:00` (T separator, colon in offset).
+
+39. `[GAP]` Only `job logs` has a `--timestamp-format` option (utc/local/relative). All other commands that display timestamps have no user control — resource get/list commands always show UTC, `job get --search-term` always shows local, and `queue sync-output` always shows local.

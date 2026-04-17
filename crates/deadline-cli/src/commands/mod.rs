@@ -9,3 +9,4 @@ pub mod helpers;
 pub mod attachment;
 pub mod manifest;
 pub mod bundle;
+pub mod handle_web_url;

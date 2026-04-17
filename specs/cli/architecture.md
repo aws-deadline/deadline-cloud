@@ -37,6 +37,7 @@ src/
     ├── bundle.rs       # BundleAction: Submit
     ├── attachment.rs   # AttachmentAction: Download/Upload
     ├── manifest.rs     # ManifestAction: Snapshot/Diff/Download/Upload
+    ├── handle_web_url.rs # HandleWebUrlArgs: URL dispatch, install/uninstall
     └── helpers.rs      # suggest_resources_on_client_error
 ```
 

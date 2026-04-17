@@ -1070,7 +1070,7 @@ fn check_windows_long_paths(_output_paths_by_root: &std::collections::HashMap<St
 }
 
 /// Core implementation of `job download-output`.
-async fn download_output_impl(
+pub(crate) async fn download_output_impl(
     config: &IniConfig,
     farm_id: &str,
     queue_id: &str,

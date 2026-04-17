@@ -48,3 +48,5 @@ mod worker;
 mod smoke;
 #[path = "cli/job_download.rs"]
 mod job_download;
+#[path = "cli/handle_web_url.rs"]
+mod handle_web_url;

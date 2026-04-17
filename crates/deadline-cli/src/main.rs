@@ -100,6 +100,9 @@ enum Commands {
         #[command(subcommand)]
         action: commands::bundle::BundleAction,
     },
+    /// Handle deadline:// protocol URLs from web applications
+    #[command(name = "handle-web-url")]
+    HandleWebUrl(commands::handle_web_url::HandleWebUrlArgs),
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -201,8 +204,13 @@ fn command_name(cmd: &Commands) -> String {
         Commands::Bundle { action } => ("bundle", match action {
             commands::bundle::BundleAction::Submit { .. } => "submit",
         }),
+        Commands::HandleWebUrl(_) => ("handle-web-url", ""),
     };
-    format!("deadline.{group}.{action}")
+    if action.is_empty() {
+        format!("deadline.{group}")
+    } else {
+        format!("deadline.{group}.{action}")
+    }
 }
 
 #[cfg(test)]
@@ -302,6 +310,7 @@ fn main() {
             Commands::Attachment { action } => commands::attachment::run(action),
             Commands::Manifest { action } => commands::manifest::run(action),
             Commands::Bundle { action } => commands::bundle::run(action),
+            Commands::HandleWebUrl(args) => commands::handle_web_url::run(args),
         };
         if let Err(e) = result {
             match e {
