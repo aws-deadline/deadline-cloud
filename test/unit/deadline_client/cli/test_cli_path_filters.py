@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Tests for _validate_and_normalize_include_paths and download-input CLI command."""
+"""Tests for _validate_and_normalize_include_paths."""
 
 import pytest
 import click

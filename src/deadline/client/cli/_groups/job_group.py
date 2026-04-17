@@ -491,7 +491,7 @@ def _run_download_ux(
 ):
     """
     Shared UX flow for downloading files: root path confirmation, cross-OS mapping,
-    conflict resolution, progress bar, and summary. Used by both download-output and download-input.
+    conflict resolution, progress bar, and summary. Used by download-output.
     """
     auto_accept = config_file.str2bool(
         config_file.get_setting("settings.auto_accept", config=config)
@@ -686,7 +686,7 @@ def _validate_and_normalize_include_paths(filters: list[str]) -> list[str]:
 
 
 def _get_job_download_context(config, farm_id, queue_id, job_id):
-    """Shared setup for download-output and download-input: fetches job, queue, and credentials."""
+    """Shared setup for download commands: fetches job, queue, and credentials."""
     deadline = api.get_boto3_client("deadline", config=config)
     job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
     queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
@@ -946,7 +946,7 @@ def _assert_valid_path(path: str) -> None:
 
 
 def _parse_filters_and_config(include_path, include_path_stdin, args):
-    """Shared setup for download-output and download-input CLI commands."""
+    """Shared setup for download CLI commands."""
 
     filters = list(include_path)
     if include_path_stdin:
@@ -980,7 +980,7 @@ def _parse_filters_and_config(include_path, include_path_stdin, args):
 
 
 def _handle_download_error(e: Exception, is_json_format: bool, download_type: str):
-    """Shared error handling for download-output and download-input CLI commands."""
+    """Shared error handling for download CLI commands."""
     if is_json_format:
         error_one_liner = str(e).replace("\n", ". ")
         click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
