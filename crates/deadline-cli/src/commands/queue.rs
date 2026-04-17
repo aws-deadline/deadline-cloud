@@ -266,21 +266,35 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
 
             match result {
                 Ok(resp) => {
-                    details.insert("is_success".into(), serde_json::json!(true));
-                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
-
                     let creds = &resp["credentials"];
-                    let expiration = creds["expiration"].as_str().unwrap_or("")
-                        .replacen(' ', "T", 1);
-                    let output = serde_json::json!({
-                        "Version": 1,
-                        "AccessKeyId": creds["accessKeyId"],
-                        "SecretAccessKey": creds["secretAccessKey"],
-                        "SessionToken": creds["sessionToken"],
-                        "Expiration": expiration,
-                    });
-                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
-                    Ok(())
+                    let access_key = creds["accessKeyId"].as_str();
+                    let secret_key = creds["secretAccessKey"].as_str();
+                    let session_token = creds["sessionToken"].as_str();
+                    let expiration = creds["expiration"].as_str();
+
+                    if let (Some(ak), Some(sk), Some(st), Some(exp)) =
+                        (access_key, secret_key, session_token, expiration)
+                    {
+                        details.insert("is_success".into(), serde_json::json!(true));
+                        telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+
+                        let output = serde_json::json!({
+                            "Version": 1,
+                            "AccessKeyId": ak,
+                            "SecretAccessKey": sk,
+                            "SessionToken": st,
+                            "Expiration": exp.replacen(' ', "T", 1),
+                        });
+                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                        Ok(())
+                    } else {
+                        details.insert("is_success".into(), serde_json::json!(false));
+                        details.insert("error_type".into(), serde_json::json!("MissingCredentials"));
+                        telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                        Err(CliError::Operation(
+                            "Failed to export credentials:\nResponse missing required credential fields".into()
+                        ))
+                    }
                 }
                 Err(e) => {
                     details.insert("is_success".into(), serde_json::json!(false));

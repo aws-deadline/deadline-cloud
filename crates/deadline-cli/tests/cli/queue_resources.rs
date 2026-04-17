@@ -126,17 +126,14 @@ async fn queue_export_credentials_internal_error_prints_error() {
     assert_cmd_snapshot!(harness.cmd(&["queue", "export-credentials"]));
 }
 
-// ⚠️ BEHAVIORAL GAP: Empty/missing credentials produce null JSON output
-// instead of an error. Python raises KeyError when credentials fields are
-// missing. This is tracked as a finding from #15d audit — the CLI should
-// validate the credential response before formatting it.
+// Empty/missing credentials should produce an error, not null JSON output.
+// Python raises KeyError when credential fields are missing.
 
 #[tokio::test]
-async fn queue_export_credentials_empty_credentials_outputs_nulls() {
+async fn queue_export_credentials_empty_credentials_exits_with_error() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
-    // Response has credentials key but empty object
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
         "farm-abc",
@@ -151,11 +148,10 @@ async fn queue_export_credentials_empty_credentials_outputs_nulls() {
 }
 
 #[tokio::test]
-async fn queue_export_credentials_missing_credentials_key_outputs_nulls() {
+async fn queue_export_credentials_missing_credentials_key_exits_with_error() {
     let harness = TestHarness::new().await;
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
-    // Response has no credentials key at all
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
         "farm-abc",

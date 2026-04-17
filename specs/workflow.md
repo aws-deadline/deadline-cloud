@@ -83,7 +83,12 @@ For CLI commands that call AWS APIs, also check:
 ### Step 2: Write exhaustive tests
 
 Write tests that define the behavioral contract before writing any
-implementation. Derive test cases from:
+implementation. This may mean writing new tests, or updating existing
+tests that have gaps (e.g., tests that accepted placeholder output,
+tests that don't assert on the full behavior, or tests that need
+additional mock infrastructure to exercise the real code path).
+
+Derive test cases from:
 
 1. The test spec section for this work item (`specs/test_specs/`)
 2. The Python unit tests for the feature (port them to Rust equivalents)
