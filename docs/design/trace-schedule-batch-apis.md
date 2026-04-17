@@ -1,296 +1,220 @@
-# Plan: Use Batch APIs in `deadline job trace-schedule`
+# `deadline job trace-schedule` — batch-API design
 
-## Background
+## Summary
 
-On 2026-04-06, AWS Deadline Cloud released 8 new batch APIs for bulk resource
-operations. The `deadline job trace-schedule` command currently drives the
-trace by making many individual `get_step`, `get_task`, and paginated
-`list_session_actions` calls. For a large job with thousands of sessions and
-tasks, this can take 30+ minutes dominated by per-call API latency.
+`deadline job trace-schedule` uses the Deadline Cloud batch-get APIs
+(`BatchGetStep`, `BatchGetTask`) to hydrate step and task records for the
+sessions in a job. This replaces the per-step and per-task `GetStep` /
+`GetTask` loops that used to dominate the command's wall-clock time on
+large jobs.
 
-Switching to the new batch APIs collapses `N` calls into `ceil(N/100)` calls,
-reducing wall-clock time and throttling pressure dramatically.
+Measured on a 10,000-task job:
 
-## Scope
+| | Before | After |
+|-|-|-|
+| Wall clock | ~1402 s (~23 min) | ~226 s (~4 min) |
+| `get_task` round-trips | ~10,000 | 0 |
+| `batch_get_task` round-trips | 0 | 100 |
 
-- **In scope:** `job_trace_schedule` (split into a new
-  `_groups/_trace_schedule.py`), a new `_groups/_batch_get.py` helper,
-  plus supporting mock backend additions and tests.
-- **Out of scope:** Other CLI commands, other batch APIs (e.g.
-  `BatchUpdateJob`, `BatchUpdateTask`) — those are not read paths used by
-  trace-schedule.
+The remaining time is dominated by the serial per-session
+`list_session_actions` loop. That's not addressed here — the batch APIs
+don't replace `list_*` calls (`list_session_actions` already returns full
+action payloads, so `BatchGetSessionAction` would not reduce round-trips).
 
-## Current API call pattern
+## Module layout
 
-Per-job, trace-schedule issues:
-
-1. `get_job` — 1 call
-2. `list_sessions` — 1 + N pages
-3. `list_session_actions` — 1 + P pages **per session** (serial loop)
-4. `get_step` — up to 1 per unique step (cached)
-5. `get_task` — up to 1 per unique task (cached)
-
-For a 10,000-task job on ~500 sessions the hot paths are `get_task`
-(~10,000 calls) and `list_session_actions` (~500+ calls, fully serialized).
-
-## Target API call pattern
-
-Per-job, trace-schedule will issue:
-
-1. `get_job` — unchanged, 1 call
-2. `list_sessions` — unchanged
-3. `list_session_actions` — unchanged. It already returns full action
-   payloads, so `batch_get_session_action` is not a win here.
-4. `batch_get_step` — replaces the per-unique-step `get_step` loop
-5. `batch_get_task` — replaces the per-unique-task `get_task` loop
-
-Both `batch_get_step` and `batch_get_task` accept up to **100 identifiers
-per request** and return `{items: [...], errors: [...]}` — partial success
-is possible and expected.
-
-## Minimum boto3 version
-
-`boto3 >= 1.42.1`.
-
-Python 3.9+ users already meet this via the existing
-`boto3 >= 1.42.29; python_version >= '3.9'` pin in `pyproject.toml`.
-
-The `< 3.9` pin stays at `boto3 >= 1.36.8`. Instead, gate
-`trace-schedule` on the Python version, mirroring how
-`deadline queue sync-output` does it today:
-
-```python
-if sys.version_info < (3, 9):
-    raise DeadlineOperationError(
-        "The trace-schedule command requires Python version 3.9 or later"
-    )
+```
+src/deadline/client/cli/_groups/
+├── _batch_get.py         # generic batch-get-with-retry helper
+├── _trace_schedule.py    # the trace-schedule command body
+└── job_group.py          # imports and registers the command
 ```
 
-## Batch-API semantics we must handle
+`job_group.py` was ~1855 lines before this change (the largest file in
+`_groups/`). Splitting `trace-schedule` out keeps that file focused on
+the other subcommands.
 
-From the docs and API reference:
+`_job_helpers.py` already exists in the same directory for per-command
+formatting helpers (`_format_task_summary`, `_resolve_job_search`, etc.).
+It isn't the right home for a generic batch-get utility, so `_batch_get.py`
+is a separate module.
 
-- **Max 100 identifiers per request** for all batch get APIs.
-- **Partial success:** response has `{items: [...], errors: [...]}`. HTTP
-  200 can still carry per-item errors. Error `code` values include:
-  `InternalServerErrorException`, `ResourceNotFoundException`,
-  `ValidationException`, `AccessDeniedException`, `ThrottlingException`.
-- Errors returned in the `errors` list carry the full identifier tuple
-  (e.g. `farmId`, `queueId`, `jobId`, `stepId`, `taskId`), so the caller
-  can map each error back to its request.
-- Whole-call failures (throttling, 5xx) raise `ClientError` as usual.
+## API call pattern
 
-### Retry / collect-results strategy
+Per invocation, `trace-schedule` issues:
 
-We need a helper that:
+1. `GetJob` — 1 call.
+2. `ListSessions` — 1 + paging.
+3. `ListSessionActions` — 1 + paging per session (unchanged).
+4. `BatchGetStep` — `ceil(U / 100)` calls for `U` unique step IDs.
+5. `BatchGetTask` — `ceil(T / 100)` calls for `T` unique `(stepId, taskId)`
+   pairs.
 
-1. Takes a list of identifiers and a batch-get callable.
-2. Chunks into batches of 100.
-3. For each batch, issues the call, collects successes into a result dict,
-   and collects per-item errors into a retry queue with their error code.
-4. Retries items whose error is transient (`InternalServerErrorException`,
-   `ThrottlingException`) with exponential backoff, up to a small maximum
-   (e.g. 3 attempts). Botocore's standard retry mode handles whole-call
-   throttling, but **per-item** throttling errors come back in `errors[]`
-   and are our responsibility.
-5. Treats `ResourceNotFoundException` / `ValidationException` /
-   `AccessDeniedException` as terminal — the identifier goes into a
-   "failed" list that the caller reports.
-6. Never re-requests an identifier we already have a successful response
-   for.
+The command extracts step and task references from the `taskRun` action
+definitions returned by `ListSessionActions`, deduplicates them, and
+fetches them in a single pair of batch passes before building the trace.
 
-Sketch:
+## `_batch_get`
 
 ```python
-def _batch_get(
+def batch_get(
     *,
-    deadline,              # boto3 deadline client
-    operation: str,        # "batch_get_task" etc.
+    deadline,                # boto3 deadline client
+    operation: str,          # "batch_get_task" etc.
     identifiers: list[dict],
-    key_fn,                # identifier -> hashable key
-    items_field: str,      # "tasks" / "steps"
+    key_fn: Callable[[dict], Any],
+    items_field: str,        # "tasks" / "steps" / ...
+    id_fields: tuple[str, ...],
     max_attempts: int = 3,
-) -> tuple[dict, list[dict]]:
-    """Batch-get with partial-success handling. Returns (results, terminal_errors)."""
-    remaining = list(identifiers)
-    results: dict = {}
-    terminal: list = []
-    attempt = 0
-    while remaining and attempt < max_attempts:
-        next_round: list = []
-        for chunk in _chunks(remaining, 100):
-            response = getattr(deadline, operation)(identifiers=chunk)
-            for item in response.get(items_field, []):
-                results[key_fn(item)] = item
-            for err in response.get("errors", []):
-                if err["code"] in ("InternalServerErrorException", "ThrottlingException"):
-                    next_round.append({k: err[k] for k in _id_fields(operation)})
-                else:
-                    terminal.append(err)
-        remaining = next_round
-        if remaining:
-            time.sleep(_backoff(attempt))
-        attempt += 1
-    terminal.extend({"code": "ExhaustedRetries", **ident} for ident in remaining)
-    return results, terminal
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[dict, list[dict]]: ...
 ```
 
-The helper goes in a new private module
-`src/deadline/client/cli/_groups/_batch_get.py`. `job_group.py` is already
-1855 lines — the largest file in `_groups/` by far — so we avoid adding
-to it. An existing `_job_helpers.py` file is scoped to per-command
-formatting helpers (`_format_task_summary`, `_resolve_job_search`, etc.)
-and isn't the right home for a general batch-get utility.
+Behavior:
 
-### Also split `job_trace_schedule` out
+- **Chunking.** Identifiers are split into groups of 100 (the Deadline
+  Cloud API limit) and each group becomes one `getattr(deadline,
+  operation)(identifiers=chunk)` call.
+- **Successes.** Items from each chunk's `items_field` are keyed by
+  `key_fn(item)` and merged into a single result dict. A key is never
+  re-requested once fetched.
+- **Per-item errors.** Each response's `errors` list is partitioned by
+  `code`:
+  - `InternalServerErrorException`, `ThrottlingException` → **transient**,
+    re-queued for the next attempt (identifier reconstructed from the
+    error entry via `id_fields`).
+  - `ResourceNotFoundException`, `ValidationException`,
+    `AccessDeniedException`, any other code → **terminal**, returned to
+    the caller as-is.
+- **Retries.** Up to `max_attempts` total attempts per identifier.
+  Exponential backoff (`0.5 * 2^attempt` seconds) between attempts. After
+  the last attempt, still-unresolved identifiers are synthesized into
+  `{"code": "ExhaustedRetries", **identifier}` entries appended to the
+  terminal list.
 
-As part of this change, move the `job_trace_schedule` command body into
-a new `_groups/_trace_schedule.py` module and have `job_group.py` just
-import-and-register it. This keeps the scope contained (the change is
-already touching the command heavily) and starts chipping away at the
-size of `job_group.py`.
+Return value is `(results, terminal_errors)`. Whole-call failures (e.g.
+throttling at the request level, 5xx) propagate as `ClientError` —
+botocore's standard retry mode already handles those.
 
-## Code changes
+The helper is private to `cli/_groups/`; promote to
+`deadline.client.api` if a second caller appears.
 
-### `src/deadline/client/cli/_groups/_trace_schedule.py` (new)
+## `_trace_schedule`
 
-Move the `job_trace_schedule` function here. Replace the per-session
-`get_step`/`get_task` logic inside the `click.progressbar` loop with:
+The command flow:
 
-1. First pass over sessions — collect the set of unique `(stepId, taskId)`
-   pairs referenced by `taskRun` actions.
-2. Call `_batch_get` for steps (unique step IDs, fields:
-   `farmId/queueId/jobId/stepId`), store into `steps: dict[str, Any]`.
-3. Call `_batch_get` for tasks (unique `(stepId, taskId)`, fields:
-   `farmId/queueId/jobId/stepId/taskId`), store into `tasks: dict[str, Any]`.
-4. Second pass over sessions — attach `step`/`task` references as before.
-5. If `_batch_get` returns any terminal errors, emit a warning (use
-   `click.echo` with `err=True`) and continue with partial data — the trace
-   should still be useful. Match the spirit of the existing code, which
-   raises `DeadlineOperationError` on unexpected structural inconsistencies
-   but otherwise produces a best-effort trace.
+1. **Version gate.** `trace-schedule` requires Python 3.9+. Raises
+   `DeadlineOperationError` otherwise, matching the `deadline queue
+   sync-output` idiom:
 
-The existing check that a session runs only a single step stays intact —
-we just look up `session["step"]` from the pre-populated `steps` dict.
+   ```python
+   if sys.version_info < (3, 9):
+       raise DeadlineOperationError(
+           "The trace-schedule command requires Python version 3.9 or later"
+       )
+   ```
 
-### `src/deadline/client/cli/_groups/job_group.py`
+2. **Get the job.** Single `GetJob` call; error out if `startedAt` is
+   absent (job hasn't started).
+3. **Get all sessions.** Paginates `ListSessions` and sorts by
+   `startedAt`.
+4. **Get all session actions.** For each session, paginates
+   `ListSessionActions`.
+5. **Fetch steps and tasks in batch** (`_fetch_steps_and_tasks`):
+   - Walk the sessions' actions once to collect the set of unique
+     `stepId`s and `(stepId, taskId)` pairs referenced by `taskRun`
+     action definitions.
+   - Call `batch_get(..., operation="batch_get_step", ...)` for the step
+     IDs.
+   - Call `batch_get(..., operation="batch_get_task", ...)` for the task
+     refs.
+   - `_warn_on_errors` emits a brief `stderr` summary if any terminal
+     errors came back (showing up to 5 examples) and the trace continues
+     with whatever was fetched. This matches the command's existing
+     philosophy that the trace is a diagnostic and partial data is still
+     valuable.
+6. **Attach step/task records** (`_attach_steps_and_tasks`): walk the
+   sessions again and set `session["step"]` and `action["task"]` from
+   the fetched dicts. The pre-existing invariant that a session runs a
+   single step (enforced with a `DeadlineOperationError`) is preserved.
+7. **Build the Chrome trace** (`_build_trace_events`) and **print the
+   summary** (`_print_summary`) — unchanged from the pre-batch
+   implementation.
+8. **Write the trace file** (`_write_trace_file`) if `--trace-file` was
+   given.
 
-Import the command from `_trace_schedule` and register it with the
-`cli_job` group. No trace-schedule body remains in this file.
-
-### Version gate
-
-At the top of `job_trace_schedule`, before any batch work:
+The command is registered on `cli_job` in `job_group.py`:
 
 ```python
-if sys.version_info < (3, 9):
-    raise DeadlineOperationError(
-        "The trace-schedule command requires Python version 3.9 or later"
-    )
+from ._trace_schedule import cli_job_trace_schedule
+cli_job.add_command(cli_job_trace_schedule)
 ```
 
-No `pyproject.toml` changes are required.
+`cli_job_trace_schedule` is declared with `cls=ContextTrackingCommand` so
+it participates in the CLI-wide user-agent tracking verified by
+`test_all_cli_commands_use_context_tracking_command`.
 
-## Mock backend additions
+## `MockDeadlineBackend` support
 
-`test/unit/deadline_client/mock_deadline_backend.py` today covers
-`get_job`, `get_step`, `get_task`, `list_sessions`, `list_session_actions`
-but not the batch APIs. Trace-schedule tests will fail once we switch code
-over. Additions needed:
+`test/unit/deadline_client/mock_deadline_backend.py` grew two batch
+methods and a test-only failure-injection knob to support the CLI's new
+code paths:
 
-1. `batch_get_step(identifiers)` → iterate identifiers, reuse
-   `self.steps[key]` lookup; missing → `errors[]` with
-   `ResourceNotFoundException`.
-2. `batch_get_task(identifiers)` → same pattern with `self.tasks[key]`.
-3. (Deferred) `batch_get_session`,
-   `batch_get_session_action`, `batch_get_job`, `batch_get_worker`,
-   `batch_update_job`, `batch_update_task` — stubs for completeness.
-   Trace-schedule only needs the first two.
-4. **Partial-success injection:** add a test-only knob
-   `backend.inject_batch_failure(operation, identifier_key, code, attempts)`
-   that records a one-shot (or N-shot) per-item error for a specific
-   identifier. This lets us test the retry/collect logic for both
-   transient and terminal error codes without flaky simulation.
-5. Enforce the max-100-identifiers limit in the mock to catch bugs where
-   chunking is forgotten. Raise a `ValidationException` when exceeded —
-   same behavior as the real API.
-6. Extend `set_mock_methods` to wire the new methods onto the `MagicMock`.
+- `batch_get_step(identifiers=[...])` and `batch_get_task(identifiers=[...])`
+  both return the real API's shape, `{items: [...], errors: [...]}`. A
+  missing identifier becomes a `ResourceNotFoundException` entry in
+  `errors`, not an exception.
+- The 100-identifier limit is enforced explicitly (the botocore
+  `ParamValidator` does not validate list `min`/`max` — only `required`
+  and types). Over-limit requests raise a `ValidationException`
+  `ClientError`, same as the real API.
+- `inject_batch_failure(operation, identifier, code, attempts=1,
+  message="injected")` queues a one-shot (or N-shot) per-item error for
+  a specific identifier on the next `attempts` calls. Used by tests to
+  exercise the transient/terminal error handling in `batch_get` without
+  flaky simulation.
+- `set_mock_methods` wires `batch_get_step` / `batch_get_task` onto the
+  `deadline_mock` `MagicMock` alongside the existing methods.
 
-Put all validation through `self._validate("BatchGetStep", params)` etc. —
-the botocore validator will check the schema (ensuring identifiers list
-is present, types are right, max items) against the real service model.
+The `BatchGetSession`, `BatchGetSessionAction`, `BatchGetJob`,
+`BatchGetWorker`, `BatchUpdateJob`, and `BatchUpdateTask` APIs are not
+implemented on the mock backend — deferred until a consumer needs them.
 
 ## Tests
 
-### Unit tests for `_batch_get` helper
+**`test/unit/deadline_client/cli/test_batch_get.py`** — the `batch_get`
+helper in isolation:
 
-New file: `test/unit/deadline_client/cli/test_batch_get.py`
+- Single batch, all succeed.
+- >100 identifiers chunk into multiple calls (100, 100, 50).
+- Terminal error (`ResourceNotFoundException`) is not retried.
+- Transient error (`ThrottlingException`) is retried once and recovers.
+- Transient error that never resolves produces a single
+  `ExhaustedRetries` entry after `max_attempts`.
+- Mix of success, transient-that-recovers, and terminal in one input.
+- Empty identifiers list makes no API call.
+- Both `ThrottlingException` and `InternalServerErrorException` are
+  treated as transient (parametrized test).
 
-Cases:
+**`test/unit/deadline_client/test_mock_deadline_backend.py`** —
+`TestBatchGetApis`:
 
-- All items succeed in one batch → returns full dict, no errors.
-- More than 100 items → multiple batches, all succeed.
-- One item returns `ResourceNotFoundException` → terminal error, no retry.
-- One item returns `ThrottlingException` once, succeeds on retry →
-  end result contains it, no terminal error.
-- One item returns `InternalServerErrorException` for all attempts →
-  terminal error after `max_attempts`.
-- Mix: 50 succeed, 1 transient fail (recovers), 1 terminal fail.
+- `batch_get_step` returns existing + error for missing.
+- `batch_get_task` returns existing + error for missing.
+- `inject_batch_failure` returns the injected code on the first call,
+  then falls back to real data.
+- Supplying >100 identifiers raises `ValidationException`.
 
-### Integration with trace-schedule
+**`test/unit/deadline_client/cli/test_cli_job_trace_schedule.py`** —
+`TestTraceScheduleBatchBehavior`:
 
-Update `test/unit/deadline_client/cli/test_cli_job_trace_schedule.py`:
+- The command uses `batch_get_task` and `batch_get_step` (and never
+  falls back to `get_task` / `get_step`).
+- 150 tasks chunk into two `batch_get_task` calls of sizes 100 and 50.
+- Transient per-task error gets retried, trace completes with all data.
+- Terminal per-task error produces a `could not retrieve 1 task(s)`
+  warning on stderr and the trace still completes.
 
-- Rewire existing tests via the mock backend's new batch methods.
-  (The backend changes mean tests should pass unchanged if the CLI
-  correctly uses the batch APIs against the backend.)
-- Add a new test that injects a transient error on one task and asserts
-  the trace output still contains that task's data (retry worked).
-- Add a new test that injects a terminal error on one task and asserts
-  a warning is emitted and the trace is produced without that task.
-
-### Scale sanity check
-
-Add a test with ~250 tasks across 3 steps on ~10 sessions to confirm:
-- Exactly 3 `batch_get_step` calls (1 batch, 3 steps).
-- Exactly `ceil(250/100) = 3` `batch_get_task` calls.
-- The mock backend's max-100 enforcement is not tripped.
-
-Assert call counts via the `MagicMock` wrapped around the backend.
-
-## Performance expectations
-
-Baseline measurement on job `job-3963bfd39f3d4f17b18ffee9b4c340a6`
-(10 sessions, 10,050 session actions, 10,000 unique tasks):
-**1402 s (~23.4 minutes)** end-to-end wall time. The `get_task`
-loop dominates.
-
-For a 10,000-task job with the batch APIs:
-
-| Phase | Before | After |
-|-------|--------|-------|
-| `get_step` | ~U unique steps, serial | `ceil(U/100)` batch calls |
-| `get_task` | ~10,000 serial calls | 100 batch calls |
-| Total round-trips | ~10,000+ | ~100 |
-
-At ~140 ms per call (observed on the baseline run), this is roughly
-1400 s → 15 s for the get-*-resources phases.
-
-## Rollout
-
-Single PR, developed in these incremental commits:
-
-1. `_batch_get` helper + unit tests.
-2. Mock backend batch APIs + failure-injection helper.
-3. Move `job_trace_schedule` to `_trace_schedule.py` and switch it to use
-   the batch helper; update tests.
-
-## Open questions
-
-- Should `_batch_get` eventually live in `deadline.client.api` so other
-  commands can use it? For now keep it private to `cli/_groups/`; promote
-  later if a second caller appears.
-- Should terminal errors be fatal or warn-and-continue? Current code
-  sometimes raises `DeadlineOperationError`. Recommend **warn** for missing
-  tasks/steps since the trace is a diagnostic and partial data is still
-  valuable.
+The pre-existing `TestTraceScheduleWithMockBackend` suite continues to
+pass unchanged — the mock backend's batch methods produce the same
+step/task payloads the single-item methods did.
