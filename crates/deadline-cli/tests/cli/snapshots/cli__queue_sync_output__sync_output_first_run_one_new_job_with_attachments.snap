@@ -7,24 +7,24 @@ info:
     - sync-output
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpbxr9o3
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpxTWAkI
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60168"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60168"
-    AWS_ENDPOINT_URL_S3: "http://localhost:60168"
-    AWS_ENDPOINT_URL_STS: "http://localhost:60168"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63277"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63277"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63277"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63277"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpL5Liyc/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpL5Liyc
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmphKsnvv/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmphKsnvv
 ---
 success: true
 exit_code: 0
@@ -46,9 +46,24 @@ Retrieving updated data from Deadline Cloud...
 ...retrieval completed
 
 Categorizing 0 checkpoint jobs against 1 download candidate jobs...
+NEW Job: Render Job (job-001)
+  Succeeded tasks: 3 / 5
 ...categorization completed
 
 Summary of paths to download:
   (no files to download)
 
+Summary of incremental output download:
+  Downloaded session actions: 0
+  Downloaded files: 0
+  Downloaded bytes: 0 B
+  Jobs with downloads:
+    completed: 0
+    added: 1
+    updated: 0
+  Jobs without downloads:
+    not using job attachments: 0
+    missing storage profile: 0
+    unchanged: 0
+    inactive: 0
 Checkpoint saved

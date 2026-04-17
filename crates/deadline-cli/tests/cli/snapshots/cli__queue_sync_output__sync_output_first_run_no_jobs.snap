@@ -8,24 +8,24 @@ info:
     - "--bootstrap-lookback-minutes"
     - "60"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpL8bWTS
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp60psAy
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60172"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60172"
-    AWS_ENDPOINT_URL_S3: "http://localhost:60172"
-    AWS_ENDPOINT_URL_STS: "http://localhost:60172"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63269"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63269"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63269"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63269"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYFGnR6/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYFGnR6
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp0M80Zc/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp0M80Zc
 ---
 success: true
 exit_code: 0
@@ -51,4 +51,17 @@ Categorizing 0 checkpoint jobs against 0 download candidate jobs...
 Summary of paths to download:
   (no files to download)
 
+Summary of incremental output download:
+  Downloaded session actions: 0
+  Downloaded files: 0
+  Downloaded bytes: 0 B
+  Jobs with downloads:
+    completed: 0
+    added: 0
+    updated: 0
+  Jobs without downloads:
+    not using job attachments: 0
+    missing storage profile: 0
+    unchanged: 0
+    inactive: 0
 Checkpoint saved

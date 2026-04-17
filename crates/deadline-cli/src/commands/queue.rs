@@ -7,6 +7,7 @@ use deadline_api::api;
 use deadline_config::config_file;
 use deadline_api::telemetry::create_telemetry;
 use deadline_job_attachments::incremental_download::IncrementalDownloadState;
+use deadline_job_attachments::incremental_download::IncrementalDownloadJob;
 use deadline_job_attachments::models::FileConflictResolution;
 
 use super::config::CliError;
@@ -609,34 +610,157 @@ async fn incremental_output_download(
     eprintln!();
 
     // Step 2: Categorize jobs
+    let checkpoint_jobs_map: std::collections::HashMap<String, &IncrementalDownloadJob> =
+        checkpoint.jobs.iter().map(|j| (j.job_id().to_string(), j)).collect();
     let checkpoint_job_ids: std::collections::HashSet<String> =
-        checkpoint.jobs.iter().map(|j| j.job_id().to_string()).collect();
+        checkpoint_jobs_map.keys().cloned().collect();
     let candidate_ids: std::collections::HashSet<String> =
         download_candidates.keys().cloned().collect();
 
-    let new_job_ids: Vec<String> = candidate_ids.difference(&checkpoint_job_ids).cloned().collect();
-    let updated_job_ids: Vec<String> = candidate_ids.intersection(&checkpoint_job_ids).cloned().collect();
+    let mut new_job_ids: std::collections::HashSet<String> =
+        candidate_ids.difference(&checkpoint_job_ids).cloned().collect();
+    let mut updated_job_ids: std::collections::HashSet<String> =
+        candidate_ids.intersection(&checkpoint_job_ids).cloned().collect();
+    let finished_tracking_ids: std::collections::HashSet<String> =
+        checkpoint_job_ids.difference(&candidate_ids).cloned().collect();
+    let mut unchanged_job_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut completed_job_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut attachments_free_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut missing_storage_profile_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     eprintln!("Categorizing {} checkpoint jobs against {} download candidate jobs...",
         checkpoint.jobs.len(), download_candidates.len());
 
+    // Copy attachments from checkpoint for updated jobs
+    for job_id in updated_job_ids.clone() {
+        if let Some(cp_job) = checkpoint_jobs_map.get(&job_id) {
+            if cp_job.job.get("attachments").map_or(false, |a| a.is_null()) {
+                attachments_free_ids.insert(job_id.clone());
+                continue;
+            }
+            if let Some(dc_job) = download_candidates.get_mut(&job_id) {
+                if let Some(att) = cp_job.job.get("attachments") {
+                    dc_job["attachments"] = att.clone();
+                }
+                if let Some(sp) = cp_job.job.get("storageProfileId") {
+                    dc_job["storageProfileId"] = sp.clone();
+                }
+            }
+        }
+    }
+    updated_job_ids = updated_job_ids.difference(&attachments_free_ids).cloned().collect();
+
+    // Detect unchanged jobs (same SUCCEEDED count and endedAt)
+    for job_id in updated_job_ids.clone() {
+        if let (Some(cp_job), Some(dc_job)) = (checkpoint_jobs_map.get(&job_id), download_candidates.get(&job_id)) {
+            let cp_succeeded = cp_job.job.get("taskRunStatusCounts")
+                .and_then(|c| c.get("SUCCEEDED")).and_then(|v| v.as_i64()).unwrap_or(0);
+            let dc_succeeded = dc_job.get("taskRunStatusCounts")
+                .and_then(|c| c.get("SUCCEEDED")).and_then(|v| v.as_i64()).unwrap_or(0);
+            let cp_ended = cp_job.job.get("endedAt").and_then(|v| v.as_str());
+            let dc_ended = dc_job.get("endedAt").and_then(|v| v.as_str());
+            if cp_succeeded == dc_succeeded && cp_ended == dc_ended {
+                let name = dc_job["name"].as_str().unwrap_or("unknown");
+                eprintln!("UNCHANGED Job: {name} ({job_id})");
+                unchanged_job_ids.insert(job_id);
+            }
+        }
+    }
+    updated_job_ids = updated_job_ids.difference(&unchanged_job_ids).cloned().collect();
+
+    // Print updated jobs
+    for job_id in &updated_job_ids {
+        if let (Some(cp_job), Some(dc_job)) = (checkpoint_jobs_map.get(job_id), download_candidates.get(job_id)) {
+            let name = cp_job.job["name"].as_str().unwrap_or("unknown");
+            eprintln!("EXISTING Job: {name} ({job_id})");
+            let cp_counts = &cp_job.job["taskRunStatusCounts"];
+            let dc_counts = &dc_job["taskRunStatusCounts"];
+            let cp_succeeded = cp_counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
+            let cp_total: i64 = cp_counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+            let dc_succeeded = dc_counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
+            let dc_total: i64 = dc_counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+            eprintln!("  Succeeded tasks (before): {cp_succeeded} / {cp_total}");
+            eprintln!("  Succeeded tasks (now)   : {dc_succeeded} / {dc_total}");
+
+            // Check if completed
+            if dc_succeeded == dc_total && dc_job.get("endedAt").is_some() {
+                completed_job_ids.insert(job_id.clone());
+            }
+        }
+    }
+    updated_job_ids = updated_job_ids.difference(&completed_job_ids).cloned().collect();
+
+    // Print finished tracking jobs
+    for job_id in &finished_tracking_ids {
+        if let Some(cp_job) = checkpoint_jobs_map.get(job_id) {
+            let name = cp_job.job.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+            if cp_job.job.as_object().map_or(true, |m| m.len() <= 1) {
+                continue; // minimal placeholder, skip
+            }
+            eprintln!("FINISHED TRACKING Job: {name} ({job_id})");
+            if cp_job.job.get("attachments").map_or(false, |a| a.is_null()) {
+                eprintln!("  Job without job attachments is no longer active");
+            } else {
+                let counts = &cp_job.job["taskRunStatusCounts"];
+                let succeeded = counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
+                let total: i64 = counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+                if succeeded == total {
+                    eprintln!("   Job succeeded");
+                } else {
+                    eprintln!("   Job is not a download candidate anymore (likely suspended, canceled or failed)");
+                }
+            }
+        }
+    }
+
     // For new jobs, call GetJob to get attachments
-    for job_id in &new_job_ids {
-        let job_detail = api::get_job(farm_id, queue_id, job_id, Some(config), None)
+    for job_id in new_job_ids.clone() {
+        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config), None)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
-        if let Some(dc_job) = download_candidates.get_mut(job_id) {
+        if let Some(dc_job) = download_candidates.get_mut(&job_id) {
             dc_job["attachments"] = job_detail.get("attachments").cloned().unwrap_or(serde_json::Value::Null);
             dc_job["storageProfileId"] = job_detail.get("storageProfileId").cloned().unwrap_or(serde_json::Value::Null);
         }
+
+        let dc_job = &download_candidates[&job_id];
+        let name = dc_job["name"].as_str().unwrap_or("unknown");
+        let counts = &dc_job["taskRunStatusCounts"];
+        let succeeded = counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
+        let total: i64 = counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+
+        if dc_job.get("attachments").map_or(true, |a| a.is_null()) {
+            eprintln!("NEW Job: {name} ({job_id})");
+            eprintln!("  Succeeded tasks: {succeeded} / {total}");
+            eprintln!("  Job does not use job attachments.");
+            attachments_free_ids.insert(job_id.clone());
+        } else if dc_job.get("storageProfileId").map_or(false, |s| s.is_null())
+            && local_storage_profile_id.is_some()
+        {
+            eprintln!("NEW Job: {name} ({job_id})");
+            eprintln!("  WARNING: THE JOB OUTPUT WILL NOT BE DOWNLOADED, IT HAS NO STORAGE PROFILE.");
+            missing_storage_profile_ids.insert(job_id.clone());
+        } else {
+            eprintln!("NEW Job: {name} ({job_id})");
+            eprintln!("  Succeeded tasks: {succeeded} / {total}");
+
+            // Check if already completed
+            if succeeded == total && dc_job.get("endedAt").is_some() {
+                completed_job_ids.insert(job_id.clone());
+            }
+        }
     }
+    new_job_ids = new_job_ids.difference(&attachments_free_ids).cloned().collect();
+    new_job_ids = new_job_ids.difference(&completed_job_ids).cloned().collect();
+    new_job_ids = new_job_ids.difference(&missing_storage_profile_ids).cloned().collect();
 
     eprintln!("...categorization completed");
     eprintln!();
 
     // Step 3: Get sessions and session actions for jobs with downloads
-    let jobs_to_process: Vec<String> = new_job_ids.iter()
+    let jobs_to_process: std::collections::HashSet<String> = new_job_ids.iter()
         .chain(updated_job_ids.iter())
+        .chain(completed_job_ids.iter())
         .filter(|id| {
             download_candidates.get(*id)
                 .and_then(|j| j.get("attachments"))
@@ -694,7 +818,11 @@ async fn incremental_output_download(
         }
     }
 
-    // Summary
+    if dry_run {
+        eprintln!("Skipping downloads due to DRY RUN");
+        eprintln!();
+    }
+
     eprintln!("Summary of paths to download:");
     if all_session_actions.is_empty() {
         eprintln!("  (no files to download)");
@@ -702,6 +830,24 @@ async fn incremental_output_download(
         eprintln!("  {} session actions to process", all_session_actions.len());
     }
     eprintln!();
+
+    if dry_run {
+        eprintln!("Summary of DRY RUN for incremental output download (no files were downloaded to the file system):");
+    } else {
+        eprintln!("Summary of incremental output download:");
+    }
+    eprintln!("  Downloaded session actions: {}", all_session_actions.len());
+    eprintln!("  Downloaded files: 0");
+    eprintln!("  Downloaded bytes: 0 B");
+    eprintln!("  Jobs with downloads:");
+    eprintln!("    completed: {}", completed_job_ids.len());
+    eprintln!("    added: {}", new_job_ids.len());
+    eprintln!("    updated: {}", updated_job_ids.len());
+    eprintln!("  Jobs without downloads:");
+    eprintln!("    not using job attachments: {}", attachments_free_ids.len());
+    eprintln!("    missing storage profile: {}", missing_storage_profile_ids.len());
+    eprintln!("    unchanged: {}", unchanged_job_ids.len());
+    eprintln!("    inactive: {}", finished_tracking_ids.len());
 
     if dry_run {
         eprintln!("Skipping downloads due to DRY RUN");

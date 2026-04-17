@@ -100,10 +100,12 @@ pub async fn mock_list_session_actions(
     session_id: &str,
     session_actions: &[Value],
 ) {
+    use wiremock::matchers::query_param;
     Mock::given(method("GET"))
         .and(path(format!(
-            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions/{session_id}/session-actions"
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/session-actions"
         )))
+        .and(query_param("sessionId", session_id))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({ "sessionActions": session_actions })),
         )

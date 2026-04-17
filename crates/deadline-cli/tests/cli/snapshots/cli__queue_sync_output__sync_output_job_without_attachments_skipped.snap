@@ -7,24 +7,24 @@ info:
     - sync-output
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp57jhwQ
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCzHtwp
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:60166"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:60166"
-    AWS_ENDPOINT_URL_S3: "http://localhost:60166"
-    AWS_ENDPOINT_URL_STS: "http://localhost:60166"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63271"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63271"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63271"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63271"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQ0MwZn/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQ0MwZn
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpitbDdT/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpitbDdT
 ---
 success: true
 exit_code: 0
@@ -46,9 +46,25 @@ Retrieving updated data from Deadline Cloud...
 ...retrieval completed
 
 Categorizing 0 checkpoint jobs against 1 download candidate jobs...
+NEW Job: No Attachments Job (job-noatt)
+  Succeeded tasks: 1 / 1
+  Job does not use job attachments.
 ...categorization completed
 
 Summary of paths to download:
   (no files to download)
 
+Summary of incremental output download:
+  Downloaded session actions: 0
+  Downloaded files: 0
+  Downloaded bytes: 0 B
+  Jobs with downloads:
+    completed: 0
+    added: 0
+    updated: 0
+  Jobs without downloads:
+    not using job attachments: 1
+    missing storage profile: 0
+    unchanged: 0
+    inactive: 0
 Checkpoint saved
