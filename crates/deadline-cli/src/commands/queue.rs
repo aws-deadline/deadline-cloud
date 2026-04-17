@@ -757,6 +757,75 @@ async fn incremental_output_download(
     eprintln!("...categorization completed");
     eprintln!();
 
+    // Step 2b: Storage profile path mapping rules
+    if let Some(local_sp_id) = &local_storage_profile_id {
+        // Collect unique storage profile IDs from jobs to process
+        let mut sp_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        sp_ids.insert(local_sp_id.clone());
+        for job_id in new_job_ids.iter().chain(updated_job_ids.iter()).chain(completed_job_ids.iter()) {
+            if let Some(sp) = download_candidates.get(job_id)
+                .and_then(|j| j.get("storageProfileId"))
+                .and_then(|v| v.as_str())
+            {
+                sp_ids.insert(sp.to_string());
+            }
+        }
+
+        // Fetch all storage profiles
+        let mut storage_profiles: std::collections::HashMap<String, serde_json::Value> =
+            std::collections::HashMap::new();
+        for sp_id in &sp_ids {
+            let sp = api::get_storage_profile_for_queue(farm_id, queue_id, sp_id, Some(config), None)
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to get storage profile {sp_id}: {e}")))?;
+            storage_profiles.insert(sp_id.clone(), sp);
+        }
+
+        // Print local profile info
+        let local_sp = &storage_profiles[local_sp_id];
+        let local_name = local_sp["displayName"].as_str().unwrap_or("unknown");
+        eprintln!("Local storage profile is {local_name} ({local_sp_id})");
+        let same_sp_count = download_candidates.values()
+            .filter(|j| j.get("storageProfileId").and_then(|v| v.as_str()) == Some(local_sp_id))
+            .count();
+        eprintln!("  {same_sp_count} download candidate jobs have the same storage profile and will be downloaded to their original specified paths");
+
+        // Print path mapping rules for each non-local storage profile
+        for (sp_id, sp) in &storage_profiles {
+            if sp_id == local_sp_id {
+                continue;
+            }
+            let sp_name = sp["displayName"].as_str().unwrap_or("unknown");
+            let sp_os = sp["osFamily"].as_str().unwrap_or("unknown");
+            let local_os = local_sp["osFamily"].as_str().unwrap_or("unknown");
+            let job_count = download_candidates.values()
+                .filter(|j| j.get("storageProfileId").and_then(|v| v.as_str()) == Some(sp_id.as_str()))
+                .count();
+
+            eprintln!();
+            eprintln!("Path mapping rules for {job_count} download candidate jobs with storage profile {sp_name} ({sp_id})");
+            eprintln!("  job storage profile: {sp_name} ({sp_os})");
+            eprintln!("  local storage profile: {local_name} ({local_os})");
+
+            // Generate rules using Batch B's path mapping
+            use deadline_job_attachments::models::StorageProfile;
+            let source_sp = StorageProfile::from_json(sp);
+            let dest_sp = StorageProfile::from_json(local_sp);
+            if let (Some(src), Some(dst)) = (source_sp, dest_sp) {
+                let rules = deadline_job_attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
+                if rules.is_empty() {
+                    eprintln!("   No rules generated. Storage profiles {local_name} and {sp_name} share no file system location names.");
+                } else {
+                    for rule in &rules {
+                        eprintln!("  - from: {}", rule.source_path);
+                        eprintln!("    to:   {}", rule.destination_path);
+                    }
+                }
+            }
+        }
+        eprintln!();
+    }
+
     // Step 3: Get sessions and session actions for jobs with downloads
     let jobs_to_process: std::collections::HashSet<String> = new_job_ids.iter()
         .chain(updated_job_ids.iter())

@@ -633,3 +633,236 @@ async fn sync_output_multi_run_job_unchanged_on_second_run() {
         "job should be unchanged on second run: {stderr}");
     assert!(stderr.contains("unchanged: 1"), "summary should show 1 unchanged: {stderr}");
 }
+
+// =========================================================================
+// Multi-run: job EXISTING (task count changed)
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_multi_run_job_existing_task_count_changed() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Run 1: job with 1/3 succeeded
+    let job1 = active_job("job-ex", "Existing Job", 1, 2);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
+        job_detail_with_attachments("job-ex", None)).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-ex", &[]).await;
+
+    harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).assert().success();
+
+    // Run 2: same job now has 2/3 succeeded
+    harness.server.reset().await;
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    let job2 = active_job("job-ex", "Existing Job", 2, 1);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job2], 1).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-ex", &[]).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("run 2");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "run 2 should succeed: {stderr}");
+    assert!(stderr.contains("EXISTING Job: Existing Job (job-ex)"), "should show EXISTING: {stderr}");
+    assert!(stderr.contains("Succeeded tasks (before): 1 / 3"), "should show before count: {stderr}");
+    assert!(stderr.contains("Succeeded tasks (now)   : 2 / 3"), "should show after count: {stderr}");
+    assert!(stderr.contains("updated: 1"), "summary should show 1 updated: {stderr}");
+}
+
+// =========================================================================
+// Multi-run: job FINISHED TRACKING (job succeeded then dropped)
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_multi_run_job_finished_tracking_succeeded() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Run 1: job with all tasks succeeded
+    let mut job1 = active_job("job-fin", "Finished Job", 2, 0);
+    job1["endedAt"] = json!("2024-06-15T11:00:00Z");
+    job1["taskRunStatus"] = json!("SUCCEEDED");
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
+        job_detail_with_attachments("job-fin", None)).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-fin", &[]).await;
+
+    harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).assert().success();
+
+    // Run 2: job no longer in SearchJobs results → FINISHED TRACKING
+    harness.server.reset().await;
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("run 2");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "run 2 should succeed: {stderr}");
+    assert!(stderr.contains("FINISHED TRACKING Job: Finished Job (job-fin)"),
+        "should show FINISHED TRACKING: {stderr}");
+    assert!(stderr.contains("Job succeeded"), "should say job succeeded: {stderr}");
+    assert!(stderr.contains("inactive: 1"), "summary should show 1 inactive: {stderr}");
+}
+
+// =========================================================================
+// Multi-run: job canceled (dropped before completion)
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_multi_run_job_canceled() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Run 1: job with 1/2 succeeded (still running)
+    let job1 = active_job("job-can", "Canceled Job", 1, 1);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
+        job_detail_with_attachments("job-can", None)).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-can", &[]).await;
+
+    harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).assert().success();
+
+    // Run 2: job no longer in SearchJobs → canceled/failed
+    harness.server.reset().await;
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("run 2");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "run 2 should succeed: {stderr}");
+    assert!(stderr.contains("FINISHED TRACKING Job: Canceled Job (job-can)"),
+        "should show FINISHED TRACKING: {stderr}");
+    assert!(stderr.contains("Job is not a download candidate anymore (likely suspended, canceled or failed)"),
+        "should explain reason: {stderr}");
+    assert!(stderr.contains("inactive: 1"), "summary should show 1 inactive: {stderr}");
+}
+
+// =========================================================================
+// Multi-run: job without attachments tracked across runs
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_multi_run_job_without_attachments_tracked() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Run 1: job without attachments
+    let job1 = active_job("job-noatt2", "No Att Job", 1, 0);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1.clone()], 1).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
+        job_detail_no_attachments("job-noatt2")).await;
+
+    harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).assert().success();
+
+    // Run 2: same job still active → should be attachments-free again (not call GetJob)
+    harness.server.reset().await;
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
+    // Note: NOT mocking GetJob — if the code calls it, the test will fail
+
+    let output = harness.cli(&[
+        "queue", "sync-output", "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("run 2");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "run 2 should succeed without calling GetJob: {stderr}");
+    assert!(stderr.contains("not using job attachments: 1"),
+        "should still count as attachments-free: {stderr}");
+}
+
+// =========================================================================
+// Storage profile path mapping rule printing
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_storage_profile_path_mapping_rules_printed() {
+    let harness = TestHarness::new().await;
+    setup_config_with_storage_profile(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+
+    // Local storage profile (Linux)
+    queue_resources::mock_get_storage_profile_for_queue(
+        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
+    ).await;
+
+    // Job submitted from a macOS machine with different storage profile
+    let mut job = active_job("job-map", "Mapped Job", 1, 1);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+
+    let mut job_detail = job_detail_with_attachments("job-map", Some("sp-macos-456"));
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-map", &[]).await;
+
+    // Mock the job's storage profile (macOS with different paths)
+    queue_resources::mock_get_storage_profile_for_queue(
+        &harness.server, "farm-abc", "queue-aaa", "sp-macos-456",
+        json!({
+            "storageProfileId": "sp-macos-456",
+            "displayName": "macOS Profile",
+            "osFamily": "macos",
+            "fileSystemLocations": [
+                {"name": "shared", "path": "/Volumes/shared", "type": "SHARED"}
+            ]
+        }),
+    ).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "should succeed: {stderr}");
+    assert!(stderr.contains("Local storage profile is Linux Profile (sp-linux-123)"),
+        "should print local profile: {stderr}");
+    assert!(stderr.contains("Path mapping rules for 1 download candidate jobs with storage profile macOS Profile (sp-macos-456)"),
+        "should print mapping header: {stderr}");
+    assert!(stderr.contains("- from: /Volumes/shared"), "should print source path: {stderr}");
+    assert!(stderr.contains("to:   /mnt/shared"), "should print dest path: {stderr}");
+}

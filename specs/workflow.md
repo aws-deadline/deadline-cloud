@@ -6,10 +6,16 @@ with front-loaded testing and spec-as-quality-tool.
 
 ## Session Start
 
-1. Read `specs/HANDOFF.md`. If it has active work, resume from where it left off.
-2. If no active work, check the Work Items table in `specs/progress.md`
+1. First, you MUST READ the following files to understand coding conventions for ALL future development (in order, skip none):
+- [ ] `AGENTS.md` — repo conventions, build/test commands
+- [ ] `specs/architecture.md` — crate dependency graph, data flows, shared conventions
+- [ ] `specs/testing.md` — test philosophy, levels, no-mocking policy, snapshot workflow
+- [ ] `specs/patterns.md` — AWS SDK usage patterns, coding conventions
+- [ ] `specs/workflow.md` — this file (the development loop you're following)
+2. Then, read `specs/HANDOFF.md`. If it has active work, resume from where it left off.
+3. If no active work, check the Work Items table in `specs/progress.md`
    and pick the first "Not started" item whose dependencies are all done.
-3. Update `specs/HANDOFF.md` with the chosen work item.
+4. Update `specs/HANDOFF.md` with the chosen work item.
 
 ## Rules
 
@@ -66,7 +72,7 @@ The goal is identical observable behavior, not identical internal structure.
 
 5. **Don't over-abstract.** If the Python is a simple function that
    doesn't need to become a trait, don't make it one. Only introduce
-   abstractions that solve a real problem.
+   abstractions that solve a real problem or optimize a process.
 
 6. **Ask "what would I design if the Python didn't exist?"** Read the
    test spec and the Python source, then close the Python file and
@@ -89,14 +95,7 @@ Read deeply — not just the happy path, but edge cases, surprising
 behaviors, error messages, and how the feature interacts with config,
 credentials, and other subsystems.
 
-Before studying, read these (in order, skip none):
-
-- [ ] `AGENTS.md` — repo conventions, build/test commands
-- [ ] `specs/architecture.md` — crate dependency graph, data flows, shared conventions
-- [ ] `specs/testing.md` — test philosophy, levels, no-mocking policy, snapshot workflow
-- [ ] `specs/patterns.md` — AWS SDK usage patterns, coding conventions
-- [ ] `specs/workflow.md` — this file (the development loop you're following)
-- [ ] `specs/progress.md` — work items table, status, dependencies
+Before studying, read the following files that are relevant to your task (in order, skip none):
 - [ ] `specs/{crate}/README.md` for the target crate — architecture, gotchas, status
 - [ ] `specs/{crate}/` topic files relevant to the feature
 - [ ] `specs/cli/{command}.md` — when the work item involves CLI commands
