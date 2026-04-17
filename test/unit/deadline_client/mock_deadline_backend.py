@@ -459,6 +459,106 @@ class MockDeadlineBackend:
 
         return session_id
 
+    # ========== Batch Get APIs ==========
+
+    def _batch_get(
+        self,
+        *,
+        operation: str,
+        identifiers: list[dict],
+        id_fields: tuple[str, ...],
+        storage: dict,
+        storage_key_fields: tuple[str, ...],
+        items_field: str,
+        resource_type: str,
+    ) -> dict:
+        """Shared implementation for batch_get_* APIs with partial-success."""
+        self._validate(operation, {"identifiers": identifiers})
+        if len(identifiers) > 100:
+            raise _validation_exception(
+                f"identifiers: must have at most 100 items ({len(identifiers)} provided).",
+                operation,
+            )
+        items: list[dict] = []
+        errors: list[dict] = []
+        for ident in identifiers:
+            # Test-only failure injection.
+            injected = self._consume_injected_failure(operation, ident)
+            if injected is not None:
+                errors.append({**{k: ident[k] for k in id_fields}, **injected})
+                continue
+            key = tuple(ident[k] for k in storage_key_fields)
+            if key in storage:
+                items.append(storage[key])
+            else:
+                errors.append(
+                    {
+                        **{k: ident[k] for k in id_fields},
+                        "code": "ResourceNotFoundException",
+                        "message": f"Resource of type {resource_type} with id "
+                        f"{ident[id_fields[-1]]} does not exist.",
+                    }
+                )
+        return {items_field: items, "errors": errors}
+
+    def batch_get_step(self, *, identifiers: list[dict]) -> dict:
+        return self._batch_get(
+            operation="BatchGetStep",
+            identifiers=identifiers,
+            id_fields=("farmId", "queueId", "jobId", "stepId"),
+            storage=self.steps,
+            storage_key_fields=("farmId", "queueId", "jobId", "stepId"),
+            items_field="steps",
+            resource_type="step",
+        )
+
+    def batch_get_task(self, *, identifiers: list[dict]) -> dict:
+        return self._batch_get(
+            operation="BatchGetTask",
+            identifiers=identifiers,
+            id_fields=("farmId", "queueId", "jobId", "stepId", "taskId"),
+            storage=self.tasks,
+            storage_key_fields=("farmId", "queueId", "jobId", "stepId", "taskId"),
+            items_field="tasks",
+            resource_type="task",
+        )
+
+    # ========== Test-only failure injection ==========
+
+    def inject_batch_failure(
+        self,
+        operation: str,
+        identifier: dict,
+        code: str,
+        attempts: int = 1,
+        message: str = "injected",
+    ) -> None:
+        """Cause the next ``attempts`` batch-get calls for ``identifier`` to
+        return a per-item error with the given ``code``. Subsequent calls
+        behave normally.
+        """
+        if not hasattr(self, "_injected_failures"):
+            self._injected_failures: dict = {}
+        key = (operation, tuple(sorted(identifier.items())))
+        self._injected_failures[key] = {
+            "remaining": attempts,
+            "code": code,
+            "message": message,
+        }
+
+    def _consume_injected_failure(self, operation: str, identifier: dict) -> dict | None:
+        """Returns {'code': ..., 'message': ...} if a failure is queued for this
+        identifier, else None. Decrements the remaining count."""
+        failures = getattr(self, "_injected_failures", None)
+        if not failures:
+            return None
+        key = (operation, tuple(sorted(identifier.items())))
+        entry = failures.get(key)
+        if entry is None or entry["remaining"] <= 0:
+            return None
+        entry["remaining"] -= 1
+        return {"code": entry["code"], "message": entry["message"]}
+
     # ========== Mock Integration ==========
 
     def set_mock_methods(self, deadline_mock: MagicMock) -> None:
@@ -474,3 +574,5 @@ class MockDeadlineBackend:
         deadline_mock.list_sessions.side_effect = self.list_sessions
         deadline_mock.list_session_actions.side_effect = self.list_session_actions
         deadline_mock.search_jobs.side_effect = self.search_jobs
+        deadline_mock.batch_get_step.side_effect = self.batch_get_step
+        deadline_mock.batch_get_task.side_effect = self.batch_get_task

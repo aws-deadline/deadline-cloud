@@ -484,3 +484,114 @@ steps:
         assert action_types[4] == ("exit", "stepenv:StepEnv1")
         assert action_types[5] == ("exit", "jobenv:JobEnv2")
         assert action_types[6] == ("exit", "jobenv:JobEnv1")
+
+
+class TestBatchGetApis:
+    """Tests for batch_get_step / batch_get_task on MockDeadlineBackend."""
+
+    def _setup_job(self):
+        backend = MockDeadlineBackend()
+        farm = backend.create_farm(displayName="F")
+        queue = backend.create_queue(farmId=farm["farmId"], displayName="Q")
+        job = backend.create_job(
+            farmId=farm["farmId"],
+            queueId=queue["queueId"],
+            template=MINIMAL_TEMPLATE,
+            nameOverride="J",
+        )
+        (step_key,) = [
+            k for k in backend.steps if k[:3] == (farm["farmId"], queue["queueId"], job["jobId"])
+        ]
+        step_id = backend.steps[step_key]["stepId"]
+        task_keys = [
+            k
+            for k in backend.tasks
+            if k[:4] == (farm["farmId"], queue["queueId"], job["jobId"], step_id)
+        ]
+        task_id = backend.tasks[task_keys[0]]["taskId"]
+        return backend, farm["farmId"], queue["queueId"], job["jobId"], step_id, task_id
+
+    def test_batch_get_step_returns_existing_and_error_for_missing(self):
+        backend, farm_id, queue_id, job_id, step_id, _ = self._setup_job()
+        result = backend.batch_get_step(
+            identifiers=[
+                {"farmId": farm_id, "queueId": queue_id, "jobId": job_id, "stepId": step_id},
+                {
+                    "farmId": farm_id,
+                    "queueId": queue_id,
+                    "jobId": job_id,
+                    "stepId": "step-does-not-exist",
+                },
+            ]
+        )
+        assert len(result["steps"]) == 1
+        assert result["steps"][0]["stepId"] == step_id
+        assert len(result["errors"]) == 1
+        assert result["errors"][0]["code"] == "ResourceNotFoundException"
+        assert result["errors"][0]["stepId"] == "step-does-not-exist"
+
+    def test_batch_get_task_returns_existing_and_error_for_missing(self):
+        backend, farm_id, queue_id, job_id, step_id, task_id = self._setup_job()
+        result = backend.batch_get_task(
+            identifiers=[
+                {
+                    "farmId": farm_id,
+                    "queueId": queue_id,
+                    "jobId": job_id,
+                    "stepId": step_id,
+                    "taskId": task_id,
+                },
+                {
+                    "farmId": farm_id,
+                    "queueId": queue_id,
+                    "jobId": job_id,
+                    "stepId": step_id,
+                    "taskId": "task-missing",
+                },
+            ]
+        )
+        assert len(result["tasks"]) == 1
+        assert result["tasks"][0]["taskId"] == task_id
+        assert len(result["errors"]) == 1
+        assert result["errors"][0]["code"] == "ResourceNotFoundException"
+        assert result["errors"][0]["taskId"] == "task-missing"
+
+    def test_inject_batch_failure_returns_injected_code(self):
+        backend, farm_id, queue_id, job_id, step_id, task_id = self._setup_job()
+        ident = {
+            "farmId": farm_id,
+            "queueId": queue_id,
+            "jobId": job_id,
+            "stepId": step_id,
+            "taskId": task_id,
+        }
+        backend.inject_batch_failure("BatchGetTask", ident, "ThrottlingException", attempts=1)
+
+        # First call: injected error, no item.
+        result = backend.batch_get_task(identifiers=[ident])
+        assert result["tasks"] == []
+        assert len(result["errors"]) == 1
+        assert result["errors"][0]["code"] == "ThrottlingException"
+        assert result["errors"][0]["taskId"] == task_id
+
+        # Second call: injection exhausted, returns real data.
+        result = backend.batch_get_task(identifiers=[ident])
+        assert len(result["tasks"]) == 1
+        assert result["errors"] == []
+
+    def test_batch_get_task_validates_max_100_identifiers(self):
+        backend = MockDeadlineBackend()
+        # Build 101 identifiers. The service schema enforces max 100.
+        identifiers = [
+            {
+                "farmId": "farm-0",
+                "queueId": "queue-0",
+                "jobId": "job-0",
+                "stepId": "step-0",
+                "taskId": f"task-{i}",
+            }
+            for i in range(101)
+        ]
+        with pytest.raises(ClientError) as exc_info:
+            backend.batch_get_task(identifiers=identifiers)
+        assert "100" in str(exc_info.value)
