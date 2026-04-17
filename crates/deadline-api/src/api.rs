@@ -1013,4 +1013,50 @@ mod tests {
             "Expected cancellation error, got: {err}"
         );
     }
+
+    #[test]
+    fn build_filter_string_list_filter_produces_filter() {
+        // Regression: stringListFilter was silently dropped, causing
+        // ValidationException from the real API (empty filters array).
+        let json = serde_json::json!({
+            "filters": [{
+                "stringListFilter": {
+                    "name": "TASK_RUN_STATUS",
+                    "operator": "ANY_EQUALS",
+                    "values": ["READY", "RUNNING"]
+                }
+            }],
+            "operator": "OR"
+        });
+        let result = build_filter_expressions(&json).unwrap();
+        assert_eq!(result.filters().len(), 1);
+    }
+
+    #[test]
+    fn build_filter_date_time_filter_produces_filter() {
+        // Regression: dateTimeFilter was silently dropped.
+        let json = serde_json::json!({
+            "filters": [{
+                "dateTimeFilter": {
+                    "name": "ENDED_AT",
+                    "dateTime": "2024-06-15T10:00:00+00:00",
+                    "operator": "GREATER_THAN_EQUAL_TO"
+                }
+            }],
+            "operator": "AND"
+        });
+        let result = build_filter_expressions(&json).unwrap();
+        assert_eq!(result.filters().len(), 1);
+    }
+
+    #[test]
+    fn build_filter_unknown_filter_type_produces_empty() {
+        // Unknown filter types are silently skipped (not an error).
+        let json = serde_json::json!({
+            "filters": [{"unknownFilter": {"name": "X"}}],
+            "operator": "AND"
+        });
+        let result = build_filter_expressions(&json).unwrap();
+        assert_eq!(result.filters().len(), 0);
+    }
 }
