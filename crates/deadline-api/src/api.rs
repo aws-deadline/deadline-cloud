@@ -314,8 +314,48 @@ fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::Sea
                     .build()
                     .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
             ));
+        } else if let Some(slf) = f.get("stringListFilter") {
+            let name = slf["name"].as_str().unwrap_or("").to_string();
+            let values: Vec<String> = slf["values"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                .unwrap_or_default();
+            let op = match slf["operator"].as_str().unwrap_or("ANY_EQUALS") {
+                "ANY_NOT_EQUALS" => ComparisonOperator::NotEqual,
+                _ => ComparisonOperator::AnyEquals,
+            };
+            let mut builder = StringListFilterExpression::builder()
+                .name(name)
+                .operator(op);
+            for v in values {
+                builder = builder.values(v);
+            }
+            sdk_filters.push(SearchFilterExpression::StringListFilter(
+                builder.build()
+                    .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
+            ));
+        } else if let Some(dtf) = f.get("dateTimeFilter") {
+            let name = dtf["name"].as_str().unwrap_or("").to_string();
+            let datetime_str = dtf["dateTime"].as_str().unwrap_or("");
+            let datetime = ::aws_smithy_types::DateTime::from_str(
+                datetime_str, ::aws_smithy_types::date_time::Format::DateTimeWithOffset,
+            ).map_err(|e| DeadlineError::OperationError(format!("Invalid datetime: {e}")))?;
+            let op = match dtf["operator"].as_str().unwrap_or("EQUAL") {
+                "GREATER_THAN_EQUAL_TO" => ComparisonOperator::GreaterThanEqualTo,
+                "LESS_THAN_EQUAL_TO" => ComparisonOperator::LessThanEqualTo,
+                "GREATER_THAN" => ComparisonOperator::GreaterThan,
+                "LESS_THAN" => ComparisonOperator::LessThan,
+                "NOT_EQUAL" => ComparisonOperator::NotEqual,
+                _ => ComparisonOperator::Equal,
+            };
+            sdk_filters.push(SearchFilterExpression::DateTimeFilter(
+                DateTimeFilterExpression::builder()
+                    .name(name)
+                    .date_time(datetime)
+                    .operator(op)
+                    .build()
+                    .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
+            ));
         }
-        // Additional filter types can be added as needed
     }
 
     SearchGroupedFilterExpressions::builder()
