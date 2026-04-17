@@ -1,0 +1,17 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: simple_echo
+description: Minimal job bundle for integration testing
+steps:
+  - name: Echo
+    script:
+      actions:
+        onRun:
+          command: '{{Task.File.run}}'
+      embeddedFiles:
+        - name: run
+          filename: run.sh
+          type: TEXT
+          runnable: true
+          data: |
+            #!/bin/bash
+            echo "Hello from simple_echo"

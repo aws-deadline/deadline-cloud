@@ -109,7 +109,8 @@ section of the AWS Deadline Cloud Developer Guide for detailed information on jo
 At a minimum, a job bundle is a folder that contains an [OpenJD][openjd] template as a file named `template.json` or `template.yaml`. However, it can optionally include:
 1. An `asset_references.yaml` file - lists file inputs and outputs.
 2. A `parameter_values.yaml` file - contains the selected values for the job template's parameters.
-3. Any number of additional files required for the job.
+3. A `hooks.yaml` file - defines pre/post-submission hooks (see [Submission Hooks](submission-hooks.md)).
+4. Any number of additional files required for the job.
 
 For example job bundles, visit the [samples repository][deadline-cloud-samples].
 

@@ -11,6 +11,12 @@
 * Decoupled Job Attachments from the Client package — `deadline.job_attachments` no longer imports from `deadline.client` ([migration guide](https://github.com/aws-deadline/deadline-cloud/blob/mainline/docs/design/client-job-attachments-decoupling.md#migration-guide)) (#1076)
 
 ### Features
+* Add submission hooks support for job bundles (#986)
+  * Pre-submission and post-submission hooks can be configured via `hooks.yaml` or `hooks.json` in job bundles
+  * Pre-submission hooks run before hashing/uploading and can validate or modify the submission payload
+  * Post-submission hooks run after successful job creation for notifications and integrations
+  * Hooks receive job metadata via stdin (JSON) and environment variables (`DEADLINE_*`)
+  * Works with both `deadline bundle submit` (CLI) and `deadline bundle gui-submit` (GUI)
 * `deadline handle-web-url --install` and `--uninstall` now print a confirmation message on success (#1056) ([`6d0c5d9`](https://github.com/aws-deadline/deadline-cloud/commit/6d0c5d9dc167e8fd65721feb5cd6d318c7f38b44))
 
 ### Bug Fixes
@@ -33,7 +39,6 @@
 * Show checkboxes in multiselect combo boxes on macOS (#1052) ([`c4eb36b`](https://github.com/aws-deadline/deadline-cloud/commit/c4eb36b93c850330c0928afa00efb84cd3b1864f))
 * Accept hidden parameters with empty string defaults (#1032) ([`347adcc`](https://github.com/aws-deadline/deadline-cloud/commit/347adcce70e873792b62e554d70ab311f2d3ba09))
 * Fix load job bundle button not working (#1041) ([`eee187e`](https://github.com/aws-deadline/deadline-cloud/commit/eee187e7f763a1f52d7d09ee8980801e8c1841c6))
-
 
 ## 0.54.2 (2026-03-04)
 
