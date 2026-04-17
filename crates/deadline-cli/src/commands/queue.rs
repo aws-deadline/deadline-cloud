@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::{Duration, Utc};
+use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
 use deadline_api::api;
 use deadline_config::config_file;
@@ -459,7 +459,7 @@ async fn run_sync_output(
         } else {
             eprintln!("Checkpoint not found, lookback is {bootstrap_lookback_minutes} minutes");
         }
-        eprintln!("Initializing from: {}", bootstrap_timestamp.to_rfc3339());
+        eprintln!("Initializing from: {}", bootstrap_timestamp.with_timezone(&Local).to_rfc3339());
 
         IncrementalDownloadState::new(
             local_storage_profile_id.clone(),
@@ -491,7 +491,7 @@ async fn run_sync_output(
             )));
         }
 
-        eprintln!("Continuing from: {}", loaded.downloads_completed_timestamp.to_rfc3339());
+        eprintln!("Continuing from: {}", loaded.downloads_completed_timestamp.with_timezone(&Local).to_rfc3339());
         loaded
     };
 
@@ -540,8 +540,16 @@ async fn incremental_output_download(
     );
 
     eprintln!("Updating download state across time interval:");
-    eprintln!("    From: {}", checkpoint.downloads_completed_timestamp.to_rfc3339());
-    eprintln!("      To: {}", now.to_rfc3339());
+    eprintln!("    From: {}", checkpoint.downloads_completed_timestamp.with_timezone(&Local).to_rfc3339());
+    eprintln!("      To: {}", now.with_timezone(&Local).to_rfc3339());
+    let update_length = now - checkpoint.downloads_completed_timestamp;
+    let ec_delta = Duration::seconds(checkpoint.eventual_consistency_max_seconds);
+    if update_length > ec_delta {
+        eprintln!("  Length: {} + {} (eventual consistency allowance)",
+            format_duration(update_length - ec_delta), format_duration(ec_delta));
+    } else {
+        eprintln!("  Length: {}", format_duration(update_length));
+    }
     eprintln!();
 
     // Step 1: Get download candidate jobs via SearchJobs
@@ -839,6 +847,8 @@ async fn incremental_output_download(
         .cloned()
         .collect();
 
+    eprintln!("Retrieving sessions for {} jobs...", jobs_to_process.len());
+
     // Collect session completed indexes from checkpoint
     let checkpoint_session_indexes: std::collections::HashMap<String, std::collections::HashMap<String, i64>> =
         checkpoint.jobs.iter()
@@ -937,6 +947,16 @@ async fn incremental_output_download(
     checkpoint.jobs = updated_jobs;
 
     Ok(checkpoint)
+}
+
+/// Format a chrono::Duration as H:MM:SS.ffffff matching Python's timedelta str()
+fn format_duration(d: Duration) -> String {
+    let total_secs = d.num_seconds();
+    let hours = total_secs / 3600;
+    let mins = (total_secs % 3600) / 60;
+    let secs = total_secs % 60;
+    let micros = d.num_microseconds().unwrap_or(0) % 1_000_000;
+    format!("{hours}:{mins:02}:{secs:02}.{micros:06}")
 }
 
 fn expand_tilde(path: &str) -> PathBuf {

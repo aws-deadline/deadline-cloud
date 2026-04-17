@@ -7,24 +7,24 @@ info:
     - sync-output
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpxTWAkI
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpHI5BvF
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63277"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63277"
-    AWS_ENDPOINT_URL_S3: "http://localhost:63277"
-    AWS_ENDPOINT_URL_STS: "http://localhost:63277"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:57093"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:57093"
+    AWS_ENDPOINT_URL_S3: "http://localhost:57093"
+    AWS_ENDPOINT_URL_STS: "http://localhost:57093"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmphKsnvv/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmphKsnvv
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpNxsTQr/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpNxsTQr
 ---
 success: true
 exit_code: 0
@@ -41,6 +41,7 @@ Initializing from: [TIMESTAMP]
 Updating download state across time interval:
     From: [TIMESTAMP]
       To: [TIMESTAMP]
+  Length: [DURATION]
 
 Retrieving updated data from Deadline Cloud...
 ...retrieval completed
@@ -50,6 +51,7 @@ NEW Job: Render Job (job-001)
   Succeeded tasks: 3 / 5
 ...categorization completed
 
+Retrieving sessions for 1 jobs...
 Summary of paths to download:
   (no files to download)
 
