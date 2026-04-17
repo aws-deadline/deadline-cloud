@@ -5,6 +5,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 use super::config::CliError;
+use super::helpers::suggest_resources_on_client_error;
 
 static OPENJD_IDENT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").unwrap());
@@ -143,6 +144,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     queue_id: queue_id.clone(),
                     job_id: None,
                     yes,
+                    ..Default::default()
                 },
                 &["farm_id", "queue_id"],
             )?;
@@ -198,8 +200,15 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 continue_callback: Some(Box::new(|| crate::common::should_continue())),
             };
 
-            let job_id = create_job_from_job_bundle(submit_params).await
-                .map_err(|e| CliError::Operation(e.to_string()))?;
+            let job_id = match create_job_from_job_bundle(submit_params).await {
+                Ok(id) => id,
+                Err(e) => {
+                    let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+                    let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), Some(&queue), None, Some(&config)).await;
+                    return Err(CliError::Operation(format!("{e}{suggestion}")));
+                }
+            };
 
             // Update defaults.job_id only when no CLI overrides were provided
             if profile.is_none()

@@ -18,7 +18,7 @@ Then study the feature deeply:
 - For CLI commands calling AWS APIs: run the Python CLI and capture exact output
 
 Update `specs/HANDOFF.md` with:
-- High-level implementation plan (which crates/modules change, new types)
+- High-level implementation plan (which crates/modules change, new types, tests to write)
 - Cross-reference table mapping test spec cases to planned Rust test names
 - Batching strategy if the work item is large
 

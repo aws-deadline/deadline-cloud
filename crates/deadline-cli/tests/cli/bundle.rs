@@ -384,6 +384,31 @@ async fn bundle_submit_api_error_exits_with_error() {
     assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"]));
 }
 
+// AUDIT-032: bundle submit API error should show resource suggestions
+#[tokio::test]
+async fn bundle_submit_access_denied_suggests_available_queues() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    bundle::mock_create_job_error(
+        &harness.server, FARM, QUEUE, 403, "AccessDeniedException",
+    ).await;
+    // Mount queue list for suggestion chain
+    queues::mock_list_queues(
+        &harness.server, FARM,
+        &[json!({"queueId": "queue-real", "displayName": "Real Queue"})],
+    ).await;
+    let bundle_dir = create_bundle(&harness, "suggest_case");
+    let _guard = bundle_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"]));
+}
+
 // =====================================================================
 // JSON template variant
 // =====================================================================

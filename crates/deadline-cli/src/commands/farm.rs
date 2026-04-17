@@ -29,7 +29,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) ->
         .map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
         required,
     )?;
     Ok(config)

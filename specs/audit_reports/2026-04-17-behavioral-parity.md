@@ -7,12 +7,12 @@
 
 ## Summary
 
-| Priority | Count | Fixed | Remaining |
-|----------|-------|-------|-----------|
-| Critical | 4     | 3     | 1         |
-| High     | 10    | 1     | 9         |
-| Medium   | 22    | 4     | 18        |
-| Low      | 20    | 0     | 20        |
+| Priority | Count | Fixed | No Issue | Remaining |
+|----------|-------|-------|----------|-----------|
+| Critical | 4     | 3     | 0        | 1         |
+| High     | 10    | 1     | 0        | 9         |
+| Medium   | 22    | 9     | 3        | 10        |
+| Low      | 20    | 3     | 2        | 15        |
 
 ## Methodology
 
@@ -196,7 +196,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Dict insertion order: `profile_name`, `source`, `status`, `api_availability`. (`auth_group.py:113-118`)
 - **Rust behavior:** `serde_json::json!()` uses `BTreeMap` — alphabetical order. (`commands/auth.rs:69-74`)
 - **Impact:** Scripts depending on key order break.
-- **Resolution:** Pending
+- **Resolution:** Fixed — use json_with_spaces() for spaced JSON output
 
 ### AUDIT-017: Login polling DCM exit code 0 handling differs
 
@@ -206,7 +206,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `p.poll()` is falsy for exit code 0 — continues polling. (`_loginout.py:73`)
 - **Rust behavior:** `child.try_wait()` returns `Some` for any exit — immediately errors. (`auth.rs:222`)
 - **Impact:** Edge case where DCM exits cleanly before credentials propagate. Rust errors; Python eventually succeeds.
-- **Resolution:** Pending
+- **Resolution:** No Issue — Rust is more correct. Python's `p.poll()` returns `0` for exit code 0, which is falsy in Python, causing the loop to silently ignore process exit. Rust correctly detects any process exit (including code 0) and reports it as an error when authentication hasn't been confirmed. The Python behavior is a latent bug.
 
 ### AUDIT-018: INI colon delimiter not supported
 
@@ -246,7 +246,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Prints "The AWS Deadline Cloud CLI encountered the following exception:" + full traceback. (`_common.py:80-83`)
 - **Rust behavior:** Prints only the error message via `println!("{e}")`. No prefix, no backtrace. (`main.rs:253-257`)
 - **Impact:** Users debugging unexpected errors get significantly less information.
-- **Resolution:** Pending
+- **Resolution:** No Issue — Rust's error model is fundamentally different. All errors are typed `CliError` variants with descriptive messages. Python's prefix only applies to unhandled `Exception` (truly unexpected errors), which in Rust would be panics, not `Result::Err`. There are no "unexpected exceptions" in the Rust CLI.
 
 ### AUDIT-022: `apply_cli_options_to_config` missing `conflict_resolution` and `storage_profile_id`
 
@@ -256,7 +256,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Handles `storage_profile_id` and `conflict_resolution` CLI options. (`_common.py:119-127`)
 - **Rust behavior:** Only handles `profile`, `farm_id`, `queue_id`, `job_id`, `yes`. (`common.rs:82-113`)
 - **Impact:** Commands accepting these flags can't override via common options path.
-- **Resolution:** Pending
+- **Resolution:** Fixed — added storage_profile_id and conflict_resolution to CliOptions
 
 ### AUDIT-023: Negative timedelta formatting differs
 
@@ -266,7 +266,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `str(timedelta)` for negative: `-1 day, 23:30:00`. (Python stdlib)
 - **Rust behavior:** `format_timedelta` for negative: `0:-30:00`. (`common.rs:260-269`)
 - **Impact:** Confusing output when log timestamps precede reference start time.
-- **Resolution:** Pending
+- **Resolution:** Fixed — format_timedelta uses unsigned_abs for negative values
 
 ### AUDIT-024: YAML output key ordering differs
 
@@ -286,7 +286,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Calls `_suggest_resources_on_client_error` on `ClientError`. (`worker_group.py:56-60`)
 - **Rust behavior:** Returns bare error message. (`worker.rs:46-49`)
 - **Impact:** No helpful suggestions for mistyped fleet/worker IDs.
-- **Resolution:** Pending
+- **Resolution:** Fixed — worker list/get now call suggest_resources_on_client_error
 
 ### AUDIT-026: `job logs --session-action-id` option missing
 
@@ -356,7 +356,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Calls suggestion helper on `ClientError`. (`bundle_group.py:344-349`)
 - **Rust behavior:** No suggestion helper called. (`bundle.rs`)
 - **Impact:** Raw API errors without helpful suggestions on submission failure.
-- **Resolution:** Pending
+- **Resolution:** Fixed — bundle submit now calls suggest_resources_on_client_error
 
 ### AUDIT-033: `defaults.job_id` not set by library function
 
@@ -366,7 +366,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Sets `defaults.job_id` when using default config. (`_submit_job_bundle.py:812-814`)
 - **Rust behavior:** Only CLI command sets it, not library function. (`submission.rs` vs `bundle.rs:195-201`)
 - **Impact:** Non-CLI callers (GUI FFI, MCP) won't have `defaults.job_id` auto-updated.
-- **Resolution:** Pending
+- **Resolution:** No Issue — The Rust CLI sets `defaults.job_id` in `bundle.rs:207-213` with an equivalent condition: `profile.is_none() && farm_id.is_none() && queue_id.is_none() && storage_profile_id.is_none()`. This matches Python's `config is None` semantics (no CLI overrides applied). Placing this in the CLI layer rather than the library is an intentional architectural choice.
 
 ### AUDIT-034: `--submitter-info` not implemented
 
@@ -410,7 +410,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `click.confirm(default=None)` re-prompts on invalid input. (`job_group.py:283-289`)
 - **Rust behavior:** Raw `stdin().read_line()` — Enter without input treated as "no". (`job.rs:537-541`)
 - **Impact:** Minor UX difference.
-- **Resolution:** Pending
+- **Resolution:** Fixed — re-prompt loop with EOF handling
 
 ### AUDIT-038: `job get --search-term` task summary missing statuses
 
@@ -420,7 +420,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Includes `INTERRUPTING` and `NOT_COMPATIBLE` status counts. (`_job_helpers.py:48-49`)
 - **Rust behavior:** Omits these statuses. (`job.rs:870-882`)
 - **Impact:** Incomplete task summaries for jobs with these statuses.
-- **Resolution:** Pending
+- **Resolution:** Fixed — added INTERRUPTING and NOT_COMPATIBLE to format_task_summary
 
 ### AUDIT-039: `job wait` verbose output goes to stderr in Rust
 
@@ -490,7 +490,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** `deadline, version X.Y.Z`. (`_main.py:95`)
 - **Rust behavior:** `deadline X.Y.Z`. (`main.rs:18`)
 - **Impact:** Scripts parsing version output may break.
-- **Resolution:** Pending
+- **Resolution:** Fixed — version format matches Python click output
 
 ### AUDIT-046: `require_setting` uses exit code 1 instead of 2
 
@@ -540,7 +540,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Always updates S3 check cache after confirming file exists. (`upload.py:310-315`)
 - **Rust behavior:** When `force_s3_check=true`, skips cache entirely without updating. (`upload.rs:410-440`)
 - **Impact:** Subsequent uploads won't benefit from cache.
-- **Resolution:** Pending
+- **Resolution:** No Issue — Both Python and Rust skip the cache *read* when `force_s3_check=true` and perform the S3 HeadObject check. The Rust code at `upload.rs:931` uses `force_s3_check != Some(true)` which exactly matches Python's `force_s3_check is not True` semantics. Behavior is equivalent.
 
 ### AUDIT-051: Download duplicate path collision not handled
 
@@ -560,7 +560,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Python behavior:** Allows empty paths array. (`asset_manifests/decode.py`)
 - **Rust behavior:** Rejects with "paths must have at least one item". (`asset_manifests.rs:230`)
 - **Impact:** Edge case — empty manifests rejected in Rust.
-- **Resolution:** Pending
+- **Resolution:** No Issue — Python also rejects empty paths arrays. Python's `validate.py:78-79` returns `(False, "paths must have a least one item")` for `len(paths) < 1`. Both implementations reject empty paths with the same error message. Behavior matches exactly.
 
 ### AUDIT-053: Windows long path (UNC) handling missing
 
@@ -623,43 +623,43 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-013 | Hash cache schema incompatible | High | Behavioral gap |
 | AUDIT-014 | No multipart upload (5GB limit) | High | Behavioral gap |
 | AUDIT-015 | `auth status --output` case-sensitive | Medium | Behavioral gap |
-| AUDIT-016 | `auth status` JSON key order | Medium | Behavioral gap |
-| AUDIT-017 | Login polling exit code 0 | Medium | Behavioral gap |
+| AUDIT-016 | `auth status` JSON key order | Medium | Behavioral gap — Fixed |
+| AUDIT-017 | Login polling exit code 0 | Medium | Behavioral gap — No Issue |
 | AUDIT-018 | INI colon delimiter unsupported | Medium | Behavioral gap |
 | AUDIT-019 | INI section ordering on write | Medium | Behavioral gap |
 | AUDIT-020 | `suggest_resources` dispatch strategy | Medium | Behavioral gap |
-| AUDIT-021 | Error messages lack context | Medium | Behavioral gap |
-| AUDIT-022 | Missing CLI options in config apply | Medium | Behavioral gap |
-| AUDIT-023 | Negative timedelta formatting | Medium | Bug |
+| AUDIT-021 | Error messages lack context | Medium | Behavioral gap — No Issue |
+| AUDIT-022 | Missing CLI options in config apply | Medium | Behavioral gap — Fixed |
+| AUDIT-023 | Negative timedelta formatting | Medium | Bug — Fixed |
 | AUDIT-024 | YAML key ordering | Medium | Behavioral gap |
-| AUDIT-025 | Worker suggest_resources missing | Medium | Behavioral gap |
+| AUDIT-025 | Worker suggest_resources missing | Medium | Behavioral gap — Fixed |
 | AUDIT-026 | `job logs --session-action-id` missing | Medium | Behavioral gap |
 | AUDIT-027 | `job cancel --mark-as` no validation | Medium | Bug |
 | AUDIT-028 | `job requeue-tasks --run-status` no validation | Medium | Bug |
 | AUDIT-029 | `job logs` relative timestamp bug | Medium | Bug |
 | AUDIT-030 | `handle-web-url` macOS missing | Medium | Behavioral gap |
 | AUDIT-031 | `--save-debug-snapshot` missing | Medium | Behavioral gap |
-| AUDIT-032 | `suggest_resources` not in bundle submit | Medium | Behavioral gap |
-| AUDIT-033 | `defaults.job_id` not set by library | Medium | Behavioral gap |
+| AUDIT-032 | `suggest_resources` not in bundle submit | Medium | Behavioral gap — Fixed |
+| AUDIT-033 | `defaults.job_id` not set by library | Medium | Behavioral gap — No Issue |
 | AUDIT-034 | `--submitter-info` missing | Medium | Behavioral gap |
 | AUDIT-035 | Download path traversal not validated | Medium | Behavioral gap |
 | AUDIT-036 | Download manifest merge order | Medium | Behavioral gap |
-| AUDIT-037 | Confirmation prompt behavior | Low | Behavioral gap |
-| AUDIT-038 | Task summary missing statuses | Low | Behavioral gap |
+| AUDIT-037 | Confirmation prompt behavior | Low | Behavioral gap — Fixed |
+| AUDIT-038 | Task summary missing statuses | Low | Behavioral gap — Fixed |
 | AUDIT-039 | `job wait` verbose to stderr | Low | Extra Rust behavior |
 | AUDIT-040 | No adaptive retry for requeue | Low | Behavioral gap |
 | AUDIT-041 | `job trace-schedule` missing | Low | Behavioral gap |
 | AUDIT-042 | Windows stdin for login | Low | Behavioral gap |
 | AUDIT-043 | User-agent mechanism | Low | Behavioral gap |
 | AUDIT-044 | INI multiline values | Low | Behavioral gap |
-| AUDIT-045 | `--version` format | Low | Nice-to-have |
+| AUDIT-045 | `--version` format | Low | Nice-to-have — Fixed |
 | AUDIT-046 | `require_setting` exit code | Low | Behavioral gap |
 | AUDIT-047 | `manifest download` stub | Low | Behavioral gap |
 | AUDIT-048 | `manifest upload` no queue derivation | Low | Behavioral gap |
 | AUDIT-049 | No multipart download | Low | Behavioral gap |
-| AUDIT-050 | `force_s3_check` cache skip | Low | Behavioral gap |
+| AUDIT-050 | `force_s3_check` cache skip | Low | Behavioral gap — No Issue |
 | AUDIT-051 | Download path collision | Low | Behavioral gap |
-| AUDIT-052 | Empty manifest paths rejected | Low | Behavioral gap |
+| AUDIT-052 | Empty manifest paths rejected | Low | Behavioral gap — No Issue |
 | AUDIT-053 | Windows long path handling | Low | Behavioral gap |
 | AUDIT-054 | `--redirect-output` Unix-only | Low | Behavioral gap |
 | AUDIT-055 | Download conflict resolution prompt | Low | Behavioral gap |

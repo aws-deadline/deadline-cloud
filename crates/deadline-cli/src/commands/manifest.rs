@@ -199,7 +199,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
-                    profile, farm_id, queue_id, job_id: None, yes: false,
+                    profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default()
                 },
                 &["farm_id", "queue_id"],
             )?;

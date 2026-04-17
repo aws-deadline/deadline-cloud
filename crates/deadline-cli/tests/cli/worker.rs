@@ -88,6 +88,41 @@ async fn worker_get_api_failure_prints_error() {
     ]));
 }
 
+// AUDIT-025: worker list API failure should show resource suggestions
+#[tokio::test]
+async fn worker_list_access_denied_suggests_available_fleets() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    errors::mock_search_workers_access_denied(&harness.server, "farm-abc").await;
+    // Mount fleet list for suggestion chain
+    deadline_test_server::deadline_api::fleets::mock_list_fleets(
+        &harness.server, "farm-abc",
+        &[json!({"fleetId": "fleet-real", "displayName": "Real Fleet"})],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["worker", "list", "--fleet-id", "fleet-bad"]));
+}
+
+// AUDIT-025: worker get API failure should show resource suggestions
+#[tokio::test]
+async fn worker_get_not_found_suggests_available_workers() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    errors::mock_get_worker_not_found(
+        &harness.server, "farm-abc", "fleet-abc", "worker-bad",
+    ).await;
+    // Mount worker search for suggestion chain
+    workers::mock_search_workers(
+        &harness.server, "farm-abc",
+        &[json!({"workerId": "worker-real", "status": "RUNNING", "createdAt": "2024-01-01T00:00:00Z"})],
+        1,
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&[
+        "worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-bad",
+    ]));
+}
+
 // --- telemetry ---
 // Telemetry tests are separate from functional tests. Telemetry is best-effort
 // fire-and-forget — the TelemetryClient silently swallows errors, so functional

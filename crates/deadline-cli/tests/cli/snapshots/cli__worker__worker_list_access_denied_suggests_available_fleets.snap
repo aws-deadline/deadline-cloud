@@ -6,31 +6,31 @@ info:
     - worker
     - list
     - "--fleet-id"
-    - fleet-abc
+    - fleet-bad
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:58891"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58891"
-    AWS_ENDPOINT_URL_S3: "http://localhost:58891"
-    AWS_ENDPOINT_URL_STS: "http://localhost:58891"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:58894"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:58894"
+    AWS_ENDPOINT_URL_S3: "http://localhost:58894"
+    AWS_ENDPOINT_URL_STS: "http://localhost:58894"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpz4e8mh/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpz4e8mh
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpz2oQlm/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpz2oQlm
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 Failed to get Workers from Deadline:
 AccessDeniedException: No message
-Could not list available resources to suggest alternatives.
-This may indicate your IAM policy is missing List permissions.
+Available fleets in farm farm-abc:
+  fleet-real  Real Fleet
 
 ----- stderr -----

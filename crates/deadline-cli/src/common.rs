@@ -45,6 +45,8 @@ pub struct CliOptions {
     pub farm_id: Option<String>,
     pub queue_id: Option<String>,
     pub job_id: Option<String>,
+    pub storage_profile_id: Option<String>,
+    pub conflict_resolution: Option<String>,
     pub yes: bool,
 }
 
@@ -83,6 +85,14 @@ pub fn apply_cli_options_to_config(
     }
     if options.yes {
         config_file::set_setting_in_config("settings.auto_accept", "true", config)
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
+    }
+    if let Some(ref v) = options.storage_profile_id {
+        config_file::set_setting_in_config("settings.storage_profile_id", v, config)
+            .map_err(|e| CliConfigError::Operation(e.to_string()))?;
+    }
+    if let Some(ref v) = options.conflict_resolution {
+        config_file::set_setting_in_config("settings.conflict_resolution", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
 
@@ -379,14 +389,18 @@ impl TimestampFormat {
 /// Format a chrono::TimeDelta like Python's str(timedelta).
 fn format_timedelta(d: chrono::TimeDelta) -> String {
     let total_secs = d.num_seconds();
-    let hours = total_secs / 3600;
-    let mins = (total_secs % 3600) / 60;
-    let secs = total_secs % 60;
-    let micros = d.subsec_nanos() / 1000;
+    let nanos = d.subsec_nanos();
+    let is_negative = total_secs < 0 || (total_secs == 0 && nanos < 0);
+    let abs_secs = total_secs.unsigned_abs();
+    let hours = abs_secs / 3600;
+    let mins = (abs_secs % 3600) / 60;
+    let secs = abs_secs % 60;
+    let micros = nanos.unsigned_abs() / 1000;
+    let prefix = if is_negative { "-" } else { "" };
     if micros > 0 {
-        format!("{hours}:{mins:02}:{secs:02}.{micros:06}")
+        format!("{prefix}{hours}:{mins:02}:{secs:02}.{micros:06}")
     } else {
-        format!("{hours}:{mins:02}:{secs:02}")
+        format!("{prefix}{hours}:{mins:02}:{secs:02}")
     }
 }
 
@@ -453,6 +467,7 @@ mod tests {
             queue_id: Some("queue-xyz".into()),
             job_id: None,
             yes: false,
+            ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
@@ -534,6 +549,36 @@ mod tests {
         )
         .unwrap();
         assert_eq!(val, "true");
+    }
+
+    // AUDIT-022: storage_profile_id should be applied to config
+    #[test]
+    fn apply_options_storage_profile_id_sets_config() {
+        let mut config = empty_config();
+        let opts = CliOptions {
+            storage_profile_id: Some("sp-abc".into()),
+            ..Default::default()
+        };
+        apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
+        let val = deadline_config::config_file::get_setting_with_config(
+            "settings.storage_profile_id", &config,
+        ).unwrap();
+        assert_eq!(val, "sp-abc");
+    }
+
+    // AUDIT-022: conflict_resolution should be applied to config
+    #[test]
+    fn apply_options_conflict_resolution_sets_config() {
+        let mut config = empty_config();
+        let opts = CliOptions {
+            conflict_resolution: Some("CREATE_COPY".into()),
+            ..Default::default()
+        };
+        apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
+        let val = deadline_config::config_file::get_setting_with_config(
+            "settings.conflict_resolution", &config,
+        ).unwrap();
+        assert_eq!(val, "CREATE_COPY");
     }
 
     // -- parse_file_parameter --
@@ -706,6 +751,17 @@ mod tests {
         let ts = DateTime::parse_from_rfc3339("2024-06-15T11:30:45+00:00").unwrap();
         let fmt = TimestampFormat::new_relative(ref_time);
         assert_eq!(fmt.format(&ts), "1:30:45");
+    }
+
+    // AUDIT-023: Negative timedelta should produce "-H:MM:SS"
+    #[test]
+    fn format_timedelta_negative_thirty_minutes() {
+        assert_eq!(format_timedelta(chrono::TimeDelta::minutes(-30)), "-0:30:00");
+    }
+
+    #[test]
+    fn format_timedelta_negative_one_hour_fifteen() {
+        assert_eq!(format_timedelta(chrono::TimeDelta::minutes(-75)), "-1:15:00");
     }
 
     // Cases 38-39: In Rust, DateTime<FixedOffset> always has a timezone.

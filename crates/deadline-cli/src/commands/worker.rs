@@ -3,6 +3,7 @@ use deadline_api::api;
 use deadline_config::config_file;
 
 use super::config::CliError;
+use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
 pub enum WorkerAction {
@@ -34,7 +35,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>) -> Result<deadline_co
         .map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
         &["farm_id"],
     )?;
     Ok(config)
@@ -45,9 +46,13 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::List { profile, farm_id, fleet_id, page_size, item_offset } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let resp = api::search_workers(&farm, &[&fleet_id], item_offset, page_size, Some(&config), None)
-                .await
-                .map_err(|e| CliError::Operation(format!("Failed to get Workers from Deadline:\n{e}")))?;
+            let resp = match api::search_workers(&farm, &[&fleet_id], item_offset, page_size, Some(&config), None).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{e}{suggestion}")));
+                }
+            };
             let total = resp["totalResults"].as_i64().unwrap_or(0);
             let empty = vec![];
             let workers = resp["workers"].as_array().unwrap_or(&empty);
@@ -63,9 +68,13 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::Get { profile, farm_id, fleet_id, worker_id } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let resp = api::get_worker(&farm, &fleet_id, &worker_id, Some(&config), None)
-                .await
-                .map_err(|e| CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}")))?;
+            let resp = match api::get_worker(&farm, &fleet_id, &worker_id, Some(&config), None).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    return Err(CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}{suggestion}")));
+                }
+            };
             println!("{}", crate::common::cli_object_repr(&resp));
             Ok(())
         }

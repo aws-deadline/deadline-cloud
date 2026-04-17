@@ -207,6 +207,62 @@ async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--run-status", "BANANA", "--yes"]));
 }
 
+// AUDIT-037: cancel confirmation with empty input should re-prompt (not treat as "no")
+#[tokio::test]
+async fn job_cancel_confirm_empty_input_reprompts() {
+    let harness = TestHarness::new().await;
+    setup(&harness).await;
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
+        "jobId": JOB,
+        "name": "Render Job",
+        "taskRunStatus": "RUNNING",
+        "taskRunStatusCounts": { "RUNNING": 3, "SUCCEEDED": 7 },
+        "startedAt": "2025-01-27T07:37:53Z",
+        "createdBy": "user-abc",
+        "createdAt": "2025-01-27T07:34:41Z",
+    })).await;
+
+    // Send empty line then "n" — Python re-prompts on empty, then accepts "n"
+    let output = harness.cli(&["job", "cancel"])
+        .write_stdin("\nn\n")
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}{stderr}");
+    // After the fix, empty input should trigger "Error: invalid input" and re-prompt
+    assert!(combined.contains("invalid input") || combined.contains("Error"),
+        "expected re-prompt on empty input, got stdout: {stdout}\nstderr: {stderr}");
+}
+
+// AUDIT-037: EOF on stdin should exit cleanly, not loop forever
+#[tokio::test]
+async fn job_cancel_confirm_eof_exits_cleanly() {
+    let harness = TestHarness::new().await;
+    setup(&harness).await;
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
+        "jobId": JOB,
+        "name": "Render Job",
+        "taskRunStatus": "RUNNING",
+        "taskRunStatusCounts": { "RUNNING": 3, "SUCCEEDED": 7 },
+        "startedAt": "2025-01-27T07:37:53Z",
+        "createdBy": "user-abc",
+        "createdAt": "2025-01-27T07:34:41Z",
+    })).await;
+
+    // Pipe empty stdin (immediate EOF) — should exit, not hang
+    let output = harness.cli(&["job", "cancel"])
+        .write_stdin("")
+        .timeout(std::time::Duration::from_secs(5))
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!output.status.success(), "should exit non-zero on EOF");
+    assert!(stdout.contains("Job not canceled."), "expected 'Job not canceled.' on EOF, got: {stdout}");
+}
+
 #[tokio::test]
 async fn job_requeue_tasks_get_job_fails_prints_error() {
     let harness = TestHarness::new().await;

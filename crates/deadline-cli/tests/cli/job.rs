@@ -278,6 +278,40 @@ async fn job_get_search_term_multiple_matches_shows_summary() {
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
 }
 
+// AUDIT-038: task summary should include INTERRUPTING and NOT_COMPATIBLE statuses
+#[tokio::test]
+async fn job_get_search_term_shows_interrupting_and_not_compatible() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[
+        json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Render Job 1",
+            "taskRunStatus": "RUNNING",
+            "taskRunStatusCounts": {
+                "RUNNING": 3, "INTERRUPTING": 2, "NOT_COMPATIBLE": 1,
+                "SUCCEEDED": 5, "FAILED": 1
+            },
+            "createdAt": "2023-01-27T07:34:41Z",
+        }),
+        json!({
+            "jobId": "job-0d239749fa05435f90263b3a8be54144",
+            "name": "Render Job 2",
+            "taskRunStatus": "FAILED",
+            "taskRunStatusCounts": {"NOT_COMPATIBLE": 4, "FAILED": 6},
+            "createdAt": "2023-01-28T10:00:00Z",
+        }),
+    ], 2).await;
+
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}", "[LOCAL_TIMESTAMP]");
+    let _guard = settings.bind_to_scope();
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
+}
+
 // job get with search term → no matches
 #[tokio::test]
 async fn job_get_search_term_no_matches() {

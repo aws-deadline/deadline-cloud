@@ -93,7 +93,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>, queue_id: Option<Stri
         .map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id, job_id: None, yes: false },
+        &crate::common::CliOptions { profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default() },
         required,
     )?;
     Ok(config)
@@ -397,7 +397,7 @@ async fn run_sync_output(
     let mut config = config_file::read_config()
         .map_err(|e| CliError::Operation(e.to_string()))?;
     let opts = crate::common::CliOptions {
-        profile, farm_id, queue_id, job_id: None, yes: false,
+        profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default()
     };
     crate::common::apply_cli_options_to_config(&mut config, &opts, &["farm_id", "queue_id"])?;
 

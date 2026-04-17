@@ -145,7 +145,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
-                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false,
+                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false, ..Default::default()
                 },
                 &[],
             )?;
@@ -199,7 +199,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
-                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false,
+                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false, ..Default::default()
                 },
                 &[],
             )?;

@@ -32,7 +32,7 @@ fn setup_config(
         .map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes },
+        &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes, ..Default::default() },
         required,
     )?;
     Ok(config)
@@ -542,12 +542,25 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 } else {
                     format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
                 };
-                eprint!("{msg} ");
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input).ok();
-                if !input.trim().eq_ignore_ascii_case("y") && !input.trim().eq_ignore_ascii_case("yes") {
-                    println!("Job not canceled.");
-                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                eprint!("{msg} [y/n]: ");
+                loop {
+                    let mut input = String::new();
+                    let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
+                    if bytes == 0 {
+                        println!("Job not canceled.");
+                        return Err(CliError::ExitCode { code: 1, message: String::new() });
+                    }
+                    match input.trim().to_lowercase().as_str() {
+                        "y" | "yes" => break,
+                        "n" | "no" => {
+                            println!("Job not canceled.");
+                            return Err(CliError::ExitCode { code: 1, message: String::new() });
+                        }
+                        _ => {
+                            eprintln!("Error: invalid input");
+                            eprint!("{msg} [y/n]: ");
+                        }
+                    }
                 }
             }
 
@@ -626,12 +639,25 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 println!("Estimated {total_to_requeue} total tasks ({summary_by_status}) to requeue.");
             } else {
                 println!("This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})");
-                eprint!("Are you sure you want to requeue these tasks? ");
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input).ok();
-                if !input.trim().eq_ignore_ascii_case("y") && !input.trim().eq_ignore_ascii_case("yes") {
-                    println!("No tasks were requeued.");
-                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
+                loop {
+                    let mut input = String::new();
+                    let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
+                    if bytes == 0 {
+                        println!("No tasks were requeued.");
+                        return Err(CliError::ExitCode { code: 1, message: String::new() });
+                    }
+                    match input.trim().to_lowercase().as_str() {
+                        "y" | "yes" => break,
+                        "n" | "no" => {
+                            println!("No tasks were requeued.");
+                            return Err(CliError::ExitCode { code: 1, message: String::new() });
+                        }
+                        _ => {
+                            eprintln!("Error: invalid input");
+                            eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
+                        }
+                    }
                 }
                 println!("Requeuing tasks...");
             }
@@ -939,18 +965,22 @@ fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value
     let mut parts = Vec::new();
     let ready = get(&["READY"]);
     let running = get(&["RUNNING", "STARTING", "ASSIGNED", "SCHEDULED"]);
+    let interrupting = get(&["INTERRUPTING"]);
     let pending = get(&["PENDING"]);
     let succeeded = get(&["SUCCEEDED"]);
     let failed = get(&["FAILED"]);
     let canceled = get(&["CANCELED"]);
     let suspended = get(&["SUSPENDED"]);
+    let not_compatible = get(&["NOT_COMPATIBLE"]);
     if ready > 0 { parts.push(format!("{ready} ready")); }
     if running > 0 { parts.push(format!("{running} running")); }
+    if interrupting > 0 { parts.push(format!("{interrupting} interrupting")); }
     if pending > 0 { parts.push(format!("{pending} pending")); }
     if suspended > 0 { parts.push(format!("{suspended} suspended")); }
     if succeeded > 0 { parts.push(format!("{succeeded} succeeded")); }
     if failed > 0 { parts.push(format!("{failed} failed")); }
     if canceled > 0 { parts.push(format!("{canceled} canceled")); }
+    if not_compatible > 0 { parts.push(format!("{not_compatible} not compatible")); }
     if parts.is_empty() { "no tasks".into() } else { parts.join(", ") }
 }
 

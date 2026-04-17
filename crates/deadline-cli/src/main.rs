@@ -9,8 +9,9 @@ const VALID_LOG_LEVELS: &[&str] = &["ERROR", "WARNING", "INFO", "DEBUG"];
 
 #[derive(Parser)]
 #[command(
-    name = "deadline",
-    version,
+    name = "deadline,",
+    bin_name = "deadline",
+    version = concat!("version ", env!("CARGO_PKG_VERSION")),
     about = common::strip_markdown_for_terminal(
         "Interact with **AWS Deadline Cloud** to submit, monitor, and manage render jobs.\n\n\
          Learn more about [Deadline Cloud](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html)"

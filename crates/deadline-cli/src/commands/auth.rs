@@ -74,7 +74,7 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
             "status": auth_status.to_string(),
             "api_availability": api_available,
         });
-        println!("{}", serde_json::to_string(&json).unwrap());
+        println!("{}", crate::common::json_with_spaces(&json));
     } else {
         let w = 17;
         println!("{:>w$} {profile_name}", "Profile Name:");

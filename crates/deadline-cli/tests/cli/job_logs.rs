@@ -318,6 +318,45 @@ async fn job_logs_timestamp_format_relative() {
 // Timestamp format in JSON output uses the formatter too
 // ---------------------------------------------------------------------------
 
+// AUDIT-023: Negative timedelta (log event before session start) should
+// produce "-H:MM:SS", not "0:-MM:SS"
+#[tokio::test]
+async fn job_logs_timestamp_format_relative_negative_timedelta() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-001",
+        "startedAt": "2023-12-18T00:01:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-001",
+    })).await;
+
+    // Event is 30 seconds BEFORE session start
+    // session start = 2023-12-18T00:01:00Z = epoch 1702857660
+    // event = 1702857630 = 2023-12-18T00:00:30Z (30 seconds before start)
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857630000_i64, "message": "early event"}),
+    ], None).await;
+
+    let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--timestamp-format", "relative"])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "got: {stdout}");
+    // Should show negative timedelta like "-0:00:30", NOT "0:-00:30" or "0:00:-30"
+    assert!(stdout.contains("-0:00:30"), "expected negative timedelta -0:00:30, got: {stdout}");
+}
+
+// ---------------------------------------------------------------------------
+// Timestamp format in JSON output uses the formatter too
+// ---------------------------------------------------------------------------
+
 #[tokio::test]
 async fn job_logs_json_timestamp_format_utc() {
     let harness = TestHarness::new().await;

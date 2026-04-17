@@ -31,7 +31,7 @@ fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) ->
         .map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
         required,
     )?;
     Ok(config)
@@ -60,7 +60,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 .map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
-                &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false },
+                &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
                 &["farm_id"],
             )?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
