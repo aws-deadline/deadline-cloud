@@ -1,3 +1,18 @@
+## 0.56.0 (2026-04-17)
+
+
+### Features
+* add submission hooks support for job bundles (#986) (#986) ([`d4b9743`](https://github.com/aws-deadline/deadline-cloud/commit/d4b97439aeb1f98660090fedaf05613b5341cfb0))
+* add --name option to bundle gui-submit command (#1053) ([`efdffaf`](https://github.com/aws-deadline/deadline-cloud/commit/efdffaf3e47ef94a8fc6164d5ad577e01962f748))
+* add --name option to bundle gui-submit command ([`efdffaf`](https://github.com/aws-deadline/deadline-cloud/commit/efdffaf3e47ef94a8fc6164d5ad577e01962f748))
+
+### Bug Fixes
+* External tools corrupting known paths configuration (#1098) ([`ca2f8e0`](https://github.com/aws-deadline/deadline-cloud/commit/ca2f8e09c875d10efb9629ad794a199dfc53792c))
+* add overloads to read_yaml_or_json_object, simplify callers, fix docstring, add tests ([`efdffaf`](https://github.com/aws-deadline/deadline-cloud/commit/efdffaf3e47ef94a8fc6164d5ad577e01962f748))
+* replace @overload with type: ignore comments per review feedback ([`efdffaf`](https://github.com/aws-deadline/deadline-cloud/commit/efdffaf3e47ef94a8fc6164d5ad577e01962f748))
+* improve error message when download directory cannot be created (#1034) ([`ae9ed20`](https://github.com/aws-deadline/deadline-cloud/commit/ae9ed20c340118be3ebd85eecac1464e58021d80))
+
+
 ## 0.55.1 (2026-04-07)
 
 
