@@ -21,7 +21,7 @@ import click
 from botocore.exceptions import ClientError
 
 from ...api._session import _modified_logging_level
-from ....job_attachments.download import OutputDownloader
+from ....job_attachments.download import OutputDownloader, InputDownloader
 from ....job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
@@ -1069,6 +1069,139 @@ def job_download_output(step_id, task_id, output, include_path, include_path_std
         )
     except Exception as e:
         _handle_download_error(e, is_json_format, "output")
+
+
+def _download_job_input(
+    config: Optional[ConfigParser],
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    is_json_format: bool = False,
+    include_paths: Optional[list[str]] = None,
+):
+    """
+    Starts the download of job input files and handles the progress reporting callback.
+    """
+    _, job, queue, queue_role_session, job_attachments, root_path_format_mapping = (
+        _get_job_download_context(config, farm_id, queue_id, job_id)
+    )
+
+    click.echo(
+        _get_json_line(JSON_MSG_TYPE_TITLE, job["name"])
+        if is_json_format
+        else f"Downloading input from Job {job['name']!r}"
+    )
+
+    if not job_attachments:
+        msg = "No input attachments found for this job."
+        click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
+        return
+
+    from ....job_attachments.models import Attachments, ManifestProperties
+
+    attachments = Attachments(
+        manifests=[
+            ManifestProperties(
+                fileSystemLocationName=m.get("fileSystemLocationName", None),
+                rootPath=m["rootPath"],
+                rootPathFormat=PathFormat(m["rootPathFormat"]),
+                outputRelativeDirectories=m.get("outputRelativeDirectories", None),
+                inputManifestPath=m.get("inputManifestPath", None),
+            )
+            for m in job_attachments.get("manifests", [])
+        ],
+    )
+
+    downloader = InputDownloader(
+        s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+        attachments=attachments,
+        session=queue_role_session,
+        path_filters=include_paths,
+    )
+
+    output_paths_by_root = downloader.get_output_paths_by_root()
+    if not output_paths_by_root:
+        msg = (
+            "No files matched the provided path filters."
+            if include_paths
+            else "No input files found for this job."
+        )
+        click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
+        return
+
+    _run_download_ux(
+        downloader=downloader,
+        output_paths_by_root=output_paths_by_root,
+        root_path_format_mapping=root_path_format_mapping,
+        is_json_format=is_json_format,
+        config=config,
+        label="Inputs",
+        telemetry_metric="download_job_input",
+    )
+
+
+@cli_job.command(name="download-input")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to use.")
+@click.option(
+    "--include-path",
+    multiple=True,
+    help="Download only files matching this relative path or directory prefix (trailing /). Repeatable.",
+)
+@click.option(
+    "--include-path-stdin",
+    is_flag=True,
+    help="Read include paths from stdin, one per line.",
+)
+@click.option(
+    "--conflict-resolution",
+    type=click.Choice(
+        [
+            FileConflictResolution.SKIP.name,
+            FileConflictResolution.OVERWRITE.name,
+            FileConflictResolution.CREATE_COPY.name,
+        ],
+        case_sensitive=False,
+    ),
+    help="How to handle downloads if a file already exists:\n"
+    "CREATE_COPY (default): Download the file with a new name, appending '(1)' to the end\n"
+    "SKIP: Do not download the file\n"
+    "OVERWRITE: Download and replace the existing file",
+)
+@click.option("--yes", is_flag=True, help="Automatically accept any confirmation prompts")
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    help="Specifies the output format of the messages printed to stdout.\n"
+    "VERBOSE: Displays messages in a human-readable text format.\n"
+    "JSON: Displays messages in JSON line format.",
+)
+@_handle_error
+def job_download_input(output, include_path, include_path_stdin, **args):
+    """
+    Download the input attachments of a Deadline Cloud job.
+
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    """
+    filters, config, farm_id, queue_id, job_id = _parse_filters_and_config(
+        include_path, include_path_stdin, args
+    )
+    is_json_format = True if output == "json" else False
+
+    try:
+        _download_job_input(
+            config,
+            farm_id,
+            queue_id,
+            job_id,
+            is_json_format,
+            include_paths=filters,
+        )
+    except Exception as e:
+        _handle_download_error(e, is_json_format, "input")
 
 
 @cli_job.command(name="wait")

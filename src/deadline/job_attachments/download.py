@@ -1459,6 +1459,37 @@ class OutputDownloader:
         return progress_tracker.get_download_summary_statistics(downloaded_files_paths_by_root)
 
 
+class InputDownloader(OutputDownloader):
+    """
+    Handler for downloading input attachment files for a given job.
+    Inherits download mechanics from OutputDownloader, only differs in
+    how manifests are fetched (input manifests from job attachments
+    instead of output manifests from S3 listing).
+    """
+
+    def __init__(
+        self,
+        s3_settings: JobAttachmentS3Settings,
+        attachments: Attachments,
+        session: Optional[boto3.Session] = None,
+        path_filters: Optional[list[str]] = None,
+    ) -> None:
+        input_paths = get_job_input_paths_by_asset_root(
+            s3_settings=s3_settings,
+            attachments=attachments,
+            session=session,
+        )
+        super().__init__(
+            s3_settings=s3_settings,
+            farm_id="",
+            queue_id="",
+            job_id="",
+            session=session,
+            path_filters=path_filters,
+            _outputs_by_root=input_paths,
+        )
+
+
 def _get_manifests_by_session_action_id(
     s3_settings: JobAttachmentS3Settings,
     farm_id: str,
