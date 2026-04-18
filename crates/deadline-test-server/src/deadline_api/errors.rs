@@ -114,3 +114,22 @@ pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str) 
         .mount(server)
         .await;
 }
+
+/// Mount a ResourceNotFoundException for GetFleet.
+pub async fn mock_get_fleet_not_found(
+    server: &MockServer,
+    farm_id: &str,
+    fleet_id: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/fleets/{fleet_id}"
+        )))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_json(json!({
+                "__type": "ResourceNotFoundException"
+            })),
+        )
+        .mount(server)
+        .await;
+}

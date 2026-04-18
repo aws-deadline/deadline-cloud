@@ -764,3 +764,56 @@ async fn get_output_manifests_session_action_without_step_errors() {
         "expected missing step/task error: {msg}"
     );
 }
+
+// =====================================================================
+// AUDIT-035: Path traversal validation
+// =====================================================================
+
+// These tests verify that download_files_from_manifests rejects manifests
+// containing path traversal sequences (e.g. ../../etc/passwd).
+// Currently, no validation exists — these tests will fail until
+// ensure_paths_within_directory is added to the download path.
+
+#[tokio::test]
+async fn download_rejects_path_traversal_in_manifest() {
+    let server = MockServer::start().await;
+    let s3_client = build_s3_client(&server).await;
+    let download_dir = TempDir::new().unwrap();
+    let root = download_dir.path().to_str().unwrap().to_string();
+
+    // Manifest with a path traversal attack
+    let evil_manifest = make_manifest_no_files(&[
+        ("../../etc/passwd", "deadbeef", 100),
+    ]);
+
+    let manifests_by_root = HashMap::from([
+        (root.clone(), evil_manifest),
+    ]);
+
+    let result = download_files_from_manifests(
+        "test-bucket",
+        &manifests_by_root,
+        Some("root-prefix/Data"),
+        &s3_client,
+        "123456789012",
+        None,
+        FileConflictResolution::CreateCopy,
+    ).await;
+
+    assert!(result.is_err(), "path traversal should be rejected before download");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("outside") || msg.contains("not under") || msg.contains("traversal"),
+        "error should mention path is outside root: {msg}"
+    );
+}
+
+// download_accepts_valid_relative_paths_in_manifest — not included because
+// valid paths already work. Only the rejection of traversal paths is new behavior.
+
+// =====================================================================
+// AUDIT-036: Manifest merge order — tested at Level 2 via CLI since
+// the bug is in get_output_manifests_by_asset_root (S3 LastModified
+// sorting), not in merge_asset_manifests itself.
+// =====================================================================
+

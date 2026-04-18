@@ -36,35 +36,35 @@ pick and execute work items.
 | 0c | TelemetryClient (common) | ✅ Done | `api_job_lifecycle.md` | — |
 | 0d | Config read/write | ✅ Done | `config.md`, `cli.md` | — |
 | 0e | Test server infrastructure | ✅ Done | — | — |
-| 0f | CLI root & common utilities | ✅ Done | `cli.md` | 0d |
+| 0f | CLI root & common utilities | ⚠️ Gaps | `cli.md` | 0d |
 | 0g | Session creation & auth status | ✅ Done | `session.md`, `api_resource_management.md`, `cli.md` | 0d |
 | 0h | Queue/job credentials & diagnostics | ✅ Done | `api_resource_management.md`, `api_job_lifecycle.md`, `cli.md` | 0g |
 | 0i | GUI FFI spike | ✅ Done | — | 0g |
-| 1 | Session caching & user-agent | ✅ Done | `session.md` | 0g |
-| 2 | Login/logout | ✅ Done | `api_resource_management.md`, `cli.md` | 1 |
+| 1 | Session caching & user-agent | ⚠️ Gaps | `session.md` | 0g |
+| 2 | Login/logout | ⚠️ Gaps | `api_resource_management.md`, `cli.md` | 1 |
 | 3 | Queue user credentials | ✅ Done | `session.md` | 1 |
-| 4 | Queue parameters | ✅ Done | `api_resource_management.md`, `cli.md` | 1 |
-| 5 | Telemetry API integration | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 1 |
-| 6 | Job monitoring & logs | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 4 | Queue parameters | ⚠️ Gaps | `api_resource_management.md`, `cli.md` | 1 |
+| 5 | Telemetry API integration | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 6 | Job monitoring & logs | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 7 | Job bundle | ✅ Done | `job_bundle.md`, `cli.md` | 1, 4 |
-| 8 | Job attachments: core | ✅ Done | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
-| 9 | Job attachments: transfer | ✅ Done | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
+| 8 | Job attachments: core | ⚠️ Gaps | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
+| 9 | Job attachments: transfer | ⚠️ Gaps | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
 | 10 | Job attachments: orchestration | ✅ Done | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
-| 11 | Submit job bundle | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
+| 11 | Submit job bundle | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | `cli.md` | 6 |
-| 13 | Job download & sync-output | ✅ Done | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
-| 14 | Handle web URL | ✅ Done | `cli.md` | 13 |
-| 15 | Job requeue-tasks | ✅ Done | `cli.md` | 6 |
+| 13 | Job download & sync-output | ⚠️ Gaps | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
+| 14 | Handle web URL | ⚠️ Gaps | `cli.md` | 13 |
+| 15 | Job requeue-tasks | ⚠️ Gaps | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
-| 15e | Behavioral parity audit | In progress | — | 9 |
+| 15e | Behavioral parity audit | ⚠️ Gaps | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | — | 1-14 |
 | 17 | MCP server | ✅ Done | `cli.md`, `mcp.md` | 1-14 |
 
-**Status key:** ✅ Done · In progress · Not started · Deferred (blocked on CLI completion)
+**Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
@@ -87,10 +87,35 @@ after the core CLI commands are complete.
   Batch A (`job download-output` ✅), Batch B (path mapping),
   Batch C (`queue sync-output` + incremental downloads).
 
-**Deferred features within completed items:**
-- **#6**: `deadline job trace-schedule` is EXPERIMENTAL in Python and
-  deferred. `--session-action-id` for `job logs` is also deferred.
+**Audit gaps in completed items** (from `audit_reports/2026-04-17-behavioral-parity.md`):
+- **#0f**: AUDIT-054 — `--redirect-output` is Unix-only, needs Windows support
+- **#1**: AUDIT-043 — User-agent string uses `app_name()` instead of `user_agent_extra`
+- **#2**: AUDIT-042 — Windows stdin handling for login subprocess
+- **#4**: AUDIT-006 — `fleet get --queue-id` mode missing
+- **#5**: AUDIT-010 — No telemetry events during submission flow
+- **#6**: AUDIT-026 — `job logs --session-action-id` deferred.
+  AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python).
   `--timezone` deprecated flag not implemented.
+- **#8**: AUDIT-013 — Hash cache V5 schema incompatible with Python V4.
+  AUDIT-053 — Windows long path (UNC) handling missing.
+- **#9**: AUDIT-011 — Upload is sequential (no parallelism).
+  AUDIT-012 — Download is sequential (no parallelism).
+  AUDIT-014 — No multipart upload (5GB PutObject limit).
+  AUDIT-048 — `manifest upload` missing queue derivation.
+  AUDIT-049 — No multipart download for large files.
+- **#11**: AUDIT-009 — Upload confirmation prompt only for unknown paths.
+  AUDIT-031 — `--save-debug-snapshot` not implemented.
+  AUDIT-034 — `--submitter-info` not implemented.
+- **#13**: AUDIT-008 — `job download-output` no interactive root path editing.
+  AUDIT-047 — `manifest download` CLI is a stub.
+  AUDIT-055 — Download conflict resolution prompt missing.
+- **#14**: AUDIT-030 — `handle-web-url` macOS support missing
+- **#15**: AUDIT-040 — No adaptive retry strategy for requeue
+
+**Dropped findings (not bugs, accepted differences):**
+- AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
+- AUDIT-039 — `job wait` verbose to stderr (Rust approach is better)
+- AUDIT-046 — `require_setting` exit code (function is unused dead code)
 
 **Technical debt:**
 - **#15d**: Audit all Level 1 tests in library crates to identify which

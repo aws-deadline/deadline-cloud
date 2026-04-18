@@ -36,9 +36,13 @@ Fully implemented. No known gaps.
 The Rust crate mirrors the Python `deadline.client.config` module's public
 API. Key differences:
 - Python uses `configparser.ConfigParser`; Rust uses a custom `IniConfig`
-  (BTreeMap-based) because configparser lowercases keys and doesn't handle
-  spaces in section names correctly.
+  (IndexMap-based, preserving insertion order) matching ConfigParser's
+  behavior: case-insensitive keys, `=` and `:` delimiters, multiline
+  continuation via leading whitespace.
 - Python has an mtime-based cache (`_CachedConfig`); Rust has no cache —
   the CLI reads once and threads through.
 - Python's `get_setting` reads from disk on every call; Rust's convenience
   wrapper does the same, but the primary API takes `&IniConfig`.
+- Trailing blank line: Python's ConfigParser.write() adds a trailing
+  newline after each section; Rust does not. Cosmetic difference that
+  doesn't affect parsing.

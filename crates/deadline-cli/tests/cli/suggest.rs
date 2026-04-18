@@ -78,3 +78,10 @@ async fn farm_get_not_found_more_than_10_farms_shows_and_more() {
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-bad"]));
 }
+
+// ── AUDIT-020: suggest_resources dispatch ──────────────────────────
+// The Rust implementation dispatches based on available resource IDs
+// (greedy) rather than operation name (Python). This is a design
+// difference that doesn't produce wrong results for current commands
+// because each command only passes the IDs it uses. Deferred to a
+// future refactor when operation-name tracking is added to API errors.

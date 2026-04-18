@@ -3,7 +3,7 @@
 //! Tests exercise the full orchestration through the CLI binary:
 //! SearchJobs → GetJob → ListSessions → ListSessionActions → S3 download.
 
-use deadline_test_server::deadline_api::{errors, jobs, queues, queue_resources, sessions, s3, telemetry};
+use deadline_test_server::deadline_api::{errors, jobs, queues, queue_resources, sessions, s3, sts, telemetry};
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
@@ -251,6 +251,8 @@ async fn sync_output_first_run_no_jobs() {
         &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let _guard = timestamp_filters().bind_to_scope();
@@ -278,6 +280,8 @@ async fn sync_output_first_run_one_new_job_with_attachments() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // SearchJobs returns 1 active job with SUCCEEDED tasks
     let job = active_job("job-001", "Render Job", 3, 2);
@@ -311,6 +315,8 @@ async fn sync_output_job_without_attachments_skipped() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     let job = active_job("job-noatt", "No Attachments Job", 1, 0);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
@@ -340,6 +346,8 @@ async fn sync_output_ignore_storage_profiles() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let _guard = timestamp_filters().bind_to_scope();
@@ -366,6 +374,8 @@ async fn sync_output_subsequent_run_resumes_from_checkpoint() {
         &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     // Write existing checkpoint
@@ -401,6 +411,8 @@ async fn sync_output_force_bootstrap_overwrites_checkpoint() {
         &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     // Write existing checkpoint
@@ -435,6 +447,8 @@ async fn sync_output_dry_run_does_not_save_checkpoint() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     let job = active_job("job-dry", "Dry Run Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
@@ -474,6 +488,8 @@ async fn sync_output_conflict_resolution_skip() {
         &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let _guard = timestamp_filters().bind_to_scope();
@@ -497,6 +513,8 @@ async fn sync_output_json_output() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let _guard = timestamp_filters().bind_to_scope();
@@ -521,6 +539,8 @@ async fn sync_output_job_with_session_actions_no_manifests() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     let job = active_job("job-sa", "Session Action Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
@@ -575,6 +595,8 @@ async fn sync_output_search_jobs_fails_returns_error() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Mock SearchJobs with access denied error
     errors::mock_search_jobs_access_denied(&harness.server, "farm-abc").await;
@@ -600,6 +622,8 @@ async fn sync_output_multi_run_job_unchanged_on_second_run() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Job with 1 succeeded task
     let job = active_job("job-multi", "Multi Run Job", 1, 1);
@@ -646,6 +670,8 @@ async fn sync_output_multi_run_job_existing_task_count_changed() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Run 1: job with 1/3 succeeded
     let job1 = active_job("job-ex", "Existing Job", 1, 2);
@@ -663,6 +689,8 @@ async fn sync_output_multi_run_job_existing_task_count_changed() {
     harness.server.reset().await;
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     let job2 = active_job("job-ex", "Existing Job", 2, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job2], 1).await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-ex", &[]).await;
@@ -692,6 +720,8 @@ async fn sync_output_multi_run_job_finished_tracking_succeeded() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Run 1: job with all tasks succeeded
     let mut job1 = active_job("job-fin", "Finished Job", 2, 0);
@@ -711,6 +741,8 @@ async fn sync_output_multi_run_job_finished_tracking_succeeded() {
     harness.server.reset().await;
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let output = harness.cli(&[
@@ -738,6 +770,8 @@ async fn sync_output_multi_run_job_canceled() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Run 1: job with 1/2 succeeded (still running)
     let job1 = active_job("job-can", "Canceled Job", 1, 1);
@@ -755,6 +789,8 @@ async fn sync_output_multi_run_job_canceled() {
     harness.server.reset().await;
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     let output = harness.cli(&[
@@ -783,6 +819,8 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Run 1: job without attachments
     let job1 = active_job("job-noatt2", "No Att Job", 1, 0);
@@ -799,6 +837,8 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
     harness.server.reset().await;
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
     // Note: NOT mocking GetJob — if the code calls it, the test will fail
 
@@ -825,6 +865,8 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
 
     // Local storage profile (Linux)
     queue_resources::mock_get_storage_profile_for_queue(
@@ -865,4 +907,117 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
         "should print mapping header: {stderr}");
     assert!(stderr.contains("- from: /Volumes/shared"), "should print source path: {stderr}");
     assert!(stderr.contains("to:   /mnt/shared"), "should print dest path: {stderr}");
+}
+
+// =========================================================================
+// AUDIT-001: sync-output actually downloads files to disk
+// =========================================================================
+
+#[tokio::test]
+async fn sync_output_downloads_files_to_disk() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+    let download_dir = TempDir::new().unwrap();
+    let download_root = download_dir.path().to_str().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Job with 1 succeeded task
+    let job = active_job("job-dl", "Download Job", 1, 0);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job.clone()], 1).await;
+
+    // GetJob returns attachments with a root path pointing to our temp dir
+    let mut job_detail = job_detail_with_attachments("job-dl", None);
+    job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+
+    // Session with one succeeded taskRun action
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-dl", &[
+        json!({
+            "sessionId": "session-dl1",
+            "fleetId": "fleet-001",
+            "workerId": "worker-001",
+            "startedAt": "2024-06-15T10:00:00Z",
+            "lifecycleStatus": "ENDED"
+        })
+    ]).await;
+
+    sessions::mock_list_session_actions(
+        &harness.server, "farm-abc", "queue-aaa", "job-dl", "session-dl1",
+        &[json!({
+            "sessionActionId": "sessionaction-dl1-0",
+            "status": "SUCCEEDED",
+            "startedAt": "2024-06-15T10:01:00Z",
+            "endedAt": "2024-06-15T10:02:00Z",
+            "definition": {
+                "taskRun": {
+                    "taskId": "task-001",
+                    "stepId": "step-001"
+                }
+            }
+        })]
+    ).await;
+
+    // Mock S3 ListObjectsV2 for output manifests — realistic key with colons
+    let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-dl/step-001/task-001/2024-06-15T10:02:00Z_sessionaction-dl1-0/abcdef.manifest";
+    s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
+
+    // Build a manifest JSON with one file
+    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let manifest_json = serde_json::to_string(&json!({
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [{
+            "path": "output/render.exr",
+            "hash": file_hash,
+            "size": 5,
+            "mtime": 1700000000000000_i64
+        }],
+        "totalSize": 5
+    })).unwrap();
+
+    // Mock S3 GetObject for the manifest (with asset-root metadata).
+    // The SDK URL-encodes colons in the key when building the HTTP path,
+    // so the mock path must use %3A to match the actual wire request.
+    let manifest_key_url_encoded = manifest_key.replace(':', "%3A");
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("my-bucket/{manifest_key_url_encoded}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", download_root)],
+    ).await;
+
+    // Mock S3 GetObject for the actual file content (CAS path)
+    s3::mock_s3_get_object(
+        &harness.server,
+        &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
+        b"hello",
+    ).await;
+
+    let _guard = timestamp_filters().bind_to_scope();
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "should succeed: {stderr}");
+
+    // The key assertion: files were actually downloaded
+    assert!(!stderr.contains("Downloaded files: 0"),
+        "should have downloaded files, not 0: {stderr}");
+    assert!(stderr.contains("Downloaded files: 1") || stderr.contains("downloaded_files\": 1"),
+        "should show 1 downloaded file: {stderr}");
+
+    // Verify the file exists on disk
+    let downloaded_file = download_dir.path().join("output/render.exr");
+    assert!(downloaded_file.exists(),
+        "file should be downloaded to {}", downloaded_file.display());
+    assert_eq!(fs::read_to_string(&downloaded_file).unwrap(), "hello",
+        "file content should match");
 }

@@ -24,6 +24,49 @@ use crate::progress_tracker::{
 pub type CollisionState = Arc<Mutex<HashMap<String, i32>>>;
 
 // ---------------------------------------------------------------------------
+// Path traversal validation (AUDIT-035)
+// ---------------------------------------------------------------------------
+
+/// Validate that all manifest paths resolve within the given root directory.
+/// Rejects path traversal attacks (e.g. `../../etc/passwd`).
+fn ensure_paths_within_directory(
+    root_path: &str,
+    paths: &[ManifestPath],
+) -> Result<(), JobAttachmentsError> {
+    let root = Path::new(root_path);
+    if !root.is_absolute() {
+        return Err(JobAttachmentsError::PathOutsideDirectory(
+            format!("The provided root path is not an absolute path: {root_path}"),
+        ));
+    }
+    let normalized_root = normalize_path(root);
+
+    for p in paths {
+        let joined = root.join(&p.path);
+        let normalized = normalize_path(&joined);
+        if !normalized.starts_with(&normalized_root) {
+            return Err(JobAttachmentsError::PathOutsideDirectory(
+                format!("The provided path is not under the root directory: {}", p.path),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Lexically normalize a path (resolve `.` and `..` without filesystem access).
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::CurDir => {}
+            other => components.push(other),
+        }
+    }
+    components.iter().collect()
+}
+
+// ---------------------------------------------------------------------------
 // Helper: S3 error handling (matches upload patterns exactly)
 // ---------------------------------------------------------------------------
 
@@ -417,6 +460,9 @@ pub async fn download_files_from_manifests(
     let mut downloaded_files_by_root: HashMap<String, Vec<String>> = HashMap::new();
 
     for (local_root, manifest) in manifests_by_root {
+        // AUDIT-035: Validate paths are within the download directory
+        ensure_paths_within_directory(local_root, &manifest.paths)?;
+
         let mut downloaded = Vec::new();
 
         for file in &manifest.paths {
@@ -575,6 +621,16 @@ pub async fn get_output_manifests_by_asset_root(
 // ---------------------------------------------------------------------------
 // Internal: S3 listing and manifest download helpers
 // ---------------------------------------------------------------------------
+
+/// List all S3 object keys under a prefix (paginated). Public wrapper.
+pub async fn list_output_manifest_keys(
+    s3_client: &S3Client,
+    s3_bucket: &str,
+    prefix: &str,
+    account_id: &str,
+) -> Result<Vec<String>, JobAttachmentsError> {
+    list_manifest_keys_from_s3(s3_client, s3_bucket, prefix, account_id).await
+}
 
 /// List all S3 object keys under a prefix (paginated).
 async fn list_manifest_keys_from_s3(

@@ -973,6 +973,7 @@ dependencies = [
 name = "deadline-config"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "serial_test",
  "tempfile",
  "test-case",

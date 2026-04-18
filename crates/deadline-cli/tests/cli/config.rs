@@ -255,3 +255,53 @@ async fn config_clear_no_dot_setting_exits_with_error() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&["config", "clear", "bad_name"]));
 }
+
+// ── AUDIT-019: config set preserves existing key ordering ───────────
+
+#[tokio::test]
+async fn config_set_preserves_existing_key_order() {
+    // Write a config with keys in a specific non-alphabetical order,
+    // then set one value. The file should preserve the original order.
+    let harness = TestHarness::with_config(
+        "[profile-(default) defaults]\nqueue_id = queue-first\nfarm_id = farm-second\njob_id = job-third\n",
+    ).await;
+
+    // Update farm_id — should stay in its original position (second)
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-updated"])
+        .assert()
+        .success();
+
+    // Verify the value was updated
+    let output = harness.cli(&["config", "get", "defaults.farm_id"])
+        .output()
+        .expect("failed to run");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "farm-updated"
+    );
+
+    // Read the config file directly to check key ordering
+    let content = std::fs::read_to_string(&harness.config_path).unwrap();
+    let queue_pos = content.find("queue_id").expect("queue_id not found");
+    let farm_pos = content.find("farm_id").expect("farm_id not found");
+    let job_pos = content.find("job_id").expect("job_id not found");
+    assert!(queue_pos < farm_pos, "queue_id should come before farm_id");
+    assert!(farm_pos < job_pos, "farm_id should come before job_id");
+}
+
+// ── AUDIT-018: config file with colon delimiter is read correctly ────
+
+#[tokio::test]
+async fn config_get_reads_colon_delimited_values() {
+    let harness = TestHarness::with_config(
+        "[profile-(default) defaults]\nfarm_id : farm-from-colon\n",
+    ).await;
+
+    let output = harness.cli(&["config", "get", "defaults.farm_id"])
+        .output()
+        .expect("failed to run");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "farm-from-colon"
+    );
+}

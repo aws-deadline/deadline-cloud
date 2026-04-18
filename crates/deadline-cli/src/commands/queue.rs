@@ -544,7 +544,7 @@ async fn incremental_output_download(
     config: &deadline_config::ini::IniConfig,
     mut checkpoint: IncrementalDownloadState,
     local_storage_profile_id: &Option<String>,
-    _conflict: FileConflictResolution,
+    conflict: FileConflictResolution,
     dry_run: bool,
 ) -> Result<IncrementalDownloadState, CliError> {
     let now = Utc::now();
@@ -911,16 +911,133 @@ async fn incremental_output_download(
         }
     }
 
-    if dry_run {
-        eprintln!("Skipping downloads due to DRY RUN");
-        eprintln!();
-    }
+    // Step 4: Download output manifests and files
+    let attachment_settings = &queue["jobAttachmentSettings"];
+    let bucket = attachment_settings["s3BucketName"].as_str().unwrap_or("");
+    let prefix = attachment_settings["rootPrefix"].as_str().unwrap_or("");
 
-    eprintln!("Summary of paths to download:");
-    if all_session_actions.is_empty() {
-        eprintln!("  (no files to download)");
+    let mut downloaded_manifests: Vec<(chrono::DateTime<Utc>, deadline_job_attachments::asset_manifests::AssetManifest)> = Vec::new();
+    let mut downloaded_files_count: usize = 0;
+    let mut downloaded_bytes: u64 = 0;
+
+    if !jobs_to_process.is_empty() {
+        let sdk_config = deadline_api::session::get_queue_scoped_config(
+            farm_id, queue_id, Some(config),
+        ).await.map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
+
+        let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(config));
+        let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to get account ID:\n{e}")))?;
+
+        // Download output manifests for each job
+        for job_id in &jobs_to_process {
+            let dc_job = match download_candidates.get(job_id) {
+                Some(j) => j,
+                None => continue,
+            };
+
+            let manifest_prefix = format!("{}/Manifests/{}/{}/{}/", prefix, farm_id, queue_id, job_id);
+            let manifest_keys = deadline_job_attachments::download::list_output_manifest_keys(
+                &s3_client, bucket, &manifest_prefix, &account_id,
+            ).await.unwrap_or_default();
+
+            for key in &manifest_keys {
+                match deadline_job_attachments::download::download_manifest_from_s3(
+                    &s3_client, bucket, key, &account_id,
+                ).await {
+                    Ok((Some(asset_root), mut manifest)) => {
+                    let root_path_format = dc_job.get("attachments")
+                        .and_then(|a| a["manifests"].as_array())
+                        .and_then(|m| m.first())
+                        .and_then(|m| m["rootPathFormat"].as_str());
+
+                    let mut unmapped = Vec::new();
+                    let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
+                        &asset_root, &mut manifest, None, root_path_format, &mut unmapped,
+                    );
+                    downloaded_manifests.push((Utc::now(), manifest));
+                    }
+                    Ok((None, _)) => {
+                        log::warn!("Manifest {key} has no asset root metadata, skipping");
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to download manifest {key}: {e}");
+                    }
+                }
+            }
+        }
+
+        // Merge and download
+        let manifest_paths = deadline_job_attachments::incremental_download::merge_absolute_path_manifest_list(
+            &mut downloaded_manifests,
+        );
+
+        let total_bytes: i64 = manifest_paths.iter().map(|p| p.size).sum();
+        let total_files = manifest_paths.len();
+
+        eprintln!("Summary of paths to download:");
+        if manifest_paths.is_empty() {
+            eprintln!("  (no files to download)");
+        } else {
+            eprintln!("  {} files, {}",
+                total_files,
+                deadline_job_attachments::progress_tracker::human_readable_file_size(total_bytes as u64));
+        }
+        eprintln!();
+
+        if !dry_run && !manifest_paths.is_empty() {
+            eprintln!("Downloading {} files from S3...", total_files);
+
+            let s3_settings = deadline_job_attachments::models::JobAttachmentS3Settings {
+                s3_bucket_name: bucket.to_string(),
+                root_prefix: prefix.to_string(),
+            };
+            let cas_prefix = s3_settings.full_cas_prefix()
+                .map_err(|e| CliError::Operation(format!("Failed to compute CAS prefix: {e}")))?;
+
+            // Group manifest paths by parent directory for download
+            let mut manifests_by_root: std::collections::HashMap<String, deadline_job_attachments::asset_manifests::AssetManifest> =
+                std::collections::HashMap::new();
+            for mp in &manifest_paths {
+                let dir = std::path::Path::new(&mp.path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/".to_string());
+                let root = if dir.is_empty() { "/".to_string() } else { dir };
+                let entry = manifests_by_root.entry(root).or_insert_with(|| {
+                    deadline_job_attachments::asset_manifests::AssetManifest::new(
+                        deadline_job_attachments::asset_manifests::HashAlgorithm::Xxh128,
+                        deadline_job_attachments::asset_manifests::ManifestVersion::V2023_03_03,
+                        0, vec![],
+                    ).unwrap()
+                });
+                let filename = std::path::Path::new(&mp.path)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| mp.path.clone());
+                entry.paths.push(deadline_job_attachments::asset_manifests::ManifestPath {
+                    path: filename, hash: mp.hash.clone(), size: mp.size, mtime: mp.mtime,
+                });
+                entry.total_size += mp.size;
+            }
+
+            match deadline_job_attachments::download::download_files_from_manifests(
+                bucket, &manifests_by_root, Some(&cas_prefix),
+                &s3_client, &account_id, None, conflict,
+            ).await {
+                Ok(stats) => {
+                    downloaded_files_count = stats.downloaded_files.len();
+                    downloaded_bytes = stats.stats.total_bytes;
+                }
+                Err(e) => eprintln!("Warning: download error: {e}"),
+            }
+        } else if dry_run {
+            eprintln!("Skipping downloads due to DRY RUN");
+        }
     } else {
-        eprintln!("  {} session actions to process", all_session_actions.len());
+        eprintln!("Summary of paths to download:");
+        eprintln!("  (no files to download)");
     }
     eprintln!();
 
@@ -930,8 +1047,9 @@ async fn incremental_output_download(
         eprintln!("Summary of incremental output download:");
     }
     eprintln!("  Downloaded session actions: {}", all_session_actions.len());
-    eprintln!("  Downloaded files: 0");
-    eprintln!("  Downloaded bytes: 0 B");
+    eprintln!("  Downloaded files: {}", downloaded_files_count);
+    eprintln!("  Downloaded bytes: {}",
+        deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes));
     eprintln!("  Jobs with downloads:");
     eprintln!("    completed: {}", completed_job_ids.len());
     eprintln!("    added: {}", new_job_ids.len());
@@ -941,11 +1059,6 @@ async fn incremental_output_download(
     eprintln!("    missing storage profile: {}", missing_storage_profile_ids.len());
     eprintln!("    unchanged: {}", unchanged_job_ids.len());
     eprintln!("    inactive: {}", finished_tracking_ids.len());
-
-    if dry_run {
-        eprintln!("Skipping downloads due to DRY RUN");
-        eprintln!();
-    }
 
     // Update checkpoint
     let mut updated_jobs: Vec<deadline_job_attachments::incremental_download::IncrementalDownloadJob> = Vec::new();

@@ -5,7 +5,7 @@ use std::time::Instant;
 /// Convert a byte count to a human-readable string (e.g., "1.5 GB").
 ///
 /// Uses SI prefixes (1 KB = 1000 bytes).
-fn human_readable_file_size(size_in_bytes: u64) -> String {
+pub fn human_readable_file_size(size_in_bytes: u64) -> String {
     let postfixes = ["B", "KB", "MB", "GB", "TB", "PB"];
     let mut converted: f64 = size_in_bytes as f64;
     let mut rounded: f64;

@@ -75,3 +75,43 @@ pub async fn mock_s3_get_object(server: &MockServer, key: &str, body: &[u8]) {
         .mount(server)
         .await;
 }
+
+/// Mount an S3 GetObject response with custom metadata headers.
+pub async fn mock_s3_get_object_with_metadata(
+    server: &MockServer,
+    key: &str,
+    body: &[u8],
+    metadata: &[(&str, &str)],
+) {
+    use wiremock::matchers::path;
+    let mut response = ResponseTemplate::new(200)
+        .set_body_bytes(body.to_vec())
+        .insert_header("last-modified", "Thu, 15 Jun 2024 10:30:00 GMT");
+    for (k, v) in metadata {
+        response = response.insert_header(format!("x-amz-meta-{k}"), *v);
+    }
+    Mock::given(method("GET"))
+        .and(path(format!("/{key}")))
+        .respond_with(response)
+        .mount(server)
+        .await;
+}
+
+/// Mount a catch-all S3 GetObject response for any GET request.
+/// Useful when the exact key path is hard to predict.
+pub async fn mock_s3_get_object_catchall(
+    server: &MockServer,
+    body: &[u8],
+    metadata: &[(&str, &str)],
+) {
+    let mut response = ResponseTemplate::new(200)
+        .set_body_bytes(body.to_vec())
+        .insert_header("last-modified", "Thu, 15 Jun 2024 10:30:00 GMT");
+    for (k, v) in metadata {
+        response = response.insert_header(format!("x-amz-meta-{k}"), *v);
+    }
+    Mock::given(method("GET"))
+        .respond_with(response)
+        .mount(server)
+        .await;
+}
