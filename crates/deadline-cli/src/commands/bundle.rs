@@ -205,7 +205,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 Err(e) => {
                     let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
                     let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), Some(&queue), None, Some(&config)).await;
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "CreateJob", Some(&farm), Some(&queue), None, Some(&config)).await;
                     return Err(CliError::Operation(format!("{e}{suggestion}")));
                 }
             };

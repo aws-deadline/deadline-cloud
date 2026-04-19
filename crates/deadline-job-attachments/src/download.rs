@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use aws_sdk_s3::Client as S3Client;
+use chrono::{DateTime, Utc};
 use crate::errors::JobAttachmentsError;
 
 use crate::asset_manifests::{decode_manifest, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
@@ -586,10 +587,10 @@ pub async fn get_output_manifests_by_asset_root(
     let selected_keys = select_latest_manifests_per_task(&manifest_keys);
 
     // Download each manifest and group by asset root with timestamps
-    let mut by_root: HashMap<String, Vec<(String, AssetManifest)>> = HashMap::new();
+    let mut by_root: HashMap<String, Vec<(DateTime<Utc>, AssetManifest)>> = HashMap::new();
 
     for key in &selected_keys {
-        let (asset_root, manifest) = download_manifest_from_s3(
+        let (asset_root, last_modified, manifest) = download_manifest_from_s3(
             s3_client,
             &s3_settings.s3_bucket_name,
             key,
@@ -603,12 +604,14 @@ pub async fn get_output_manifests_by_asset_root(
             ))
         })?;
 
-        by_root.entry(root).or_default().push((key.clone(), manifest));
+        by_root.entry(root).or_default().push((last_modified, manifest));
     }
 
-    // Merge each asset root's manifests (they're already in S3 listing order)
+    // Sort each asset root's manifests by LastModified (oldest first, newer wins)
+    // then merge them
     let mut outputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
-    for (root, manifest_list) in by_root {
+    for (root, mut manifest_list) in by_root {
+        manifest_list.sort_by_key(|(ts, _)| *ts);
         let manifests: Vec<AssetManifest> = manifest_list.into_iter().map(|(_, m)| m).collect();
         if let Some(merged) = merge_asset_manifests(&manifests)? {
             outputs.insert(root, vec![merged]);
@@ -768,7 +771,7 @@ pub async fn download_manifest_from_s3(
     s3_bucket: &str,
     manifest_key: &str,
     account_id: &str,
-) -> Result<(Option<String>, AssetManifest), JobAttachmentsError> {
+) -> Result<(Option<String>, DateTime<Utc>, AssetManifest), JobAttachmentsError> {
     let result = s3_client
         .get_object()
         .bucket(s3_bucket)
@@ -792,6 +795,16 @@ pub async fn download_manifest_from_s3(
             }
         })?;
 
+    // Extract LastModified from S3 response
+    let last_modified = result
+        .last_modified()
+        .and_then(|dt| {
+            let epoch_secs = dt.secs();
+            let nanos = dt.subsec_nanos();
+            chrono::DateTime::from_timestamp(epoch_secs, nanos as u32)
+        })
+        .unwrap_or_else(Utc::now);
+
     // Extract asset root from metadata
     let metadata: HashMap<String, String> = result
         .metadata()
@@ -811,7 +824,7 @@ pub async fn download_manifest_from_s3(
     })?;
     let manifest = decode_manifest(&contents)?;
 
-    Ok((asset_root, manifest))
+    Ok((asset_root, last_modified, manifest))
 }
 
 /// Get manifests for a specific session action ID by searching S3 paths.
@@ -868,7 +881,7 @@ async fn get_manifests_by_session_action_id(
 
     // Download all found manifests
     for key in &manifest_keys {
-        let (asset_root, manifest) = download_manifest_from_s3(
+        let (asset_root, _last_modified, manifest) = download_manifest_from_s3(
             s3_client,
             &s3_settings.s3_bucket_name,
             key,

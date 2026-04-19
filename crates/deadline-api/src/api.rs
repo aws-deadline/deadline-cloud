@@ -273,6 +273,86 @@ pub async fn search_jobs_with_filters(
     }).await
 }
 
+/// Retrieve all jobs matching a filter expression, paginating via `createdAt`
+/// thresholding. Ports Python's `_list_jobs_by_filter_expression` algorithm.
+///
+/// The SearchJobs API returns at most 100 results per call. This function
+/// pages through all matching jobs by sorting ascending on `CREATED_AT` and
+/// using the last page's max `createdAt` as a `GREATER_THAN_EQUAL_TO` filter
+/// for the next page. Jobs are deduped by `jobId`.
+pub async fn list_jobs_by_filter_expression(
+    farm_id: &str,
+    queue_id: &str,
+    filter_expression: &Value,
+    config: Option<&IniConfig>,
+) -> Result<Vec<Value>, DeadlineError> {
+    let sort = serde_json::json!([{
+        "fieldSort": {"name": "CREATED_AT", "sortOrder": "ASCENDING"}
+    }]);
+
+    let provided_filter = serde_json::json!({
+        "groupFilter": filter_expression,
+    });
+
+    // First call: no timestamp threshold
+    let mut query_filters = serde_json::json!({
+        "filters": [provided_filter.clone()],
+        "operator": "AND"
+    });
+
+    let mut result_jobs: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+
+    loop {
+        let resp = search_jobs_with_filters(
+            farm_id, &[queue_id], 0, 100,
+            Some(&query_filters), Some(&sort), config, None,
+        ).await?;
+
+        let jobs = resp["jobs"].as_array().cloned().unwrap_or_default();
+        let total_results = resp["totalResults"].as_u64().unwrap_or(0) as usize;
+
+        for job in &jobs {
+            if let Some(id) = job["jobId"].as_str() {
+                result_jobs.insert(id.to_string(), job.clone());
+            }
+        }
+
+        if jobs.len() >= total_results {
+            break;
+        }
+
+        // Edge case: all jobs on this page have identical createdAt
+        let first_ts = jobs.first().and_then(|j| j["createdAt"].as_str());
+        let last_ts = jobs.last().and_then(|j| j["createdAt"].as_str());
+        if first_ts == last_ts {
+            return Err(DeadlineError::OperationError(
+                "Failure fetching jobs based on the createdAt field as more than 100 jobs \
+                 have the exact same timestamp value.".into()
+            ));
+        }
+
+        // Threshold: use the last job's createdAt for the next page.
+        // ResponseBodyCapture converts datetimes to display format (space separator),
+        // but the SearchJobs API needs RFC 3339 (T separator).
+        let threshold = last_ts.unwrap_or_default().replacen(' ', "T", 1);
+        query_filters = serde_json::json!({
+            "filters": [
+                provided_filter.clone(),
+                {
+                    "dateTimeFilter": {
+                        "name": "CREATED_AT",
+                        "dateTime": threshold,
+                        "operator": "GREATER_THAN_EQUAL_TO"
+                    }
+                }
+            ],
+            "operator": "AND"
+        });
+    }
+
+    Ok(result_jobs.into_values().collect())
+}
+
 /// Build SDK SearchGroupedFilterExpressions from JSON.
 fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
     use aws_sdk_deadline::types::*;
@@ -355,6 +435,10 @@ fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::Sea
                     .build()
                     .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
             ));
+        } else if let Some(gf) = f.get("groupFilter") {
+            // Nested group filter — recurse into build_filter_expressions
+            let nested = build_filter_expressions(gf)?;
+            sdk_filters.push(SearchFilterExpression::GroupFilter(nested));
         }
     }
 

@@ -1021,3 +1021,87 @@ async fn sync_output_downloads_files_to_disk() {
     assert_eq!(fs::read_to_string(&downloaded_file).unwrap(), "hello",
         "file content should match");
 }
+
+// =====================================================================
+// AUDIT-007: Job discovery must paginate beyond 100 jobs
+// =====================================================================
+
+/// AUDIT-007: When SearchJobs returns totalResults > len(jobs), the CLI
+/// must paginate using createdAt thresholding to discover all jobs.
+/// The current code calls search_jobs_with_filters once with page_size=100
+/// and silently drops any jobs beyond the first page.
+#[tokio::test]
+async fn sync_output_paginates_beyond_100_jobs() {
+    let harness = TestHarness::new().await;
+    setup_config_with_storage_profile(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    queue_resources::mock_get_storage_profile_for_queue(
+        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
+    ).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    // Build 3 jobs: 2 on the "first page" and 1 that only appears
+    // on the "second page" (after createdAt thresholding).
+    let job_a = json!({
+        "jobId": "job-aaa", "name": "Job A",
+        "taskRunStatus": "READY",
+        "taskRunStatusCounts": {"SUCCEEDED": 1, "READY": 1},
+        "createdAt": "2024-06-15T10:00:00Z", "createdBy": "user"
+    });
+    let job_b = json!({
+        "jobId": "job-bbb", "name": "Job B",
+        "taskRunStatus": "READY",
+        "taskRunStatusCounts": {"SUCCEEDED": 1, "READY": 0},
+        "createdAt": "2024-06-15T11:00:00Z", "createdBy": "user"
+    });
+    let job_c = json!({
+        "jobId": "job-ccc", "name": "Job C",
+        "taskRunStatus": "READY",
+        "taskRunStatusCounts": {"SUCCEEDED": 1, "READY": 2},
+        "createdAt": "2024-06-15T12:00:00Z", "createdBy": "user"
+    });
+
+    // Active jobs query: page 1 returns [A, B] with totalResults=3,
+    // page 2 (with CREATED_AT >= B.createdAt) returns [B, C].
+    // The pagination algorithm deduplicates by jobId.
+    // "ANY_EQUALS" marker differentiates active-jobs from ended-jobs queries.
+    jobs::mock_search_jobs_paginated(
+        &harness.server, "farm-abc",
+        "ANY_EQUALS",
+        &[job_a, job_b.clone()], 3,
+        &[job_b, job_c],
+    ).await;
+
+    // Ended jobs query returns empty (separate from active-jobs pagination)
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
+
+    // GetJob for each new job (to get attachments)
+    for job_id in &["job-aaa", "job-bbb", "job-ccc"] {
+        jobs::mock_get_job(
+            &harness.server, "farm-abc", "queue-aaa",
+            job_detail_no_attachments(job_id),
+        ).await;
+    }
+
+    let _guard = timestamp_filters().bind_to_scope();
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--dry-run",
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // The key assertion: all 3 jobs should be discovered (not just 2).
+    // Each job has no attachments, so they'll show as "not using job attachments".
+    assert!(
+        stderr.contains("Job A") && stderr.contains("Job B") && stderr.contains("Job C"),
+        "All 3 jobs should be discovered via pagination.\nstderr:\n{stderr}\nstdout:\n{stdout}"
+    );
+}

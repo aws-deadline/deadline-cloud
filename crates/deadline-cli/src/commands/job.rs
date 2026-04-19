@@ -191,7 +191,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
                         "Failed to get Jobs from Deadline:\n{e}{suggestion}"
@@ -506,7 +506,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 Ok(j) => j,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "GetJob", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
                         "Failed to get Job from Deadline:\n{e}{suggestion}"
@@ -599,7 +599,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 Ok(j) => j,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "GetJob", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
                         "Failed to get Job from Deadline:\n{e}{suggestion}"
@@ -733,7 +733,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
                         "Failed to search Jobs from Deadline:\n{e}{suggestion}"
@@ -876,7 +876,7 @@ async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniCo
         }
         Err(e) => {
             let suggestion = suggest_resources_on_client_error(
-                &e.to_string(), Some(farm), Some(queue), None, Some(config),
+                &e.to_string(), "GetJob", Some(farm), Some(queue), None, Some(config),
             ).await;
             Err(CliError::Operation(format!(
                 "Failed to get Job from Deadline:\n{e}{suggestion}"

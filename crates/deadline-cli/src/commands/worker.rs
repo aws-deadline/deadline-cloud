@@ -49,7 +49,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             let resp = match api::search_workers(&farm, &[&fleet_id], item_offset, page_size, Some(&config), None).await {
                 Ok(r) => r,
                 Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "SearchWorkers", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
                     return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{e}{suggestion}")));
                 }
             };
@@ -71,7 +71,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             let resp = match api::get_worker(&farm, &fleet_id, &worker_id, Some(&config), None).await {
                 Ok(r) => r,
                 Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "GetWorker", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
                     return Err(CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}{suggestion}")));
                 }
             };

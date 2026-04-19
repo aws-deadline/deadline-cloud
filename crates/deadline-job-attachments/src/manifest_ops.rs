@@ -506,7 +506,7 @@ pub async fn manifest_download(
                 }
 
                 let manifest_key = format!("{s3_prefix}/{input_path}");
-                let (_, manifest) = download_manifest_from_s3(
+                let (_, _last_modified, manifest) = download_manifest_from_s3(
                     s3_client,
                     &s3_settings.s3_bucket_name,
                     &manifest_key,

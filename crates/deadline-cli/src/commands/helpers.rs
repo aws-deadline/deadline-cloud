@@ -43,9 +43,12 @@ pub fn require_setting(
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.
+/// Dispatches suggestion chains based on which API operation failed,
+/// matching Python's `_OPERATION_GROUPS` pattern.
 /// Returns a suggestion string to append to the error message, or empty string.
 pub async fn suggest_resources_on_client_error(
     error_msg: &str,
+    operation_name: &str,
     farm_id: Option<&str>,
     queue_id: Option<&str>,
     fleet_id: Option<&str>,
@@ -59,46 +62,70 @@ pub async fn suggest_resources_on_client_error(
         return String::new();
     }
 
-    // Build a chain of fetchers based on what resource IDs we have.
-    // Try the most specific first, fall back to broader.
     let mut suggestions: Vec<String> = Vec::new();
 
-    // Try listing resources in order of specificity
-    if let Some(fid) = farm_id {
-        if let Some(qid) = queue_id {
-            // We have farm + queue — try listing jobs, then queues, then farms
-            if try_list_jobs(fid, qid, config, &mut suggestions).await {
-                return suggestions.join("\n");
+    // Dispatch based on operation name (matching Python's _OPERATION_GROUPS)
+    let found = match operation_name {
+        "GetQueue" | "ListQueues" | "ListQueueEnvironments" => {
+            if let Some(fid) = farm_id {
+                try_list_queues(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else {
+                try_list_farms(config, &mut suggestions).await
             }
         }
-        if let Some(flid) = fleet_id {
-            // We have farm + fleet — try listing workers, then fleets, then farms
-            if try_list_workers(fid, flid, config, &mut suggestions).await {
-                return suggestions.join("\n");
+        "GetFarm" | "ListFarms" => {
+            try_list_farms(config, &mut suggestions).await
+        }
+        "GetFleet" | "ListFleets" => {
+            if let Some(fid) = farm_id {
+                try_list_fleets(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else {
+                try_list_farms(config, &mut suggestions).await
             }
         }
-        // We have farm — try listing queues or fleets, then farms
-        if try_list_queues(fid, config, &mut suggestions).await {
-            return suggestions.join("\n");
+        "GetWorker" | "SearchWorkers" => {
+            if let (Some(fid), Some(flid)) = (farm_id, fleet_id) {
+                try_list_workers(fid, flid, config, &mut suggestions).await
+                    || try_list_fleets(fid, config, &mut suggestions).await
+            } else if let Some(fid) = farm_id {
+                try_list_fleets(fid, config, &mut suggestions).await
+            } else {
+                false
+            }
         }
-        if try_list_fleets(fid, config, &mut suggestions).await {
-            return suggestions.join("\n");
+        "GetJob" | "ListJobs" | "SearchJobs" | "CreateJob" => {
+            if let (Some(fid), Some(qid)) = (farm_id, queue_id) {
+                try_list_jobs(fid, qid, config, &mut suggestions).await
+                    || try_list_queues(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else if let Some(fid) = farm_id {
+                try_list_queues(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else {
+                try_list_farms(config, &mut suggestions).await
+            }
         }
-    }
+        "GetStorageProfileForQueue" | "ListStorageProfilesForQueue" => {
+            // Storage profile listing not yet implemented
+            false
+        }
+        // Unknown operation: fall back to listing farms
+        _ => try_list_farms(config, &mut suggestions).await,
+    };
 
-    // Fall back to listing farms
-    if try_list_farms(config, &mut suggestions).await {
+    if found {
         return suggestions.join("\n");
     }
 
-    // All list calls failed
     if suggestions.is_empty() {
-        return "\nCould not list available resources to suggest alternatives.\n\
-                This may indicate your IAM policy is missing List permissions."
-            .to_string();
+        "\nCould not list available resources to suggest alternatives.\n\
+         This may indicate your IAM policy is missing List permissions."
+            .to_string()
+    } else {
+        suggestions.join("\n")
     }
-
-    suggestions.join("\n")
 }
 
 async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {

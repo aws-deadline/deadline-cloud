@@ -62,6 +62,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
                         &e.to_string(),
+                        "GetFarm",
                         Some(&farm),
                         None,
                         None,

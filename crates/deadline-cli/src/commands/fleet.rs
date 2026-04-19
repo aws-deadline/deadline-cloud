@@ -75,6 +75,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
                         &e.to_string(),
+                        "GetFleet",
                         Some(&farm),
                         None,
                         Some(&fleet),

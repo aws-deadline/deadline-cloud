@@ -69,3 +69,32 @@ Requires: farm_id, queue_id. Calls `get_queue_parameter_definitions` from
 
 Output is the merged parameter definitions list via `cli_object_repr`.
 On error, `suggest_resources_on_client_error` lists available queues.
+
+## `queue sync-output`
+
+Incrementally downloads job output attachments for all jobs in a queue.
+Uses a checkpoint file to track download progress across invocations.
+
+### Job Discovery
+
+Uses `list_jobs_by_filter_expression` (in `deadline-api`) to paginate
+through all matching jobs via `createdAt` thresholding. Two queries:
+
+1. **Active jobs**: filter by `TASK_RUN_STATUS` in `[READY, ASSIGNED,
+   STARTING, SCHEDULED, RUNNING]`, then filter to jobs with
+   `SUCCEEDED > 0` in `taskRunStatusCounts`.
+2. **Recently ended jobs**: filter by `ENDED_AT >= checkpoint timestamp`,
+   then filter to `SUCCEEDED > 0`.
+
+The pagination algorithm sorts by `CREATED_AT ASC` and uses the last
+job's `createdAt` as a `GREATER_THAN_EQUAL_TO` threshold for the next
+page. Jobs are deduped by `jobId`. This replaces the previous approach
+of a single `search_jobs_with_filters(..., 0, 100)` call that silently
+dropped jobs beyond 100.
+
+### Manifest Merge Order
+
+Output manifests are downloaded from S3 with their `LastModified`
+timestamps preserved. Manifests for the same asset root are sorted by
+`LastModified` (oldest first) before merging, so newer files overwrite
+older ones. This matches Python's `_merge_asset_manifests_sorted_asc_by_last_modified`.

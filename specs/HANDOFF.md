@@ -7,10 +7,10 @@ consulting the Work Items table in `specs/progress.md`.
 
 **15e — Behavioral parity audit (Batch 2: Bug & Problem Fixes)**
 
-Batch 2 partially complete. 5 of 9 audit findings fixed + 4 output
-parity items identified during CLI comparison.
+Batch 2 complete (sub-batches A–C). Sub-batch D (correctness fixes)
+in progress. Sub-batch E (output parity) not started.
 
-### Batch 2 — Fixed
+### Batch 2 — Fixed (Sub-batches A–C)
 
 | ID | Fix |
 |----|-----|
@@ -19,15 +19,20 @@ parity items identified during CLI comparison.
 | AUDIT-019 | INI parser uses IndexMap — preserves section/key insertion order |
 | AUDIT-035 | Path traversal validation before download (`ensure_paths_within_directory`) |
 | AUDIT-044 | INI parser supports multiline continuation values |
+| AUDIT-051 | Resolved — `CreateCopy` collision handling + manifest merge dedup already implemented in AUDIT-001 |
 
-### Batch 2 — Remaining
+### Sub-batch D — Correctness fixes (DONE)
+
+| ID | Title | Crate | Status |
+|----|-------|-------|--------|
+| AUDIT-007 | `queue sync-output` job discovery limited to 100 | deadline-api + deadline-cli | ✅ Fixed |
+| AUDIT-020 | `suggest_resources` dispatch gives wrong suggestions | deadline-cli | ✅ Fixed |
+| AUDIT-036 | Download manifest merge order by S3 LastModified | deadline-job-attachments + deadline-cli | ✅ Fixed |
+
+### Sub-batch E — Output parity (NOT STARTED)
 
 | ID | Title |
 |----|-------|
-| AUDIT-007 | `queue sync-output` job discovery limited to 100 |
-| AUDIT-020 | `suggest_resources` dispatch (deferred — no user-visible bug) |
-| AUDIT-036 | Download manifest merge order by S3 LastModified |
-| AUDIT-051 | Download duplicate path collision handling |
 | SYNC-001 | Session action count includes no-output actions |
 | SYNC-002 | Missing "Manifest file system paths" per-job output |
 | SYNC-003 | Missing WARNING for jobs with no output manifests |
@@ -116,109 +121,87 @@ AUDIT-006, 008, 009, 010, 011, 012, 013, 014, 026, 030, 031, 034,
 | SYNC-003 | Low | `sync-output` missing WARNING for jobs with no output manifests | Output parity |
 | SYNC-004 | Low | `sync-output` path summary shows aggregate instead of per-file listing | Output parity |
 
-## Implementation Plan — Batch 2
-
-### Batching Strategy
-
-9 findings split into 3 sub-batches by crate/module affinity:
-
-**Sub-batch A: INI parser bugs (deadline-config)**
-- AUDIT-018 — colon delimiter support
-- AUDIT-019 — preserve section/key ordering on write
-- AUDIT-044 — multiline value support
-
-**Sub-batch B: Download correctness bugs (deadline-job-attachments)**
-- AUDIT-035 — path traversal validation
-- AUDIT-036 — manifest merge by S3 LastModified (not lexicographic)
-- AUDIT-051 — duplicate path collision handling
-
-**Sub-batch C: sync-output + suggest_resources (deadline-cli)**
-- AUDIT-001 — queue sync-output doesn't download files
-- AUDIT-007 — job discovery limited to 100 (needs `_list_jobs_by_filter_expression` port)
-- AUDIT-020 — suggest_resources dispatch gives wrong suggestions
+## Implementation Plan — Sub-batch D
 
 ### Crate/Module Changes
 
 | Crate | Module | Changes |
 |-------|--------|---------|
-| `deadline-config` | `ini.rs` | Add `:` delimiter, `IndexMap` for ordering, multiline continuation |
-| `deadline-job-attachments` | `download.rs` | Add `ensure_paths_within_directory()`, sort manifests by S3 `LastModified` |
-| `deadline-job-attachments` | `download.rs` | Add duplicate path collision prefixing in `OutputDownloader` |
-| `deadline-cli` | `commands/queue.rs` | Wire actual S3 downloads in `incremental_output_download` |
-| `deadline-cli` | `commands/queue.rs` | Port `_list_jobs_by_filter_expression` pagination with `createdAt` thresholding |
-| `deadline-cli` | `commands/helpers.rs` | Refactor `suggest_resources` to dispatch by operation name |
+| `deadline-api` | `api.rs` | Add `groupFilter` to `build_filter_expressions`; new `list_jobs_by_filter_expression` pagination function |
+| `deadline-job-attachments` | `download.rs` | `download_manifest_from_s3` returns S3 `LastModified`; `get_output_manifests_by_asset_root` sorts by timestamp before merging |
+| `deadline-cli` | `commands/queue.rs` | Replace hardcoded `search_jobs_with_filters(..., 0, 100)` with `list_jobs_by_filter_expression`; use real `LastModified` from manifest downloads |
+| `deadline-cli` | `commands/helpers.rs` | Rewrite `suggest_resources_on_client_error` to dispatch on operation name |
+| `deadline-cli` | `commands/*.rs` | All callers pass operation name string to `suggest_resources_on_client_error` |
 
 ### Cross-Reference: Test Spec → Planned Rust Tests
 
-#### Sub-batch A: INI parser
-
 | Finding | Test Spec Case | Planned Rust Test Name |
 |---------|---------------|----------------------|
-| AUDIT-018 | config.md (new) | `parse_colon_delimiter_accepted` |
-| AUDIT-018 | config.md (new) | `parse_colon_and_equals_mixed` |
-| AUDIT-019 | config.md (new) | `roundtrip_preserves_section_order` |
-| AUDIT-019 | config.md (new) | `roundtrip_preserves_key_order` |
-| AUDIT-019 | cli.md §config | `config_set_preserves_existing_key_order` (L2) |
-| AUDIT-044 | config.md (new) | `parse_multiline_continuation` |
-| AUDIT-044 | config.md (new) | `parse_multiline_with_empty_continuation` |
-
-#### Sub-batch B: Download correctness
-
-| Finding | Test Spec Case | Planned Rust Test Name |
-|---------|---------------|----------------------|
-| AUDIT-035 | job_attachments_data_transfer.md (new) | `download_rejects_path_traversal` |
-| AUDIT-035 | job_attachments_data_transfer.md (new) | `download_accepts_paths_within_root` |
-| AUDIT-036 | job_attachments_data_transfer.md (new) | `manifest_merge_sorts_by_last_modified` |
-| AUDIT-036 | job_attachments_data_transfer.md (new) | `manifest_merge_newer_overwrites_older` |
-| AUDIT-051 | job_attachments_data_transfer.md (new) | `duplicate_path_collision_prefixed` |
-| AUDIT-051 | job_attachments_data_transfer.md (new) | `no_collision_when_paths_differ` |
-
-#### Sub-batch C: sync-output + suggest_resources
-
-| Finding | Test Spec Case | Planned Rust Test Name |
-|---------|---------------|----------------------|
-| AUDIT-001 | cli.md §42 case 14 | `sync_output_downloads_files` (L2) |
-| AUDIT-001 | cli.md §42 (new) | `sync_output_dry_run_shows_files_to_download` (L2) |
 | AUDIT-007 | cli.md §42 (new) | `sync_output_paginates_beyond_100_jobs` (L2) |
-| AUDIT-020 | cli.md (new) | `suggest_resources_farm_error_lists_farms` (L2) |
-| AUDIT-020 | cli.md (new) | `suggest_resources_queue_error_lists_queues` (L2) |
+| AUDIT-007 | (unit) | `list_jobs_by_filter_expression_single_page` |
+| AUDIT-007 | (unit) | `list_jobs_by_filter_expression_multi_page_deduplicates` |
+| AUDIT-020 | cli.md §37 case 48 | `suggest_resources_get_queue_error_lists_queues` (L2) |
+| AUDIT-020 | cli.md §37 case 49 | `suggest_resources_get_farm_error_lists_farms` (L2) |
+| AUDIT-020 | cli.md §37 case 50 | `suggest_resources_get_job_error_lists_jobs_then_queues` (L2) |
+| AUDIT-020 | (new) | `suggest_resources_get_fleet_error_lists_fleets` (L2) |
+| AUDIT-036 | data_transfer.md case 36 | `manifest_merge_newer_overwrites_older` (L1) |
+| AUDIT-036 | data_transfer.md case 39 | `manifest_merge_sorts_by_last_modified` (L1) |
+| AUDIT-036 | (new) | `download_manifest_from_s3_returns_last_modified` (L1) |
 
 ### Key Design Decisions
 
-1. **AUDIT-019 (INI ordering):** Replace `BTreeMap` with `IndexMap` in
-   `IniConfig`. This preserves insertion order while still allowing
-   O(1) lookups. New sections/keys append to end (matching Python's
-   `ConfigParser`). Existing sections/keys update in-place.
+1. **AUDIT-007 (job pagination):** New function
+   `list_jobs_by_filter_expression(farm_id, queue_id, filter, config)`
+   in `deadline-api`. Ports Python's `createdAt` thresholding algorithm:
+   - First call: user filter only, sorted `CREATED_AT ASC`, no offset
+   - If `len(jobs) < totalResults`: take last job's `createdAt`, wrap
+     user filter in a `groupFilter`, AND with `dateTimeFilter(CREATED_AT
+     >= threshold)`, repeat
+   - Dedup by `jobId` (HashMap)
+   - Edge case: raise error if all 100 jobs have identical `createdAt`
+   - Requires `groupFilter` support in `build_filter_expressions`
+     (currently missing — the SDK has `SearchFilterExpression::GroupFilter`
+     but the JSON→SDK builder doesn't handle it)
 
-2. **AUDIT-036 (manifest merge order):** The `download_manifest_from_s3`
-   function must return the S3 `LastModified` timestamp alongside the
-   manifest. `get_output_manifests_by_asset_root` sorts by this
-   timestamp before merging (oldest first, newer wins).
+2. **AUDIT-020 (suggest_resources):** Rewrite the function entirely.
+   New signature: `suggest_resources_on_client_error(error_msg,
+   operation_name, farm_id?, queue_id?, fleet_id?, config?)`.
+   Dispatch table matching Python's `_OPERATION_GROUPS`:
 
-3. **AUDIT-001 (sync-output downloads):** The current Rust code collects
-   session actions but never calls the download functions. Need to:
-   (a) download output manifests for each session action,
-   (b) apply path mapping rules,
-   (c) merge manifests chronologically,
-   (d) call `download_files` for the merged manifest paths.
-   This mirrors Python's `_incremental_output_download` flow.
+   | Operation group | Operations | Suggestion chain |
+   |----------------|------------|-----------------|
+   | queue | GetQueue, ListQueues, ListQueueEnvironments | queues → farms |
+   | farm | GetFarm, ListFarms | farms |
+   | fleet | GetFleet, ListFleets | fleets → farms |
+   | worker | GetWorker, SearchWorkers | workers → fleets |
+   | job | GetJob, ListJobs, SearchJobs | jobs → queues → farms |
+   | storage_profile | GetStorageProfileForQueue, ListStorageProfilesForQueue | storage profiles |
 
-4. **AUDIT-007 (job pagination):** Port Python's
-   `_list_jobs_by_filter_expression` algorithm that uses `createdAt`
-   thresholding to paginate through all matching jobs. Replace the
-   two hardcoded `search_jobs_with_filters(..., 0, 100, ...)` calls.
+   Broken cases in current code (greedy dispatch):
+   - `fleet get` (GetFleet): has farm+fleet → tries workers first (wrong, should try fleets)
+   - `queue get` (GetQueue): has farm+queue → tries jobs first (wrong, should try queues)
+   - `queue paramdefs` (ListQueueEnvironments): same as above
 
-5. **AUDIT-020 (suggest_resources):** Add operation name tracking to
-   API error paths. Dispatch suggestion chains based on which API
-   operation failed (matching Python's `exc.operation_name` approach)
-   instead of the current greedy approach based on available IDs.
+   All ~15 callers updated to pass operation name. No backwards compat
+   needed — just replace the function.
 
-## Step Status
+3. **AUDIT-036 (manifest merge order):** Two changes:
+   - `download_manifest_from_s3` returns `(Option<String>, DateTime<Utc>,
+     AssetManifest)` — extracts `LastModified` from S3 `GetObjectOutput`.
+     The SDK field is `Option<aws_smithy_types::DateTime>`, convert via
+     epoch seconds to `chrono::DateTime<Utc>`.
+   - `get_output_manifests_by_asset_root` sorts manifests by `LastModified`
+     before merging (oldest first, newer wins). Currently uses arbitrary
+     S3 listing order.
+   - `queue.rs::incremental_output_download` uses the real `LastModified`
+     instead of `Utc::now()` when building the `downloaded_manifests` vec.
+
+## Step Status — Sub-batch D
 
 - [x] Step 1: Study Python — complete
 - [x] Step 2: Write tests (red) — complete
 - [x] Step 3: Implement fixes — complete
 - [x] Step 4: Compare CLIs — complete
-- [x] Step 5: Audit & fix — complete
+- [x] Step 5: Audit & fix — complete (1 finding: error format diff documented)
 - [x] Step 6: Spec — complete
-- [ ] Step 7: Commit — awaiting review
+- [x] Step 7: Commit — awaiting review

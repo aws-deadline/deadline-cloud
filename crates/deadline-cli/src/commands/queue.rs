@@ -218,7 +218,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), None, None, Some(&config),
+                        &e.to_string(), "ListQueues", Some(&farm), None, None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queues from Deadline:\n{e}{suggestion}"
@@ -237,7 +237,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "GetQueue", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue from Deadline:\n{e}{suggestion}"
@@ -327,7 +327,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), Some(&farm), Some(&queue), None, Some(&config),
+                        &e.to_string(), "ListQueueEnvironments", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue Parameter Definitions from Deadline:\n{e}{suggestion}"
@@ -570,7 +570,7 @@ async fn incremental_output_download(
     eprintln!("Retrieving updated data from Deadline Cloud...");
     let starting_ts = checkpoint.downloads_completed_timestamp;
 
-    // Active jobs with at least one SUCCEEDED task
+    // Active jobs with at least one SUCCEEDED task — paginate through all
     let active_filter = serde_json::json!({
         "filters": [{
             "stringListFilter": {
@@ -581,26 +581,23 @@ async fn incremental_output_download(
         }],
         "operator": "OR"
     });
-    let active_resp = api::search_jobs_with_filters(
-        farm_id, &[queue_id], 0, 100,
-        Some(&active_filter), None, Some(config), None,
+    let active_jobs = api::list_jobs_by_filter_expression(
+        farm_id, queue_id, &active_filter, Some(config),
     ).await.map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
 
     let mut download_candidates: std::collections::HashMap<String, serde_json::Value> =
         std::collections::HashMap::new();
-    if let Some(jobs) = active_resp["jobs"].as_array() {
-        for job in jobs {
-            if let Some(counts) = job.get("taskRunStatusCounts") {
-                if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
-                    if let Some(id) = job["jobId"].as_str() {
-                        download_candidates.insert(id.to_string(), job.clone());
-                    }
+    for job in &active_jobs {
+        if let Some(counts) = job.get("taskRunStatusCounts") {
+            if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
+                if let Some(id) = job["jobId"].as_str() {
+                    download_candidates.insert(id.to_string(), job.clone());
                 }
             }
         }
     }
 
-    // Recently ended jobs
+    // Recently ended jobs — paginate through all
     let ended_filter = serde_json::json!({
         "filters": [{
             "dateTimeFilter": {
@@ -611,18 +608,15 @@ async fn incremental_output_download(
         }],
         "operator": "AND"
     });
-    let ended_resp = api::search_jobs_with_filters(
-        farm_id, &[queue_id], 0, 100,
-        Some(&ended_filter), None, Some(config), None,
+    let ended_jobs = api::list_jobs_by_filter_expression(
+        farm_id, queue_id, &ended_filter, Some(config),
     ).await.map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
-    if let Some(jobs) = ended_resp["jobs"].as_array() {
-        for job in jobs {
-            if let Some(counts) = job.get("taskRunStatusCounts") {
-                if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
-                    if let Some(id) = job["jobId"].as_str() {
-                        download_candidates.insert(id.to_string(), job.clone());
-                    }
+    for job in &ended_jobs {
+        if let Some(counts) = job.get("taskRunStatusCounts") {
+            if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
+                if let Some(id) = job["jobId"].as_str() {
+                    download_candidates.insert(id.to_string(), job.clone());
                 }
             }
         }
@@ -946,7 +940,7 @@ async fn incremental_output_download(
                 match deadline_job_attachments::download::download_manifest_from_s3(
                     &s3_client, bucket, key, &account_id,
                 ).await {
-                    Ok((Some(asset_root), mut manifest)) => {
+                    Ok((Some(asset_root), last_modified, mut manifest)) => {
                     let root_path_format = dc_job.get("attachments")
                         .and_then(|a| a["manifests"].as_array())
                         .and_then(|m| m.first())
@@ -956,9 +950,9 @@ async fn incremental_output_download(
                     let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
                         &asset_root, &mut manifest, None, root_path_format, &mut unmapped,
                     );
-                    downloaded_manifests.push((Utc::now(), manifest));
+                    downloaded_manifests.push((last_modified, manifest));
                     }
-                    Ok((None, _)) => {
+                    Ok((None, _, _)) => {
                         log::warn!("Manifest {key} has no asset root metadata, skipping");
                     }
                     Err(e) => {

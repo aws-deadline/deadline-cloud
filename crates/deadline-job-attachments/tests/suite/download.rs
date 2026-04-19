@@ -812,8 +812,119 @@ async fn download_rejects_path_traversal_in_manifest() {
 // valid paths already work. Only the rejection of traversal paths is new behavior.
 
 // =====================================================================
-// AUDIT-036: Manifest merge order — tested at Level 2 via CLI since
-// the bug is in get_output_manifests_by_asset_root (S3 LastModified
-// sorting), not in merge_asset_manifests itself.
+// AUDIT-036: download_manifest_from_s3 must return S3 LastModified
 // =====================================================================
+
+/// AUDIT-036: download_manifest_from_s3 returns the S3 LastModified timestamp
+/// alongside the asset root and manifest. The caller uses this to sort
+/// manifests chronologically before merging (older first, newer wins).
+#[tokio::test]
+async fn download_manifest_from_s3_returns_last_modified() {
+    use deadline_job_attachments::download::download_manifest_from_s3;
+    use wiremock::matchers::path;
+
+    let server = MockServer::start().await;
+    let s3_client = build_s3_client(&server).await;
+
+    // A minimal valid manifest JSON
+    let manifest_json = r#"{"hashAlg":"xxh128","manifestVersion":"2023-03-03","paths":[{"hash":"abc123def456abc123def456abc12345","mtime":1000000,"path":"file.txt","size":42}],"totalSize":42}"#;
+
+    // Mount S3 GetObject with a specific Last-Modified timestamp
+    Mock::given(method("GET"))
+        .and(path("/test-bucket/manifest-key"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(manifest_json)
+                .insert_header("last-modified", "Sat, 15 Jun 2024 14:30:00 GMT")
+                .insert_header("x-amz-meta-asset-root-json", r#""/mnt/shared""#),
+        )
+        .mount(&server)
+        .await;
+
+    let (asset_root, last_modified, manifest) = download_manifest_from_s3(
+        &s3_client, "test-bucket", "manifest-key", "123456789012",
+    ).await.unwrap();
+
+    assert_eq!(asset_root, Some("/mnt/shared".to_string()));
+    assert_eq!(manifest.paths.len(), 1);
+    // The LastModified should be 2024-06-15T14:30:00Z
+    assert_eq!(
+        last_modified.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+        "2024-06-15T14:30:00Z"
+    );
+}
+
+/// AUDIT-036: get_output_manifests_by_asset_root sorts manifests by
+/// LastModified before merging, so newer files overwrite older ones.
+/// This is tested at Level 2 via the CLI (job download-output), but
+/// we add a Level 1 test for precision on the merge ordering.
+#[tokio::test]
+async fn get_output_manifests_merges_by_last_modified_order() {
+    use deadline_job_attachments::download::get_output_manifests_by_asset_root;
+    use wiremock::matchers::{path, query_param};
+
+    let server = MockServer::start().await;
+    let s3_client = build_s3_client(&server).await;
+    let s3_settings = test_s3_settings();
+
+    // Two manifests for the same asset root, with different timestamps.
+    // The older manifest has "old_hash", the newer has "new_hash".
+    let manifest_old = r#"{"hashAlg":"xxh128","manifestVersion":"2023-03-03","paths":[{"hash":"aaa111bbb222ccc333ddd444eee55566","mtime":1000000,"path":"file.txt","size":42}],"totalSize":42}"#;
+    let manifest_new = r#"{"hashAlg":"xxh128","manifestVersion":"2023-03-03","paths":[{"hash":"fff666eee555ddd444ccc333bbb22211","mtime":2000000,"path":"file.txt","size":42}],"totalSize":42}"#;
+
+    // S3 ListObjectsV2 returns two manifest keys
+    Mock::given(method("GET"))
+        .and(query_param("list-type", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>test-bucket</Name>
+  <KeyCount>2</KeyCount>
+  <MaxKeys>1000</MaxKeys>
+  <IsTruncated>false</IsTruncated>
+  <Contents><Key>root-prefix/Manifests/farm-1/queue-1/job-1/step-1/task-1/sa-1/output_old.json</Key><Size>100</Size></Contents>
+  <Contents><Key>root-prefix/Manifests/farm-1/queue-1/job-1/step-1/task-1/sa-2/output_new.json</Key><Size>100</Size></Contents>
+</ListBucketResult>"#,
+        ))
+        .mount(&server)
+        .await;
+
+    // Older manifest (LastModified earlier)
+    Mock::given(method("GET"))
+        .and(path("/test-bucket/root-prefix/Manifests/farm-1/queue-1/job-1/step-1/task-1/sa-1/output_old.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(manifest_old)
+                .insert_header("last-modified", "Sat, 15 Jun 2024 10:00:00 GMT")
+                .insert_header("x-amz-meta-asset-root-json", r#""/mnt/shared""#),
+        )
+        .mount(&server)
+        .await;
+
+    // Newer manifest (LastModified later)
+    Mock::given(method("GET"))
+        .and(path("/test-bucket/root-prefix/Manifests/farm-1/queue-1/job-1/step-1/task-1/sa-2/output_new.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(manifest_new)
+                .insert_header("last-modified", "Sat, 15 Jun 2024 14:00:00 GMT")
+                .insert_header("x-amz-meta-asset-root-json", r#""/mnt/shared""#),
+        )
+        .mount(&server)
+        .await;
+
+    let result = get_output_manifests_by_asset_root(
+        &s3_settings, "farm-1", "queue-1", "job-1",
+        Some("step-1"), Some("task-1"), None,
+        &s3_client, "123456789012",
+    ).await.unwrap();
+
+    // Should have one asset root with one merged manifest
+    let manifests = result.get("/mnt/shared").expect("missing /mnt/shared root");
+    assert_eq!(manifests.len(), 1);
+    // The merged manifest should have the newer hash (newer LastModified wins)
+    let merged = &manifests[0];
+    assert_eq!(merged.paths.len(), 1);
+    assert_eq!(merged.paths[0].hash, "fff666eee555ddd444ccc333bbb22211");
+}
 
