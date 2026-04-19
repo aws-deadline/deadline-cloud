@@ -120,6 +120,8 @@ AUDIT-006, 008, 009, 010, 011, 012, 013, 014, 026, 030, 031, 034,
 | SYNC-002 | Low | `sync-output` missing "Manifest file system paths" per-job output | Output parity |
 | SYNC-003 | Low | `sync-output` missing WARNING for jobs with no output manifests | Output parity |
 | SYNC-004 | Low | `sync-output` path summary shows aggregate instead of per-file listing | Output parity |
+| SYNC-006 | Medium | `sync-output` duration format missing days | Bug — format_duration |
+| SYNC-007 | Medium | `sync-output` dry-run reports 0 files/bytes | Bug — stats from skipped download |
 
 ## Implementation Plan — Sub-batch D
 
@@ -284,7 +286,14 @@ sizes. Rust prints only `{N} files, {size}`.
 - [x] Step 4: Compare CLIs — complete (see comparison results below)
 - [x] Step 5: Audit & fix — complete (1 finding: per-job action ID filtering)
 - [x] Step 6: Spec — complete (queue.md updated)
-- [x] Step 7: Commit — awaiting review
+- [x] Step 7: Commit — done
+
+## Sub-batch F — Remaining sync-output bugs (NOT STARTED)
+
+| ID | Priority | Title | Category |
+|----|----------|-------|----------|
+| SYNC-006 | Medium | `sync-output` duration format missing days (`16666:37:00` vs `694 days, 10:37:00`) | Bug — `format_duration` doesn't break hours into days |
+| SYNC-007 | Medium | `sync-output` dry-run reports 0 files/bytes instead of would-be counts | Bug — stats computed from download result which is skipped in dry-run |
 
 ### Step 4 Comparison Results
 
@@ -323,8 +332,8 @@ exactly.
 
 **Pre-existing differences (not in scope for Sub-batch E):**
 
-- Duration format: Python `694 days, 10:37:00` vs Rust `16666:37:00`
-- Job order: HashMap iteration order differs
-- WARNING placement: Python prints during S3 manifest population, Rust during session retrieval
-- Missing intermediate messages: Python has "Retrieving session actions...", "Populating manifest S3 keys...", "Downloading N asset manifests..." — Rust omits these
-- Dry-run file/byte counts: Python reports would-be counts, Rust reports 0
+- Duration format: Python `694 days, 10:37:00` vs Rust `16666:37:00` → tracked as SYNC-006
+- Job order: HashMap iteration order differs — accepted difference
+- WARNING placement: Python prints during S3 phase, Rust during session phase — accepted difference
+- Missing intermediate messages: Python has "Retrieving session actions...", "Populating manifest S3 keys...", "Downloading N asset manifests..." — tracked as SYNC-005 in progress.md #13
+- Dry-run file/byte counts: Python reports would-be counts, Rust reports 0 → tracked as SYNC-007

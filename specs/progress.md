@@ -109,6 +109,9 @@ after the core CLI commands are complete.
 - **#13**: AUDIT-008 — `job download-output` no interactive root path editing.
   AUDIT-047 — `manifest download` CLI is a stub.
   AUDIT-055 — Download conflict resolution prompt missing.
+  SYNC-005 — `sync-output` missing intermediate progress messages
+  ("Retrieving session actions...", "Populating manifest S3 keys...",
+  "Downloading N asset manifests...").
 - **#14**: AUDIT-030 — `handle-web-url` macOS support missing
 - **#15**: AUDIT-040 — No adaptive retry strategy for requeue
 
