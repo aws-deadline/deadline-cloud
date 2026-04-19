@@ -256,7 +256,7 @@ async fn config_clear_no_dot_setting_exits_with_error() {
     assert_cmd_snapshot!(harness.cmd(&["config", "clear", "bad_name"]));
 }
 
-// ── AUDIT-019: config set preserves existing key ordering ───────────
+// ── config set preserves existing key ordering ───────────
 
 #[tokio::test]
 async fn config_set_preserves_existing_key_order() {
@@ -289,7 +289,7 @@ async fn config_set_preserves_existing_key_order() {
     assert!(farm_pos < job_pos, "farm_id should come before job_id");
 }
 
-// ── AUDIT-018: config file with colon delimiter is read correctly ────
+// ── config file with colon delimiter is read correctly ────
 
 #[tokio::test]
 async fn config_get_reads_colon_delimited_values() {

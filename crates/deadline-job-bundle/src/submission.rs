@@ -762,7 +762,7 @@ mod tests {
         assert_eq!(refs.input_filenames.len(), 2);
     }
 
-    // AUDIT-002: known_asset_paths must split on path-list separator (: on Unix, ; on Windows)
+    // known_asset_paths must split on path-list separator (: on Unix, ; on Windows)
     // not on directory separator (/ on Unix, \ on Windows)
     #[test]
     fn path_list_separator_splits_correctly() {

@@ -334,12 +334,11 @@ mod tests {
     }
 
     // ===================================================================
-    // IncrementalDownloadJob tests (spec cases 1-10)
+    // IncrementalDownloadJob tests
     // ===================================================================
 
     #[test]
     fn job_construct_with_all_fields() {
-        // Spec #1
         let ts = utc(2024, 6, 15, 10, 30, 0);
         let indexes = HashMap::from([("session-1".to_string(), 5i64)]);
         let job = IncrementalDownloadJob::new(
@@ -353,21 +352,18 @@ mod tests {
 
     #[test]
     fn job_construct_none_indexes_defaults_to_empty() {
-        // Spec #2
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, None);
         assert!(job.session_completed_indexes.is_empty());
     }
 
     #[test]
     fn job_id_returns_job_id_field() {
-        // Spec #3
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, None);
         assert_eq!(job.job_id(), "job-abc123");
     }
 
     #[test]
     fn job_round_trip_serde() {
-        // Spec #4
         let ts = utc(2024, 6, 15, 10, 30, 0);
         let indexes = HashMap::from([("session-1".to_string(), 5i64)]);
         let original = IncrementalDownloadJob::new(
@@ -382,14 +378,12 @@ mod tests {
 
     #[test]
     fn job_deserialize_not_an_object_returns_error() {
-        // Spec #5
         let result = serde_json::from_str::<IncrementalDownloadJob>("\"not a dict\"");
         assert!(result.is_err());
     }
 
     #[test]
     fn job_deserialize_missing_required_job_field_returns_error() {
-        // Spec #6
         let result = serde_json::from_str::<IncrementalDownloadJob>(r#"{"other": 1}"#);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("job"));
@@ -397,7 +391,6 @@ mod tests {
 
     #[test]
     fn job_deserialize_missing_optional_session_ended_timestamp() {
-        // Spec #7
         let json = json!({"job": sample_job_dict()}).to_string();
         let job: IncrementalDownloadJob = serde_json::from_str(&json).unwrap();
         assert!(job.session_ended_timestamp.is_none());
@@ -405,7 +398,6 @@ mod tests {
 
     #[test]
     fn job_deserialize_missing_optional_session_completed_indexes() {
-        // Spec #8
         let json = json!({"job": sample_job_dict()}).to_string();
         let job: IncrementalDownloadJob = serde_json::from_str(&json).unwrap();
         assert!(job.session_completed_indexes.is_empty());
@@ -413,7 +405,6 @@ mod tests {
 
     #[test]
     fn job_serialize_none_timestamp_omits_key() {
-        // Spec #9
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, None);
         let val: Value = serde_json::to_value(&job).unwrap();
         assert!(val.get("sessionEndedTimestamp").is_none());
@@ -421,19 +412,17 @@ mod tests {
 
     #[test]
     fn job_serialize_empty_indexes_omits_key() {
-        // Spec #10
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, Some(HashMap::new()));
         let val: Value = serde_json::to_value(&job).unwrap();
         assert!(val.get("sessionCompletedIndexes").is_none());
     }
 
     // ===================================================================
-    // IncrementalDownloadState tests (spec cases 11-17)
+    // IncrementalDownloadState tests
     // ===================================================================
 
     #[test]
     fn state_construct_required_fields_only() {
-        // Spec #11
         let ts = utc(2024, 6, 15, 10, 0, 0);
         let state = IncrementalDownloadState::new(
             Some("sp-123".to_string()),
@@ -449,7 +438,6 @@ mod tests {
 
     #[test]
     fn state_construct_all_fields() {
-        // Spec #12
         let started = utc(2024, 6, 15, 10, 0, 0);
         let completed = utc(2024, 6, 15, 11, 0, 0);
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, None);
@@ -468,7 +456,6 @@ mod tests {
 
     #[test]
     fn state_construct_none_storage_profile() {
-        // Spec #13
         let ts = utc(2024, 6, 15, 10, 0, 0);
         let state = IncrementalDownloadState::new(None, ts, None, None, None);
         assert!(state.local_storage_profile_id.is_none());
@@ -476,7 +463,6 @@ mod tests {
 
     #[test]
     fn state_round_trip_serde() {
-        // Spec #14
         let started = utc(2024, 6, 15, 10, 0, 0);
         let completed = utc(2024, 6, 15, 11, 0, 0);
         let job = IncrementalDownloadJob::new(
@@ -498,21 +484,18 @@ mod tests {
 
     #[test]
     fn state_deserialize_not_an_object_returns_error() {
-        // Spec #15
         let result = serde_json::from_str::<IncrementalDownloadState>("42");
         assert!(result.is_err());
     }
 
     #[test]
     fn state_deserialize_missing_required_fields_returns_error() {
-        // Spec #16
         let result = serde_json::from_str::<IncrementalDownloadState>(r#"{"jobs": []}"#);
         assert!(result.is_err());
     }
 
     #[test]
     fn state_deserialize_multiple_jobs() {
-        // Spec #17
         let started = utc(2024, 6, 15, 10, 0, 0);
         let job1 = IncrementalDownloadJob::new(
             json!({"jobId": "job-1", "name": "Job 1", "taskRunStatusCounts": {"SUCCEEDED": 1}}),
@@ -539,12 +522,11 @@ mod tests {
     }
 
     // ===================================================================
-    // File persistence tests (spec cases 18-22)
+    // File persistence tests
     // ===================================================================
 
     #[test]
     fn state_save_and_load_round_trip() {
-        // Spec #18
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("checkpoint.json");
         let state = IncrementalDownloadState::new(
@@ -565,7 +547,6 @@ mod tests {
 
     #[test]
     fn state_save_creates_parent_directories() {
-        // Spec #19
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("nested").join("dir").join("checkpoint.json");
         let state = IncrementalDownloadState::new(
@@ -579,7 +560,6 @@ mod tests {
 
     #[test]
     fn state_save_is_atomic() {
-        // Spec #20
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("checkpoint.json");
 
@@ -607,13 +587,11 @@ mod tests {
 
     #[test]
     fn state_load_nonexistent_file_returns_error() {
-        // Spec #21
         assert!(IncrementalDownloadState::from_file(Path::new("/nonexistent/path.json")).is_err());
     }
 
     #[test]
     fn state_load_invalid_json_returns_error() {
-        // Spec #22
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("bad.json");
         fs::write(&path, "not valid json {{{").unwrap();
@@ -621,7 +599,7 @@ mod tests {
     }
 
     // ===================================================================
-    // add_output_manifests_from_s3 tests (spec cases 23-29)
+    // add_output_manifests_from_s3 tests
     // ===================================================================
 
     fn sample_job_with_attachments() -> Value {
@@ -650,7 +628,7 @@ mod tests {
 
     #[test]
     fn add_manifests_matches_keys_to_session_actions() {
-        // Spec #23: session actions lacking manifests get populated
+        // session actions lacking manifests get populated
         let job = sample_job_with_attachments();
         let root_path_hash = hash_data(
             "/mnt/shared".as_bytes(),
@@ -669,7 +647,7 @@ mod tests {
 
     #[test]
     fn add_manifests_skips_actions_with_existing_manifests() {
-        // Spec #24: session action already has manifests → skipped
+        // session action already has manifests → skipped
         let job = sample_job_with_attachments();
         let mut actions = vec![
             sample_session_action("sessionaction-abc-0", true),
@@ -682,7 +660,7 @@ mod tests {
 
     #[test]
     fn add_manifests_no_attachments_returns_immediately() {
-        // Spec #25: job has no attachments
+        // job has no attachments
         let job = json!({"jobId": "job-1", "name": "No Attachments"});
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
         let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
@@ -692,7 +670,7 @@ mod tests {
 
     #[test]
     fn add_manifests_all_have_manifests_returns_immediately() {
-        // Spec #26: all session actions already have manifests
+        // all session actions already have manifests
         let job = sample_job_with_attachments();
         let mut actions = vec![
             sample_session_action("sessionaction-abc-0", true),
@@ -704,7 +682,7 @@ mod tests {
 
     #[test]
     fn add_manifests_key_missing_session_action_id_returns_error() {
-        // Spec #27: key lacks session action ID
+        // key lacks session action ID
         let job = sample_job_with_attachments();
         let keys = vec!["prefix/Manifests/no-session-action-id/hash/manifest.json".to_string()];
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
@@ -715,7 +693,7 @@ mod tests {
 
     #[test]
     fn add_manifests_key_no_matching_root_hash_returns_error() {
-        // Spec #28: key doesn't contain any root path hash
+        // key doesn't contain any root path hash
         let job = sample_job_with_attachments();
         let keys = vec![
             "prefix/Manifests/sessionaction-abc-0/wronghash/manifest.json".to_string(),
@@ -728,7 +706,7 @@ mod tests {
 
     #[test]
     fn add_manifests_no_keys_leaves_actions_unchanged() {
-        // Spec #29: no manifests found in S3
+        // no manifests found in S3
         let job = sample_job_with_attachments();
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
         let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
@@ -738,7 +716,7 @@ mod tests {
     }
 
     // ===================================================================
-    // make_manifest_paths_absolute tests (spec cases 30-34)
+    // make_manifest_paths_absolute tests
     // ===================================================================
 
     fn make_manifest(paths: Vec<(&str, &str, i64)>) -> AssetManifest {
@@ -757,7 +735,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_joined_with_root() {
-        // Spec #30: paths made absolute by joining with root path
+        // paths made absolute by joining with root path
         let mut manifest = make_manifest(vec![("subdir/file.txt", "aaa", 100)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute(
@@ -769,7 +747,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_with_path_mapping() {
-        // Spec #31: path mapping applied after absolutization
+        // path mapping applied after absolutization
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
@@ -789,7 +767,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_no_mapping_uses_host_conventions() {
-        // Spec #32: no path mapping → join with root using host OS
+        // no path mapping → join with root using host OS
         let mut manifest = make_manifest(vec![("a/b.txt", "aaa", 50)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute(
@@ -800,7 +778,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_windows_source_format() {
-        // Spec #33: Windows source paths joined with Windows conventions
+        // Windows source paths joined with Windows conventions
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
@@ -819,7 +797,7 @@ mod tests {
 
     #[test]
     fn absolute_paths_unmapped_paths_excluded() {
-        // Spec #34: paths that fail mapping are excluded and recorded
+        // paths that fail mapping are excluded and recorded
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
@@ -845,12 +823,12 @@ mod tests {
     }
 
     // ===================================================================
-    // merge_absolute_path_manifest_list tests (spec cases 35-39)
+    // merge_absolute_path_manifest_list tests
     // ===================================================================
 
     #[test]
     fn merge_non_overlapping_files() {
-        // Spec #35: two manifests with different files → all included
+        // two manifests with different files → all included
         let ts1 = utc(2024, 6, 15, 10, 0, 0);
         let ts2 = utc(2024, 6, 15, 11, 0, 0);
         let m1 = make_manifest(vec![("/a/file1.txt", "hash1", 100)]);
@@ -862,7 +840,7 @@ mod tests {
 
     #[test]
     fn merge_same_path_later_wins() {
-        // Spec #36: same file path, later timestamp wins
+        // same file path, later timestamp wins
         let ts1 = utc(2024, 6, 15, 10, 0, 0);
         let ts2 = utc(2024, 6, 15, 11, 0, 0);
         let m1 = make_manifest(vec![("/a/file.txt", "old_hash", 100)]);
@@ -875,7 +853,7 @@ mod tests {
 
     #[test]
     fn merge_case_insensitive_keys() {
-        // Spec #37: paths differing only in case treated as same file
+        // paths differing only in case treated as same file
         let ts1 = utc(2024, 6, 15, 10, 0, 0);
         let ts2 = utc(2024, 6, 15, 11, 0, 0);
         let m1 = make_manifest(vec![("/a/File.txt", "hash1", 100)]);
@@ -888,7 +866,7 @@ mod tests {
 
     #[test]
     fn merge_empty_list() {
-        // Spec #38: empty → empty
+        // empty → empty
         let mut manifests: Vec<(DateTime<Utc>, AssetManifest)> = vec![];
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert!(result.is_empty());
@@ -896,7 +874,7 @@ mod tests {
 
     #[test]
     fn merge_sorted_by_timestamp_before_merging() {
-        // Spec #39: manifests sorted by timestamp; earlier processed first
+        // manifests sorted by timestamp; earlier processed first
         let ts_early = utc(2024, 6, 15, 10, 0, 0);
         let ts_late = utc(2024, 6, 15, 11, 0, 0);
         // Provide in reverse order — merge should sort first

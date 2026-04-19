@@ -766,7 +766,7 @@ async fn get_output_manifests_session_action_without_step_errors() {
 }
 
 // =====================================================================
-// AUDIT-035: Path traversal validation
+// Path traversal validation
 // =====================================================================
 
 // These tests verify that download_files_from_manifests rejects manifests
@@ -812,10 +812,10 @@ async fn download_rejects_path_traversal_in_manifest() {
 // valid paths already work. Only the rejection of traversal paths is new behavior.
 
 // =====================================================================
-// AUDIT-036: download_manifest_from_s3 must return S3 LastModified
+// download_manifest_from_s3 must return S3 LastModified
 // =====================================================================
 
-/// AUDIT-036: download_manifest_from_s3 returns the S3 LastModified timestamp
+/// download_manifest_from_s3 returns the S3 LastModified timestamp
 /// alongside the asset root and manifest. The caller uses this to sort
 /// manifests chronologically before merging (older first, newer wins).
 #[tokio::test]
@@ -854,7 +854,7 @@ async fn download_manifest_from_s3_returns_last_modified() {
     );
 }
 
-/// AUDIT-036: get_output_manifests_by_asset_root sorts manifests by
+/// get_output_manifests_by_asset_root sorts manifests by
 /// LastModified before merging, so newer files overwrite older ones.
 /// This is tested at Level 2 via the CLI (job download-output), but
 /// we add a Level 1 test for precision on the merge ordering.

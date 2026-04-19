@@ -88,7 +88,7 @@ async fn worker_get_api_failure_prints_error() {
     ]));
 }
 
-// AUDIT-025: worker list API failure should show resource suggestions
+// worker list API failure should show resource suggestions
 #[tokio::test]
 async fn worker_list_access_denied_suggests_available_fleets() {
     let harness = TestHarness::new().await;
@@ -103,7 +103,7 @@ async fn worker_list_access_denied_suggests_available_fleets() {
     assert_cmd_snapshot!(harness.cmd(&["worker", "list", "--fleet-id", "fleet-bad"]));
 }
 
-// AUDIT-025: worker get API failure should show resource suggestions
+// worker get API failure should show resource suggestions
 #[tokio::test]
 async fn worker_get_not_found_suggests_available_workers() {
     let harness = TestHarness::new().await;

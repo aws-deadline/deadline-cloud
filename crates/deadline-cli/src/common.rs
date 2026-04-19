@@ -551,7 +551,7 @@ mod tests {
         assert_eq!(val, "true");
     }
 
-    // AUDIT-022: storage_profile_id should be applied to config
+    // storage_profile_id should be applied to config
     #[test]
     fn apply_options_storage_profile_id_sets_config() {
         let mut config = empty_config();
@@ -566,7 +566,7 @@ mod tests {
         assert_eq!(val, "sp-abc");
     }
 
-    // AUDIT-022: conflict_resolution should be applied to config
+    // conflict_resolution should be applied to config
     #[test]
     fn apply_options_conflict_resolution_sets_config() {
         let mut config = empty_config();
@@ -753,7 +753,7 @@ mod tests {
         assert_eq!(fmt.format(&ts), "1:30:45");
     }
 
-    // AUDIT-023: Negative timedelta should produce "-H:MM:SS"
+    // Negative timedelta should produce "-H:MM:SS"
     #[test]
     fn format_timedelta_negative_thirty_minutes() {
         assert_eq!(format_timedelta(chrono::TimeDelta::minutes(-30)), "-0:30:00");

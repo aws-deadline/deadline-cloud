@@ -68,7 +68,7 @@ async fn farm_list_non_dcm_does_not_inject_principal_id() {
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
 
-// AUDIT-005: DCM credentials in [default] profile should be detected
+// DCM credentials in [default] profile should be detected
 #[tokio::test]
 async fn auth_status_default_profile_dcm_shows_monitor_login_source() {
     let harness = TestHarness::new().await;

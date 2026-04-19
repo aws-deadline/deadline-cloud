@@ -253,7 +253,7 @@ pub fn summarize_paths_by_nested_directory(paths: &[&str]) -> Vec<PathSummary> {
     // For each summary, split into directory components and build a tree.
     // For now, return the flat sequence summaries — the nesting logic can be
     // added when the CLI output formatting needs it.
-    // This satisfies the test spec cases 13-14 at a basic level.
+    // This satisfies the basic path summarization requirements.
     sequence_summaries
 }
 

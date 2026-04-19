@@ -322,12 +322,12 @@ mod tests {
     }
 
     // ===================================================================
-    // generate_path_mapping_rules tests (spec cases 1-7)
+    // generate_path_mapping_rules tests
     // ===================================================================
 
     #[test]
     fn generate_rules_matching_names_returns_rules() {
-        // Spec #1: matching location names produce one rule each
+        // matching location names produce one rule each
         let src = linux_profile("sp-1", vec![("shared", "/mnt/shared"), ("temp", "/tmp")]);
         let dst = linux_profile("sp-2", vec![("shared", "/opt/shared"), ("temp", "/var/tmp")]);
         let rules = generate_path_mapping_rules(&src, &dst);
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn generate_rules_same_profile_returns_empty() {
-        // Spec #2: same storageProfileId → empty
+        // same storageProfileId → empty
         let src = linux_profile("sp-same", vec![("shared", "/mnt/shared")]);
         let dst = linux_profile("sp-same", vec![("shared", "/opt/shared")]);
         assert!(generate_path_mapping_rules(&src, &dst).is_empty());
@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn generate_rules_source_only_locations_no_rules() {
-        // Spec #3: source locations not in destination produce no rules
+        // source locations not in destination produce no rules
         let src = linux_profile("sp-1", vec![("only_in_src", "/mnt/src")]);
         let dst = linux_profile("sp-2", vec![("only_in_dst", "/mnt/dst")]);
         assert!(generate_path_mapping_rules(&src, &dst).is_empty());
@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn generate_rules_dest_only_locations_no_rules() {
-        // Spec #4: destination locations not in source produce no rules
+        // destination locations not in source produce no rules
         let src = linux_profile("sp-1", vec![("a", "/a")]);
         let dst = linux_profile("sp-2", vec![("a", "/a2"), ("extra", "/extra")]);
         let rules = generate_path_mapping_rules(&src, &dst);
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn generate_rules_windows_source_uses_windows_format() {
-        // Spec #5: Windows source → WINDOWS format
+        // Windows source → WINDOWS format
         let src = windows_profile("sp-w", vec![("shared", "C:\\shared"), ("temp", "C:\\temp")]);
         let dst = windows_profile("sp-w2", vec![("shared", "D:\\shared"), ("temp", "D:\\temp")]);
         let rules = generate_path_mapping_rules(&src, &dst);
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn generate_rules_linux_macos_source_uses_posix_format() {
-        // Spec #6: Linux and macOS → POSIX format
+        // Linux and macOS → POSIX format
         let linux_src = linux_profile("sp-l", vec![("shared", "/mnt/shared")]);
         let macos_src = macos_profile("sp-m", vec![("shared", "/Volumes/shared")]);
         let dst = linux_profile("sp-d", vec![("shared", "/opt/shared")]);
@@ -390,19 +390,19 @@ mod tests {
 
     #[test]
     fn generate_rules_empty_locations_returns_empty() {
-        // Spec #7: both profiles have empty fileSystemLocations
+        // both profiles have empty fileSystemLocations
         let src = linux_profile("sp-1", vec![]);
         let dst = linux_profile("sp-2", vec![]);
         assert!(generate_path_mapping_rules(&src, &dst).is_empty());
     }
 
     // ===================================================================
-    // PathMappingRuleApplier constructor tests (spec cases 8-9)
+    // PathMappingRuleApplier constructor tests
     // ===================================================================
 
     #[test]
     fn applier_mixed_source_formats_returns_error() {
-        // Spec #8: mixed source path formats → error
+        // mixed source path formats → error
         let rules = vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
             rule("windows", "D:\\tmp", "/var/tmp"),
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn applier_unexpected_source_format_returns_error() {
-        // Spec #9: unexpected format → error
+        // unexpected format → error
         let rules = vec![rule("xisop", "/mnt/shared", "/opt/shared")];
         let err = PathMappingRuleApplier::new(rules).unwrap_err();
         assert!(
@@ -426,12 +426,11 @@ mod tests {
     }
 
     // ===================================================================
-    // transform tests (spec cases 10-15)
+    // transform tests
     // ===================================================================
 
     #[test]
     fn transform_exact_match_returns_destination() {
-        // Spec #10
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
         ])
@@ -441,7 +440,6 @@ mod tests {
 
     #[test]
     fn transform_child_path_returns_joined_destination() {
-        // Spec #11
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
         ])
@@ -454,7 +452,6 @@ mod tests {
 
     #[test]
     fn transform_no_match_returns_original() {
-        // Spec #12
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
         ])
@@ -464,7 +461,7 @@ mod tests {
 
     #[test]
     fn transform_most_specific_rule_wins() {
-        // Spec #13: /mnt/Projects/Special is more specific than /mnt/Projects
+        // /mnt/Projects/Special is more specific than /mnt/Projects
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/Projects", "/dest/projects"),
             rule("posix", "/mnt/Projects/Special", "/dest/special"),
@@ -483,7 +480,7 @@ mod tests {
 
     #[test]
     fn transform_windows_case_insensitive() {
-        // Spec #14: Windows paths match case-insensitively
+        // Windows paths match case-insensitively
         let applier = PathMappingRuleApplier::new(vec![
             rule("windows", "C:\\Shared", "/opt/shared"),
         ])
@@ -497,18 +494,16 @@ mod tests {
 
     #[test]
     fn transform_no_rules_returns_original() {
-        // Spec #15
         let applier = PathMappingRuleApplier::new(vec![]).unwrap();
         assert_eq!(applier.transform("/some/path"), "/some/path");
     }
 
     // ===================================================================
-    // strict_transform tests (spec cases 16-19)
+    // strict_transform tests
     // ===================================================================
 
     #[test]
     fn strict_transform_match_returns_path() {
-        // Spec #16
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
         ])
@@ -521,7 +516,6 @@ mod tests {
 
     #[test]
     fn strict_transform_no_match_returns_error() {
-        // Spec #17
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/opt/shared"),
         ])
@@ -536,14 +530,13 @@ mod tests {
 
     #[test]
     fn strict_transform_no_rules_returns_error() {
-        // Spec #18: no rules (source_path_format is None)
+        // no rules (source_path_format is None)
         let applier = PathMappingRuleApplier::new(vec![]).unwrap();
         assert!(applier.strict_transform("/some/path").is_err());
     }
 
     #[test]
     fn strict_transform_overlapping_rules_uses_longest() {
-        // Spec #19
         let applier = PathMappingRuleApplier::new(vec![
             rule("posix", "/mnt/shared", "/dest/short"),
             rule("posix", "/mnt/shared/projects", "/dest/long"),

@@ -318,7 +318,7 @@ async fn job_logs_timestamp_format_relative() {
 // Timestamp format in JSON output uses the formatter too
 // ---------------------------------------------------------------------------
 
-// AUDIT-023: Negative timedelta (log event before session start) should
+// Negative timedelta (log event before session start) should
 // produce "-H:MM:SS", not "0:-MM:SS"
 #[tokio::test]
 async fn job_logs_timestamp_format_relative_negative_timedelta() {
@@ -539,7 +539,7 @@ async fn job_logs_auto_select_ongoing_from_multiple_prints_latest_message() {
 }
 
 // =====================================================================
-// AUDIT-029: relative timestamp for auto-selected sessions uses session startedAt
+// relative timestamp for auto-selected sessions uses session startedAt
 // =====================================================================
 
 #[tokio::test]

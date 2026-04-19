@@ -25,7 +25,7 @@ use crate::progress_tracker::{
 pub type CollisionState = Arc<Mutex<HashMap<String, i32>>>;
 
 // ---------------------------------------------------------------------------
-// Path traversal validation (AUDIT-035)
+// Path traversal validation
 // ---------------------------------------------------------------------------
 
 /// Validate that all manifest paths resolve within the given root directory.
@@ -461,7 +461,7 @@ pub async fn download_files_from_manifests(
     let mut downloaded_files_by_root: HashMap<String, Vec<String>> = HashMap::new();
 
     for (local_root, manifest) in manifests_by_root {
-        // AUDIT-035: Validate paths are within the download directory
+        // Validate paths are within the download directory
         ensure_paths_within_directory(local_root, &manifest.paths)?;
 
         let mut downloaded = Vec::new();

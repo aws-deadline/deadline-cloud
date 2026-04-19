@@ -278,7 +278,7 @@ async fn job_get_search_term_multiple_matches_shows_summary() {
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
 }
 
-// AUDIT-038: task summary should include INTERRUPTING and NOT_COMPATIBLE statuses
+// task summary should include INTERRUPTING and NOT_COMPATIBLE statuses
 #[tokio::test]
 async fn job_get_search_term_shows_interrupting_and_not_compatible() {
     let harness = TestHarness::new().await;

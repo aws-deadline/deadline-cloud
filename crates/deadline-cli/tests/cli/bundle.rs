@@ -352,7 +352,7 @@ async fn bundle_submit_with_attachments_uploads_files() {
     setup_config(&harness);
     mock_submit_with_attachments(&harness).await;
     let bundle_dir = create_bundle_with_attachments(&harness, "case12");
-    // Set known_asset_paths so AUDIT-003 safety check doesn't cancel
+    // Set known_asset_paths so safety check doesn't cancel
     let temp_root = harness.config_dir.path().to_string_lossy().to_string();
     harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
     let _guard = bundle_settings().bind_to_scope();
@@ -384,7 +384,7 @@ async fn bundle_submit_api_error_exits_with_error() {
     assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"]));
 }
 
-// AUDIT-032: bundle submit API error should show resource suggestions
+// bundle submit API error should show resource suggestions
 #[tokio::test]
 async fn bundle_submit_access_denied_suggests_available_queues() {
     let harness = TestHarness::new().await;
@@ -720,7 +720,7 @@ async fn bundle_submit_with_cli_overrides() {
 // files outside known paths should produce a warning
 // =====================================================================
 
-// AUDIT-003: When --yes (auto_accept) is set and files are outside known
+// When --yes (auto_accept) is set and files are outside known
 // paths, Python cancels the submission as a safety measure. Rust must match.
 #[tokio::test]
 async fn bundle_submit_auto_accept_unknown_paths_cancels() {

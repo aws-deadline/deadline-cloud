@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(ini.get("s", "nope"), None);
     }
 
-    // ── AUDIT-004: INI key case insensitivity ───────────────────────
+    // ── INI key case insensitivity ───────────────────────
 
     #[test]
     fn parse_mixed_case_keys_lowercased() {
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(ini.get("s", "Key"), Some("val"));
     }
 
-    // ── AUDIT-018: INI colon delimiter support ──────────────────────
+    // ── INI colon delimiter support ──────────────────────
 
     #[test]
     fn parse_colon_delimiter_accepted() {
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(ini.get("defaults", "queue_id"), Some("queue-xyz"));
     }
 
-    // ── AUDIT-019: INI section/key ordering preserved ───────────────
+    // ── INI section/key ordering preserved ───────────────
 
     #[test]
     fn roundtrip_preserves_section_order() {
@@ -303,7 +303,7 @@ mod tests {
         assert!(zebra_pos < alpha_pos, "new key should append after existing");
     }
 
-    // ── AUDIT-044: INI multiline value support ──────────────────────
+    // ── INI multiline value support ──────────────────────
 
     #[test]
     fn parse_multiline_continuation() {

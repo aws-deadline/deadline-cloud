@@ -204,7 +204,7 @@ async fn auth_logout_dcm_monitor_fails() {
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
 
-// AUDIT-015: --output JSON (uppercase) should produce JSON, not verbose
+// --output JSON (uppercase) should produce JSON, not verbose
 #[tokio::test]
 async fn auth_status_output_json_uppercase_produces_json() {
     let harness = TestHarness::new().await;

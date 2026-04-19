@@ -117,10 +117,10 @@ fn timestamp_filters() -> insta::Settings {
 }
 
 // =========================================================================
-// Error path tests (spec cases 18-22, 26) — validation short-circuits
+// Error path tests — validation short-circuits
 // =========================================================================
 
-// Spec #18: Both --storage-profile-id and --ignore-storage-profiles
+// Both --storage-profile-id and --ignore-storage-profiles
 #[tokio::test]
 async fn sync_output_storage_profile_and_ignore_mutual_exclusion() {
     let harness = TestHarness::new().await;
@@ -135,7 +135,7 @@ async fn sync_output_storage_profile_and_ignore_mutual_exclusion() {
     ]));
 }
 
-// Spec #19: No storage profile configured
+// No storage profile configured
 #[tokio::test]
 async fn sync_output_no_storage_profile_configured_returns_error() {
     let harness = TestHarness::new().await;
@@ -148,7 +148,7 @@ async fn sync_output_no_storage_profile_configured_returns_error() {
     ]));
 }
 
-// Spec #20: Checkpoint storage profile mismatch
+// Checkpoint storage profile mismatch
 #[tokio::test]
 async fn sync_output_checkpoint_storage_profile_mismatch_returns_error() {
     let harness = TestHarness::new().await;
@@ -179,7 +179,7 @@ async fn sync_output_checkpoint_storage_profile_mismatch_returns_error() {
     ]));
 }
 
-// Spec #21: Queue has no job attachment settings
+// Queue has no job attachment settings
 #[tokio::test]
 async fn sync_output_queue_no_attachments_returns_error() {
     let harness = TestHarness::new().await;
@@ -197,7 +197,7 @@ async fn sync_output_queue_no_attachments_returns_error() {
     ]));
 }
 
-// Spec #22: Checkpoint directory not writable
+// Checkpoint directory not writable
 #[tokio::test]
 async fn sync_output_checkpoint_dir_not_writable_returns_error() {
     let harness = TestHarness::new().await;
@@ -209,7 +209,7 @@ async fn sync_output_checkpoint_dir_not_writable_returns_error() {
     ]));
 }
 
-// Spec #26: PID lock prevents concurrent runs
+// PID lock prevents concurrent runs
 #[tokio::test]
 async fn sync_output_pid_lock_prevents_concurrent_runs() {
     let harness = TestHarness::new().await;
@@ -910,7 +910,7 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
 }
 
 // =========================================================================
-// AUDIT-001: sync-output actually downloads files to disk
+// sync-output actually downloads files to disk
 // =========================================================================
 
 #[tokio::test]
@@ -1023,10 +1023,10 @@ async fn sync_output_downloads_files_to_disk() {
 }
 
 // =====================================================================
-// AUDIT-007: Job discovery must paginate beyond 100 jobs
+// Job discovery must paginate beyond 100 jobs
 // =====================================================================
 
-/// AUDIT-007: When SearchJobs returns totalResults > len(jobs), the CLI
+/// When SearchJobs returns totalResults > len(jobs), the CLI
 /// must paginate using createdAt thresholding to discover all jobs.
 /// The current code calls search_jobs_with_filters once with page_size=100
 /// and silently drops any jobs beyond the first page.

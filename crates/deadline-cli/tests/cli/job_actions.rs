@@ -69,7 +69,7 @@ async fn job_cancel_get_job_fails_prints_error_with_suggestions() {
     assert_cmd_snapshot!(harness.cmd(&["job", "cancel", "--yes"]));
 }
 
-// AUDIT-027: --mark-as BANANA should exit with error listing valid values
+// --mark-as BANANA should exit with error listing valid values
 #[tokio::test]
 async fn job_cancel_mark_as_invalid_value_exits_with_error() {
     let harness = TestHarness::new().await;
@@ -198,7 +198,7 @@ async fn job_requeue_tasks_step_with_no_matching_tasks() {
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--yes"]));
 }
 
-// AUDIT-028: --run-status BANANA should exit with error listing valid values
+// --run-status BANANA should exit with error listing valid values
 #[tokio::test]
 async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
     let harness = TestHarness::new().await;
@@ -207,7 +207,7 @@ async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--run-status", "BANANA", "--yes"]));
 }
 
-// AUDIT-037: cancel confirmation with empty input should re-prompt (not treat as "no")
+// cancel confirmation with empty input should re-prompt (not treat as "no")
 #[tokio::test]
 async fn job_cancel_confirm_empty_input_reprompts() {
     let harness = TestHarness::new().await;
@@ -236,7 +236,7 @@ async fn job_cancel_confirm_empty_input_reprompts() {
         "expected re-prompt on empty input, got stdout: {stdout}\nstderr: {stderr}");
 }
 
-// AUDIT-037: EOF on stdin should exit cleanly, not loop forever
+// EOF on stdin should exit cleanly, not loop forever
 #[tokio::test]
 async fn job_cancel_confirm_eof_exits_cleanly() {
     let harness = TestHarness::new().await;

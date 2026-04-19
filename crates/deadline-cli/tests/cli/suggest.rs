@@ -79,7 +79,7 @@ async fn farm_get_not_found_more_than_10_farms_shows_and_more() {
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-bad"]));
 }
 
-// ── AUDIT-020: suggest_resources dispatch by operation name ────────
+// ── suggest_resources dispatch by operation name ────────
 // The suggestion chain must be determined by which API operation failed,
 // not by which resource IDs happen to be available. When both jobs and
 // queues are listable, a GetQueue error should suggest queues (not jobs).
