@@ -59,7 +59,7 @@ pick and execute work items.
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
-| 15e | Behavioral parity audit | ⚠️ Gaps | — | 9 |
+| 15e | Behavioral parity audit | ✅ Done | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | — | 1-14 |
 | 17 | MCP server | ✅ Done | `cli.md`, `mcp.md` | 1-14 |
