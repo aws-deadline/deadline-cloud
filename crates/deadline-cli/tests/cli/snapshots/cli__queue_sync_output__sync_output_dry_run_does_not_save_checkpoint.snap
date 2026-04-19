@@ -8,24 +8,24 @@ info:
     - "--dry-run"
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmQUINg
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmparU4sv
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:51128"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51128"
-    AWS_ENDPOINT_URL_S3: "http://localhost:51128"
-    AWS_ENDPOINT_URL_STS: "http://localhost:51128"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:59896"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:59896"
+    AWS_ENDPOINT_URL_S3: "http://localhost:59896"
+    AWS_ENDPOINT_URL_STS: "http://localhost:59896"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYhfhli/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYhfhli
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpvBkRn3/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpvBkRn3
 ---
 success: true
 exit_code: 0
@@ -50,6 +50,8 @@ Retrieving updated data from Deadline Cloud...
 Categorizing 0 checkpoint jobs against 1 download candidate jobs...
 NEW Job: Dry Run Job (job-dry)
   Succeeded tasks: 1 / 2
+  Manifest file system paths:
+    - /mnt/shared (posix)
 ...categorization completed
 
 Retrieving sessions for 1 jobs...

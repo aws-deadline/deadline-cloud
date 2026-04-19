@@ -261,23 +261,69 @@ pub fn summarize_paths_by_nested_directory(paths: &[&str]) -> Vec<PathSummary> {
 ///
 /// Groups files by common directory prefix and limits output to
 /// `max_entries` lines. Matches Python's `summarize_path_list`.
-pub fn summarize_path_list(paths: &[&str], max_entries: usize) -> String {
+///
+/// If `total_size_by_path` is provided, sizes are shown per entry and
+/// entries are sorted by size descending (matching Python).
+pub fn summarize_path_list(
+    paths: &[&str],
+    max_entries: usize,
+    total_size_by_path: Option<&std::collections::HashMap<String, i64>>,
+) -> String {
     if paths.is_empty() {
         return String::new();
     }
 
-    // Group paths by parent directory
+    // Helper to format bytes as human-readable
+    fn fmt_size(bytes: i64) -> String {
+        let postfixes = ["B", "KB", "MB", "GB", "TB"];
+        let mut converted = bytes as f64;
+        for postfix in &postfixes {
+            let rounded = (converted * 100.0).round() / 100.0;
+            if rounded < 1000.0 {
+                if *postfix == "B" {
+                    return format!("{} {postfix}", rounded as u64);
+                }
+                let s = format!("{rounded:.2}");
+                let s = s.trim_end_matches('0').trim_end_matches('.');
+                return format!("{s} {postfix}");
+            }
+            converted /= 1000.0;
+        }
+        let rounded = (converted * 100.0).round() / 100.0;
+        let s = format!("{rounded:.2}");
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        format!("{s} TB")
+    }
+
+    // Group paths by parent directory, tracking sizes per directory and per file
     let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut dir_sizes: BTreeMap<String, i64> = BTreeMap::new();
+    let mut file_sizes: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     for path in paths {
         let p = std::path::Path::new(path);
         let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
         let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
-        by_dir.entry(dir).or_default().push(name);
+        by_dir.entry(dir.clone()).or_default().push(name.clone());
+        if let Some(sizes) = total_size_by_path {
+            if let Some(&size) = sizes.get(*path) {
+                *dir_sizes.entry(dir.clone()).or_default() += size;
+                file_sizes.insert(format!("{dir}/{name}"), size);
+            }
+        }
+    }
+
+    // Sort directories: by size descending if sizes provided, otherwise by file count descending
+    let mut dir_order: Vec<String> = by_dir.keys().cloned().collect();
+    if total_size_by_path.is_some() {
+        dir_order.sort_by(|a, b| dir_sizes.get(b).unwrap_or(&0).cmp(dir_sizes.get(a).unwrap_or(&0)));
+    } else {
+        dir_order.sort_by(|a, b| by_dir.get(b).map(|v| v.len()).unwrap_or(0).cmp(&by_dir.get(a).map(|v| v.len()).unwrap_or(0)));
     }
 
     let mut lines = Vec::new();
 
-    for (dir, files) in &by_dir {
+    for dir in &dir_order {
+        let files = &by_dir[dir];
         let dir_display = if dir.is_empty() { "." } else { dir.as_str() };
         let total = files.len();
         let file_word = if total == 1 { "file" } else { "files" };
@@ -286,15 +332,23 @@ pub fn summarize_path_list(paths: &[&str], max_entries: usize) -> String {
         let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
         let summaries = summarize_paths_by_sequence(&file_refs);
 
-        if summaries.len() == 1 && summaries[0].index_set.is_empty() && total == 1 {
-            // Single file, no directory grouping needed
-            lines.push(format!("{dir_display}/{} (1 file)\n", files[0]));
+        let size_suffix = if let Some(&dir_size) = dir_sizes.get(dir) {
+            format!(", {}", fmt_size(dir_size))
         } else {
-            lines.push(format!("{dir_display}/ ({total} {file_word}):\n"));
+            String::new()
+        };
+
+        if summaries.len() == 1 && summaries[0].index_set.is_empty() && total == 1 {
+            lines.push(format!("{dir_display}/{} (1 file{size_suffix})\n", files[0]));
+        } else {
+            lines.push(format!("{dir_display}/ ({total} {file_word}{size_suffix}):\n"));
             let show = summaries.len().min(max_entries.saturating_sub(lines.len()));
             for summary in &summaries[..show] {
+                let child_size = file_sizes.get(&format!("{dir}/{}", summary.path))
+                    .map(|&s| format!(", {}", fmt_size(s)))
+                    .unwrap_or_default();
                 if summary.index_set.is_empty() {
-                    lines.push(format!("  {} (1 file)\n", summary.path));
+                    lines.push(format!("  {} (1 file{child_size})\n", summary.path));
                 } else {
                     let seq = int_set_to_range_expr(&summary.index_set);
                     let count = summary.file_count;

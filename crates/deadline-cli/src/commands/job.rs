@@ -1233,7 +1233,7 @@ pub(crate) async fn download_output_impl(
             .collect();
         let path_refs: Vec<&str> = all_paths.iter().map(|s| s.as_str()).collect();
         println!("\nSummary of file paths to download:");
-        let summary = summarize_path_list(&path_refs, 10);
+        let summary = summarize_path_list(&path_refs, 10, None);
         for line in summary.lines() {
             println!("  {line}");
         }

@@ -1105,3 +1105,354 @@ async fn sync_output_paginates_beyond_100_jobs() {
         "All 3 jobs should be discovered via pagination.\nstderr:\n{stderr}\nstdout:\n{stdout}"
     );
 }
+
+// =========================================================================
+// SYNC-001: Session action count excludes no-output actions
+// =========================================================================
+
+/// Python filters out session actions that have no output manifests before
+/// counting `downloaded_session_actions`. The count should only reflect
+/// actions that actually produced downloadable output.
+///
+/// Setup: 1 job with 1 session, 2 succeeded taskRun actions.
+/// Action 0 has no output manifest on S3. Action 1 has a manifest.
+/// Expected: `Downloaded session actions: 1` (not 2).
+#[tokio::test]
+async fn sync_output_session_action_count_excludes_no_output_actions() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+    let download_dir = TempDir::new().unwrap();
+    let download_root = download_dir.path().to_str().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let job = active_job("job-mix", "Mixed Actions Job", 2, 0);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+
+    let mut job_detail = job_detail_with_attachments("job-mix", None);
+    job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-mix", &[
+        json!({
+            "sessionId": "session-mix1",
+            "fleetId": "fleet-001",
+            "workerId": "worker-001",
+            "startedAt": "2024-06-15T10:00:00Z",
+            "lifecycleStatus": "ENDED"
+        })
+    ]).await;
+
+    // Two succeeded taskRun actions
+    sessions::mock_list_session_actions(
+        &harness.server, "farm-abc", "queue-aaa", "job-mix", "session-mix1",
+        &[
+            json!({
+                "sessionActionId": "sessionaction-mix1-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2024-06-15T10:01:00Z",
+                "endedAt": "2024-06-15T10:02:00Z",
+                "definition": { "taskRun": { "taskId": "task-001", "stepId": "step-001" } }
+            }),
+            json!({
+                "sessionActionId": "sessionaction-mix1-1",
+                "status": "SUCCEEDED",
+                "startedAt": "2024-06-15T10:03:00Z",
+                "endedAt": "2024-06-15T10:04:00Z",
+                "definition": { "taskRun": { "taskId": "task-002", "stepId": "step-002" } }
+            }),
+        ]
+    ).await;
+
+    // S3: only action 1 has an output manifest; action 0 has none
+    let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-mix/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-mix1-1/abc.manifest";
+    s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
+
+    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let manifest_json = serde_json::to_string(&json!({
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1700000000000000_i64 }],
+        "totalSize": 10
+    })).unwrap();
+
+    let manifest_key_encoded = manifest_key.replace(':', "%3A");
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("my-bucket/{manifest_key_encoded}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", download_root)],
+    ).await;
+
+    s3::mock_s3_get_object(
+        &harness.server,
+        &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
+        b"resultdata",
+    ).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // SYNC-001: count should be 1 (only the action with a manifest), not 2
+    assert!(stderr.contains("Downloaded session actions: 1"),
+        "Should count only session actions with output manifests, not all succeeded actions.\nstderr:\n{stderr}");
+}
+
+// =========================================================================
+// SYNC-002: New job prints "Manifest file system paths"
+// =========================================================================
+
+/// Python prints manifest root paths for each NEW job with attachments:
+///   Manifest file system paths:
+///     - /mnt/shared (posix)
+/// Rust currently omits this.
+#[tokio::test]
+async fn sync_output_new_job_prints_manifest_file_system_paths() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    let job = active_job("job-mfp", "Manifest Paths Job", 1, 1);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+
+    // Job with two manifest entries (different root paths)
+    let job_detail = json!({
+        "jobId": "job-mfp",
+        "name": "Manifest Paths Job",
+        "attachments": {
+            "manifests": [
+                { "rootPath": "/mnt/shared", "rootPathFormat": "posix", "fileSystemLocationName": "" },
+                { "rootPath": "/mnt/output", "rootPathFormat": "posix", "fileSystemLocationName": "" }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-mfp", &[]).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Manifest file system paths:"),
+        "Should print 'Manifest file system paths:' header for new jobs with attachments.\nstderr:\n{stderr}");
+    assert!(stderr.contains("- /mnt/shared (posix)"),
+        "Should list first manifest root path.\nstderr:\n{stderr}");
+    assert!(stderr.contains("- /mnt/output (posix)"),
+        "Should list second manifest root path.\nstderr:\n{stderr}");
+}
+
+// =========================================================================
+// SYNC-003: WARNING for session actions without output manifests
+// =========================================================================
+
+/// Python prints a WARNING when a job has session actions that produced
+/// no output manifests:
+///   WARNING: Job Test Job (job-123) ran 1 / 2 session actions with no output.
+///            This may indicate steps in the job that strictly perform validation...
+#[tokio::test]
+async fn sync_output_warning_for_session_actions_without_manifests() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+    let download_dir = TempDir::new().unwrap();
+    let download_root = download_dir.path().to_str().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let job = active_job("job-warn", "Warning Job", 2, 0);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+
+    let mut job_detail = job_detail_with_attachments("job-warn", None);
+    job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-warn", &[
+        json!({
+            "sessionId": "session-w1",
+            "fleetId": "fleet-001",
+            "workerId": "worker-001",
+            "startedAt": "2024-06-15T10:00:00Z",
+            "lifecycleStatus": "ENDED"
+        })
+    ]).await;
+
+    // Two succeeded taskRun actions, but only one has output on S3
+    sessions::mock_list_session_actions(
+        &harness.server, "farm-abc", "queue-aaa", "job-warn", "session-w1",
+        &[
+            json!({
+                "sessionActionId": "sessionaction-w1-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2024-06-15T10:01:00Z",
+                "endedAt": "2024-06-15T10:02:00Z",
+                "definition": { "taskRun": { "taskId": "task-001", "stepId": "step-001" } }
+            }),
+            json!({
+                "sessionActionId": "sessionaction-w1-1",
+                "status": "SUCCEEDED",
+                "startedAt": "2024-06-15T10:03:00Z",
+                "endedAt": "2024-06-15T10:04:00Z",
+                "definition": { "taskRun": { "taskId": "task-002", "stepId": "step-002" } }
+            }),
+        ]
+    ).await;
+
+    // Only step-002/task-002 has a manifest; step-001/task-001 has none
+    let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-warn/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-w1-1/abc.manifest";
+    s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
+
+    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let manifest_json = serde_json::to_string(&json!({
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1700000000000000_i64 }],
+        "totalSize": 10
+    })).unwrap();
+
+    let manifest_key_encoded = manifest_key.replace(':', "%3A");
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("my-bucket/{manifest_key_encoded}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", download_root)],
+    ).await;
+
+    s3::mock_s3_get_object(
+        &harness.server,
+        &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
+        b"resultdata",
+    ).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("WARNING: Job Warning Job (job-warn) ran 1 / 2 session actions with no output."),
+        "Should print WARNING about session actions without output manifests.\nstderr:\n{stderr}");
+    assert!(stderr.contains("This may indicate steps in the job that strictly perform validation"),
+        "Should print explanation about validation steps.\nstderr:\n{stderr}");
+}
+
+// =========================================================================
+// SYNC-004: Path summary shows per-file listing with sizes
+// =========================================================================
+
+/// Python uses `summarize_path_list(paths, total_size_by_path=sizes, max_entries=30)`
+/// which produces a per-directory/per-file summary with sizes.
+/// Rust currently prints only "{N} files, {size}" as an aggregate.
+#[tokio::test]
+async fn sync_output_path_summary_shows_per_file_listing() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness).await;
+    let checkpoint_dir = TempDir::new().unwrap();
+    let download_dir = TempDir::new().unwrap();
+    let download_root = download_dir.path().to_str().unwrap();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let job = active_job("job-sum", "Summary Job", 1, 0);
+    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
+
+    let mut job_detail = job_detail_with_attachments("job-sum", None);
+    job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
+
+    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-sum", &[
+        json!({
+            "sessionId": "session-sum1",
+            "fleetId": "fleet-001",
+            "workerId": "worker-001",
+            "startedAt": "2024-06-15T10:00:00Z",
+            "lifecycleStatus": "ENDED"
+        })
+    ]).await;
+
+    sessions::mock_list_session_actions(
+        &harness.server, "farm-abc", "queue-aaa", "job-sum", "session-sum1",
+        &[json!({
+            "sessionActionId": "sessionaction-sum1-0",
+            "status": "SUCCEEDED",
+            "startedAt": "2024-06-15T10:01:00Z",
+            "endedAt": "2024-06-15T10:02:00Z",
+            "definition": { "taskRun": { "taskId": "task-001", "stepId": "step-001" } }
+        })]
+    ).await;
+
+    let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-sum/step-001/task-001/2024-06-15T10:02:00Z_sessionaction-sum1-0/abc.manifest";
+    s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
+
+    // Manifest with two files in different directories
+    let hash_a = "aaaa000000000000aaaa000000000000";
+    let hash_b = "bbbb000000000000bbbb000000000000";
+    let manifest_json = serde_json::to_string(&json!({
+        "hashAlg": "xxh128",
+        "manifestVersion": "2023-03-03",
+        "paths": [
+            { "path": "renders/frame_001.exr", "hash": hash_a, "size": 1500000, "mtime": 1700000000000000_i64 },
+            { "path": "renders/frame_002.exr", "hash": hash_b, "size": 1500000, "mtime": 1700000000000000_i64 }
+        ],
+        "totalSize": 3000000
+    })).unwrap();
+
+    let manifest_key_encoded = manifest_key.replace(':', "%3A");
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("my-bucket/{manifest_key_encoded}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", download_root)],
+    ).await;
+
+    s3::mock_s3_get_object(
+        &harness.server,
+        &format!("my-bucket/DeadlineCloud/Data/{hash_a}.xxh128"),
+        &vec![0u8; 1500000],
+    ).await;
+    s3::mock_s3_get_object(
+        &harness.server,
+        &format!("my-bucket/DeadlineCloud/Data/{hash_b}.xxh128"),
+        &vec![0u8; 1500000],
+    ).await;
+
+    let output = harness.cli(&[
+        "queue", "sync-output",
+        "--ignore-storage-profiles",
+        "--dry-run",
+        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+    ]).output().expect("should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // SYNC-004: Should show per-file listing, not just aggregate "2 files, 3.0 MB"
+    // The old format was a bare "  2 files, 3 MB" line with no directory context.
+    // The new format uses summarize_path_list which shows directory grouping:
+    //   /path/to/renders/ (2 files, 3 MB):
+    //     frame_001.exr (1 file)
+    //     frame_002.exr (1 file)
+    let summary_section = stderr.split("Summary of paths to download:").nth(1).unwrap_or("");
+    assert!(summary_section.contains("renders/") || summary_section.contains("renders\\"),
+        "Path summary should show directory grouping.\nstderr:\n{stderr}");
+    assert!(summary_section.contains("frame_001.exr") || summary_section.contains("frame_%d.exr"),
+        "Path summary should show individual files or sequence patterns.\nstderr:\n{stderr}");
+}

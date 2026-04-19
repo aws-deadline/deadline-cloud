@@ -98,3 +98,50 @@ Output manifests are downloaded from S3 with their `LastModified`
 timestamps preserved. Manifests for the same asset root are sorted by
 `LastModified` (oldest first) before merging, so newer files overwrite
 older ones. This matches Python's `_merge_asset_manifests_sorted_asc_by_last_modified`.
+
+### Job Categorization Output
+
+For each NEW job with attachments, the command prints:
+```
+NEW Job: <name> (<jobId>)
+  Succeeded tasks: <succeeded> / <total>
+  Manifest file system paths:
+    - <rootPath> (<rootPathFormat>)
+```
+
+The "Manifest file system paths" section lists each manifest entry's
+`rootPath` and `rootPathFormat` from the job's `attachments.manifests`
+array. This matches Python's `_categorize_jobs_in_checkpoint` output.
+
+### Session Action Filtering and WARNING
+
+After discovering S3 output manifests, the command determines which
+session actions produced output by matching session action IDs in the
+S3 manifest key paths. Session actions without output manifests are
+excluded from the `Downloaded session actions` count.
+
+If a job has session actions that produced no output, a WARNING is
+printed:
+```
+WARNING: Job <name> (<jobId>) ran <without_output> / <total> session actions with no output.
+         This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3.
+```
+
+This matches Python's `_filter_session_actions_without_manifests_from_job_sessions`.
+
+### Path Summary
+
+The "Summary of paths to download" section uses `summarize_path_list`
+with per-file sizes and `max_entries=30`. Output groups files by
+directory with individual file sizes:
+```
+/path/to/output/ (7 files, 700.91 KB):
+  convergence.png (1 file, 658.55 KB)
+  frame_%d.exr (5 files, sequence 1-5)
+```
+
+**Accepted difference from Python:** Python shows each file as a
+full-path top-level entry sorted by size descending. Rust groups by
+directory with nested children. Both show the same information (file
+names, sizes, totals). The Rust format is more readable for large file
+sets and consistent with `job download-output`.

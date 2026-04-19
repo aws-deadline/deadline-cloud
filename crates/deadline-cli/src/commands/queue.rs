@@ -760,6 +760,18 @@ async fn incremental_output_download(
             eprintln!("NEW Job: {name} ({job_id})");
             eprintln!("  Succeeded tasks: {succeeded} / {total}");
 
+            // SYNC-002: Print manifest file system paths for new jobs with attachments
+            if let Some(manifests) = dc_job.get("attachments")
+                .and_then(|a| a["manifests"].as_array())
+            {
+                eprintln!("  Manifest file system paths:");
+                for manifest in manifests {
+                    let root_path = manifest["rootPath"].as_str().unwrap_or("");
+                    let root_format = manifest["rootPathFormat"].as_str().unwrap_or("");
+                    eprintln!("    - {root_path} ({root_format})");
+                }
+            }
+
             // Check if already completed
             if succeeded == total && dc_job.get("endedAt").is_some() {
                 completed_job_ids.insert(job_id.clone());
@@ -865,10 +877,16 @@ async fn incremental_output_download(
 
     let mut all_session_actions: Vec<serde_json::Value> = Vec::new();
 
+    // Track session actions per job for SYNC-001/SYNC-003 filtering
+    let mut job_session_action_counts: std::collections::HashMap<String, (usize, usize)> = std::collections::HashMap::new(); // (total, with_output)
+    let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+
     for job_id in &jobs_to_process {
         let sessions_resp = api::list_sessions(farm_id, queue_id, job_id, Some(config), None)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
+
+        let mut job_actions: Vec<serde_json::Value> = Vec::new();
 
         if let Some(sessions) = sessions_resp["sessions"].as_array() {
             for session in sessions {
@@ -896,13 +914,20 @@ async fn incremental_output_download(
                                 .and_then(|m| m.get(session_id))
                                 .copied();
                             if completed_index.map_or(true, |ci| sa_index > ci) {
-                                all_session_actions.push(action.clone());
+                                job_actions.push(action.clone());
                             }
                         }
                     }
                 }
             }
         }
+
+        let action_ids: Vec<String> = job_actions.iter()
+            .filter_map(|a| a["sessionActionId"].as_str().map(|s| s.to_string()))
+            .collect();
+        job_session_action_counts.insert(job_id.clone(), (job_actions.len(), 0));
+        job_session_action_ids.insert(job_id.clone(), action_ids);
+        all_session_actions.extend(job_actions);
     }
 
     // Step 4: Download output manifests and files
@@ -936,6 +961,26 @@ async fn incremental_output_download(
                 &s3_client, bucket, &manifest_prefix, &account_id,
             ).await.unwrap_or_default();
 
+            // SYNC-001/003: Count session actions with output manifests for this job
+            let mut session_action_ids_with_manifests: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for key in &manifest_keys {
+                // Extract session action ID from manifest key path
+                // Format: .../step-X/task-Y/timestamp_sessionaction-ID/file.manifest
+                if let Some(sa_part) = key.rsplit('/').nth(1) {
+                    if let Some(sa_id) = sa_part.split('_').find(|p| p.starts_with("sessionaction-")) {
+                        session_action_ids_with_manifests.insert(sa_id.to_string());
+                    }
+                }
+            }
+
+            // Update the with-output count for this job
+            if let Some(counts) = job_session_action_counts.get_mut(job_id) {
+                let job_sa_ids = job_session_action_ids.get(job_id);
+                counts.1 = job_sa_ids.map_or(0, |ids| {
+                    ids.iter().filter(|id| session_action_ids_with_manifests.contains(id.as_str())).count()
+                });
+            }
+
             for key in &manifest_keys {
                 match deadline_job_attachments::download::download_manifest_from_s3(
                     &s3_client, bucket, key, &account_id,
@@ -962,6 +1007,20 @@ async fn incremental_output_download(
             }
         }
 
+        // SYNC-003: Print WARNING for jobs with session actions that had no output
+        for job_id in &jobs_to_process {
+            if let Some(&(total, with_output)) = job_session_action_counts.get(job_id) {
+                let without_output = total - with_output;
+                if without_output > 0 {
+                    let name = download_candidates.get(job_id)
+                        .and_then(|j| j["name"].as_str())
+                        .unwrap_or("unknown");
+                    eprintln!("WARNING: Job {name} ({job_id}) ran {without_output} / {total} session actions with no output.");
+                    eprintln!("         This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3.");
+                }
+            }
+        }
+
         // Merge and download
         let manifest_paths = deadline_job_attachments::incremental_download::merge_absolute_path_manifest_list(
             &mut downloaded_manifests,
@@ -974,9 +1033,14 @@ async fn incremental_output_download(
         if manifest_paths.is_empty() {
             eprintln!("  (no files to download)");
         } else {
-            eprintln!("  {} files, {}",
-                total_files,
-                deadline_job_attachments::progress_tracker::human_readable_file_size(total_bytes as u64));
+            // SYNC-004: Use summarize_path_list with sizes instead of aggregate count
+            let local_paths: Vec<String> = manifest_paths.iter().map(|p| p.path.clone()).collect();
+            let path_refs: Vec<&str> = local_paths.iter().map(|s| s.as_str()).collect();
+            let size_by_path: std::collections::HashMap<String, i64> = manifest_paths.iter()
+                .map(|p| (p.path.clone(), p.size))
+                .collect();
+            let summary = deadline_api::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
+            eprint!("{summary}");
         }
         eprintln!();
 
@@ -1040,7 +1104,7 @@ async fn incremental_output_download(
     } else {
         eprintln!("Summary of incremental output download:");
     }
-    eprintln!("  Downloaded session actions: {}", all_session_actions.len());
+    eprintln!("  Downloaded session actions: {}", job_session_action_counts.values().map(|&(_, with_output)| with_output).sum::<usize>());
     eprintln!("  Downloaded files: {}", downloaded_files_count);
     eprintln!("  Downloaded bytes: {}",
         deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes));
