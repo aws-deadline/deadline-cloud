@@ -8,7 +8,7 @@ This catches differences that stub-server tests miss.
 Process:
 1. Check auth: `deadline auth status` — if not authenticated, ask human to log in
 2. Discover resources: `deadline farm list`, `deadline queue list`, etc.
-3. For each key case, diff both CLIs:
+3. Use the resources you found to test each key case that you implemented. Then, diff both CLIs:
    ```bash
    diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
    ```

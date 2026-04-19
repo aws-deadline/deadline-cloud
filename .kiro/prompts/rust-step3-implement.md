@@ -8,7 +8,7 @@ Write the minimum code to make the tests pass. Then:
 1. Run `cargo build` (full workspace)
 2. Run `cargo test` (full test suite — all crates, not just the one you changed)
 3. If snapshots were created, run `cargo insta review` — verify each against
-   Python output before accepting. Do not use `INSTA_UPDATE=always`.
+   Python implementation before accepting. Do not use `INSTA_UPDATE=always`.
 
 For CLI commands calling AWS APIs, follow patterns in `specs/patterns.md`:
 - All API functions use `ResponseBodyCapture` to capture raw JSON
