@@ -16,6 +16,9 @@ None — pick from `specs/progress.md`.
 4. **Serialization patterns.** See `specs/patterns.md`.
 5. **`serde_json` has `preserve_order` enabled** — `json!()` preserves
    insertion order, not alphabetical.
+6. **Test fixtures for CLI comparison.** `test_fixtures/job_bundles/`
+   contains sample job bundles for manual comparison between Python and
+   Rust CLIs. See `test_fixtures/README.md`.
 
 ## Recently Completed
 

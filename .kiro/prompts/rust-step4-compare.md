@@ -12,9 +12,15 @@ Process:
    ```bash
    diff <(deadline <command> 2>&1) <(./target/debug/deadline <command> 2>&1)
    ```
-4. If the command has no API calls (pure validation / URL parsing),
+4. For bundle submit comparisons, use the committed test fixtures:
+   ```bash
+   diff <(deadline bundle submit test_fixtures/job_bundles/simple_job --dry-run --yes 2>&1) \
+        <(./target/debug/deadline bundle submit test_fixtures/job_bundles/simple_job --dry-run --yes 2>&1)
+   ```
+   See `test_fixtures/README.md` for available bundles and more examples.
+5. If the command has no API calls (pure validation / URL parsing),
    compare error messages and exit codes for all error paths
-5. Fix any output differences. If a difference is accepted, document
+6. Fix any output differences. If a difference is accepted, document
    the rationale.
 
 ⛔ GATE: Present comparison results and any accepted differences. Stop and wait for

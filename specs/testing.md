@@ -647,3 +647,33 @@ A test that only checks `contains("farm-abc")` will pass even if:
 
 Snapshot tests catch all of these automatically because they assert on the
 full output.
+
+---
+
+## Manual CLI Comparison Testing
+
+Stub-server tests (Level 2) verify behavior against canned responses.
+Manual comparison against the real API catches differences that stubs
+miss — field ordering, extra fields, datetime precision, error message
+wording from the service.
+
+### Test fixtures
+
+`test_fixtures/job_bundles/` contains sample job bundles for comparing
+the Python (`deadline`) and Rust (`./target/debug/deadline`) CLIs:
+
+| Bundle | Use Case |
+|--------|----------|
+| `simple_job` | `bundle submit --dry-run`, parameter validation |
+| `cli_job` | Attachment upload/download with INOUT PATH parameter |
+| `job_attachments_devguide_output` | Output download, `queue sync-output` |
+
+### Workflow
+
+```bash
+# Compare dry-run submission output
+diff <(deadline bundle submit test_fixtures/job_bundles/simple_job --dry-run --yes 2>&1) \
+     <(./target/debug/deadline bundle submit test_fixtures/job_bundles/simple_job --dry-run --yes 2>&1)
+```
+
+See `test_fixtures/README.md` for more examples.

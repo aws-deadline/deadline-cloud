@@ -16,6 +16,7 @@ Deeper docs:
 - `specs/` — per-crate subdirectories with architecture and topic-scoped specs
 - `specs/cli/` — per-command CLI feature documentation
 - `specs/workflow.md` — development loop: study Python → write tests → implement → write spec → audit → fix → commit
+- `test_fixtures/` — job bundles for manual CLI comparison testing (see `test_fixtures/README.md`)
 
 ## Keeping docs in sync with code
 

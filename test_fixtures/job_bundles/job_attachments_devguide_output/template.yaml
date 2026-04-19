@@ -1,0 +1,30 @@
+specificationVersion: jobtemplate-2023-09
+name: "Job Attachments Explorer: Output"
+description: |
+  This bundle serves as the starting point for the exploration of how job attachments
+  collects output files that is contained in job_bundles/Using_Files_In_Jobs.md.
+parameterDefinitions:
+- name: ScriptFile
+  type: PATH
+  default: script.sh
+  dataFlow: IN
+  objectType: FILE
+- name: OutputDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: OUT
+  default: ./output_dir
+  description: This directory the output for all steps.
+steps:
+- name: Step
+  hostRequirements:
+    attributes:
+    - name: attr.worker.os.family
+      anyOf:
+      - linux
+  script:
+    actions:
+      onRun:
+        command: /bin/bash
+        args: ['{{Param.ScriptFile}}', '{{Param.OutputDir}}', '{{Session.PathMappingRulesFile}}']
+
