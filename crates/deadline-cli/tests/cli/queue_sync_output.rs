@@ -1455,4 +1455,9 @@ async fn sync_output_path_summary_shows_per_file_listing() {
         "Path summary should show directory grouping.\nstderr:\n{stderr}");
     assert!(summary_section.contains("frame_001.exr") || summary_section.contains("frame_%d.exr"),
         "Path summary should show individual files or sequence patterns.\nstderr:\n{stderr}");
+    // SYNC-007: Dry-run should still report would-be file/byte counts
+    assert!(stderr.contains("Downloaded files: 2"),
+        "Dry-run should report would-be file count.\nstderr:\n{stderr}");
+    assert!(stderr.contains("Downloaded bytes: 3 MB"),
+        "Dry-run should report would-be byte count.\nstderr:\n{stderr}");
 }

@@ -288,12 +288,12 @@ sizes. Rust prints only `{N} files, {size}`.
 - [x] Step 6: Spec — complete (queue.md updated)
 - [x] Step 7: Commit — done
 
-## Sub-batch F — Remaining sync-output bugs (NOT STARTED)
+## Sub-batch F — Remaining sync-output bugs (DONE)
 
-| ID | Priority | Title | Category |
-|----|----------|-------|----------|
-| SYNC-006 | Medium | `sync-output` duration format missing days (`16666:37:00` vs `694 days, 10:37:00`) | Bug — `format_duration` doesn't break hours into days |
-| SYNC-007 | Medium | `sync-output` dry-run reports 0 files/bytes instead of would-be counts | Bug — stats computed from download result which is skipped in dry-run |
+| ID | Priority | Title | Status |
+|----|----------|-------|--------|
+| SYNC-006 | Medium | `sync-output` duration format missing days | ✅ Fixed |
+| SYNC-007 | Medium | `sync-output` dry-run reports 0 files/bytes instead of would-be counts | ✅ Fixed |
 
 ### Step 4 Comparison Results
 

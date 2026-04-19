@@ -1029,6 +1029,10 @@ async fn incremental_output_download(
         let total_bytes: i64 = manifest_paths.iter().map(|p| p.size).sum();
         let total_files = manifest_paths.len();
 
+        // SYNC-007: Set stats from manifest paths so dry-run reports would-be counts
+        downloaded_files_count = total_files;
+        downloaded_bytes = total_bytes as u64;
+
         eprintln!("Summary of paths to download:");
         if manifest_paths.is_empty() {
             eprintln!("  (no files to download)");
@@ -1135,13 +1139,46 @@ async fn incremental_output_download(
 }
 
 /// Format a chrono::Duration as H:MM:SS.ffffff matching Python's timedelta str()
+/// Python outputs "X day(s), H:MM:SS.ffffff" when days > 0.
 fn format_duration(d: Duration) -> String {
     let total_secs = d.num_seconds();
-    let hours = total_secs / 3600;
-    let mins = (total_secs % 3600) / 60;
-    let secs = total_secs % 60;
+    let days = total_secs / 86400;
+    let remaining = total_secs % 86400;
+    let hours = remaining / 3600;
+    let mins = (remaining % 3600) / 60;
+    let secs = remaining % 60;
     let micros = d.num_microseconds().unwrap_or(0) % 1_000_000;
-    format!("{hours}:{mins:02}:{secs:02}.{micros:06}")
+    let time = format!("{hours}:{mins:02}:{secs:02}.{micros:06}");
+    if days == 0 {
+        time
+    } else if days == 1 {
+        format!("1 day, {time}")
+    } else {
+        format!("{days} days, {time}")
+    }
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+
+    #[test]
+    fn format_duration_under_24h() {
+        let d = Duration::seconds(3661) + Duration::microseconds(500000);
+        assert_eq!(format_duration(d), "1:01:01.500000");
+    }
+
+    #[test]
+    fn format_duration_with_days() {
+        let d = Duration::days(694) + Duration::hours(10) + Duration::minutes(37);
+        assert_eq!(format_duration(d), "694 days, 10:37:00.000000");
+    }
+
+    #[test]
+    fn format_duration_one_day() {
+        let d = Duration::days(1) + Duration::hours(2);
+        assert_eq!(format_duration(d), "1 day, 2:00:00.000000");
+    }
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
