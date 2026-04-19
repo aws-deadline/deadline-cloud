@@ -73,6 +73,33 @@ If code under test writes outside a `TempDir` (e.g. to cwd), use an RAII
 
 ---
 
+## Test Infrastructure
+
+### `deadline-test-server` crate
+
+A workspace member (`crates/deadline-test-server/`) used only as a
+`[dev-dependency]`. Provides:
+
+- **`TestHarness`** — per-test isolation. Each `TestHarness::new()` starts
+  a fresh `wiremock` server and creates an isolated temp directory for
+  config files. Environment variables point the CLI at the stub server.
+  No shared state between tests.
+- **Mock helpers** — organized by API domain under
+  `deadline_test_server::deadline_api::`:
+  `farms`, `jobs`, `queues`, `queue_resources`, `sessions`, `s3`, `sts`,
+  `telemetry`, `errors`. Each module has `mock_*` async functions that
+  mount canned responses on `harness.server`.
+
+### `TestHarness` methods
+
+- `harness.cmd(&["farm", "list"])` → `std::process::Command` for
+  `assert_cmd_snapshot!` (snapshot tests)
+- `harness.cli(&["config", "set", ...])` → `assert_cmd::Command` for
+  `.assert().success()` and file side-effect checks
+- `harness.server` → the `wiremock::MockServer` to mount stubs on
+
+---
+
 ## Test Levels
 
 ### Level 1: Direct Unit Tests
