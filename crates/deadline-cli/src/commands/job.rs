@@ -495,10 +495,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let mark_as = mark_as.to_uppercase();
             const VALID_MARK_AS: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"];
             if !VALID_MARK_AS.contains(&mark_as.as_str()) {
-                return Err(CliError::Operation(format!(
-                    "Invalid value for --mark-as: {mark_as}. Valid values: {}",
-                    VALID_MARK_AS.join(", ")
-                )));
+                return Err(CliError::ExitCode {
+                    code: 2,
+                    message: format!(
+                        "Invalid value for --mark-as: {mark_as}. Valid values: {}",
+                        VALID_MARK_AS.join(", ")
+                    ),
+                });
             }
             let auto_accept = is_auto_accept(&config);
 
@@ -588,10 +591,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             const VALID_RUN_STATUSES: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"];
             for status in &run_status_set {
                 if !VALID_RUN_STATUSES.contains(&status.as_str()) {
-                    return Err(CliError::Operation(format!(
-                        "Invalid value for --run-status: {status}. Valid values: {}",
-                        VALID_RUN_STATUSES.join(", ")
-                    )));
+                    return Err(CliError::ExitCode {
+                        code: 2,
+                        message: format!(
+                            "Invalid value for --run-status: {status}. Valid values: {}",
+                            VALID_RUN_STATUSES.join(", ")
+                        ),
+                    });
                 }
             }
 
@@ -708,7 +714,9 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     };
                     println!("    {status} {task_summary}");
 
-                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config), None).await
+                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config), None,
+                        Some(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)),
+                    ).await
                         .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
                     total_requeued += 1;
                 }

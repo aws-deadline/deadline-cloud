@@ -113,7 +113,7 @@ after the core CLI commands are complete.
   ("Retrieving session actions...", "Populating manifest S3 keys...",
   "Downloading N asset manifests...").
 - **#14**: AUDIT-030 — `handle-web-url` macOS support missing
-- **#15**: AUDIT-040 — No adaptive retry strategy for requeue
+- **#15**: AUDIT-040 — ~~No adaptive retry strategy for requeue~~ ✅ Fixed
 
 **Dropped findings (not bugs, accepted differences):**
 - AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
@@ -132,11 +132,9 @@ after the core CLI commands are complete.
   `"farm-1"`, `"queue-1"`) with pseudorandomly generated IDs that follow
   the actual Deadline Cloud ID format. Add a test helper that generates
   realistic IDs per resource type. Applies across all crates.
-- **Exit code parity**: Rust uses exit code 1 for argument validation
-  errors (e.g. `--mark-as BANANA`, `--run-status BANANA`), while Python
-  uses exit code 2 (Click's `UsageError`). Align to exit code 2 for
-  argument validation failures to match Python. Affects `job cancel`,
-  `job requeue-tasks`, and any future commands with value validation.
+- **~~Exit code parity~~**: ✅ Fixed — Rust now uses exit code 2 for
+  argument validation failures (`--mark-as`, `--run-status`), matching
+  Python's Click `UsageError`.
 - **Test consolidation**: Audit test suite for redundant or overlapping
   tests. Identify Level 1 tests fully subsumed by Level 2 snapshots
   (per testing.md removal rule). Consolidate tests that exercise the

@@ -856,16 +856,21 @@ pub async fn update_task(
     target_run_status: &str,
     config: Option<&IniConfig>,
     telemetry: Option<&TelemetryClient>,
+    retry_config: Option<aws_config::retry::RetryConfig>,
 ) -> Result<Value, DeadlineError> {
     with_telemetry_latency_async("update_task", config, telemetry, || async {
         let client = session::deadline_client(config).await;
         let status: aws_sdk_deadline::types::TaskTargetRunStatus = target_run_status.into();
         capture_send(|cap| async move {
-            client.update_task()
+            let mut req = client.update_task()
                 .farm_id(farm_id).queue_id(queue_id).job_id(job_id)
                 .step_id(step_id).task_id(task_id)
                 .target_run_status(status)
-                .customize().interceptor(cap).send().await.map(|_| ())
+                .customize().interceptor(cap);
+            if let Some(rc) = retry_config {
+                req = req.config_override(aws_sdk_deadline::config::Builder::default().retry_config(rc));
+            }
+            req.send().await.map(|_| ())
         }).await
     }).await
 }
