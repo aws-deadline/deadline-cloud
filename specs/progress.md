@@ -103,6 +103,7 @@ after the core CLI commands are complete.
   AUDIT-014 — No multipart upload (5GB PutObject limit).
   AUDIT-048 — `manifest upload` missing queue derivation.
   AUDIT-049 — No multipart download for large files.
+  AUDIT-056 — `suggest_resources` storage profile chain is a stub.
 - **#11**: AUDIT-009 — Upload confirmation prompt only for unknown paths.
   AUDIT-031 — `--save-debug-snapshot` not implemented.
   AUDIT-034 — `--submitter-info` not implemented.
