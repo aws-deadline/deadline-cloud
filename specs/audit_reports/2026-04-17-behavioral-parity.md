@@ -11,8 +11,8 @@
 |----------|-------|-------|----------|-----------|
 | Critical | 4     | 3     | 0        | 1         |
 | High     | 10    | 1     | 0        | 9         |
-| Medium   | 22    | 9     | 3        | 10        |
-| Low      | 20    | 3     | 2        | 15        |
+| Medium   | 22    | 12    | 3        | 7         |
+| Low      | 20    | 6     | 2        | 12        |
 
 ## Methodology
 
@@ -214,9 +214,9 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Priority:** Medium
 - **Command/Function:** `deadline-config` INI parsing
 - **Python behavior:** `ConfigParser` accepts both `=` and `:` as delimiters. (Python stdlib)
-- **Rust behavior:** Only recognizes `=`. Lines with `:` delimiter silently ignored. (`ini.rs:48`)
-- **Impact:** Config files using `:` delimiter lose settings in Rust.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Only recognizes `=`. Lines with `:` delimiter silently ignored. (`ini.rs:48`)~~ Now supports both `=` and `:` delimiters, preferring `=` when both present. (`ini.rs:74`)
+- **Impact:** ~~Config files using `:` delimiter lose settings in Rust.~~ None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-019: INI section/key ordering changes on write
 
@@ -224,9 +224,9 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Priority:** Medium
 - **Command/Function:** `deadline config set` (any config write)
 - **Python behavior:** `ConfigParser` preserves insertion order. (`config_file.py:268-283`)
-- **Rust behavior:** `BTreeMap` produces alphabetically sorted output. (`ini.rs:14-15`)
-- **Impact:** Round-tripping config through Rust reorders sections/keys, creating noisy diffs.
-- **Resolution:** Pending
+- **Rust behavior:** ~~`BTreeMap` produces alphabetically sorted output. (`ini.rs:14-15`)~~ Uses `IndexMap` for insertion-order-preserving output. (`ini.rs:15`)
+- **Impact:** ~~Round-tripping config through Rust reorders sections/keys, creating noisy diffs.~~ None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-020: `suggest_resources` dispatch strategy differs
 
@@ -234,9 +234,9 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Priority:** Medium
 - **Command/Function:** Error suggestion on API failures
 - **Python behavior:** Dispatches based on `exc.operation_name` — precise per-operation chains. (`_suggest_resources.py:111-255`)
-- **Rust behavior:** Dispatches based on available resource IDs — greedy approach trying all types. (`commands/helpers.rs:47-100`)
-- **Impact:** May show irrelevant suggestions (e.g., listing queues for a fleet error).
-- **Resolution:** Pending
+- **Rust behavior:** ~~Dispatches based on available resource IDs — greedy approach trying all types. (`commands/helpers.rs:47-100`)~~ Now dispatches based on `operation_name` matching Python's `_OPERATION_GROUPS` pattern. (`helpers.rs:68`)
+- **Impact:** ~~May show irrelevant suggestions (e.g., listing queues for a fleet error).~~ None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-021: Unexpected error messages lack context
 
@@ -385,23 +385,23 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-035: Download path traversal not validated
 
-- **Category:** Behavioral gap
-- **Priority:** Medium
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Medium~~ N/A
 - **Command/Function:** `deadline-job-attachments` download
 - **Python behavior:** Calls `_ensure_paths_within_directory` before downloading. (`download.py:600-605`)
-- **Rust behavior:** No path traversal validation. (`download.rs:244-280`)
-- **Impact:** Malicious manifest with `../../etc/passwd` could write outside download directory.
-- **Resolution:** Pending
+- **Rust behavior:** ~~No path traversal validation. (`download.rs:244-280`)~~ Calls `ensure_paths_within_directory` before downloading. (`download.rs:33,465`)
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-036: Download output manifest merge order differs
 
-- **Category:** Behavioral gap
-- **Priority:** Medium
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Medium~~ N/A
 - **Command/Function:** `deadline-job-attachments` download
 - **Python behavior:** Sorts manifests by S3 `LastModified` timestamp (oldest first, newer wins). (`download.py:290-320`)
-- **Rust behavior:** Merges in S3 listing order (lexicographic by key). (`download.rs:340-360`)
-- **Impact:** Different merge results when multiple session actions produce output for the same task.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Merges in S3 listing order (lexicographic by key). (`download.rs:340-360`)~~ Sorts manifests by S3 `LastModified` (oldest first, newer wins). (`download.rs:607-610`)
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ---
 
@@ -439,13 +439,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-040: `job requeue-tasks` no adaptive retry strategy
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline job requeue-tasks`
 - **Python behavior:** Creates client with `retries=dict(mode="adaptive", total_max_attempts=5)`. (`job_group.py:381-385`)
-- **Rust behavior:** Uses default retry behavior. (`job.rs:640`)
-- **Impact:** More susceptible to throttling for jobs with many tasks.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Uses default retry behavior. (`job.rs:640`)~~ Uses `RetryConfig::adaptive().with_max_attempts(5)`. (`job.rs:718`)
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-041: `job trace-schedule` command missing
 
@@ -479,13 +479,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-044: INI multiline values not supported
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline-config` INI parsing
 - **Python behavior:** `ConfigParser` supports continuation lines. (Python stdlib)
-- **Rust behavior:** Each line processed independently. (`ini.rs:26-57`)
-- **Impact:** Low — no known Deadline settings use multiline values.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Each line processed independently. (`ini.rs:26-57`)~~ Supports multiline values via leading whitespace continuation lines. (`ini.rs:25-42`)
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### AUDIT-045: `--version` output format differs
 
@@ -630,9 +630,9 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-015 | `auth status --output` case-sensitive | Medium | Behavioral gap |
 | AUDIT-016 | `auth status` JSON key order | Medium | Behavioral gap — Fixed |
 | AUDIT-017 | Login polling exit code 0 | Medium | Behavioral gap — No Issue |
-| AUDIT-018 | INI colon delimiter unsupported | Medium | Behavioral gap |
-| AUDIT-019 | INI section ordering on write | Medium | Behavioral gap |
-| AUDIT-020 | `suggest_resources` dispatch strategy | Medium | Behavioral gap |
+| AUDIT-018 | INI colon delimiter unsupported | Medium | Behavioral gap — Fixed |
+| AUDIT-019 | INI section ordering on write | Medium | Behavioral gap — Fixed |
+| AUDIT-020 | `suggest_resources` dispatch strategy | Medium | Behavioral gap — Fixed |
 | AUDIT-021 | Error messages lack context | Medium | Behavioral gap — No Issue |
 | AUDIT-022 | Missing CLI options in config apply | Medium | Behavioral gap — Fixed |
 | AUDIT-023 | Negative timedelta formatting | Medium | Bug — Fixed |
@@ -647,16 +647,16 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-032 | `suggest_resources` not in bundle submit | Medium | Behavioral gap — Fixed |
 | AUDIT-033 | `defaults.job_id` not set by library | Medium | Behavioral gap — No Issue |
 | AUDIT-034 | `--submitter-info` missing | Medium | Behavioral gap |
-| AUDIT-035 | Download path traversal not validated | Medium | Behavioral gap |
-| AUDIT-036 | Download manifest merge order | Medium | Behavioral gap |
+| AUDIT-035 | Download path traversal not validated | ~~Medium~~ | Behavioral gap — Fixed |
+| AUDIT-036 | Download manifest merge order | ~~Medium~~ | Behavioral gap — Fixed |
 | AUDIT-037 | Confirmation prompt behavior | Low | Behavioral gap — Fixed |
 | AUDIT-038 | Task summary missing statuses | Low | Behavioral gap — Fixed |
 | AUDIT-039 | `job wait` verbose to stderr | Low | Extra Rust behavior |
-| AUDIT-040 | No adaptive retry for requeue | Low | Behavioral gap |
+| AUDIT-040 | No adaptive retry for requeue | ~~Low~~ | Behavioral gap — Fixed |
 | AUDIT-041 | `job trace-schedule` missing | Low | Behavioral gap |
 | AUDIT-042 | Windows stdin for login | Low | Behavioral gap |
 | AUDIT-043 | User-agent mechanism | Low | Behavioral gap |
-| AUDIT-044 | INI multiline values | Low | Behavioral gap |
+| AUDIT-044 | INI multiline values | ~~Low~~ | Behavioral gap — Fixed |
 | AUDIT-045 | `--version` format | Low | Nice-to-have — Fixed |
 | AUDIT-046 | `require_setting` exit code | Low | Behavioral gap |
 | AUDIT-047 | `manifest download` stub | Low | Behavioral gap |

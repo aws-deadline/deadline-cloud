@@ -66,6 +66,12 @@ pick and execute work items.
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
+**Dependency status:** All core feature dependencies are resolved. Every
+remaining ⚠️ Gaps item is leaf-level — none block other work items.
+#16 (GUI FFI) is deferred; #17 (MCP) is done. Remaining gaps are
+performance (#9), UX polish (#11, #13), platform support (#0f, #2, #8),
+and telemetry (#5).
+
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
 
@@ -107,7 +113,11 @@ after the core CLI commands are complete.
 - **#11**: AUDIT-009 — Upload confirmation prompt only for unknown paths.
   AUDIT-031 — `--save-debug-snapshot` not implemented.
   AUDIT-034 — `--submitter-info` not implemented.
-- **#13**: AUDIT-008 — `job download-output` no interactive root path editing.
+- **#13**: ~~AUDIT-001~~ ✅ `sync-output` now downloads files.
+  ~~AUDIT-007~~ ✅ Job discovery uses `createdAt` thresholding pagination.
+  ~~AUDIT-035~~ ✅ Download path traversal validated via `ensure_paths_within_directory`.
+  ~~AUDIT-036~~ ✅ Manifest merge sorts by S3 `LastModified` (oldest first).
+  AUDIT-008 — `job download-output` no interactive root path editing.
   AUDIT-047 — `manifest download` CLI is a stub.
   AUDIT-055 — Download conflict resolution prompt missing.
   SYNC-005 — `sync-output` missing intermediate progress messages
@@ -121,6 +131,15 @@ after the core CLI commands are complete.
 - AUDIT-030 — `handle-web-url` macOS support — false finding (Python also doesn't support macOS)
 - AUDIT-039 — `job wait` verbose to stderr (Rust approach is better)
 - AUDIT-046 — `require_setting` exit code (function is unused dead code)
+
+**Findings fixed since audit (verified 2026-04-20):**
+- ~~AUDIT-018~~ ✅ INI colon delimiter — now supported (`ini.rs:74`)
+- ~~AUDIT-019~~ ✅ INI section/key ordering — uses `IndexMap` for insertion-order preservation
+- ~~AUDIT-020~~ ✅ `suggest_resources` dispatch — now dispatches on `operation_name`
+- ~~AUDIT-035~~ ✅ Download path traversal — `ensure_paths_within_directory` implemented
+- ~~AUDIT-036~~ ✅ Download manifest merge order — sorts by S3 `LastModified`
+- ~~AUDIT-040~~ ✅ Adaptive retry for requeue — `RetryConfig::adaptive().with_max_attempts(5)`
+- ~~AUDIT-044~~ ✅ INI multiline values — continuation lines supported
 
 **Technical debt:**
 - **#15d**: Audit all Level 1 tests in library crates to identify which
