@@ -65,6 +65,15 @@
 | 51 | Exceptions (client) | ✅ Complete (7 cases) | [common.md](common.md) |
 | 52 | SubmitterInfo data structure | ✅ Complete (4 cases) | [common.md](common.md) |
 | 53 | Credential scoping for non-Deadline AWS services | ✅ Complete (22 cases) | [credential_scoping.md](credential_scoping.md) |
+| 54 | Submission hooks: data models | Not started (13 cases) | [submission_hooks.md](submission_hooks.md) |
+| 55 | Submission hooks: configuration validation | Not started (16 cases) | [submission_hooks.md](submission_hooks.md) |
+| 56 | Submission hooks: payload merging | Not started (8 cases) | [submission_hooks.md](submission_hooks.md) |
+| 57 | Submission hooks: loading & execution | Not started (21 cases) | [submission_hooks.md](submission_hooks.md) |
+| 58 | Submission hooks: CLI integration (Level 2) | Not started (9 cases) | [submission_hooks.md](submission_hooks.md) |
+| 59 | Update checker | Not started (12 cases) | [new_features.md](new_features.md) |
+| 60 | Batch get API helper | Not started (7 cases) | [new_features.md](new_features.md) |
+| 61 | Python bug-fix parity | Not started (7 cases) | [new_features.md](new_features.md) |
+| 62 | New config settings | Not started (4 cases) | [new_features.md](new_features.md) |
 
 ### Planned (new crates)
 

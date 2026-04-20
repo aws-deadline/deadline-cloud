@@ -62,15 +62,20 @@ pick and execute work items.
 | 15e | Behavioral parity audit | ✅ Done | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | Deferred | — | 1-14 |
-| 17 | MCP server | ✅ Done | `cli.md`, `mcp.md` | 1-14 |
+| 17 | MCP server | ⚠️ Gaps | `mcp.md` | 1-14 |
+| 18 | Submission hooks | Not started | `submission_hooks.md` | 11 |
+| 19 | Update checker | Not started | `new_features.md` | 0g |
+| 20 | Batch get API helper | Not started | `new_features.md` | — |
+| 21 | Python bug-fix parity sweep | Not started | `new_features.md` | — |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
 **Dependency status:** All core feature dependencies are resolved. Every
 remaining ⚠️ Gaps item is leaf-level — none block other work items.
-#16 (GUI FFI) is deferred; #17 (MCP) is done. Remaining gaps are
-performance (#9), UX polish (#11, #13), platform support (#0f, #2, #8),
-and telemetry (#5).
+#16 (GUI FFI) is deferred; #17 (MCP) is a placeholder — crate exists
+but has no implementation. Remaining gaps are performance (#9), UX
+polish (#11, #13), platform support (#0f, #2, #8), telemetry (#5),
+and new Python features (#18-21).
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
@@ -92,6 +97,42 @@ after the core CLI commands are complete.
   `queue sync-output` CLI commands. Split into three batches:
   Batch A (`job download-output` ✅), Batch B (path mapping),
   Batch C (`queue sync-output` + incremental downloads).
+- **#17**: Corrected from ✅ Done to ⚠️ Gaps. The `deadline-mcp` crate
+  exists but contains only a doc comment — no tool definitions, no
+  `mcp-server` CLI subcommand. The spec says "Placeholder —
+  implementation deferred." Python MCP has 13 tools including
+  `submit_job`, `download_job_output`, `get_session_and_worker_logs`,
+  and diagnostic APIs.
+
+**New work items (discovered 2026-04-20 from Python repo sync):**
+- **#18 — Submission hooks**: Pre/post-submission hook framework. Python
+  PR #986. Hooks are external scripts run during `bundle submit`:
+  pre-submission hooks can modify the CreateJob payload (JSON in/out),
+  post-submission hooks run after job creation (failures only warn).
+  Two sources: `hooks.yaml` in the job bundle, and `DEADLINE_HOOKS_DIR`
+  environment variable. Gated by `settings.allow_bundle_hooks` and
+  `settings.allow_environment_hooks` config settings. Includes
+  confirmation prompt, timeout handling, and payload validation.
+  Touches: `deadline-job-bundle` (new `hooks` module), `submission.rs`
+  (integration), `deadline-config/settings.rs` (2 new settings).
+  Depends on #11 (submission flow must be complete first).
+- **#19 — Update checker**: Check if newer submitter version is available.
+  Python PRs #1070, #1087. Fetches manifest from
+  `downloads.deadlinecloud.amazonaws.com/submitters/manifest.json`,
+  compares installed version, returns `UpdateCheckResult`. GUI dialog
+  for DCC submitters. Config setting:
+  `settings.submitter_update_notification`. Depends on #0g (session).
+- **#20 — Batch get API helper**: Generic helper for `BatchGetTask`,
+  `BatchGetStep` APIs. Python PR #1117. Handles chunking (100 items/call),
+  partial success, transient error retry with exponential backoff.
+  Used by `trace-schedule` and potentially other bulk operations.
+  No dependencies.
+- **#21 — Python bug-fix parity sweep**: Verify Rust handles fixes from
+  recent Python PRs: #1098 (external tools corrupting known paths),
+  #1005 (STS/S3 endpoint URL overrides), #1013 (handle-web-url PATH
+  lookup on Linux), #1032 (hidden parameters with empty string defaults),
+  #1008 (missing newline with no attachments). Quick audit — some may
+  already be correct in Rust.
 
 **Audit gaps in completed items** (from `audit_reports/2026-04-17-behavioral-parity.md`):
 - **#0f**: AUDIT-054 — `--redirect-output` is Unix-only, needs Windows support
@@ -140,6 +181,11 @@ after the core CLI commands are complete.
 - ~~AUDIT-036~~ ✅ Download manifest merge order — sorts by S3 `LastModified`
 - ~~AUDIT-040~~ ✅ Adaptive retry for requeue — `RetryConfig::adaptive().with_max_attempts(5)`
 - ~~AUDIT-044~~ ✅ INI multiline values — continuation lines supported
+
+**Missing config settings (discovered 2026-04-20):**
+- `settings.allow_bundle_hooks` (default `false`) — needed for #18
+- `settings.allow_environment_hooks` (default `false`) — needed for #18
+- `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
 - **#15d**: Audit all Level 1 tests in library crates to identify which
