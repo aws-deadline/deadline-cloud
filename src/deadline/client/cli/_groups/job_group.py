@@ -58,6 +58,7 @@ from ._job_helpers import (
     _estimate_remaining_time,
 )
 from ._job_download_helpers import (
+    JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
@@ -74,7 +75,6 @@ JSON_MSG_TYPE_TITLE = "title"
 JSON_MSG_TYPE_PRESUMMARY = "presummary"
 JSON_MSG_TYPE_PATH = "path"
 JSON_MSG_TYPE_PATHCONFIRM = "pathconfirm"
-JSON_MSG_TYPE_PROGRESS = "progress"
 JSON_MSG_TYPE_SUMMARY = "summary"
 JSON_MSG_TYPE_ERROR = "error"
 JSON_MSG_TYPE_WARNING = "warning"
@@ -620,10 +620,8 @@ def _download_job_output(
             # which will download to original (unmapped) paths.
         elif resolved.job_profile.storageProfileId != resolved.local_profile.storageProfileId:
             click.echo(
-                "Warning: Storage profiles have no matching file system location names. "
-                "Path mapping will be skipped.\n"
-                "Ensure both storage profiles share the same location names to enable "
-                "automatic path mapping."
+                "Warning: No path mapping rules could be generated from the storage profiles. "
+                "Path mapping will be skipped."
             )
     else:
         # No storage profiles — fall back to manual prompt on OS mismatch
@@ -1045,13 +1043,13 @@ def job_download_output(step_id, task_id, output, ignore_storage_profiles, **arg
 
     try:
         _download_job_output(
-            config,
-            farm_id,
-            queue_id,
-            job_id,
-            step_id,
-            task_id,
-            is_json_format,
+            config=config,
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_id=job_id,
+            step_id=step_id,
+            task_id=task_id,
+            is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
         )
     except Exception as e:

@@ -205,7 +205,7 @@ def test_case2_both_profiles_no_matching_locations(fresh_deadline_config: str) -
         assert result.exit_code == 0, result.output
         assert "Using storage profile: Local Linux Profile" in result.output
         # No set_root_path calls because no location names matched
-        assert "no matching file system location names" in result.output
+        assert "No path mapping rules could be generated" in result.output
         mock_downloader.return_value.set_root_path.assert_not_called()
 
 

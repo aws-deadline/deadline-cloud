@@ -36,8 +36,10 @@ from ....job_attachments.models import (
 )
 from ....job_attachments.progress_tracker import ProgressReportMetadata
 
-# JSON message type constant — must match job_group.py's JSON_MSG_TYPE_PROGRESS
-_JSON_MSG_TYPE_PROGRESS = "progress"
+from ._sigint_handler import SigIntHandler
+
+# JSON message type for progress reporting (defined here to avoid circular import with job_group.py)
+JSON_MSG_TYPE_PROGRESS = "progress"
 
 
 @dataclass
@@ -209,8 +211,23 @@ def _download_mapped_manifests(
         file_conflict_resolution = FileConflictResolution.CREATE_COPY
 
     s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+    sigint_handler = SigIntHandler()
 
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+
+        @api.record_success_fail_telemetry_event(metric_name="download_job_output")
+        def _do_download(
+            on_downloading_files: Any = None,
+        ) -> Any:
+            return download_files_from_manifests(
+                s3_bucket=s3_settings.s3BucketName,
+                manifests_by_root=mapped_manifests,
+                cas_prefix=s3_settings.full_cas_prefix(),
+                session=queue_role_session,
+                on_downloading_files=on_downloading_files,
+                conflict_resolution=file_conflict_resolution,
+            )
+
         if not is_json_format:
             with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
 
@@ -218,34 +235,21 @@ def _download_mapped_manifests(
                     new_progress = int(download_metadata.progress) - download_progress.pos
                     if new_progress > 0:
                         download_progress.update(new_progress)
-                    return True
+                    return sigint_handler.continue_operation
 
-                return download_files_from_manifests(
-                    s3_bucket=s3_settings.s3BucketName,
-                    manifests_by_root=mapped_manifests,
-                    cas_prefix=s3_settings.full_cas_prefix(),
-                    session=queue_role_session,
-                    on_downloading_files=_on_progress,
-                    conflict_resolution=file_conflict_resolution,
-                )
+                return _do_download(on_downloading_files=_on_progress)
         else:
 
             def _on_progress_json(download_metadata: ProgressReportMetadata) -> bool:
                 json_line = json.dumps(
                     {
-                        "messageType": _JSON_MSG_TYPE_PROGRESS,
+                        "messageType": JSON_MSG_TYPE_PROGRESS,
                         "value": str(int(download_metadata.progress)),
                     },
                     ensure_ascii=True,
                 )
                 click.echo(json_line)
+                # TODO: enable download cancellation for JSON format
                 return True
 
-            return download_files_from_manifests(
-                s3_bucket=s3_settings.s3BucketName,
-                manifests_by_root=mapped_manifests,
-                cas_prefix=s3_settings.full_cas_prefix(),
-                session=queue_role_session,
-                on_downloading_files=_on_progress_json,
-                conflict_resolution=file_conflict_resolution,
-            )
+            return _do_download(on_downloading_files=_on_progress_json)
