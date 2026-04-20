@@ -330,13 +330,18 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-030: `handle-web-url` macOS support missing
 
-- **Category:** Behavioral gap
-- **Priority:** Medium
+- **Category:** ~~Behavioral gap~~ False finding
+- **Priority:** ~~Medium~~ N/A
 - **Command/Function:** `deadline handle-web-url install/uninstall`
-- **Python behavior:** Supports macOS via `lsregister` and plist files. (`_deadline_web_url.py`)
+- **Python behavior:** Does NOT support macOS. The `else` branch in
+  `_deadline_web_url.py:237` raises `DeadlineOperationError("Installing
+  the web URL handler is only supported on Windows and Linux")`. The
+  Python test `test_cli_handle_web_url_install_mac` asserts this error.
 - **Rust behavior:** Only Windows and Linux. macOS returns error. (`handle_web_url.rs:186-189`)
-- **Impact:** macOS users cannot install `deadline://` URL handler.
-- **Resolution:** Pending
+- **Impact:** None — Rust is already at parity with Python.
+- **Resolution:** Closed — false finding. Original audit incorrectly
+  stated Python supports macOS via `lsregister`/plist; verified this is
+  not the case in the Python source.
 
 ### AUDIT-031: `--save-debug-snapshot` not implemented
 
@@ -637,7 +642,7 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-027 | `job cancel --mark-as` no validation | Medium | Bug |
 | AUDIT-028 | `job requeue-tasks --run-status` no validation | Medium | Bug |
 | AUDIT-029 | `job logs` relative timestamp bug | Medium | Bug |
-| AUDIT-030 | `handle-web-url` macOS missing | Medium | Behavioral gap |
+| AUDIT-030 | `handle-web-url` macOS missing | ~~Medium~~ | False finding — Python also doesn't support macOS |
 | AUDIT-031 | `--save-debug-snapshot` missing | Medium | Behavioral gap |
 | AUDIT-032 | `suggest_resources` not in bundle submit | Medium | Behavioral gap — Fixed |
 | AUDIT-033 | `defaults.job_id` not set by library | Medium | Behavioral gap — No Issue |

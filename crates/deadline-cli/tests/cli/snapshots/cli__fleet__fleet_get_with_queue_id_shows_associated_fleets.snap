@@ -1,0 +1,45 @@
+---
+source: crates/deadline-cli/tests/cli/fleet.rs
+info:
+  program: deadline
+  args:
+    - fleet
+    - get
+    - "--queue-id"
+    - queue-111
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63817"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63817"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63817"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63817"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp1rEc6t/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp1rEc6t
+---
+success: true
+exit_code: 0
+----- stdout -----
+Showing all fleets (2 total) associated with queue: Render Queue
+
+fleetId: fleet-aaa
+displayName: Fleet Alpha
+status: ACTIVE
+queueFleetAssociationStatus: ACTIVE
+
+
+fleetId: fleet-bbb
+displayName: Fleet Beta
+status: ACTIVE
+queueFleetAssociationStatus: STOPPED
+
+
+----- stderr -----

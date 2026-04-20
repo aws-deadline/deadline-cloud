@@ -6,7 +6,8 @@ Run the Python CLI and the Rust CLI with the same arguments and diff output.
 This catches differences that stub-server tests miss.
 
 Process:
-1. Check auth: `deadline auth status` — if not authenticated, ask human to log in
+1. Check auth: `deadline auth status` — if not authenticated, run
+   `deadline auth login` or ask the human to log in
 2. Discover resources: `deadline farm list`, `deadline queue list`, etc.
 3. Use the resources you found to test each key case that you implemented. Then, diff both CLIs:
    ```bash

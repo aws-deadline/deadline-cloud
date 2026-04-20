@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 pub async fn mock_list_fleets(server: &MockServer, farm_id: &str, fleets: &[Value]) {
@@ -15,6 +15,24 @@ pub async fn mock_get_fleet(server: &MockServer, farm_id: &str, fleet: Value) {
     Mock::given(method("GET"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/fleets/{fleet_id}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(fleet))
+        .mount(server)
+        .await;
+}
+
+/// Mock ListQueueFleetAssociations.
+/// API: GET /2023-10-12/farms/{farmId}/queue-fleet-associations?queueId={queueId}
+pub async fn mock_list_queue_fleet_associations(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    associations: &[Value],
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queue-fleet-associations")))
+        .and(query_param("queueId", queue_id))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "queueFleetAssociations": associations,
+        })))
         .mount(server)
         .await;
 }

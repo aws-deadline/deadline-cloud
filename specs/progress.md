@@ -43,7 +43,7 @@ pick and execute work items.
 | 1 | Session caching & user-agent | ⚠️ Gaps | `session.md` | 0g |
 | 2 | Login/logout | ⚠️ Gaps | `api_resource_management.md`, `cli.md` | 1 |
 | 3 | Queue user credentials | ✅ Done | `session.md` | 1 |
-| 4 | Queue parameters | ⚠️ Gaps | `api_resource_management.md`, `cli.md` | 1 |
+| 4 | Queue parameters | ✅ Done | `api_resource_management.md`, `cli.md` | 1 |
 | 5 | Telemetry API integration | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 6 | Job monitoring & logs | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 7 | Job bundle | ✅ Done | `job_bundle.md`, `cli.md` | 1, 4 |
@@ -54,7 +54,7 @@ pick and execute work items.
 | 12 | Job cancel | ✅ Done | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | `cli.md` | 6 |
 | 13 | Job download & sync-output | ⚠️ Gaps | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
-| 14 | Handle web URL | ⚠️ Gaps | `cli.md` | 13 |
+| 14 | Handle web URL | ✅ Done | `cli.md` | 13 |
 | 15 | Job requeue-tasks | ✅ Done | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |
@@ -91,7 +91,7 @@ after the core CLI commands are complete.
 - **#0f**: AUDIT-054 — `--redirect-output` is Unix-only, needs Windows support
 - **#1**: AUDIT-043 — User-agent string uses `app_name()` instead of `user_agent_extra`
 - **#2**: AUDIT-042 — Windows stdin handling for login subprocess
-- **#4**: AUDIT-006 — `fleet get --queue-id` mode missing
+- **#4**: ~~AUDIT-006~~ ✅ `fleet get --queue-id` mode implemented
 - **#5**: AUDIT-010 — No telemetry events during submission flow
 - **#6**: AUDIT-026 — `job logs --session-action-id` deferred.
   AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python).
@@ -113,11 +113,12 @@ after the core CLI commands are complete.
   SYNC-005 — `sync-output` missing intermediate progress messages
   ("Retrieving session actions...", "Populating manifest S3 keys...",
   "Downloading N asset manifests...").
-- **#14**: AUDIT-030 — `handle-web-url` macOS support missing
+- **#14**: ~~AUDIT-030~~ ✅ False finding — Python also doesn't support macOS
 - **#15**: ~~AUDIT-040~~ ✅ All gaps fixed
 
 **Dropped findings (not bugs, accepted differences):**
 - AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
+- AUDIT-030 — `handle-web-url` macOS support — false finding (Python also doesn't support macOS)
 - AUDIT-039 — `job wait` verbose to stderr (Rust approach is better)
 - AUDIT-046 — `require_setting` exit code (function is unused dead code)
 

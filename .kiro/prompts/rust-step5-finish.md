@@ -29,8 +29,8 @@ changed areas. Loop until clean.
 Write or update spec files in `specs/{crate}/` to describe the final
 audited state of the code. Include: behavioral contract, data flows,
 edge cases, design decisions, differences from Python. Exclude:
-implementation mechanics, internal APIs. Update `specs/{crate}/README.md`
-index if new files were created.
+implementation mechanics, internal APIs, and forego update if changes are minor.
+Update `specs/{crate}/README.md` index if new files were created.
 
 **Step 7 — Commit:**
 1. Run `cargo test` — all tests must pass
