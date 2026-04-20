@@ -715,6 +715,32 @@ pub async fn get_storage_profile_for_queue(
     }).await
 }
 
+pub async fn list_storage_profiles_for_queue(
+    farm_id: &str,
+    queue_id: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+) -> Result<Value, DeadlineError> {
+    with_telemetry_latency_async("list_storage_profiles_for_queue", config, telemetry, || async {
+        let client = session::deadline_client(config).await;
+        let farm_id = farm_id.to_string();
+        let queue_id = queue_id.to_string();
+        paginated_list("storageProfiles", |token| {
+            let client = client.clone();
+            let farm_id = farm_id.clone();
+            let queue_id = queue_id.clone();
+            async move {
+                capture_send(|cap| {
+                    let mut req = client.list_storage_profiles_for_queue()
+                        .farm_id(&farm_id).queue_id(&queue_id);
+                    if let Some(t) = token { req = req.next_token(t); }
+                    async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
+                }).await
+            }
+        }).await
+    }).await
+}
+
 // ---------------------------------------------------------------------------
 // Fleet credentials
 // ---------------------------------------------------------------------------

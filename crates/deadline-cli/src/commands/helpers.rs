@@ -16,31 +16,6 @@ pub fn apply_profile(profile: Option<String>) -> Result<Option<IniConfig>, CliEr
     }
 }
 
-/// Get a required setting from CLI arg, config, or return an error.
-pub fn require_setting(
-    name: &str,
-    cli_arg: Option<String>,
-    setting_name: &str,
-    config: Option<&IniConfig>,
-) -> Result<String, CliError> {
-    if let Some(v) = cli_arg {
-        return Ok(v);
-    }
-    let v = match config {
-        Some(c) => config_file::get_setting_with_config(setting_name, c).unwrap_or_default(),
-        None => config_file::get_setting(setting_name).unwrap_or_default(),
-    };
-    if v.is_empty() {
-        Err(CliError::Operation(format!(
-            "Missing '--{n}' or default {label} configuration",
-            n = name.replace('_', "-"),
-            label = name.replace('_', " ").replace("id", "ID"),
-        )))
-    } else {
-        Ok(v)
-    }
-}
-
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.
 /// Dispatches suggestion chains based on which API operation failed,
@@ -108,8 +83,16 @@ pub async fn suggest_resources_on_client_error(
             }
         }
         "GetStorageProfileForQueue" | "ListStorageProfilesForQueue" => {
-            // Storage profile listing not yet implemented
-            false
+            if let (Some(fid), Some(qid)) = (farm_id, queue_id) {
+                try_list_storage_profiles(fid, qid, config, &mut suggestions).await
+                    || try_list_queues(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else if let Some(fid) = farm_id {
+                try_list_queues(fid, config, &mut suggestions).await
+                    || try_list_farms(config, &mut suggestions).await
+            } else {
+                try_list_farms(config, &mut suggestions).await
+            }
         }
         // Unknown operation: fall back to listing farms
         _ => try_list_farms(config, &mut suggestions).await,
@@ -209,6 +192,24 @@ async fn try_list_workers(
             }
             true
         }
+        Err(_) => false,
+    }
+}
+
+async fn try_list_storage_profiles(
+    farm_id: &str,
+    queue_id: &str,
+    config: Option<&IniConfig>,
+    out: &mut Vec<String>,
+) -> bool {
+    match api::list_storage_profiles_for_queue(farm_id, queue_id, config, None).await {
+        Ok(resp) => format_suggestions(
+            resp["storageProfiles"].as_array(),
+            "storageProfileId",
+            "displayName",
+            &format!("Available storage profiles for queue {queue_id}:"),
+            out,
+        ),
         Err(_) => false,
     }
 }

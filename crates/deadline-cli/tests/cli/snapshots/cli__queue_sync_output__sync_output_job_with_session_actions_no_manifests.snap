@@ -7,24 +7,24 @@ info:
     - sync-output
     - "--ignore-storage-profiles"
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpu5jhgy
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpzO8wHT
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:59891"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:59891"
-    AWS_ENDPOINT_URL_S3: "http://localhost:59891"
-    AWS_ENDPOINT_URL_STS: "http://localhost:59891"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63634"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63634"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63634"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63634"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpyMBBSl/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpyMBBSl
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmps5JJGn/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmps5JJGn
 ---
 success: true
 exit_code: 0
@@ -54,6 +54,8 @@ NEW Job: Session Action Job (job-sa)
 ...categorization completed
 
 Retrieving sessions for 1 jobs...
+Found 1 new session action(s) across 1 job(s)
+Populating manifest S3 keys for 1 jobs...
 WARNING: Job Session Action Job (job-sa) ran 1 / 1 session actions with no output.
          This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3.
 Summary of paths to download:

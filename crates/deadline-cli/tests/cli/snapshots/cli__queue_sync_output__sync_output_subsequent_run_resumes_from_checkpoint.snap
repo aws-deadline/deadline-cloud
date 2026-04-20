@@ -6,24 +6,24 @@ info:
     - queue
     - sync-output
     - "--checkpoint-dir"
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpNNsJ1X
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpwoYvBD
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:57101"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:57101"
-    AWS_ENDPOINT_URL_S3: "http://localhost:57101"
-    AWS_ENDPOINT_URL_STS: "http://localhost:57101"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:63635"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:63635"
+    AWS_ENDPOINT_URL_S3: "http://localhost:63635"
+    AWS_ENDPOINT_URL_STS: "http://localhost:63635"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTkeWet/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpTkeWet
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQOTS0E/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQOTS0E
 ---
 success: true
 exit_code: 0
@@ -51,6 +51,8 @@ Local storage profile is Linux Profile (sp-linux-123)
   0 download candidate jobs have the same storage profile and will be downloaded to their original specified paths
 
 Retrieving sessions for 0 jobs...
+Found 0 new session action(s) across 0 job(s)
+Populating manifest S3 keys for 0 jobs...
 Summary of paths to download:
   (no files to download)
 

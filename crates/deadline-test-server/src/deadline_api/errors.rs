@@ -133,3 +133,23 @@ pub async fn mock_get_fleet_not_found(
         .mount(server)
         .await;
 }
+
+/// Mount a ResourceNotFoundException for GetStorageProfileForQueue.
+pub async fn mock_get_storage_profile_not_found(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    storage_profile_id: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/storage-profiles/{storage_profile_id}"
+        )))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_json(json!({
+                "__type": "ResourceNotFoundException"
+            })),
+        )
+        .mount(server)
+        .await;
+}

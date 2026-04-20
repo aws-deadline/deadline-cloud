@@ -12,7 +12,7 @@
 | Critical | 4     | 3     | 0        | 1         |
 | High     | 10    | 1     | 0        | 9         |
 | Medium   | 22    | 12    | 3        | 7         |
-| Low      | 20    | 6     | 2        | 12        |
+| Low      | 20    | 8     | 2        | 10        |
 
 ## Methodology
 
@@ -499,13 +499,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-046: `require_setting` uses exit code 1 instead of 2
 
-- **Category:** Behavioral gap
-- **Priority:** Low
-- **Command/Function:** `helpers.rs::require_setting` (currently unused)
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
+- **Command/Function:** `helpers.rs::require_setting` (was unused)
 - **Python behavior:** Missing required options exit with code 2. (`_common.py:146-156`)
-- **Rust behavior:** Returns `CliError::Operation` → exit code 1. (`helpers.rs:36`)
-- **Impact:** Latent — function is defined but not called.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Returns `CliError::Operation` → exit code 1. (`helpers.rs:36`)~~ Function deleted — was dead code with zero callers.
+- **Impact:** None — dead code removed.
+- **Resolution:** Fixed — deleted unused function
 
 ### AUDIT-047: `manifest download` CLI is a stub
 
@@ -599,13 +599,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-056: `suggest_resources` missing storage profile chain
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** Error suggestion helper
 - **Python behavior:** Handles `GetStorageProfileForQueue` operations. (`_suggest_resources.py:238-253`)
-- **Rust behavior:** No storage profile suggestion chain. (`commands/helpers.rs`)
-- **Impact:** Storage profile errors get no suggestions.
-- **Resolution:** Pending
+- **Rust behavior:** ~~No storage profile suggestion chain. (`commands/helpers.rs`)~~ Now dispatches `GetStorageProfileForQueue`/`ListStorageProfilesForQueue` to `try_list_storage_profiles` chain. Also wired `suggest_resources_on_client_error` into `queue get-storage-profile` command.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ---
 
@@ -658,7 +658,7 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-043 | User-agent mechanism | Low | Behavioral gap |
 | AUDIT-044 | INI multiline values | ~~Low~~ | Behavioral gap — Fixed |
 | AUDIT-045 | `--version` format | Low | Nice-to-have — Fixed |
-| AUDIT-046 | `require_setting` exit code | Low | Behavioral gap |
+| AUDIT-046 | `require_setting` exit code | ~~Low~~ | Behavioral gap — Fixed |
 | AUDIT-047 | `manifest download` stub | Low | Behavioral gap |
 | AUDIT-048 | `manifest upload` no queue derivation | Low | Behavioral gap |
 | AUDIT-049 | No multipart download | Low | Behavioral gap |
@@ -668,4 +668,4 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-053 | Windows long path handling | Low | Behavioral gap |
 | AUDIT-054 | `--redirect-output` Unix-only | Low | Behavioral gap |
 | AUDIT-055 | Download conflict resolution prompt | Low | Behavioral gap |
-| AUDIT-056 | Storage profile suggestion chain | Low | Behavioral gap |
+| AUDIT-056 | Storage profile suggestion chain | ~~Low~~ | Behavioral gap — Fixed |

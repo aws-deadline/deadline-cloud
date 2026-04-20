@@ -10,7 +10,7 @@ None — pick from `specs/progress.md`.
 ## Critical Context
 
 1. **Python source is at `../deadline-cloud-python`** (sibling directory).
-2. **All tests pass.** 1085 tests across all crates.
+2. **All tests pass.** 1086 tests across all crates.
 3. **Testing rules:** Level 2 CLI tests must exercise the full stack through
    the CLI binary. No stubs at the application layer — only HTTP stub server.
 4. **Serialization patterns.** See `specs/patterns.md`.
@@ -22,16 +22,18 @@ None — pick from `specs/progress.md`.
 
 ## Recently Completed
 
-**#4 — `fleet get --queue-id` mode (AUDIT-006)**
+**Quick wins batch — AUDIT-046, SYNC-005, AUDIT-056, AUDIT-043**
 
-- Added `list_queue_fleet_associations` API function (paginated, ResponseBodyCapture)
-- Added `--queue-id` option to `fleet get` CLI command
-- Queue mode: get_queue → list associations → get each fleet → print with status
-- 3 new Level 2 tests, all passing
-- CLI comparison verified against real API — only pre-existing accepted
-  differences (field order, extra `arn` field)
-- Python bug found: `--queue-id` CLI arg overwritten by config default.
-  Rust correctly prioritizes CLI arg.
+- AUDIT-046: Deleted unused `require_setting` function (dead code)
+- SYNC-005: Added progress messages to `queue sync-output`:
+  "Found N new session action(s) across N job(s)" and
+  "Populating manifest S3 keys for N jobs..."
+- AUDIT-056: Implemented storage profile suggestion chain:
+  `list_storage_profiles_for_queue` API function, `try_list_storage_profiles`
+  helper, wired match arm, added `suggest_resources_on_client_error` to
+  `queue get-storage-profile` command. 1 new Level 2 test.
+- AUDIT-043: Reclassified as accepted difference — Rust SDK `app_name()`
+  vs Python `user_agent_extra`. Content identical, header position differs.
 
 ### Accepted Differences
 
@@ -40,5 +42,6 @@ None — pick from `specs/progress.md`.
 | AUDIT-024 | YAML key ordering — accepted per `patterns.md` |
 | AUDIT-030 | False finding — Python also doesn't support macOS |
 | AUDIT-039 | `job wait` verbose to stderr — Rust approach is better |
-| AUDIT-046 | `require_setting` exit code — function is unused dead code |
+| AUDIT-043 | User-agent position in header — Rust SDK limitation, content is correct |
+| AUDIT-046 | `require_setting` exit code — function was unused dead code, deleted |
 | SYNC-004 | Path summary groups by directory (Rust) vs flat full-path (Python) — same data, Rust more readable |

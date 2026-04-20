@@ -308,11 +308,18 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
-            let resp = api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config), None)
-                .await
-                .map_err(|e| CliError::Operation(format!("Failed to get storage profile:\n{e}")))?;
-            println!("{}", crate::common::cli_object_repr(&resp));
-            Ok(())
+            match api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config), None).await {
+                Ok(resp) => {
+                    println!("{}", crate::common::cli_object_repr(&resp));
+                    Ok(())
+                }
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), "GetStorageProfileForQueue", Some(&farm), Some(&queue), None, Some(&config),
+                    ).await;
+                    Err(CliError::Operation(format!("Failed to get storage profile:\n{e}{suggestion}")))
+                }
+            }
         }
         QueueAction::Paramdefs { profile, farm_id, queue_id } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
@@ -930,7 +937,11 @@ async fn incremental_output_download(
         all_session_actions.extend(job_actions);
     }
 
+    eprintln!("Found {} new session action(s) across {} job(s)",
+        all_session_actions.len(), jobs_to_process.len());
+
     // Step 4: Download output manifests and files
+    eprintln!("Populating manifest S3 keys for {} jobs...", jobs_to_process.len());
     let attachment_settings = &queue["jobAttachmentSettings"];
     let bucket = attachment_settings["s3BucketName"].as_str().unwrap_or("");
     let prefix = attachment_settings["rootPrefix"].as_str().unwrap_or("");
