@@ -62,6 +62,20 @@ jobs:
       os: windows
       tag: ${{ needs.TagRelease.outputs.tag }}
 
+  MacOSIntegrationTests:
+    name: MacOS Integration Tests
+    needs: [TagRelease, UnitTests]
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      environment: release
+      os: macos
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
   PreRelease:
     needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests]
     uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
