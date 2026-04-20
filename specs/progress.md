@@ -55,7 +55,7 @@ pick and execute work items.
 | 12b | Job search command | ✅ Done | `cli.md` | 6 |
 | 13 | Job download & sync-output | ⚠️ Gaps | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 14 | Handle web URL | ⚠️ Gaps | `cli.md` | 13 |
-| 15 | Job requeue-tasks | ⚠️ Gaps | `cli.md` | 6 |
+| 15 | Job requeue-tasks | ✅ Done | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
 | 15c | Job logs auto-selection messages | ✅ Done | `cli.md` | 6 |
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
@@ -113,7 +113,7 @@ after the core CLI commands are complete.
   ("Retrieving session actions...", "Populating manifest S3 keys...",
   "Downloading N asset manifests...").
 - **#14**: AUDIT-030 — `handle-web-url` macOS support missing
-- **#15**: AUDIT-040 — ~~No adaptive retry strategy for requeue~~ ✅ Fixed
+- **#15**: ~~AUDIT-040~~ ✅ All gaps fixed
 
 **Dropped findings (not bugs, accepted differences):**
 - AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
@@ -125,20 +125,11 @@ after the core CLI commands are complete.
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through
   the CLI."
-- **#15e**: Complete read-through of all implemented Rust code comparing
-  against Python Deadline CLI behavior. Flag behavioral gaps, silent
-  error swallowing, or missing edge cases.
 - **Realistic test IDs**: Replace hardcoded pseudo-IDs in tests (e.g.
   `"farm-1"`, `"queue-1"`) with pseudorandomly generated IDs that follow
   the actual Deadline Cloud ID format. Add a test helper that generates
   realistic IDs per resource type. Applies across all crates.
-- **~~Exit code parity~~**: ✅ Fixed — Rust now uses exit code 2 for
-  argument validation failures (`--mark-as`, `--run-status`), matching
-  Python's Click `UsageError`.
 - **Test consolidation**: Audit test suite for redundant or overlapping
   tests. Identify Level 1 tests fully subsumed by Level 2 snapshots
   (per testing.md removal rule). Consolidate tests that exercise the
   same code path with minor variations into parameterized test cases.
-- **~~Crate rename discussion~~**: ✅ Done — renamed `deadline-client` to
-  `deadline-api`. Also dissolved `deadline-models` and `deadline-common`
-  into their consumer crates.
