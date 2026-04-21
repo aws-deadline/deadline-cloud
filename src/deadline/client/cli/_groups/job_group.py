@@ -499,6 +499,7 @@ def _download_job_output(
     task_id: Optional[str],
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
+    path_filters: Optional[list[str]] = None,
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
@@ -557,6 +558,7 @@ def _download_job_output(
         task_id=task_id,
         session_action_id=session_action_id,
         session=queue_role_session,
+        path_filters=path_filters,
     )
 
     def _check_and_warn_long_output_paths(
@@ -959,6 +961,28 @@ def _assert_valid_path(path: str) -> None:
         raise ValueError(f"Path {path} is not an absolute path.")
 
 
+def _validate_and_normalize_include_paths(filters: list[str]) -> list[str]:
+    """
+    Validates and normalizes include paths.
+    - Rejects filters containing '..' (path traversal prevention)
+    - Converts backslashes to forward slashes (Windows compatibility)
+    - Strips leading './'
+    - Normalizes '//' to '/'
+    """
+    normalized = []
+    for f in filters:
+        if ".." in f:
+            raise click.BadParameter(f"Path filter must not contain '..': {f}")
+        f = f.replace("\\", "/")
+        if f.startswith("./"):
+            f = f[2:]
+        while "//" in f:
+            f = f.replace("//", "/")
+        if f:
+            normalized.append(f)
+    return normalized
+
+
 @cli_job.command(name="download-output")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -966,6 +990,16 @@ def _assert_valid_path(path: str) -> None:
 @click.option("--job-id", help="The job to use.")
 @click.option("--step-id", help="The step to use.")
 @click.option("--task-id", help="The task to use.")
+@click.option(
+    "--include-path",
+    multiple=True,
+    help="Download only files matching this relative path or directory prefix (trailing /). Repeatable.",
+)
+@click.option(
+    "--include-path-stdin",
+    is_flag=True,
+    help="Read include paths from stdin, one per line.",
+)
 @click.option(
     "--ignore-storage-profiles",
     is_flag=True,
@@ -1007,7 +1041,9 @@ def _assert_valid_path(path: str) -> None:
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def job_download_output(step_id, task_id, output, ignore_storage_profiles, **args):
+def job_download_output(
+    step_id, task_id, output, ignore_storage_profiles, include_path, include_path_stdin, **args
+):
     """
     Download the output of a Deadline Cloud job that was saved as job
     attachments.
@@ -1017,6 +1053,22 @@ def job_download_output(step_id, task_id, output, ignore_storage_profiles, **arg
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
+
+    filters = list(include_path)
+    if include_path_stdin:
+        for line in sys.stdin:
+            stripped = line.strip()
+            if not stripped:
+                break
+            filters.append(stripped)
+        try:
+            tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
+            sys.stdin = open(tty_path)  # noqa: SIM115
+        except OSError:
+            pass
+    if filters:
+        filters = _validate_and_normalize_include_paths(filters)
+    path_filters = filters or None
 
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1038,6 +1090,7 @@ def job_download_output(step_id, task_id, output, ignore_storage_profiles, **arg
             task_id=task_id,
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
+            path_filters=path_filters,
         )
     except Exception as e:
         if is_json_format:
