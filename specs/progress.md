@@ -134,55 +134,24 @@ after the core CLI commands are complete.
   #1008 (missing newline with no attachments). Quick audit — some may
   already be correct in Rust.
 
-**Audit gaps in completed items** (from `audit_reports/2026-04-17-behavioral-parity.md`):
-- **#0f**: ~~AUDIT-046~~ ✅ `require_setting` deleted (dead code).
-  AUDIT-054 — `--redirect-output` is Unix-only, needs Windows support
-- **#1**: ~~AUDIT-043~~ Accepted difference — Rust SDK uses `app_name()`, content identical to Python
+**Audit gaps in completed items** (see `audit_reports/2026-04-17-behavioral-parity.md` for full details):
+
+Remaining open findings (12):
+- **#0f**: AUDIT-054 — `--redirect-output` Windows support
 - **#2**: AUDIT-042 — Windows stdin handling for login subprocess
-- **#4**: ~~AUDIT-006~~ ✅ `fleet get --queue-id` mode implemented
-- **#5**: ~~AUDIT-010~~ ✅ Submission telemetry events added (`submission` + `create_job`).
-- **#6**: ~~AUDIT-026~~ ✅ `job logs --session-action-id` implemented.
-  AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python).
-  `--timezone` deprecated flag not implemented.
-- **#8**: ~~AUDIT-013~~ ✅ Hash cache V4 compatible — Rust uses same `hashesV4` table as Python.
-  AUDIT-053 — Windows long path (UNC) handling missing.
-- **#9**: AUDIT-011 — Upload is sequential (no parallelism).
-  AUDIT-012 — Download is sequential (no parallelism).
-  AUDIT-014 — No multipart upload (5GB PutObject limit).
-  ~~AUDIT-048~~ ✅ `manifest upload` queue derivation implemented.
-  AUDIT-049 — No multipart download for large files.
-  AUDIT-056 — ~~`suggest_resources` storage profile chain is a stub~~ ✅ Fixed.
-- **#11**: ~~AUDIT-009~~ ✅ Upload summary message always shown.
-  AUDIT-031 — `--save-debug-snapshot` not implemented.
-  AUDIT-034 — `--submitter-info` not implemented.
-- **#13**: ~~AUDIT-001~~ ✅ `sync-output` now downloads files.
-  ~~AUDIT-007~~ ✅ Job discovery uses `createdAt` thresholding pagination.
-  ~~AUDIT-035~~ ✅ Download path traversal validated via `ensure_paths_within_directory`.
-  ~~AUDIT-036~~ ✅ Manifest merge sorts by S3 `LastModified` (oldest first).
-  AUDIT-008 — `job download-output` no interactive root path editing.
-  ~~AUDIT-047~~ ✅ `manifest download` wired to API.
-  ~~AUDIT-055~~ ✅ Download conflict detection implemented (test coverage partial — S3 mock gap).
-  SYNC-005 — ~~`sync-output` missing intermediate progress messages~~ ✅ Fixed.
-- **#14**: ~~AUDIT-030~~ ✅ False finding — Python also doesn't support macOS
-- **#15**: ~~AUDIT-040~~ ✅ All gaps fixed
+- **#6**: AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python)
+- **#8**: AUDIT-053 — Windows long path (UNC) handling
+- **#9**: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
+  AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
+- **#11**: AUDIT-031 (`--save-debug-snapshot`), AUDIT-034 (`--submitter-info` — GUI-only)
+- **#13**: AUDIT-008 (interactive root path editing), AUDIT-051 (download path collision)
 
 **Dropped findings (not bugs, accepted differences):**
 - AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
-- AUDIT-030 — `handle-web-url` macOS support — false finding (Python also doesn't support macOS)
+- AUDIT-030 — `handle-web-url` macOS support — false finding
 - AUDIT-039 — `job wait` verbose to stderr (Rust approach is better)
-- AUDIT-046 — `require_setting` exit code (function is unused dead code)
-
-**Findings fixed since audit (verified 2026-04-20):**
-- ~~AUDIT-018~~ ✅ INI colon delimiter — now supported (`ini.rs:74`)
-- ~~AUDIT-019~~ ✅ INI section/key ordering — uses `IndexMap` for insertion-order preservation
-- ~~AUDIT-020~~ ✅ `suggest_resources` dispatch — now dispatches on `operation_name`
-- ~~AUDIT-035~~ ✅ Download path traversal — `ensure_paths_within_directory` implemented
-- ~~AUDIT-036~~ ✅ Download manifest merge order — sorts by S3 `LastModified`
-- ~~AUDIT-040~~ ✅ Adaptive retry for requeue — `RetryConfig::adaptive().with_max_attempts(5)`
-- ~~AUDIT-044~~ ✅ INI multiline values — continuation lines supported
-- ~~AUDIT-046~~ ✅ `require_setting` deleted — dead code with zero callers
-- ~~AUDIT-056~~ ✅ Storage profile suggestion chain — `list_storage_profiles_for_queue` + `try_list_storage_profiles`
-- ~~SYNC-005~~ ✅ `sync-output` progress messages — "Retrieving session actions..." and "Populating manifest S3 keys..."
+- AUDIT-043 — User-agent position in header (Rust SDK limitation)
+- AUDIT-046 — `require_setting` exit code (deleted dead code)
 
 **Missing config settings (discovered 2026-04-20):**
 - `settings.allow_bundle_hooks` (default `false`) — needed for #18
