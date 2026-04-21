@@ -16,7 +16,7 @@ prompt test).
 | 1. Study Python | ✅ Complete |
 | 2. Write tests | ✅ Complete (tests already existed, fixed mocks) |
 | 3. Implement | ✅ Complete |
-| 4. Write spec | N/A (test infrastructure fix, no new behavior) |
+| 4. Compare CLIs | ✅ Complete |
 | 5. Audit | ✅ Complete (full suite passes) |
 | 6. Fix | ✅ Complete |
 | 7. Commit | ✅ Complete |
