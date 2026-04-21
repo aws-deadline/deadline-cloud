@@ -1065,7 +1065,7 @@ def job_download_output(
             tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
             sys.stdin = open(tty_path)  # noqa: SIM115
         except OSError:
-            pass
+            pass  # Non-interactive environment (CI, Tauri) — no TTY to reopen
     if filters:
         filters = _validate_and_normalize_include_paths(filters)
     path_filters = filters or None
