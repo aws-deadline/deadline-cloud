@@ -150,7 +150,7 @@ Remaining open findings (7):
 - AUDIT-054 — `--redirect-output` Windows support (F2)
 - AUDIT-053 — Windows long path UNC handling (F3)
 - AUDIT-031 — `--save-debug-snapshot` (F8)
-- AUDIT-008 — Interactive root path editing in download (F7, tests blocked on S3 mock chain)
+- AUDIT-008 — Interactive root path editing in download (F7)
 - Telemetry: hashing/upload summary events (F5), error event on submit failure (F6)
 
 **Dropped findings (not bugs, accepted differences):**
@@ -166,10 +166,7 @@ Remaining open findings (7):
 - `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
-- **S3 download mock chain**: ~~Fixed.~~ `mock_s3_get_object` and
-  `mock_s3_get_object_with_metadata` now percent-encode colons in key
-  paths to match what the S3 SDK sends. All 7 previously-ignored tests
-  in `job_download.rs` now pass. Total: 1127 tests, 0 ignored.
+- **S3 download mock chain**: Fixed. All 1127 tests pass, 0 ignored.
 - **#15d**: Audit all Level 1 tests in library crates to identify which
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through
