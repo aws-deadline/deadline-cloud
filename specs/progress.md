@@ -77,8 +77,7 @@ but has no implementation. Remaining gaps are performance (#9), UX
 polish (#11, #13), platform support (#0f, #2, #8), telemetry (#5),
 and new Python features (#18-21).
 
-**Next action item:** Fix S3 download mock chain to unblock F7 tests
-(6 ignored tests in `job_download.rs` + 1 pre-existing in same file).
+**Next action item:** Pick next work item from the table.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
@@ -167,14 +166,10 @@ Remaining open findings (7):
 - `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
-- **S3 download mock chain**: `job_download_output_existing_files_shows_conflict_prompt`
-  is `#[ignore]`. The conflict detection code in `download_output_impl` works
-  but can't be tested end-to-end because the S3 mock chain (ListObjectsV2 →
-  GetObject with `x-amz-meta-asset-root` metadata → manifest decode → path
-  extraction) doesn't produce `output_paths_by_root` entries. Root cause:
-  `mock_s3_get_object_with_metadata` path format doesn't match what the SDK
-  sends with `force_path_style(true)`. Fix: investigate the exact path the
-  SDK uses for GetObject with endpoint override and update the mock accordingly.
+- **S3 download mock chain**: ~~Fixed.~~ `mock_s3_get_object` and
+  `mock_s3_get_object_with_metadata` now percent-encode colons in key
+  paths to match what the S3 SDK sends. All 7 previously-ignored tests
+  in `job_download.rs` now pass. Total: 1127 tests, 0 ignored.
 - **#15d**: Audit all Level 1 tests in library crates to identify which
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through
