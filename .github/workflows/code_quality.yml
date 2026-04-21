@@ -3,6 +3,9 @@ name: Code Quality
 on:
   pull_request:
     branches: [ mainline, release, feature_assets_cli, 'patch_*' , "feature_*"]
+  push:
+    # Run on mainline pushes to populate the Actions cache that PRs restore from.
+    branches: [ mainline ]
   workflow_call:
     inputs:
       branch:
