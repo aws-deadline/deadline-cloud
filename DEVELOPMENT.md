@@ -509,10 +509,6 @@ These are the manual test cases for the client software release cycle, covering 
 | Verify 'Export job bundle' button in GUI Submitter | | |
 | Verify all GUI Submitter dialogue controls work | Verify all dropdown options, menus, input fields, toggles, checkboxes, radio buttons work as expected. Verify all tabs: Shared job settings, Job-specific settings, Job attachments, Host requirements (both 'Run on all worker hosts' and 'Run on worker hosts that meet the following requirements' options). | |
 | Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
-| `deadline fleet get` | Verify correct information is displayed. | |
-| `deadline fleet list` | Verify correct information is displayed. | |
-| `deadline worker get` | Verify correct information is displayed. | Include `--fleet-id` and `--worker-id` parameter. |
-| `deadline worker list` | Verify correct information is displayed. | Include `--fleet-id` parameter. |
 
 ## Job Attachments Tests
 

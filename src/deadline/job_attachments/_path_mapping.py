@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Optional, Union
 
-from .models import PathFormat, PathMappingRule, StorageProfileOperatingSystemFamily
+from .models import (
+    PathFormat,
+    PathMappingRule,
+    StorageProfile,
+    StorageProfileOperatingSystemFamily,
+)
 
 __all__ = ["_generate_path_mapping_rules", "_PathMappingRuleApplier"]
 
@@ -16,8 +21,8 @@ to be marked as public after developing some experience with it.
 
 
 def _generate_path_mapping_rules(
-    source_storage_profile: dict[str, Any],
-    destination_storage_profile: dict[str, Any],
+    source_storage_profile: Union[StorageProfile, dict[str, Any]],
+    destination_storage_profile: Union[StorageProfile, dict[str, Any]],
 ) -> list[PathMappingRule]:
     """
     Given a pair of storage profiles, generate all the path mapping rules to transform paths
@@ -27,34 +32,29 @@ def _generate_path_mapping_rules(
     the storage profile regardless of the type (SHARED vs LOCAL), to account for the broadest
     possible storage profile configurations.
 
+    Accepts either StorageProfile dataclass or raw boto3 dict responses.
+
     Args:
-        source_storage_profile: A storage profile as returned by boto3 deadline.get_storage_profile or
-            deadline.get_storage_profile_for_queue.
-        destination_storage_profile: A storage profile as returned by boto3 deadline.get_storage_profile or
-            deadline.get_storage_profile_for_queue.
+        source_storage_profile: A StorageProfile dataclass or a storage profile dict as returned
+            by boto3 deadline.get_storage_profile or deadline.get_storage_profile_for_queue.
+        destination_storage_profile: A StorageProfile dataclass or a storage profile dict as returned
+            by boto3 deadline.get_storage_profile or deadline.get_storage_profile_for_queue.
     Returns:
         A list of path mapping rules to transform paths.
     """
+    # Normalize inputs to a common shape
+    src = _normalize_storage_profile(source_storage_profile)
+    dst = _normalize_storage_profile(destination_storage_profile)
+
     # If the source and destination are identical, no transformation is needed
-    if (
-        source_storage_profile["storageProfileId"]
-        == destination_storage_profile["storageProfileId"]
-    ):
+    if src["storageProfileId"] == dst["storageProfileId"]:
         return []
 
     # Put the locations into dictionaries to match up the names
-    source_locations = {
-        location["name"]: location for location in source_storage_profile["fileSystemLocations"]
-    }
-    destination_locations = {
-        location["name"]: location
-        for location in destination_storage_profile["fileSystemLocations"]
-    }
+    source_locations = {location["name"]: location for location in src["fileSystemLocations"]}
+    destination_locations = {location["name"]: location for location in dst["fileSystemLocations"]}
 
-    if (
-        source_storage_profile["osFamily"].lower()
-        == StorageProfileOperatingSystemFamily.WINDOWS.value
-    ):
+    if src["osFamily"].lower() == StorageProfileOperatingSystemFamily.WINDOWS.value:
         source_path_format = PathFormat.WINDOWS.value
     else:
         source_path_format = PathFormat.POSIX.value
@@ -71,6 +71,22 @@ def _generate_path_mapping_rules(
             )
 
     return path_mapping_rules
+
+
+def _normalize_storage_profile(
+    profile: Union[StorageProfile, dict[str, Any]],
+) -> dict[str, Any]:
+    """Convert a StorageProfile dataclass to the dict format, or pass through if already a dict."""
+    if isinstance(profile, StorageProfile):
+        return {
+            "storageProfileId": profile.storageProfileId,
+            "osFamily": profile.osFamily.value,
+            "fileSystemLocations": [
+                {"name": loc.name, "path": loc.path, "type": loc.type.value}
+                for loc in profile.fileSystemLocations
+            ],
+        }
+    return profile
 
 
 class _PathMappingRuleApplier:

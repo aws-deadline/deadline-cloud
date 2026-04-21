@@ -21,7 +21,6 @@ import click
 from botocore.exceptions import ClientError
 
 from ...api._session import _modified_logging_level
-from ....job_attachments.download import OutputDownloader
 from ....job_attachments.models import (
     FileConflictResolution,
     JobAttachmentS3Settings,
@@ -58,6 +57,17 @@ from ._job_helpers import (
     _print_job_details,
     _estimate_remaining_time,
 )
+from ._job_download_helpers import (
+    JSON_MSG_TYPE_PROGRESS,
+    _download_mapped_manifests,
+    _resolve_storage_profiles,
+    _transform_manifests_to_absolute_paths,
+)
+from ....job_attachments._path_mapping import _generate_path_mapping_rules
+from ....job_attachments.download import (
+    OutputDownloader,
+    get_output_manifests_by_asset_root,
+)
 
 logger = logging.getLogger("deadline.client.cli")
 
@@ -65,7 +75,6 @@ JSON_MSG_TYPE_TITLE = "title"
 JSON_MSG_TYPE_PRESUMMARY = "presummary"
 JSON_MSG_TYPE_PATH = "path"
 JSON_MSG_TYPE_PATHCONFIRM = "pathconfirm"
-JSON_MSG_TYPE_PROGRESS = "progress"
 JSON_MSG_TYPE_SUMMARY = "summary"
 JSON_MSG_TYPE_ERROR = "error"
 JSON_MSG_TYPE_WARNING = "warning"
@@ -488,6 +497,7 @@ def _download_job_output(
     step_id: Optional[str],
     task_id: Optional[str],
     is_json_format: bool = False,
+    ignore_storage_profiles: bool = False,
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
@@ -568,34 +578,81 @@ def _download_job_output(
 
     _check_and_warn_long_output_paths(output_paths_by_root)
 
-    # Check if the asset roots came from different OS. If so, prompt users to
-    # select alternative root paths to download to, (regardless of the auto-accept.)
-    asset_roots = list(output_paths_by_root.keys())
-    for asset_root in asset_roots:
-        root_path_format = root_path_format_mapping.get(asset_root, "")
-        if root_path_format == "":
-            # There must be a corresponding root path format for each root path, by design.
-            raise DeadlineOperationError(f"No root path format found for {asset_root}.")
-        if PathFormat.get_host_path_format_string() != root_path_format:
-            click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
+    # Storage profile path mapping (replaces manual OS mismatch prompt when profiles are available)
+    resolved = _resolve_storage_profiles(
+        config, deadline, farm_id, queue_id, job, ignore_storage_profiles
+    )
 
-            if not is_json_format:
-                new_root = click.prompt(
-                    "> Please enter a new root path",
-                    type=click.Path(exists=False),
+    if resolved:
+        # Automatic path mapping via storage profiles using absolute-path transformation.
+        # This matches sync-output behavior: join root + relative, then transform the full
+        # absolute path. This correctly handles nested file system locations where a rule's
+        # source path is deeper than the asset root.
+        rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
+        click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
+        if rules:
+            # Fetch manifests directly (same S3 data OutputDownloader uses internally)
+            manifests_by_root = get_output_manifests_by_asset_root(
+                s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+                farm_id=farm_id,
+                queue_id=queue_id,
+                job_id=job_id,
+                step_id=step_id,
+                task_id=task_id,
+                session_action_id=session_action_id,
+                session=queue_role_session,
+            )
+            mapped_manifests = _transform_manifests_to_absolute_paths(
+                manifests_by_root, rules, resolved.job_profile.osFamily
+            )
+            if mapped_manifests:
+                download_summary = _download_mapped_manifests(
+                    mapped_manifests=mapped_manifests,
+                    queue=queue,
+                    queue_role_session=queue_role_session,
+                    conflict_resolution_setting=conflict_resolution,
+                    is_json_format=is_json_format,
                 )
-            else:
-                json_string = click.prompt("", prompt_suffix="", type=str)
-                new_root = _get_value_from_json_line(
-                    json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
-                )[0]
-                _assert_valid_path(new_root)
+                click.echo(_get_download_summary_message(download_summary, is_json_format))
+                click.echo()
+                return
+            # If no files could be mapped, fall through to the OutputDownloader path
+            # which will download to original (unmapped) paths.
+        elif resolved.job_profile.storageProfileId != resolved.local_profile.storageProfileId:
+            click.echo(
+                "Warning: No path mapping rules could be generated from the storage profiles. "
+                "Path mapping will be skipped."
+            )
+    else:
+        # No storage profiles — fall back to manual prompt on OS mismatch
+        asset_roots = list(output_paths_by_root.keys())
+        for asset_root in asset_roots:
+            root_path_format = root_path_format_mapping.get(asset_root, "")
+            if root_path_format == "":
+                # There must be a corresponding root path format for each root path, by design.
+                raise DeadlineOperationError(f"No root path format found for {asset_root}.")
+            if PathFormat.get_host_path_format_string() != root_path_format:
+                click.echo(
+                    _get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format)
+                )
 
-            job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
+                if not is_json_format:
+                    new_root = click.prompt(
+                        "> Please enter a new root path",
+                        type=click.Path(exists=False),
+                    )
+                else:
+                    json_string = click.prompt("", prompt_suffix="", type=str)
+                    new_root = _get_value_from_json_line(
+                        json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
+                    )[0]
+                    _assert_valid_path(new_root)
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-    _check_and_warn_long_output_paths(output_paths_by_root)
+        # Re-fetch after potential set_root_path calls above
+        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+        _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Prompt users to confirm local root paths where they will download outputs to,
     # and allow users to select different location to download files to if they want.
@@ -923,6 +980,15 @@ def _assert_valid_path(path: str) -> None:
 @click.option("--step-id", help="The step to use.")
 @click.option("--task-id", help="The task to use.")
 @click.option(
+    "--ignore-storage-profiles",
+    is_flag=True,
+    help="Ignores the storage profile configuration. Only use if the job was "
+    "submitted and downloaded from the same machine. Downloads to "
+    "unmapped paths regardless of operating system.\n"
+    "Default value is False.",
+    default=False,
+)
+@click.option(
     "--conflict-resolution",
     type=click.Choice(
         [
@@ -954,7 +1020,7 @@ def _assert_valid_path(path: str) -> None:
     "parsed/consumed by custom scripts.",
 )
 @_handle_error
-def job_download_output(step_id, task_id, output, **args):
+def job_download_output(step_id, task_id, output, ignore_storage_profiles, **args):
     """
     Download the output of a Deadline Cloud job that was saved as job
     attachments.
@@ -964,6 +1030,7 @@ def job_download_output(step_id, task_id, output, **args):
     """
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
+
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
         required_options={"farm_id", "queue_id", "job_id"}, **args
@@ -975,7 +1042,16 @@ def job_download_output(step_id, task_id, output, **args):
     is_json_format = True if output == "json" else False
 
     try:
-        _download_job_output(config, farm_id, queue_id, job_id, step_id, task_id, is_json_format)
+        _download_job_output(
+            config=config,
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_id=job_id,
+            step_id=step_id,
+            task_id=task_id,
+            is_json_format=is_json_format,
+            ignore_storage_profiles=ignore_storage_profiles,
+        )
     except Exception as e:
         if is_json_format:
             error_one_liner = str(e).replace("\n", ". ")
