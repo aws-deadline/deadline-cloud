@@ -1,0 +1,33 @@
+---
+source: crates/deadline-cli/tests/cli/job_logs.rs
+info:
+  program: deadline
+  args:
+    - job
+    - logs
+    - "--session-action-id"
+    - sessionaction-00000000000000000000000000000001-0
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:56356"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:56356"
+    AWS_ENDPOINT_URL_S3: "http://localhost:56356"
+    AWS_ENDPOINT_URL_STS: "http://localhost:56356"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpdsTdJB/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpdsTdJB
+---
+success: false
+exit_code: 1
+----- stdout -----
+Session action 'sessionaction-00000000000000000000000000000001-0' has not started yet. No logs are available.
+
+----- stderr -----

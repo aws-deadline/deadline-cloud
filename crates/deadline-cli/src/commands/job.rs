@@ -3,9 +3,26 @@ use deadline_api::{api, job_monitoring, log_retrieval};
 use deadline_api::log_retrieval::SessionAutoSelect;
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
+use regex::Regex;
+use std::sync::LazyLock;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
+
+static SESSION_ACTION_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^sessionaction-([0-9a-f]{32})-\d+$").unwrap());
+
+/// Parse a session action ID and derive the session ID.
+/// Format: `sessionaction-{uuid}-{number}` → `session-{uuid}`
+fn parse_session_action_id(session_action_id: &str) -> Result<String, CliError> {
+    let caps = SESSION_ACTION_ID_RE.captures(session_action_id).ok_or_else(|| {
+        CliError::Operation(format!(
+            "Invalid session action ID format: '{}'. Expected format: sessionaction-{{uuid}}-{{number}}",
+            session_action_id
+        ))
+    })?;
+    Ok(format!("session-{}", &caps[1]))
+}
 
 fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
     match s.to_uppercase().as_str() {
@@ -114,6 +131,7 @@ pub enum JobAction {
         #[arg(long)] queue_id: Option<String>,
         #[arg(long)] job_id: Option<String>,
         #[arg(long)] session_id: Option<String>,
+        #[arg(long)] session_action_id: Option<String>,
         #[arg(long, default_value = "100")]
         limit: i32,
         #[arg(long)] start_time: Option<String>,
@@ -371,26 +389,60 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
             }
         }
-        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, limit, start_time, end_time, next_token, output, timestamp_format } => {
+        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format } => {
             let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let is_json = output.eq_ignore_ascii_case("json");
 
             let job = get(&config, "defaults.job_id");
+
+            // Validate --session-action-id format early (before API calls)
+            let (mut resolved_session_id_owned, mut action_start, mut action_end) = (None, None, None);
+            if let Some(ref said) = session_action_id {
+                let derived = parse_session_action_id(said)?;
+                if let Some(ref explicit_sid) = session_id {
+                    if *explicit_sid != derived {
+                        return Err(CliError::Operation(format!(
+                            "Session ID mismatch: --session-id '{}' does not match \
+                             session ID '{}' derived from --session-action-id '{}'",
+                            explicit_sid, derived, said
+                        )));
+                    }
+                }
+                resolved_session_id_owned = Some(derived);
+            }
+
             let job_resp = api::get_job(&farm, &queue, &job, Some(&config), None).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
             let job_name = job_resp["name"].as_str().unwrap_or("");
 
-            let sid = session_id.as_deref();
+            // Get session action details for time bounds (after validation)
+            if let Some(ref said) = session_action_id {
+                let sa = api::get_session_action(&farm, &queue, &job, said, Some(&config), None).await
+                    .map_err(|e| CliError::Operation(format!(
+                        "Session action '{}' not found in job '{}':\n{}", said, job, e
+                    )))?;
+                let sa_start = sa["startedAt"].as_str().map(String::from);
+                if sa_start.is_none() {
+                    return Err(CliError::Operation(format!(
+                        "Session action '{}' has not started yet. No logs are available.", said
+                    )));
+                }
+                action_start = sa_start;
+                action_end = sa["endedAt"].as_str().map(String::from);
+            }
 
-            let start = start_time.as_deref().and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+            let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
+
+            // Use action time bounds if available, otherwise use explicit start/end
+            let start = action_start.as_deref().or(start_time.as_deref()).and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
                     .ok()
                     .map(|dt| dt.with_timezone(&chrono::Utc))
             });
-            let end = end_time.as_deref().and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace('Z', "+00:00"))
+            let end = action_end.as_deref().or(end_time.as_deref()).and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
                     .ok()
                     .map(|dt| dt.with_timezone(&chrono::Utc))
             });
@@ -439,10 +491,33 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     }
                     SessionAutoSelect::Provided => {}
                 }
-                println!("Retrieving logs for session {} from log group /aws/deadline/{farm}/{queue}...",
-                    result.log_stream);
+                println!("Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
+                    if session_action_id.is_some() {
+                        format!("session action {}", session_action_id.as_deref().unwrap())
+                    } else {
+                        format!("session {}", result.log_stream)
+                    });
                 println!("Job ID: {job}");
                 println!("Job Name: {job_name}");
+
+                // Show session action time bounds if available
+                if let (Some(sa_start), Some(_said)) = (&action_start, &session_action_id) {
+                    println!("Session action start: {sa_start}");
+                    if let Some(sa_end) = &action_end {
+                        println!("Session action end: {sa_end}");
+                        // Parse and compute duration
+                        if let (Ok(start_dt), Ok(end_dt)) = (
+                            chrono::DateTime::parse_from_rfc3339(&sa_start.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
+                            chrono::DateTime::parse_from_rfc3339(&sa_end.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
+                        ) {
+                            let duration = end_dt.signed_duration_since(start_dt);
+                            let secs = duration.num_seconds();
+                            let micros = duration.num_microseconds().unwrap_or(0) % 1_000_000;
+                            println!("Session action duration: {}:{:02}:{:02}.{:06}",
+                                secs / 3600, (secs % 3600) / 60, secs % 60, micros);
+                        }
+                    }
+                }
             }
 
             if is_json {
@@ -1247,16 +1322,39 @@ pub(crate) async fn download_output_impl(
         }
     }
 
-    // Resolve conflict resolution
-    let resolution = conflict_resolution.unwrap_or_else(|| {
-        let setting = config_file::get_setting_with_config("settings.conflict_resolution", config)
-            .unwrap_or_default();
-        match setting.to_uppercase().as_str() {
-            "SKIP" => FileConflictResolution::Skip,
-            "OVERWRITE" => FileConflictResolution::Overwrite,
-            _ => FileConflictResolution::CreateCopy,
+    // Resolve conflict resolution — check for existing files if not explicitly set
+    let resolution = match conflict_resolution {
+        Some(r) => r,
+        None => {
+            // Check for conflicting files
+            let mut conflicting: Vec<String> = Vec::new();
+            for (root, paths) in &output_paths {
+                for p in paths {
+                    let full = std::path::PathBuf::from(root).join(p);
+                    if full.is_file() {
+                        conflicting.push(full.to_string_lossy().to_string());
+                    }
+                }
+            }
+            if !conflicting.is_empty() && !is_json {
+                println!("\nThe following files already exist in your local directory:");
+                for f in conflicting.iter().take(10) {
+                    println!("        {f}");
+                }
+                if conflicting.len() > 10 {
+                    println!("        ... and {} more", conflicting.len() - 10);
+                }
+                println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
+            }
+            let setting = config_file::get_setting_with_config("settings.conflict_resolution", config)
+                .unwrap_or_default();
+            match setting.to_uppercase().as_str() {
+                "SKIP" => FileConflictResolution::Skip,
+                "OVERWRITE" => FileConflictResolution::Overwrite,
+                _ => FileConflictResolution::CreateCopy,
+            }
         }
-    });
+    };
 
     // Download with progress
     let progress_mgr = std::sync::Mutex::new(

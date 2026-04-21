@@ -5,6 +5,7 @@
 
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
+use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
 
@@ -342,4 +343,211 @@ async fn manifest_download_nonexistent_dir_exits_with_error() {
         "--farm-id", "farm-abc",
         "--queue-id", "queue-abc",
     ]));
+}
+
+// ===========================================================================
+// manifest upload derives S3 settings from queue
+// ===========================================================================
+
+#[tokio::test]
+async fn manifest_upload_derives_s3_settings_from_queue() {
+    use deadline_test_server::deadline_api::{queues, sts, s3};
+
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", json!({
+        "queueId": "queue-abc",
+        "displayName": "Test Queue",
+        "jobAttachmentSettings": {
+            "s3BucketName": "test-bucket",
+            "rootPrefix": "root-prefix"
+        }
+    })).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+
+    // Create a minimal manifest file
+    let dir = TempDir::new().unwrap();
+    let manifest_path = dir.path().join("test.manifest");
+    fs::write(&manifest_path, r#"{"hashAlg":"xxh128","paths":[]}"#).unwrap();
+
+    let output = harness
+        .cli(&["manifest", "upload", manifest_path.to_str().unwrap()])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should succeed and show upload message with bucket from queue
+    assert!(stdout.contains("test-bucket"), "Expected bucket name in output: {stdout}");
+    assert!(stdout.contains("Uploading successful") || output.status.success(),
+        "Expected success, got: {stdout}");
+}
+
+// ---------------------------------------------------------------------------
+// manifest upload without --s3-cas-uri and without farm/queue errors
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn manifest_upload_no_s3_uri_no_queue_exits_with_error() {
+    let harness = TestHarness::new().await;
+    // No farm_id or queue_id configured, no --s3-cas-uri
+    let dir = TempDir::new().unwrap();
+    let manifest_path = dir.path().join("test.manifest");
+    fs::write(&manifest_path, r#"{"hashAlg":"xxh128","paths":[]}"#).unwrap();
+
+    assert_cmd_snapshot!(harness.cmd(&[
+        "manifest", "upload", manifest_path.to_str().unwrap(),
+    ]));
+}
+
+// ===========================================================================
+// manifest download wired to API
+// ===========================================================================
+
+#[tokio::test]
+async fn manifest_download_fetches_manifests_from_s3() {
+    use deadline_test_server::deadline_api::{jobs, queues, sts, s3};
+
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", json!({
+        "queueId": "queue-abc",
+        "displayName": "Test Queue",
+        "jobAttachmentSettings": {
+            "s3BucketName": "test-bucket",
+            "rootPrefix": "root-prefix"
+        }
+    })).await;
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-abc",
+        "name": "Test Job",
+        "attachments": {
+            "manifests": [{
+                "rootPath": "/tmp/outputs",
+                "rootPathFormat": "posix",
+                "inputManifestPath": "Manifests/input.manifest",
+                "inputManifestHash": "abc123",
+                "outputRelativeDirectories": ["outputs"]
+            }],
+            "fileSystem": "COPIED"
+        }
+    })).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    // Mock S3 list and get for manifest download
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    let dir = TempDir::new().unwrap();
+    let output = harness
+        .cli(&[
+            "manifest", "download", dir.path().to_str().unwrap(),
+            "--job-id", "job-abc",
+        ])
+        .output()
+        .expect("failed to run");
+
+    // Should NOT return the old stub error
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stdout}{stderr}");
+    assert!(!combined.contains("not yet wired"),
+        "Should not show stub error, got: {combined}");
+}
+
+// ===========================================================================
+// manifest upload — error cases
+// ===========================================================================
+
+#[tokio::test]
+async fn manifest_upload_queue_no_attachment_settings_exits_with_error() {
+    use deadline_test_server::deadline_api::{queues, sts};
+
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    // Queue exists but has no jobAttachmentSettings
+    queues::mock_get_queue(&harness.server, "farm-abc", json!({
+        "queueId": "queue-abc",
+        "displayName": "No Attachments Queue",
+    })).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let dir = TempDir::new().unwrap();
+    let manifest_path = dir.path().join("test.manifest");
+    fs::write(&manifest_path, r#"{"hashAlg":"xxh128","paths":[]}"#).unwrap();
+
+    let output = harness
+        .cli(&["manifest", "upload", manifest_path.to_str().unwrap()])
+        .output()
+        .expect("failed to run");
+
+    assert!(!output.status.success(), "Should fail when queue has no attachment settings");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stdout}{stderr}");
+    // Must NOT contain the old stub error — that means queue derivation worked
+    // but the queue lacks attachment settings
+    assert!(
+        !combined.contains("--s3-cas-uri"),
+        "Should not show the old stub error about --s3-cas-uri, got: {combined}"
+    );
+    assert!(
+        combined.contains("attachment") && combined.contains("not configured"),
+        "Error should say attachments are not configured, got: {combined}"
+    );
+}
+
+// ===========================================================================
+// manifest download — error cases
+// ===========================================================================
+
+#[tokio::test]
+async fn manifest_download_job_no_attachments_exits_with_error() {
+    use deadline_test_server::deadline_api::{jobs, queues, sts};
+
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    queues::mock_get_queue(&harness.server, "farm-abc", json!({
+        "queueId": "queue-abc",
+        "displayName": "Test Queue",
+        "jobAttachmentSettings": {
+            "s3BucketName": "test-bucket",
+            "rootPrefix": "root-prefix"
+        }
+    })).await;
+    // Job has no attachments field
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-abc",
+        "name": "No Attachments Job",
+    })).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let dir = TempDir::new().unwrap();
+    let output = harness
+        .cli(&[
+            "manifest", "download", dir.path().to_str().unwrap(),
+            "--job-id", "job-abc",
+        ])
+        .output()
+        .expect("failed to run");
+
+    assert!(!output.status.success(), "Should fail when job has no attachments");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stdout}{stderr}");
+    // Must NOT contain the old stub error
+    assert!(
+        !combined.contains("not yet wired"),
+        "Should not show the old stub error, got: {combined}"
+    );
+    assert!(
+        combined.contains("no attachment") || combined.contains("no manifest"),
+        "Error should mention missing attachments/manifests, got: {combined}"
+    );
 }

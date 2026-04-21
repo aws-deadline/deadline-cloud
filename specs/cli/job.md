@@ -143,23 +143,39 @@ Terminal states: SUCCEEDED, FAILED, CANCELED, SUSPENDED, NOT_COMPATIBLE.
 
 ## `job logs`
 
-Options: `--session-id` (optional), `--limit` (default 100), `--start-time`,
-`--end-time`, `--next-token`, `--output verbose|json`,
-`--timestamp-format utc|local|relative` (default utc).
+Options: `--session-id` (optional), `--session-action-id` (optional),
+`--limit` (default 100), `--start-time`, `--end-time`, `--next-token`,
+`--output verbose|json`, `--timestamp-format utc|local|relative` (default utc).
 
 Requires: farm_id, queue_id, job_id.
 
+### `--session-action-id`
+
+When provided, derives the session ID from the action ID format
+`sessionaction-{uuid}-{number}` → `session-{uuid}`. Calls
+`GetSessionAction` to get `startedAt`/`endedAt` timestamps and uses
+them to scope the CloudWatch log query to that action's time window.
+
+- Validated before any API calls (fast failure on bad format)
+- If both `--session-id` and `--session-action-id` are given, validates
+  they are consistent (error on mismatch)
+- Displays "session action {id}" instead of "session {id}" in output
+- Shows session action start, end, and duration in header
+
 ### Execution Flow
 
-1. GetJob to retrieve job name
-2. Call `log_retrieval::get_session_logs` (handles session auto-selection)
-3. Resolve the actual session ID (explicit or auto-selected)
-4. GetSession to retrieve `startedAt` for timestamp formatting
-5. Build timestamp formatter (utc/local/relative)
-6. Print auto-selection message (if applicable)
-7. Print header: log group, job ID, job name
-8. Print events or "No logs found"
-9. Print pagination hint if more logs available
+1. Validate `--session-action-id` format (if provided)
+2. Validate `--session-id` / `--session-action-id` consistency
+3. GetJob to retrieve job name
+4. GetSessionAction for time bounds (if `--session-action-id`)
+5. Call `log_retrieval::get_session_logs` (handles session auto-selection)
+6. Resolve the actual session ID (explicit, derived, or auto-selected)
+7. GetSession to retrieve `startedAt` for timestamp formatting
+8. Build timestamp formatter (utc/local/relative)
+9. Print auto-selection message (if applicable)
+10. Print header: log group, job ID, job name, session action times
+11. Print events or "No logs found"
+12. Print pagination hint if more logs available
 
 ### Session Auto-Selection
 

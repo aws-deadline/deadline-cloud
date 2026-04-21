@@ -171,6 +171,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 crate::common::ProgressBarManager::new(100, "Uploading Attachments"),
             );
 
+            let telemetry = deadline_api::telemetry::create_telemetry(Some(&config));
+
             let submit_params = SubmitJobParams {
                 job_bundle_dir: job_bundle_dir.clone(),
                 job_parameters,
@@ -198,17 +200,22 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     upload_progress.lock().unwrap().callback(meta.progress as u64)
                 })),
                 continue_callback: Some(Box::new(|| crate::common::should_continue())),
+                telemetry: Some(&telemetry),
             };
 
             let job_id = match create_job_from_job_bundle(submit_params).await {
                 Ok(id) => id,
                 Err(e) => {
+                    drop(telemetry); // Flush telemetry before exit
                     let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
                     let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
                     let suggestion = suggest_resources_on_client_error(&e.to_string(), "CreateJob", Some(&farm), Some(&queue), None, Some(&config)).await;
                     return Err(CliError::Operation(format!("{e}{suggestion}")));
                 }
             };
+
+            // Flush telemetry events before process exits
+            drop(telemetry);
 
             // Update defaults.job_id only when no CLI overrides were provided
             if profile.is_none()

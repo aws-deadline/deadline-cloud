@@ -65,35 +65,42 @@ Or "No differences found." if clean.
 
 ## `manifest download`
 
-Currently a stub — returns error: "manifest download requires Deadline API
-access (not yet wired in CLI)". The library function
-(`manifest_ops::manifest_download`) is ready; CLI wiring for queue role
-assumption needs to be completed.
-
 Options: `download_dir` (positional), `--job-id` (required), `--step-id`,
 `--farm-id`, `--queue-id`, `--profile`, `--asset-type` (input/output/all,
 default all), `--json`.
+
+Requires: farm_id, queue_id.
+
+### Execution Flow
+
+1. GetQueue to retrieve `jobAttachmentSettings` (bucket, prefix)
+2. GetJob to check for attachments and manifest entries
+3. Get queue-scoped credentials via `get_queue_scoped_config`
+4. For each manifest entry in the job's attachments:
+   - Filter by `--step-id` if provided
+   - Download manifest from S3 via GetObject
+   - Write to `download_dir`
+5. Print download count
 
 ## `manifest upload`
 
 Options:
 - `manifest_file` (positional) — path to the manifest file
-- `--s3-cas-uri` — S3 CAS URI (currently required — farm/queue-based resolution
-  not yet wired). Parsed into bucket name and root prefix via
-  `JobAttachmentS3Settings::from_s3_root_uri`.
+- `--s3-cas-uri` — S3 CAS URI. If provided, uses it directly.
 - `--s3-manifest-prefix` — prefix for the manifest in S3
-- `--farm-id`, `--queue-id`, `--profile` — accepted but not yet used for
-  S3 URI resolution
+- `--farm-id`, `--queue-id`, `--profile` — used to derive S3 settings
+  from the queue's `jobAttachmentSettings` when `--s3-cas-uri` is not given.
+  Uses queue-scoped credentials.
 - `--json` — accepted but currently unused (no JSON output implemented)
 
-Validates manifest file exists (error if not). Currently requires `--s3-cas-uri`
-(error: "Either --s3-cas-uri or --farm-id/--queue-id is required" if missing).
+When `--s3-cas-uri` is not provided, requires `--farm-id` and `--queue-id`
+(from flags or config). Calls GetQueue to get `jobAttachmentSettings`,
+then uses queue-scoped credentials for the S3 upload.
+
+Validates manifest file exists (error if not).
 
 Output:
 ```
 Uploading Manifest to {bucket} {prefix} Manifests, prefix: {manifest_prefix}
 Uploading successful!
 ```
-
-Uses default AWS credentials (not queue-scoped) since `--profile` resolution
-for S3 is not yet wired.

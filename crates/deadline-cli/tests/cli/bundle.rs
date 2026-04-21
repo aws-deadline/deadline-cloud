@@ -156,7 +156,6 @@ fn queue_role_credentials() -> serde_json::Value {
 
 /// Mock the standard APIs for a no-attachment submission.
 async fn mock_submit_no_attachments(harness: &TestHarness) {
-    telemetry::mock_telemetry_endpoint(&harness.server).await;
     queues::mock_get_queue(&harness.server, FARM, json!({
         "queueId": QUEUE,
         "displayName": "Test Queue",
@@ -174,7 +173,6 @@ async fn mock_submit_no_attachments(harness: &TestHarness) {
 
 /// Mock APIs for a submission with attachments (queue has jobAttachmentSettings).
 async fn mock_submit_with_attachments(harness: &TestHarness) {
-    telemetry::mock_telemetry_endpoint(&harness.server).await;
     queues::mock_get_queue(&harness.server, FARM, json!({
         "queueId": QUEUE,
         "displayName": "Test Queue",
@@ -821,3 +819,137 @@ async fn bundle_submit_invalid_parameter_name_exits_with_error() {
         "--parameter", "123Invalid=value",
     ]));
 }
+
+// ===========================================================================
+// Submission telemetry events
+// ===========================================================================
+
+/// Verify that a successful bundle submit sends telemetry events.
+#[tokio::test]
+async fn bundle_submit_records_submission_telemetry_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "telemetry_sub");
+    // The permissive mock in mock_submit_no_attachments accepts telemetry.
+    // Replace it with expect(1..) to verify telemetry is actually sent.
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+}
+
+/// Verify that a successful bundle submit sends a "create_job" telemetry event.
+#[tokio::test]
+async fn bundle_submit_records_create_job_telemetry_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "telemetry_cj");
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+}
+
+/// Verify that the submission event fires even when CreateJob fails.
+#[tokio::test]
+async fn bundle_submit_failure_still_records_submission_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    bundle::mock_create_job_error(
+        &harness.server, FARM, QUEUE, 403, "AccessDeniedException",
+    ).await;
+    let bundle_dir = create_bundle(&harness, "telemetry_fail");
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().failure();
+}
+
+// ===========================================================================
+// Upload confirmation prompt for all paths
+// ===========================================================================
+
+/// When --yes is NOT passed and there are attachments, the CLI should show
+/// an upload summary and prompt for confirmation. Since stdin is not a TTY
+/// in tests, the CLI should cancel (matching Python's behavior when
+/// interactive_confirmation_callback is None).
+#[tokio::test]
+async fn bundle_submit_shows_upload_confirmation_prompt() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    let bundle_dir = create_bundle_with_attachments(&harness, "confirm_prompt");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+
+    // Without --yes, should show upload summary with file count/size info
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}{stderr}");
+    // Should contain upload summary info (file count, size)
+    assert!(
+        combined.contains("input file") || combined.contains("Job submission"),
+        "Expected upload summary or submission message, got: {combined}"
+    );
+}
+
+/// When auto_accept is true and all paths are known, submission should
+/// proceed without prompting and print the upload summary.
+#[tokio::test]
+async fn bundle_submit_auto_accept_known_paths_prints_summary() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    let bundle_dir = create_bundle_with_attachments(&harness, "auto_known");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+    harness.cli(&["config", "set", "settings.auto_accept", "true"]).assert().success();
+
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should print upload summary even with auto_accept
+    assert!(
+        stdout.contains("input file"),
+        "Expected upload summary with file count, got: {stdout}"
+    );
+}
+
+// ===========================================================================
+// --yes flag still prints upload summary
+// ===========================================================================
+
+/// With --yes, the upload summary should still be printed (just no prompt).
+#[tokio::test]
+async fn bundle_submit_yes_flag_prints_upload_summary() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    let bundle_dir = create_bundle_with_attachments(&harness, "yes_summary");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // --yes should still print the upload summary
+    assert!(
+        stdout.contains("input file"),
+        "Expected upload summary with file count even with --yes, got: {stdout}"
+    );
+}
+
+

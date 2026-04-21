@@ -140,8 +140,8 @@ after the core CLI commands are complete.
 - **#1**: ~~AUDIT-043~~ Accepted difference — Rust SDK uses `app_name()`, content identical to Python
 - **#2**: AUDIT-042 — Windows stdin handling for login subprocess
 - **#4**: ~~AUDIT-006~~ ✅ `fleet get --queue-id` mode implemented
-- **#5**: AUDIT-010 — No telemetry events during submission flow
-- **#6**: AUDIT-026 — `job logs --session-action-id` deferred.
+- **#5**: ~~AUDIT-010~~ ✅ Submission telemetry events added (`submission` + `create_job`).
+- **#6**: ~~AUDIT-026~~ ✅ `job logs --session-action-id` implemented.
   AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python).
   `--timezone` deprecated flag not implemented.
 - **#8**: AUDIT-013 — Hash cache V5 schema incompatible with Python V4.
@@ -149,10 +149,10 @@ after the core CLI commands are complete.
 - **#9**: AUDIT-011 — Upload is sequential (no parallelism).
   AUDIT-012 — Download is sequential (no parallelism).
   AUDIT-014 — No multipart upload (5GB PutObject limit).
-  AUDIT-048 — `manifest upload` missing queue derivation.
+  ~~AUDIT-048~~ ✅ `manifest upload` queue derivation implemented.
   AUDIT-049 — No multipart download for large files.
   AUDIT-056 — ~~`suggest_resources` storage profile chain is a stub~~ ✅ Fixed.
-- **#11**: AUDIT-009 — Upload confirmation prompt only for unknown paths.
+- **#11**: ~~AUDIT-009~~ ✅ Upload summary message always shown.
   AUDIT-031 — `--save-debug-snapshot` not implemented.
   AUDIT-034 — `--submitter-info` not implemented.
 - **#13**: ~~AUDIT-001~~ ✅ `sync-output` now downloads files.
@@ -160,8 +160,8 @@ after the core CLI commands are complete.
   ~~AUDIT-035~~ ✅ Download path traversal validated via `ensure_paths_within_directory`.
   ~~AUDIT-036~~ ✅ Manifest merge sorts by S3 `LastModified` (oldest first).
   AUDIT-008 — `job download-output` no interactive root path editing.
-  AUDIT-047 — `manifest download` CLI is a stub.
-  AUDIT-055 — Download conflict resolution prompt missing.
+  ~~AUDIT-047~~ ✅ `manifest download` wired to API.
+  ~~AUDIT-055~~ ✅ Download conflict detection implemented (test coverage partial — S3 mock gap).
   SYNC-005 — ~~`sync-output` missing intermediate progress messages~~ ✅ Fixed.
 - **#14**: ~~AUDIT-030~~ ✅ False finding — Python also doesn't support macOS
 - **#15**: ~~AUDIT-040~~ ✅ All gaps fixed
@@ -190,6 +190,14 @@ after the core CLI commands are complete.
 - `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
+- **S3 download mock chain**: `job_download_output_existing_files_shows_conflict_prompt`
+  is `#[ignore]`. The conflict detection code in `download_output_impl` works
+  but can't be tested end-to-end because the S3 mock chain (ListObjectsV2 →
+  GetObject with `x-amz-meta-asset-root` metadata → manifest decode → path
+  extraction) doesn't produce `output_paths_by_root` entries. Root cause:
+  `mock_s3_get_object_with_metadata` path format doesn't match what the SDK
+  sends with `force_path_style(true)`. Fix: investigate the exact path the
+  SDK uses for GetObject with endpoint override and update the mock accordingly.
 - **#15d**: Audit all Level 1 tests in library crates to identify which
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through

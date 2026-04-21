@@ -92,6 +92,45 @@ pub async fn mock_update_task(
         .await;
 }
 
+pub async fn mock_get_session_action(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_action: Value,
+) {
+    let session_action_id = session_action["sessionActionId"].as_str().unwrap_or("sessionaction-mock-0");
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/session-actions/{session_action_id}"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(session_action))
+        .mount(server)
+        .await;
+}
+
+pub async fn mock_get_session_action_error(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_action_id: &str,
+    status: u16,
+    error_type: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/session-actions/{session_action_id}"
+        )))
+        .respond_with(
+            ResponseTemplate::new(status).set_body_json(json!({
+                "__type": error_type,
+            })),
+        )
+        .mount(server)
+        .await;
+}
+
 pub async fn mock_list_session_actions(
     server: &MockServer,
     farm_id: &str,

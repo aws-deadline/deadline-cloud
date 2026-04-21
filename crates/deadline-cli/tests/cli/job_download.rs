@@ -371,3 +371,113 @@ async fn job_download_output_help_shows_usage() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&["job", "download-output", "--help"]));
 }
+
+// ===========================================================================
+// Download conflict resolution prompt
+// ===========================================================================
+
+/// When files already exist at the download target and no --conflict-resolution
+/// is specified, the CLI should detect conflicts and show a message.
+///
+/// Ignored: requires S3 GetObject mock with SDK-compatible x-amz-meta-asset-root
+/// header for the full manifest download chain to work.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_existing_files_shows_conflict_prompt() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+
+    // Pre-create a file that will conflict with the manifest entry
+    std::fs::write(output_dir.path().join("render.exr"), b"existing").unwrap();
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
+        "jobId": JOB,
+        "name": "Render Job",
+    })).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // S3 manifest key (must include step- pattern for select_latest_manifests_per_task)
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = serde_json::json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 1024,
+        "paths": [
+            {"path": "render.exr", "hash": "abc123", "size": 1024, "mtime": 1700000000}
+        ]
+    }).to_string();
+
+    // S3 GetObject for the manifest (path-style: /bucket/key)
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", output_root)],
+    ).await;
+
+    // S3 ListObjectsV2: return the manifest key
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+
+    let output = harness
+        .cli(&[
+            "job", "download-output",
+            "--farm-id", FARM,
+            "--queue-id", QUEUE,
+            "--job-id", JOB,
+        ])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}{stderr}");
+
+    // Should mention existing files / conflict resolution
+    assert!(
+        combined.contains("already exist") || combined.contains("conflict") || combined.contains("Overwrite") || combined.contains("Create a copy"),
+        "Expected conflict resolution message about existing files, got: {combined}"
+    );
+}
+
+/// When --conflict-resolution is explicitly set, no prompt should be shown
+/// even if files conflict.
+#[tokio::test]
+async fn job_download_output_explicit_conflict_resolution_skips_prompt() {
+    let harness = TestHarness::new().await;
+    setup_no_output_mocks(&harness).await;
+
+    // With explicit --conflict-resolution, should proceed without prompting
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--conflict-resolution", "SKIP",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// --yes flag defaults to CREATE_COPY without prompt
+// ---------------------------------------------------------------------------
+
+/// With --yes and no --conflict-resolution, should default to CREATE_COPY
+/// without showing any conflict prompt.
+#[tokio::test]
+async fn job_download_output_yes_flag_defaults_to_create_copy() {
+    let harness = TestHarness::new().await;
+    setup_no_output_mocks(&harness).await;
+
+    // --yes should suppress any conflict prompt
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--yes",
+    ]));
+}

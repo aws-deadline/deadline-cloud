@@ -221,6 +221,7 @@ pub struct SubmitJobParams<'a> {
     pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub upload_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub continue_callback: Option<Box<dyn Fn() -> bool + Send>>,
+    pub telemetry: Option<&'a deadline_api::telemetry::TelemetryClient>,
 }
 
 fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
@@ -421,6 +422,15 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         ).map_err(|e| op_err(e.to_string()))?;
 
         if !upload_group.asset_groups.is_empty() {
+            // Print upload summary (matches Python's _generate_message_for_asset_paths)
+            print(&format!(
+                "Job submission contains {} input file{} totaling {}. \
+                 All input files will be uploaded to S3 if they are not already present in the job attachments bucket.\n",
+                upload_group.total_input_files,
+                if upload_group.total_input_files == 1 { "" } else { "s" },
+                deadline_api::path_utils::human_readable_file_size(upload_group.total_input_bytes),
+            ));
+
             let cache_dir = config_file::get_cache_directory();
             let cache_dir_str = cache_dir.to_str();
 
@@ -515,7 +525,13 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         create_job_args.insert("targetTaskRunStatus".into(), json!(v));
     }
 
-    // 9. Call CreateJob
+    // 9. Record submission telemetry and call CreateJob
+    if let Some(tc) = params.telemetry {
+        let mut details = std::collections::HashMap::new();
+        details.insert("submitter_name".into(), Value::String(submitter_name.to_string()));
+        tc.record_event("com.amazon.rum.deadline.submission", details, false);
+    }
+
     let response = api::create_job(&create_job_args, params.config, None).await?;
 
     let job_id = response.get("jobId").and_then(|v| v.as_str())
@@ -530,6 +546,13 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let (success, status_message) = api::wait_for_create_job_to_complete(
         &farm_id, &queue_id, &job_id, params.config, &*continue_cb,
     ).await?;
+
+    // Record create_job telemetry
+    if let Some(tc) = params.telemetry {
+        let mut details = std::collections::HashMap::new();
+        details.insert("is_success".into(), Value::Bool(success));
+        tc.record_event("com.amazon.rum.deadline.create_job", details, false);
+    }
 
     if !success {
         return Err(op_err(format!("Job {job_id} creation failed: {status_message}")));

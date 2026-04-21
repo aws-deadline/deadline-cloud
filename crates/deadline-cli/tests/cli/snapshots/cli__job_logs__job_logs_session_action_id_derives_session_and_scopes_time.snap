@@ -1,0 +1,43 @@
+---
+source: crates/deadline-cli/tests/cli/job_logs.rs
+info:
+  program: deadline
+  args:
+    - job
+    - logs
+    - "--session-action-id"
+    - sessionaction-00000000000000000000000000000001-0
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:52203"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:52203"
+    AWS_ENDPOINT_URL_S3: "http://localhost:52203"
+    AWS_ENDPOINT_URL_STS: "http://localhost:52203"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpHh7S1i/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpHh7S1i
+---
+success: true
+exit_code: 0
+----- stdout -----
+Retrieving logs for [SESSION] from log group /aws/deadline/farm-abc/queue-abc...
+Job ID: job-aaa
+Job Name: Render Job
+Session action start: 2024-12-18 00:00:00+00:00
+Session action end: 2024-12-18 00:05:00+00:00
+Session action duration: 0:05:00.000000
+
+[2023-12-18T00:00:00+00:00] Action started
+
+Retrieved 1 log events.
+More logs are available. Use --next-token "f/token" to retrieve the next page.
+
+----- stderr -----

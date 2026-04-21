@@ -185,7 +185,7 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
 async fn run_async(action: ManifestAction) -> Result<(), CliError> {
     match action {
         ManifestAction::Download {
-            download_dir, job_id: _, step_id: _, farm_id, queue_id,
+            download_dir, job_id, step_id, farm_id, queue_id,
             profile, asset_type, json: _,
         } => {
             if !std::path::Path::new(&download_dir).is_dir() {
@@ -204,23 +204,94 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 &["farm_id", "queue_id"],
             )?;
 
+            let farm = deadline_config::config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let queue = deadline_config::config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+
             let _asset = match asset_type.to_lowercase().as_str() {
                 "input" => deadline_job_attachments::manifest_ops::AssetType::Input,
                 "output" => deadline_job_attachments::manifest_ops::AssetType::Output,
                 _ => deadline_job_attachments::manifest_ops::AssetType::All,
             };
 
-            // For now, this is a stub that requires the full Deadline API
-            // client to get queue settings and assume role. The library
-            // function is ready; CLI wiring for queue role assumption
-            // will be completed when the Deadline API mock is extended.
-            return Err(CliError::Operation(
-                "manifest download requires Deadline API access (not yet wired in CLI)".into()
-            ));
+            // Get queue attachment settings
+            let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config), None).await
+                .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
+            let ja_settings = queue_resp.get("jobAttachmentSettings")
+                .ok_or_else(|| CliError::Operation(
+                    "Queue does not have job attachment settings configured.".into()
+                ))?;
+            let bucket = ja_settings["s3BucketName"].as_str().unwrap_or("");
+            let prefix = ja_settings["rootPrefix"].as_str().unwrap_or("");
+
+            // Get job to check for attachments
+            let job_resp = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config), None).await
+                .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+            let attachments = job_resp.get("attachments")
+                .ok_or_else(|| CliError::Operation(
+                    "Job has no attachments — no manifests to download.".into()
+                ))?;
+            let manifests = attachments["manifests"].as_array()
+                .ok_or_else(|| CliError::Operation(
+                    "Job has no manifest entries — no manifests to download.".into()
+                ))?;
+
+            if manifests.is_empty() {
+                return Err(CliError::Operation(
+                    "Job has no manifest entries — no manifests to download.".into()
+                ));
+            }
+
+            // Get queue-scoped credentials
+            let sdk_config = deadline_api::session::get_queue_scoped_config(
+                &farm, &queue, Some(&config),
+            ).await.map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
+
+            let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(&config));
+            let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config).await
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+
+            // Download manifests for each entry
+            let mut downloaded = 0;
+            for manifest_entry in manifests {
+                if let Some(manifest_path) = manifest_entry.get("inputManifestPath").and_then(|v| v.as_str()) {
+                    // Filter by step if specified
+                    if let Some(ref sid) = step_id {
+                        if let Some(step) = manifest_entry.get("stepId").and_then(|v| v.as_str()) {
+                            if step != sid.as_str() { continue; }
+                        }
+                    }
+                    let key = format!("{}/Manifests/{}", prefix, manifest_path);
+                    let dest_path = std::path::Path::new(&download_dir).join(
+                        std::path::Path::new(manifest_path).file_name().unwrap_or_default()
+                    );
+                    let result = s3_client.get_object()
+                        .bucket(bucket)
+                        .key(&key)
+                        .expected_bucket_owner(&account_id)
+                        .send()
+                        .await;
+                    match result {
+                        Ok(output) => {
+                            let bytes = output.body.collect().await
+                                .map_err(|e| CliError::Operation(format!("Failed to read S3 body: {e}")))?
+                                .into_bytes();
+                            std::fs::write(&dest_path, &bytes)
+                                .map_err(|e| CliError::Operation(format!("Failed to write {}: {e}", dest_path.display())))?;
+                            println!("Downloaded: {}", dest_path.display());
+                            downloaded += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to download {}: {}", manifest_path, e);
+                        }
+                    }
+                }
+            }
+            println!("Downloaded {} manifest(s) to {}", downloaded, download_dir);
+            Ok(())
         }
         ManifestAction::Upload {
             manifest_file, s3_cas_uri, s3_manifest_prefix,
-            farm_id: _, queue_id: _, profile: _, json: _,
+            farm_id, queue_id, profile, json: _,
         } => {
             if !std::path::Path::new(&manifest_file).is_file() {
                 return Err(CliError::Operation(format!(
@@ -228,21 +299,44 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 )));
             }
 
-            let (bucket, cas_prefix) = match s3_cas_uri {
+            let (bucket, cas_prefix, sdk_config) = match s3_cas_uri {
                 Some(ref uri) => {
                     let settings = deadline_job_attachments::models::JobAttachmentS3Settings::from_s3_root_uri(uri)
                         .map_err(|e| CliError::Operation(e.to_string()))?;
-                    (settings.s3_bucket_name, settings.root_prefix)
+                    let cfg = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                        .load().await;
+                    (settings.s3_bucket_name, settings.root_prefix, cfg)
                 }
                 None => {
-                    return Err(CliError::Operation(
-                        "Either --s3-cas-uri or --farm-id/--queue-id is required".into()
-                    ));
+                    // Derive from queue
+                    let mut config = deadline_config::config_file::read_config()
+                        .map_err(|e| CliError::Operation(e.to_string()))?;
+                    crate::common::apply_cli_options_to_config(
+                        &mut config,
+                        &crate::common::CliOptions {
+                            profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default()
+                        },
+                        &["farm_id", "queue_id"],
+                    )?;
+                    let farm = deadline_config::config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+                    let queue = deadline_config::config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+
+                    let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config), None).await
+                        .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
+                    let ja_settings = queue_resp.get("jobAttachmentSettings")
+                        .ok_or_else(|| CliError::Operation(
+                            "Queue does not have job attachment settings not configured.".into()
+                        ))?;
+                    let b = ja_settings["s3BucketName"].as_str().unwrap_or("").to_string();
+                    let p = ja_settings["rootPrefix"].as_str().unwrap_or("").to_string();
+
+                    let cfg = deadline_api::session::get_queue_scoped_config(
+                        &farm, &queue, Some(&config),
+                    ).await.map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
+                    (b, p, cfg)
                 }
             };
 
-            let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                .load().await;
             let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, None);
             let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config).await
                 .map_err(|e| CliError::Operation(e.to_string()))?;

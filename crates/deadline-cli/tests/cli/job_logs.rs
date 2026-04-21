@@ -627,3 +627,179 @@ async fn job_logs_cloudwatch_access_denied_shows_error_code() {
         "Expected 'AccessDeniedException' in error, got:\n{stdout}"
     );
 }
+
+// ===========================================================================
+// --session-action-id flag
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// session-action-id derives session ID and scopes time window
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_derives_session_and_scopes_time() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    // The session action ID encodes the session UUID
+    sessions::mock_get_session_action(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionActionId": "sessionaction-00000000000000000000000000000001-0",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "endedAt": "2024-12-18T00:05:00Z",
+        "status": "SUCCEEDED",
+    })).await;
+
+    // The derived session ID is session-{uuid}
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-00000000000000000000000000000001",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-001",
+    })).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857600000_i64, "message": "Action started"}),
+    ], None).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// Invalid session-action-id format
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_invalid_format_errors() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-action-id", "not-a-valid-id",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// Both --session-id and --session-action-id with mismatch
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_conflicts_with_session_id_errors() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-id", "session-ffffffffffffffffffffffffffffffff",
+        "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// session-action-id not found (404)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_not_found_errors() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_get_session_action_error(
+        &harness.server, "farm-abc", "queue-abc", "job-aaa",
+        "sessionaction-00000000000000000000000000000001-0",
+        404, "ResourceNotFoundException",
+    ).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// session-action-id: action hasn't started yet (no startedAt)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_not_started_errors() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_get_session_action(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionActionId": "sessionaction-00000000000000000000000000000001-0",
+        "status": "ASSIGNED",
+    })).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
+    ]));
+}
+
+// ---------------------------------------------------------------------------
+// session-action-id: both flags provided and they MATCH (should succeed)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn job_logs_session_action_id_matches_session_id_succeeds() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_get_session_action(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionActionId": "sessionaction-00000000000000000000000000000001-0",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "endedAt": "2024-12-18T00:05:00Z",
+        "status": "SUCCEEDED",
+    })).await;
+
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-00000000000000000000000000000001",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-001",
+    })).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857600000_i64, "message": "Action started"}),
+    ], None).await;
+
+    let _guard = insta_settings().bind_to_scope();
+    // Both flags provided, they match — should succeed
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "logs",
+        "--session-id", "session-00000000000000000000000000000001",
+        "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
+    ]));
+}

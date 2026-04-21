@@ -40,14 +40,23 @@ pub async fn mock_s3_list_empty(server: &MockServer) {
 pub async fn mock_s3_list_objects(server: &MockServer, keys: &[&str]) {
     let contents: String = keys
         .iter()
-        .map(|k| format!("<Contents><Key>{k}</Key><Size>100</Size></Contents>"))
+        .map(|k| format!(
+            "<Contents>\
+             <Key>{k}</Key>\
+             <LastModified>2024-06-15T10:30:00.000Z</LastModified>\
+             <ETag>\"d41d8cd98f00b204e9800998ecf8427e\"</ETag>\
+             <Size>100</Size>\
+             <StorageClass>STANDARD</StorageClass>\
+             </Contents>"
+        ))
         .collect();
     Mock::given(method("GET"))
         .and(query_param("list-type", "2"))
         .respond_with(ResponseTemplate::new(200).set_body_string(format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-  <Name>bucket</Name>
+  <Name>test-bucket</Name>
+  <Prefix></Prefix>
   <KeyCount>{}</KeyCount>
   <MaxKeys>1000</MaxKeys>
   <IsTruncated>false</IsTruncated>
