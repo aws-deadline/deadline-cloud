@@ -980,12 +980,9 @@ async fn sync_output_downloads_files_to_disk() {
     })).unwrap();
 
     // Mock S3 GetObject for the manifest (with asset-root metadata).
-    // The SDK URL-encodes colons in the key when building the HTTP path,
-    // so the mock path must use %3A to match the actual wire request.
-    let manifest_key_url_encoded = manifest_key.replace(':', "%3A");
     s3::mock_s3_get_object_with_metadata(
         &harness.server,
-        &format!("my-bucket/{manifest_key_url_encoded}"),
+        &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
     ).await;
@@ -1179,10 +1176,9 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
         "totalSize": 10
     })).unwrap();
 
-    let manifest_key_encoded = manifest_key.replace(':', "%3A");
     s3::mock_s3_get_object_with_metadata(
         &harness.server,
-        &format!("my-bucket/{manifest_key_encoded}"),
+        &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
     ).await;
@@ -1327,10 +1323,9 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
         "totalSize": 10
     })).unwrap();
 
-    let manifest_key_encoded = manifest_key.replace(':', "%3A");
     s3::mock_s3_get_object_with_metadata(
         &harness.server,
-        &format!("my-bucket/{manifest_key_encoded}"),
+        &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
     ).await;
@@ -1417,10 +1412,9 @@ async fn sync_output_path_summary_shows_per_file_listing() {
         "totalSize": 3000000
     })).unwrap();
 
-    let manifest_key_encoded = manifest_key.replace(':', "%3A");
     s3::mock_s3_get_object_with_metadata(
         &harness.server,
-        &format!("my-bucket/{manifest_key_encoded}"),
+        &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
     ).await;
