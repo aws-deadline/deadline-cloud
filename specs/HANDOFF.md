@@ -209,10 +209,21 @@ Implementation order (by dependency):
 | Gap | Reason |
 |-----|--------|
 | AUDIT-034 | `--submitter-info` is GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. Not deprecated on CLI. |
-| AUDIT-013 | Hash cache V5 works correctly. One-time re-hash on Python→Rust migration is acceptable. V4 stores `str(datetime.fromtimestamp(st_mtime))` — lossy datetime string, not clean integer. Migration adds complexity for marginal benefit. |
 | AUDIT-008 | Interactive root path editing — deferred (fancy interactive feature). |
 
 ## Recently Completed
+
+**AUDIT-013: Hash cache V4 compatibility**
+
+- Rust now uses Python's `hashesV4` table instead of `hashesV5`. Both CLIs
+  share one hash cache — zero re-hashing when switching between tools.
+- `HashCacheEntry.last_modified_time` changed from `i64` (nanoseconds) to
+  `String` matching Python's `str(datetime.fromtimestamp(st_mtime))` format.
+- New `format_mtime_for_cache(secs, nsec)` converts through `f64` to replicate
+  Python's float-precision loss from `os.stat().st_mtime`.
+- Edge case fixed: nanoseconds near 1 second (e.g., 999999500ns) round
+  microseconds to 1000000, which carries into the seconds field.
+- 5 existing tests updated, 3 new tests added (interop, format, float precision).
 
 **Behavioral gap batch — AUDIT-010, AUDIT-026, AUDIT-048, AUDIT-047, AUDIT-009, AUDIT-055**
 

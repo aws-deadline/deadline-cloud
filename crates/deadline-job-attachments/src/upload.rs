@@ -8,7 +8,7 @@ use crate::errors::JobAttachmentsError;
 use crate::models::PathFormat;
 
 use crate::asset_manifests::{hash_data, hash_file, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
-use crate::caches::{HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry};
+use crate::caches::{HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry, format_mtime_for_cache};
 use crate::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
     JobAttachmentS3Settings, ManifestProperties, StorageProfile, join_s3_paths,
@@ -282,11 +282,11 @@ fn hash_with_cache(
     full_path: &str,
     file_path: &Path,
     hash_alg: HashAlgorithm,
-    mtime_ns: i64,
+    mtime_str: &str,
     was_cached: &mut bool,
 ) -> Result<String, JobAttachmentsError> {
     if let Some(entry) = cache.get_entry(full_path, hash_alg, 0, -1) {
-        if entry.last_modified_time == mtime_ns {
+        if entry.last_modified_time == mtime_str {
             *was_cached = true;
             return Ok(entry.file_hash);
         }
@@ -296,7 +296,7 @@ fn hash_with_cache(
         file_path: full_path.to_string(),
         hash_algorithm: hash_alg,
         file_hash: h.clone(),
-        last_modified_time: mtime_ns,
+        last_modified_time: mtime_str.to_string(),
         range_start: 0,
         range_end: -1,
     });
@@ -353,27 +353,29 @@ pub fn hash_assets_and_create_manifest(
                 let file_size = meta.len() as i64;
 
                 #[cfg(unix)]
-                let mtime_ns = {
+                let (mtime_secs, mtime_nsec) = {
                     use std::os::unix::fs::MetadataExt;
-                    meta.mtime() * 1_000_000_000 + meta.mtime_nsec()
+                    (meta.mtime(), meta.mtime_nsec())
                 };
                 #[cfg(not(unix))]
-                let mtime_ns = {
-                    meta.modified()
+                let (mtime_secs, mtime_nsec) = {
+                    let dur = meta.modified()
                         .unwrap_or(std::time::UNIX_EPOCH)
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_nanos() as i64
+                        .unwrap_or_default();
+                    (dur.as_secs() as i64, dur.subsec_nanos() as i64)
                 };
 
+                let mtime_ns = mtime_secs * 1_000_000_000 + mtime_nsec;
                 let mtime_us = mtime_ns / 1000; // truncate to microseconds
+                let mtime_str = format_mtime_for_cache(mtime_secs, mtime_nsec);
 
                 let hash_alg = HashAlgorithm::Xxh128;
                 let mut was_cached = false;
 
                 let file_hash = match cache {
                     Some(ref cache) => {
-                        hash_with_cache(cache, &full_path, input_path, hash_alg, mtime_ns, &mut was_cached)?
+                        hash_with_cache(cache, &full_path, input_path, hash_alg, &mtime_str, &mut was_cached)?
                     }
                     None => hash_file(input_path, hash_alg)?,
                 };

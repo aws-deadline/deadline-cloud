@@ -144,7 +144,7 @@ after the core CLI commands are complete.
 - **#6**: ~~AUDIT-026~~ ✅ `job logs --session-action-id` implemented.
   AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python).
   `--timezone` deprecated flag not implemented.
-- **#8**: AUDIT-013 — Hash cache V5 schema incompatible with Python V4.
+- **#8**: ~~AUDIT-013~~ ✅ Hash cache V4 compatible — Rust uses same `hashesV4` table as Python.
   AUDIT-053 — Windows long path (UNC) handling missing.
 - **#9**: AUDIT-011 — Upload is sequential (no parallelism).
   AUDIT-012 — Download is sequential (no parallelism).

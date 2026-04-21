@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::TimeZone;
+
 use crate::errors::JobAttachmentsError;
 use rusqlite::Connection;
 
@@ -69,12 +71,14 @@ fn rand_jitter() -> f64 {
 
 /// An entry in the hash cache. Represents either a whole-file hash
 /// (range_start=0, range_end=-1) or a byte-range hash.
+/// Compatible with Python's `hashesV4` table — `last_modified_time` is a string
+/// in `str(datetime.fromtimestamp(st_mtime))` format.
 #[derive(Debug, Clone)]
 pub struct HashCacheEntry {
     pub file_path: String,
     pub hash_algorithm: HashAlgorithm,
     pub file_hash: String,
-    pub last_modified_time: i64, // nanoseconds since epoch
+    pub last_modified_time: String,
     pub range_start: i64,
     pub range_end: i64,
 }
@@ -84,7 +88,7 @@ impl HashCacheEntry {
         file_path: String,
         hash_algorithm: HashAlgorithm,
         file_hash: String,
-        last_modified_time: i64,
+        last_modified_time: String,
         range_start: i64,
         range_end: i64,
     ) -> Result<Self, JobAttachmentsError> {
@@ -104,16 +108,43 @@ impl HashCacheEntry {
     }
 }
 
+/// Formats a file mtime as Python's `str(datetime.fromtimestamp(st_mtime))`.
+/// Local time, no timezone suffix. Omits fractional seconds when microseconds == 0,
+/// otherwise 6-digit microseconds. Converts through f64 to match Python's
+/// `os.stat().st_mtime` float precision loss.
+pub fn format_mtime_for_cache(secs: i64, nsec: i64) -> String {
+    // Python uses os.stat().st_mtime (a C double), which loses nanosecond precision.
+    // Replicate: combine secs+nsec into f64, then extract microseconds from the float.
+    let ts_float: f64 = secs as f64 + nsec as f64 / 1_000_000_000.0;
+    let float_secs = ts_float.floor() as i64;
+    let us = ((ts_float - ts_float.floor()) * 1_000_000.0).round() as u32;
+    // Rounding can produce us=1000000 when nsec is near 1 second — carry into seconds.
+    let (final_secs, final_us) = if us >= 1_000_000 {
+        (float_secs + 1, 0)
+    } else {
+        (float_secs, us)
+    };
+    let dt = chrono::Local
+        .timestamp_opt(final_secs, final_us * 1000)
+        .single()
+        .expect("valid timestamp");
+    if final_us == 0 {
+        dt.format("%Y-%m-%d %H:%M:%S").to_string()
+    } else {
+        dt.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+    }
+}
+
 // --- HashCache ---
 
-/// SQLite-backed cache for file hashes. Uses `hashesV5` table with integer
-/// nanosecond timestamps (improvement over Python's `hashesV4` string timestamps).
+/// SQLite-backed cache for file hashes. Uses Python's `hashesV4` table with string
+/// timestamps for cross-tool compatibility.
 /// Thread-safe via `Mutex<Connection>`. WAL journal mode for concurrent reads.
 pub struct HashCache {
     conn: Mutex<Connection>,
 }
 
-const HASH_TABLE: &str = "hashesV5";
+const HASH_TABLE: &str = "hashesV4";
 
 impl HashCache {
     pub fn new(cache_dir: &str) -> Result<Self, JobAttachmentsError> {
@@ -130,7 +161,7 @@ impl HashCache {
              range_start INTEGER, \
              range_end INTEGER, \
              file_hash TEXT, \
-             last_modified_time INTEGER, \
+             last_modified_time timestamp, \
              PRIMARY KEY (file_path, hash_algorithm, range_start, range_end))"
         );
         let conn = open_db(&db_path, HASH_TABLE, &create_query)?;
@@ -337,7 +368,7 @@ mod tests {
             file_path: "/tmp/test.txt".into(),
             hash_algorithm: HashAlgorithm::Xxh128,
             file_hash: "abcdef1234567890".into(),
-            last_modified_time: 1710000000_000_000_000,
+            last_modified_time: "2024-03-09 16:00:00.123456".into(),
             range_start: 0,
             range_end: -1,
         };
@@ -348,6 +379,7 @@ mod tests {
             .unwrap();
         assert_eq!(result.file_path, "/tmp/test.txt");
         assert_eq!(result.file_hash, "abcdef1234567890");
+        assert_eq!(result.last_modified_time, "2024-03-09 16:00:00.123456");
         assert_eq!(result.range_start, 0);
         assert_eq!(result.range_end, -1);
     }
@@ -361,7 +393,7 @@ mod tests {
             file_path: "/tmp/test.txt".into(),
             hash_algorithm: HashAlgorithm::Xxh128,
             file_hash: "rangehash123".into(),
-            last_modified_time: 1710000000_000_000_000,
+            last_modified_time: "2024-03-09 16:00:00.123456".into(),
             range_start: 100,
             range_end: 200,
         };
@@ -384,7 +416,7 @@ mod tests {
             file_path: "/tmp/test.txt".into(),
             hash_algorithm: HashAlgorithm::Xxh128,
             file_hash: "old_hash".into(),
-            last_modified_time: 1000,
+            last_modified_time: "2024-01-01 00:00:00".into(),
             range_start: 0,
             range_end: -1,
         };
@@ -394,7 +426,7 @@ mod tests {
             file_path: "/tmp/test.txt".into(),
             hash_algorithm: HashAlgorithm::Xxh128,
             file_hash: "new_hash".into(),
-            last_modified_time: 2000,
+            last_modified_time: "2024-01-02 00:00:00".into(),
             range_start: 0,
             range_end: -1,
         };
@@ -404,6 +436,7 @@ mod tests {
             .get_entry("/tmp/test.txt", HashAlgorithm::Xxh128, 0, -1)
             .unwrap();
         assert_eq!(result.file_hash, "new_hash");
+        assert_eq!(result.last_modified_time, "2024-01-02 00:00:00");
     }
 
     #[test]
@@ -424,7 +457,7 @@ mod tests {
             file_path: "/tmp/test.txt".into(),
             hash_algorithm: HashAlgorithm::Xxh128,
             file_hash: "whole_hash".into(),
-            last_modified_time: 1000,
+            last_modified_time: "2024-01-01 00:00:00".into(),
             range_start: 0,
             range_end: -1,
         };
@@ -447,11 +480,98 @@ mod tests {
             "/tmp/test.txt".into(),
             HashAlgorithm::Xxh128,
             "hash".into(),
-            1000,
+            "2024-01-01 00:00:00".into(),
             50,
             10,
         );
         assert!(result.is_err());
+    }
+
+    // === : Hash cache V4 compatibility ===
+
+    /// Simulate a Python-written V4 entry and verify Rust can read it.
+    /// Python stores: file_path as BLOB (utf-8 encoded), last_modified_time as
+    /// text in `str(datetime.fromtimestamp(st_mtime))` format.
+    #[test]
+    fn hash_cache_v4_interop_python_written_entry_readable() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("hash_cache.db");
+
+        // Create the DB with Python's exact schema and insert an entry
+        // the way Python would (utf-8 encoded path blob, string timestamp)
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            conn.execute_batch(
+                "CREATE TABLE hashesV4(\
+                 file_path blob, \
+                 hash_algorithm text, \
+                 range_start integer, \
+                 range_end integer, \
+                 file_hash text, \
+                 last_modified_time timestamp, \
+                 PRIMARY KEY (file_path, hash_algorithm, range_start, range_end))",
+            )
+            .unwrap();
+            let path_bytes = "/tmp/python_file.txt".as_bytes();
+            conn.execute(
+                "INSERT INTO hashesV4 VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![path_bytes, "xxh128", 0, -1, "deadbeef", "2025-04-21 12:08:54.123456"],
+            )
+            .unwrap();
+        }
+
+        // Now open via Rust HashCache and read it back
+        let cache = HashCache::new(dir.path().to_str().unwrap()).unwrap();
+        let result = cache
+            .get_entry("/tmp/python_file.txt", HashAlgorithm::Xxh128, 0, -1)
+            .unwrap();
+        assert_eq!(result.file_path, "/tmp/python_file.txt");
+        assert_eq!(result.file_hash, "deadbeef");
+        assert_eq!(result.last_modified_time, "2025-04-21 12:08:54.123456");
+    }
+
+    // === : format_mtime_for_cache ===
+
+    /// Python's `str(datetime.fromtimestamp(t))` omits fractional seconds when
+    /// microseconds == 0, and uses 6-digit microseconds otherwise.
+    #[test]
+    fn format_mtime_for_cache_format_matches_python() {
+        // Whole seconds: no fractional part
+        let whole = format_mtime_for_cache(1745262534, 0);
+        assert!(!whole.contains('.'), "whole-second mtime should have no fractional part, got: {whole}");
+        assert_eq!(whole.len(), 19, "expected YYYY-MM-DD HH:MM:SS (19 chars), got: {whole}");
+
+        // With microseconds: 6-digit fractional part
+        let frac = format_mtime_for_cache(1745262534, 500_000_000);
+        assert!(frac.ends_with(".500000"), "expected .500000 suffix, got: {frac}");
+        assert_eq!(frac.len(), 26, "expected 26-char datetime with microseconds, got: {frac}");
+    }
+
+    /// Python uses `os.stat().st_mtime` (a C double) which loses nanosecond
+    /// precision. Rust must replicate this lossy float conversion so cache keys match.
+    #[test]
+    fn format_mtime_for_cache_matches_python_float_precision() {
+        // Python: os.stat().st_mtime_ns = 1776796813370875952
+        //         os.stat().st_mtime    = 1776796813.370875835... (float64)
+        //         datetime.fromtimestamp(st_mtime).microsecond = 370876 (rounded by float)
+        //
+        // Rust gets (secs=1776796813, nsec=370875952). Must convert through
+        // float64 to match Python's precision loss.
+        let result = format_mtime_for_cache(1776796813, 370_875_952);
+        assert!(
+            result.contains(".370876") || result.contains(".370875"),
+            "expected float-precision microseconds matching Python, got: {result}"
+        );
+
+        // Edge case: nsec close to 1 second rounds up to next second.
+        // Python: str(datetime.fromtimestamp(1745262534 + 999999500/1e9)) == "...:08:55"
+        // The float rounds microseconds to 1000000, which carries into seconds.
+        let edge = format_mtime_for_cache(1745262534, 999_999_500);
+        assert!(
+            edge.contains(":08:55") || edge.contains(":08:54.999999"),
+            "near-boundary nsec should round to next second like Python, got: {edge}"
+        );
     }
 
     // === : S3CheckCache construction ===

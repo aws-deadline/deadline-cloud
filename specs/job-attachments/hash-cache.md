@@ -2,19 +2,19 @@
 
 ## Hash Cache (Local)
 
-SQLite database at `~/.deadline/job_attachments/hash_cache.db`. Table `hashesV5`
-(not compatible with legacy `hashesV4` — first run after migration starts cold).
+SQLite database at `~/.deadline/job_attachments/hash_cache.db`. Table `hashesV4`
+— shared with the Python CLI for zero-cost switching between tools.
 
 ### Schema
 
-Table `hashesV5`. Primary key: `(file_path, hash_algorithm, range_start, range_end)`.
+Table `hashesV4`. Primary key: `(file_path, hash_algorithm, range_start, range_end)`.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `file_path` | text | Absolute file path |
+| `file_path` | blob | Absolute file path, UTF-8 encoded (Python uses `surrogatepass`) |
 | `hash_algorithm` | text | e.g., `"xxh128"` |
 | `file_hash` | text | Hex-encoded hash value |
-| `last_modified_time` | integer | Nanoseconds since epoch |
+| `last_modified_time` | timestamp | String in Python's `str(datetime.fromtimestamp(st_mtime))` format |
 | `range_start` | integer | 0 for whole-file hashes |
 | `range_end` | integer | -1 for whole-file hashes |
 
@@ -22,13 +22,23 @@ Entry types:
 - Whole-file: `range_start=0, range_end=-1`
 - Byte-range: `range_start >= 0, range_end > range_start` (for chunked files)
 
-Cache hit requires exact nanosecond mtime match — any change triggers a rehash.
-No eviction policy — entries persist indefinitely.
+Cache hit requires exact string mtime match — any file modification triggers
+a rehash. No eviction policy — entries persist indefinitely.
 
-**Version history:** Python CLI uses `hashesV4` with string timestamps and
-`surrogatepass` blob encoding for paths. Rust CLI uses `hashesV5` with integer
-nanosecond timestamps and text paths. The two are incompatible — switching
-between CLIs causes a one-time re-hash of all files.
+### Timestamp format (`last_modified_time`)
+
+Matches Python's `str(datetime.fromtimestamp(os.stat().st_mtime))`:
+- Local time, no timezone suffix
+- `"2025-04-21 12:08:54"` when microseconds == 0
+- `"2025-04-21 12:08:54.123456"` (6-digit) when microseconds != 0
+
+Rust replicates Python's float-precision path: `(secs, nsec)` → `f64` →
+extract microseconds from the float → format. This matches the precision
+loss inherent in Python's `os.stat().st_mtime` (a C `double`).
+
+Edge case: when nanoseconds are close to 1 second (e.g., 999999500ns),
+float rounding can produce microseconds=1000000, which carries into the
+seconds field.
 
 ### Database Configuration
 

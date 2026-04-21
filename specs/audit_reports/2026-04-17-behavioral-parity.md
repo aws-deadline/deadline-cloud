@@ -156,13 +156,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-013: Hash cache schema incompatible between Python and Rust
 
-- **Category:** Behavioral gap
-- **Priority:** High
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~High~~ N/A
 - **Command/Function:** `deadline-job-attachments` caches
 - **Python behavior:** `hashesV4` table, `last_modified_time` as text timestamp string. (`caches/hash_cache.py:72-82`)
-- **Rust behavior:** `hashesV5` table, `last_modified_time` as integer nanoseconds. (`caches.rs:100-108`)
-- **Impact:** Python and Rust CLIs cannot share hash caches. Users switching between tools get full re-hashing of all files.
-- **Resolution:** Pending — intentional improvement but interop gap
+- **Rust behavior:** ~~`hashesV5` table, `last_modified_time` as integer nanoseconds. (`caches.rs:100-108`)~~ Uses `hashesV4` table with string timestamps matching Python's `str(datetime.fromtimestamp(st_mtime))` format.
+- **Impact:** None — full interop achieved. Both CLIs share one cache.
+- **Resolution:** Fixed
 
 ### AUDIT-014: No multipart upload (5GB PutObject limit)
 
@@ -625,7 +625,7 @@ Findings already documented in `specs/python-observations.md` (observations
 | AUDIT-010 | No telemetry in submission | High | Behavioral gap |
 | AUDIT-011 | Upload sequential (no parallelism) | High | Behavioral gap |
 | AUDIT-012 | Download sequential (no parallelism) | High | Behavioral gap |
-| AUDIT-013 | Hash cache schema incompatible | High | Behavioral gap |
+| AUDIT-013 | Hash cache schema incompatible | ~~High~~ | Behavioral gap — Fixed |
 | AUDIT-014 | No multipart upload (5GB limit) | High | Behavioral gap |
 | AUDIT-015 | `auth status --output` case-sensitive | Medium | Behavioral gap |
 | AUDIT-016 | `auth status` JSON key order | Medium | Behavioral gap — Fixed |
