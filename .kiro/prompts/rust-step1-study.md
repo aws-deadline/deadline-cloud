@@ -4,6 +4,8 @@ Read these files first and abide by them:
 - `AGENTS.md` — repo conventions
 - `specs/HANDOFF.md` — resume in-flight work or pick a new work item
 - `specs/progress.md` — work items table (if no active work in HANDOFF)
+- `specs/audit_reports/2026-04-17-behavioral-parity.md` — check if the
+  work item has related audit findings (AUDIT-NNN) to resolve
 - `specs/patterns.md` — design principles and coding conventions
 
 If no active work item, present candidate items and wait for human to choose.

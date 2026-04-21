@@ -10,18 +10,18 @@
 | Priority | Count | Fixed | No Issue / Accepted | Remaining |
 |----------|-------|-------|---------------------|-----------|
 | Critical | 4     | 4     | 0                   | 0         |
-| High     | 10    | 9     | 1                   | 0         |
-| Medium   | 22    | 15    | 3                   | 4         |
-| Low      | 20    | 10    | 4                   | 6         |
+| High     | 10    | 10    | 1                   | 0         |
+| Medium   | 22    | 16    | 3                   | 3         |
+| Low      | 20    | 14    | 4                   | 2         |
 
-**Remaining open findings (10):**
+**Remaining open findings (5):**
 - Performance: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
   AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
-- UX: AUDIT-008 (interactive root editing), AUDIT-031 (`--save-debug-snapshot`),
-  AUDIT-034 (`--submitter-info`), AUDIT-051 (download path collision)
-- Platform: AUDIT-042 (Windows login stdin), AUDIT-053 (Windows long paths),
-  AUDIT-054 (`--redirect-output` Windows)
 - Deferred: AUDIT-041 (`job trace-schedule` — EXPERIMENTAL in Python)
+
+**Investigated and dropped (not bugs):**
+- AUDIT-034 (`--submitter-info` — GUI-only, not CLI scope)
+- AUDIT-051 (download path collision — worker-agent scope, not CLI)
 
 ## Methodology
 
@@ -115,13 +115,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-008: `job download-output` no interactive root path editing
 
-- **Category:** Behavioral gap
-- **Priority:** High
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~High~~ N/A
 - **Command/Function:** `deadline job download-output`
 - **Python behavior:** Interactive loop where users view output roots, select by index to edit, confirm or cancel. (`job_group.py:555-600`)
-- **Rust behavior:** Prints path summary but proceeds directly to download with no editing. (`job.rs:1145-1155`)
-- **Impact:** Users cannot redirect output to different directories, especially important for cross-OS downloads.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Prints path summary but proceeds directly to download with no editing. (`job.rs:1145-1155`)~~ Full interactive root editing loop: view roots with indices, select to edit, enter new path, confirm or cancel. Cross-OS mismatch prompt for Windows↔posix. JSON mode emits structured messages.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-21, gap sweep F7)
 
 ### AUDIT-009: Upload confirmation prompt only for unknown paths
 
@@ -354,13 +354,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-031: `--save-debug-snapshot` not implemented
 
-- **Category:** Behavioral gap
-- **Priority:** Medium
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Medium~~ N/A
 - **Command/Function:** `deadline bundle submit`
 - **Python behavior:** Creates debug directory with `create_job_args.json`, scripts, queue info. (`_submit_job_bundle.py:296-370`)
-- **Rust behavior:** No `--save-debug-snapshot` option. (`bundle.rs`)
-- **Impact:** Cannot create reproducible debug snapshots for troubleshooting.
-- **Resolution:** Pending
+- **Rust behavior:** ~~No `--save-debug-snapshot` option. (`bundle.rs`)~~ Full implementation: JSON dump, parameter files, shell/batch scripts, S3 copy commands, queue.json, zip support, and `snapshot_assets` for local file copy.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-21, gap sweep F8)
 
 ### AUDIT-032: `suggest_resources_on_client_error` not used in bundle submit
 
@@ -468,13 +468,13 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-042: Windows stdin handling for login subprocess
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline auth login`
 - **Python behavior:** Uses `stdin=subprocess.PIPE` on Windows. (`_loginout.py:47-55`)
-- **Rust behavior:** Always uses `stdin(Stdio::null())`. (`auth.rs:203`)
-- **Impact:** Could cause issues on Windows when spawning DCM.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Always uses `stdin(Stdio::null())`. (`auth.rs:203`)~~ Uses `Stdio::piped()` on Windows, `Stdio::null()` on other platforms.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-21, gap sweep F1)
 
 ### AUDIT-043: User-agent string mechanism differs
 
@@ -578,23 +578,23 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ### AUDIT-053: Windows long path (UNC) handling missing
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline-job-attachments` upload/download
 - **Python behavior:** Prepends `\\?\` for paths >260 chars on Windows. (`_utils.py:80-110`)
-- **Rust behavior:** No equivalent handling. (No equivalent file)
-- **Impact:** Windows files with long paths fail in Rust.
-- **Resolution:** Pending
+- **Rust behavior:** ~~No equivalent handling. (No equivalent file)~~ `get_long_path_compatible_path()` prepends `\\?\` UNC prefix on Windows for paths exceeding `MAX_PATH`.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-21, gap sweep F3)
 
 ### AUDIT-054: `--redirect-output` is Unix-only in Rust
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline --redirect-output`
 - **Python behavior:** Cross-platform via `sys.stdout` reassignment. (`_main.py:136-139`)
-- **Rust behavior:** Uses `libc::dup2` — Unix-only. (`main.rs:274-280`)
-- **Impact:** Won't compile on Windows.
-- **Resolution:** Pending
+- **Rust behavior:** ~~Uses `libc::dup2` — Unix-only. (`main.rs:274-280`)~~ Uses `libc::dup2` on Unix, `SetStdHandle` on Windows.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-21, gap sweep F2)
 
 ### AUDIT-055: `job download-output` conflict resolution prompt missing
 
@@ -623,23 +623,23 @@ Findings already documented in `specs/python-observations.md` (observations
 Only remaining open findings listed. For full history, see individual
 findings above.
 
-### Remaining Open (10)
+### Remaining Open (5)
 
 | ID | Title | Priority | Category |
 |----|-------|----------|----------|
-| AUDIT-008 | `job download-output` no root editing | High | UX gap |
 | AUDIT-011 | Upload sequential (no parallelism) | High | Performance |
 | AUDIT-012 | Download sequential (no parallelism) | High | Performance |
 | AUDIT-014 | No multipart upload (5GB limit) | High | Performance |
-| AUDIT-031 | `--save-debug-snapshot` missing | Medium | Feature gap |
-| AUDIT-034 | `--submitter-info` missing | Medium | Feature gap (GUI-only) |
 | AUDIT-041 | `job trace-schedule` missing | Low | Deferred (EXPERIMENTAL in Python) |
-| AUDIT-042 | Windows stdin for login | Low | Platform (Windows-only) |
 | AUDIT-049 | No multipart download | Low | Performance |
-| AUDIT-051 | Download path collision | Low | Correctness (cross-OS) |
-| AUDIT-053 | Windows long path handling | Low | Platform (Windows-only) |
-| AUDIT-054 | `--redirect-output` Unix-only | Low | Platform (Windows-only) |
 
-### Resolved (44)
+### Investigated and Dropped (2)
 
-Fixed: 37 · No Issue: 5 · Accepted difference: 3 · False finding: 1
+| ID | Title | Reason |
+|----|-------|--------|
+| AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
+| AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
+
+### Resolved (49)
+
+Fixed: 42 · No Issue: 5 · Accepted difference: 3 · False finding: 1

@@ -136,29 +136,9 @@ after the core CLI commands are complete.
   #1008 (missing newline with no attachments). Quick audit — some may
   already be correct in Rust.
 
-**Audit gaps in completed items** (see `audit_reports/2026-04-17-behavioral-parity.md` for full details):
-
-Remaining open findings (7):
-- **#6**: AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python)
-- **#9**: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
-  AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
-- **#11**: AUDIT-034 (`--submitter-info` — GUI-only)
-- **#13**: AUDIT-051 (download path collision — worker-agent scope)
-
-**Fixed in gap sweep (2026-04-21):**
-- AUDIT-042 — Windows stdin for login subprocess (F1)
-- AUDIT-054 — `--redirect-output` Windows support (F2)
-- AUDIT-053 — Windows long path UNC handling (F3)
-- AUDIT-031 — `--save-debug-snapshot` (F8)
-- AUDIT-008 — Interactive root path editing in download (F7)
-- Telemetry: hashing/upload summary events (F5), error event on submit failure (F6)
-
-**Dropped findings (not bugs, accepted differences):**
-- AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)
-- AUDIT-030 — `handle-web-url` macOS support — false finding
-- AUDIT-039 — `job wait` verbose to stderr (Rust approach is better)
-- AUDIT-043 — User-agent position in header (Rust SDK limitation)
-- AUDIT-046 — `require_setting` exit code (deleted dead code)
+**Audit gaps:** See `audit_reports/2026-04-17-behavioral-parity.md` for
+the full audit report with all findings, resolutions, and remaining open
+items. 5 findings remain open (4 performance, 1 deferred experimental).
 
 **Missing config settings (discovered 2026-04-20):**
 - `settings.allow_bundle_hooks` (default `false`) — needed for #18
@@ -166,7 +146,6 @@ Remaining open findings (7):
 - `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
-- **S3 download mock chain**: Fixed. All 1127 tests pass, 0 ignored.
 - **#15d**: Audit all Level 1 tests in library crates to identify which
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through

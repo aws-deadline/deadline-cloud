@@ -25,6 +25,13 @@ coverage → add or strengthen tests. Improvements → implement if
 low-risk, defer if not. If fixes were significant, re-audit the
 changed areas. Loop until clean.
 
+If any fix resolves an existing audit finding (AUDIT-NNN), update the
+finding's entry in `specs/audit_reports/2026-04-17-behavioral-parity.md`:
+mark it as Fixed, update the Rust behavior description, and update the
+summary table and remaining open list at the top and bottom of the report.
+Audit finding status lives in the audit report, not in `progress.md` or
+`HANDOFF.md`.
+
 **Step 6 — Write spec:**
 Write or update spec files in `specs/{crate}/` to describe the final
 audited state of the code. Include: behavioral contract, data flows,
@@ -35,9 +42,12 @@ Update `specs/{crate}/README.md` index if new files were created.
 **Step 7 — Commit:**
 1. Run `cargo test` — all tests must pass
 2. Verify specs are updated
-3. Update `specs/progress.md` work items table
-4. Clear `specs/HANDOFF.md` active work item
-5. Commit with conventional commit message covering the full batch
+3. Update `specs/progress.md` work items table (status only — no audit details)
+4. If audit findings were resolved, verify they are updated in
+   `specs/audit_reports/2026-04-17-behavioral-parity.md` (the single
+   source of truth for audit finding status)
+5. Clear `specs/HANDOFF.md` active work item
+6. Commit with conventional commit message covering the full batch
 
 ⛔ GATE: Present the audit findings and final commit summary. Stop
 and wait for review. Update `specs/HANDOFF.md` with step status once review is complete.
