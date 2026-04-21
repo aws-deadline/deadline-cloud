@@ -253,6 +253,29 @@ mod tests {
     }
 }
 
+/// Redirect stdout (fd 1) and stderr (fd 2) to the given file.
+#[cfg(unix)]
+fn redirect_std_to_file(file: &std::fs::File) {
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+    unsafe {
+        libc::dup2(fd, 1);
+        libc::dup2(fd, 2);
+    }
+}
+
+#[cfg(windows)]
+fn redirect_std_to_file(file: &std::fs::File) {
+    use std::os::windows::io::AsRawHandle;
+    let handle = file.as_raw_handle();
+    unsafe {
+        // SetStdHandle(STD_OUTPUT_HANDLE, handle)
+        extern "system" { fn SetStdHandle(nStdHandle: u32, hHandle: *mut std::ffi::c_void) -> i32; }
+        SetStdHandle(0xFFFF_FFF5, handle as *mut _); // STD_OUTPUT_HANDLE = -11 as u32
+        SetStdHandle(0xFFFF_FFF4, handle as *mut _); // STD_ERROR_HANDLE = -12 as u32
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -269,17 +292,8 @@ fn main() {
                 std::process::exit(1);
             });
 
-        // Redirect stdout to the file. We use unsafe to set the global
-        // file descriptor — this is the Rust equivalent of Python's
-        // `sys.stdout = open(...)`.
-        use std::os::unix::io::AsRawFd;
-        let fd = file.as_raw_fd();
-        unsafe {
-            // dup2 stdout (fd 1) to our file
-            libc::dup2(fd, 1);
-            // dup2 stderr (fd 2) to our file
-            libc::dup2(fd, 2);
-        }
+        // Redirect stdout and stderr to the file.
+        redirect_std_to_file(&file);
         // Keep the file open for the process lifetime
         std::mem::forget(file);
     }

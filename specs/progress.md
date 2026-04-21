@@ -77,6 +77,9 @@ but has no implementation. Remaining gaps are performance (#9), UX
 polish (#11, #13), platform support (#0f, #2, #8), telemetry (#5),
 and new Python features (#18-21).
 
+**Next action item:** Fix S3 download mock chain to unblock F7 tests
+(6 ignored tests in `job_download.rs` + 1 pre-existing in same file).
+
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
 
@@ -136,15 +139,20 @@ after the core CLI commands are complete.
 
 **Audit gaps in completed items** (see `audit_reports/2026-04-17-behavioral-parity.md` for full details):
 
-Remaining open findings (12):
-- **#0f**: AUDIT-054 — `--redirect-output` Windows support
-- **#2**: AUDIT-042 — Windows stdin handling for login subprocess
+Remaining open findings (7):
 - **#6**: AUDIT-041 — `job trace-schedule` deferred (EXPERIMENTAL in Python)
-- **#8**: AUDIT-053 — Windows long path (UNC) handling
 - **#9**: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
   AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
-- **#11**: AUDIT-031 (`--save-debug-snapshot`), AUDIT-034 (`--submitter-info` — GUI-only)
-- **#13**: AUDIT-008 (interactive root path editing), AUDIT-051 (download path collision)
+- **#11**: AUDIT-034 (`--submitter-info` — GUI-only)
+- **#13**: AUDIT-051 (download path collision — worker-agent scope)
+
+**Fixed in gap sweep (2026-04-21):**
+- AUDIT-042 — Windows stdin for login subprocess (F1)
+- AUDIT-054 — `--redirect-output` Windows support (F2)
+- AUDIT-053 — Windows long path UNC handling (F3)
+- AUDIT-031 — `--save-debug-snapshot` (F8)
+- AUDIT-008 — Interactive root path editing in download (F7, tests blocked on S3 mock chain)
+- Telemetry: hashing/upload summary events (F5), error event on submit failure (F6)
 
 **Dropped findings (not bugs, accepted differences):**
 - AUDIT-024 — YAML key ordering differs (accepted per `patterns.md`)

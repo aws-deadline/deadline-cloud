@@ -106,6 +106,45 @@ impl PathFormat {
     }
 }
 
+// --- Windows long path handling ---
+
+/// Extra characters that temp download files may add (suffix like `.tmp`).
+const TEMP_DOWNLOAD_ADDED_CHARS: usize = 20;
+/// Windows MAX_PATH limit.
+const WINDOWS_MAX_PATH_LENGTH: usize = 260;
+
+/// Returns a long-path-compatible version of the given path.
+/// On Windows, prepends `\\?\` when the path length approaches MAX_PATH
+/// and the registry long-path setting is not enabled.
+/// On non-Windows, returns the path unchanged.
+#[cfg(not(windows))]
+pub fn get_long_path_compatible_path(path: &std::path::Path) -> std::path::PathBuf {
+    path.to_path_buf()
+}
+
+#[cfg(windows)]
+pub fn get_long_path_compatible_path(path: &std::path::Path) -> std::path::PathBuf {
+    let s = path.to_string_lossy();
+    if s.len() + TEMP_DOWNLOAD_ADDED_CHARS >= WINDOWS_MAX_PATH_LENGTH
+        && !s.starts_with("\\\\?\\")
+        && !is_windows_long_path_registry_enabled()
+    {
+        std::path::PathBuf::from(format!("\\\\?\\{s}"))
+    } else {
+        path.to_path_buf()
+    }
+}
+
+#[cfg(windows)]
+fn is_windows_long_path_registry_enabled() -> bool {
+    use std::ffi::c_uchar;
+    #[link(name = "ntdll")]
+    extern "system" {
+        fn RtlAreLongPathsEnabled() -> c_uchar;
+    }
+    unsafe { RtlAreLongPathsEnabled() != 0 }
+}
+
 // --- JobAttachmentS3Settings ---
 
 #[derive(Debug, Clone)]
@@ -991,5 +1030,26 @@ mod tests {
             "osFamily": "INVALID",
         });
         assert!(StorageProfile::from_json(&json).is_none());
+    }
+
+    // F3: AUDIT-053 — Windows long path UNC handling
+    #[test]
+    fn get_long_path_compatible_short_path_unchanged() {
+        use std::path::PathBuf;
+        let short = PathBuf::from("/tmp/short/path.txt");
+        let result = super::get_long_path_compatible_path(&short);
+        assert_eq!(result, short);
+    }
+
+    #[test]
+    fn get_long_path_compatible_long_path_on_non_windows_unchanged() {
+        use std::path::PathBuf;
+        // 300-char path — on non-Windows, should be returned as-is
+        let long_name = "a".repeat(280);
+        let long_path = PathBuf::from(format!("/tmp/{long_name}"));
+        let result = super::get_long_path_compatible_path(&long_path);
+        // On non-Windows, always returns unchanged
+        #[cfg(not(windows))]
+        assert_eq!(result, long_path);
     }
 }

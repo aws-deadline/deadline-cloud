@@ -848,7 +848,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let result = download_output_impl(
                 &config, &farm, &queue_id_val, &job_id_val,
                 step_id.as_deref(), task_id.as_deref(),
-                conflict_resolution, is_json,
+                conflict_resolution, is_json, is_auto_accept(&config),
             ).await;
 
             match result {
@@ -1208,9 +1208,10 @@ pub(crate) async fn download_output_impl(
     task_id: Option<&str>,
     conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
     is_json: bool,
+    auto_accept: bool,
 ) -> Result<(), CliError> {
     use deadline_job_attachments::download::OutputDownloader;
-    use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
+    use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings, PathFormat};
     use deadline_job_attachments::s3;
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
 
@@ -1288,7 +1289,7 @@ pub(crate) async fn download_output_impl(
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
     // Create OutputDownloader
-    let downloader = OutputDownloader::new(
+    let mut downloader = OutputDownloader::new(
         s3_settings, farm_id, queue_id, job_id,
         step_id, task_id, session_action_id.as_deref(),
         s3_client, account_id,
@@ -1300,6 +1301,132 @@ pub(crate) async fn download_output_impl(
     if output_paths.is_empty() {
         println!("{}", no_output_message(is_json));
         return Ok(());
+    }
+
+    check_windows_long_paths(&output_paths);
+
+    // F7: Build root_path_format_mapping from job attachments
+    let mut root_path_format_mapping: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Some(attachments) = job.get("attachments") {
+        if let Some(manifests) = attachments.get("manifests").and_then(|m| m.as_array()) {
+            for manifest in manifests {
+                if let (Some(root), Some(fmt)) = (
+                    manifest.get("rootPath").and_then(|v| v.as_str()),
+                    manifest.get("rootPathFormat").and_then(|v| v.as_str()),
+                ) {
+                    root_path_format_mapping.insert(root.to_string(), fmt.to_string());
+                }
+            }
+        }
+    }
+
+    // F7: Cross-OS mismatch prompt — always runs, even with auto_accept
+    let host_format = PathFormat::get_host_path_format_string();
+    let asset_roots: Vec<String> = output_paths.keys().cloned().collect();
+    for asset_root in &asset_roots {
+        let root_format = root_path_format_mapping.get(asset_root).map(|s| s.as_str()).unwrap_or("");
+        if !root_format.is_empty() && host_format != root_format {
+            if is_json {
+                println!("{}", serde_json::json!({"messageType": "path", "value": [asset_root]}));
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line).unwrap_or(0);
+                let line = line.trim();
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
+                        if let Some(new_root) = vals.first().and_then(|v| v.as_str()) {
+                            downloader.set_root_path(asset_root, new_root);
+                        }
+                    }
+                }
+            } else {
+                let fmt_cap = format!("{}{}", &root_format[..1].to_uppercase(), &root_format[1..]);
+                println!(
+                    "This root path format does not match the operating system you're using. \
+                     Where would you like to save the files?\n\
+                     The location was {asset_root}, on {fmt_cap}."
+                );
+                print!("> Please enter a new root path: ");
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+                let mut new_root = String::new();
+                std::io::stdin().read_line(&mut new_root).unwrap_or(0);
+                let new_root = new_root.trim();
+                let new_root = expand_tilde(new_root);
+                if !new_root.is_empty() {
+                    downloader.set_root_path(asset_root, &new_root);
+                }
+            }
+        }
+    }
+
+    let mut output_paths = downloader.get_output_paths_by_root();
+
+    // F7: Root editing loop — skipped when auto_accept
+    if !auto_accept && !output_paths.is_empty() {
+        if !is_json {
+            loop {
+                // Show summary
+                let summary_lines: Vec<String> = output_paths.iter().map(|(dir, paths)| {
+                    let count = paths.len();
+                    let s = if count > 1 { "s" } else { "" };
+                    format!("    {dir} ({count} file{s})")
+                }).collect();
+                println!("\nSummary of files to download:\n{}", summary_lines.join("\n"));
+
+                // Show roots with indices
+                let roots: Vec<String> = output_paths.keys().cloned().collect();
+                println!("You are about to download files which may come from multiple root directories. Here are a list of the current root directories:");
+                for (i, root) in roots.iter().enumerate() {
+                    println!("[{i}] {root}");
+                }
+
+                print!("> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download: ");
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+                let mut choice = String::new();
+                if std::io::stdin().read_line(&mut choice).unwrap_or(0) == 0 {
+                    break; // EOF
+                }
+                let choice = choice.trim();
+                if choice == "n" {
+                    println!("Output download canceled.");
+                    return Ok(());
+                } else if choice == "y" || choice.is_empty() {
+                    break;
+                } else if let Ok(idx) = choice.parse::<usize>() {
+                    if idx < roots.len() {
+                        print!("> Please enter the new root directory path, or press Enter to keep it unchanged: ");
+                        std::io::stdout().flush().ok();
+                        let mut new_root = String::new();
+                        std::io::stdin().read_line(&mut new_root).unwrap_or(0);
+                        let new_root = new_root.trim();
+                        if !new_root.is_empty() && new_root != roots[idx] {
+                            downloader.set_root_path(&roots[idx], new_root);
+                            output_paths = downloader.get_output_paths_by_root();
+                        }
+                    }
+                }
+            }
+        } else {
+            // JSON mode: emit paths, read pathConfirm response
+            let roots: Vec<String> = output_paths.keys().cloned().collect();
+            println!("{}", serde_json::json!({"messageType": "path", "value": roots}));
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line).unwrap_or(0);
+            let line = line.trim();
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
+                    for (i, val) in vals.iter().enumerate() {
+                        if let Some(new_root) = val.as_str() {
+                            if i < roots.len() {
+                                downloader.set_root_path(&roots[i], new_root);
+                            }
+                        }
+                    }
+                    output_paths = downloader.get_output_paths_by_root();
+                }
+            }
+        }
     }
 
     check_windows_long_paths(&output_paths);
@@ -1402,4 +1529,14 @@ pub(crate) async fn download_output_impl(
     println!();
 
     Ok(())
+}
+
+/// Expand leading `~` to the user's home directory.
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with('~') {
+        if let Ok(home) = std::env::var("HOME") {
+            return path.replacen('~', &home, 1);
+        }
+    }
+    path.to_string()
 }

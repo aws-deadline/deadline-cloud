@@ -29,9 +29,19 @@
 | `--yes` | false | Skip confirmation prompts |
 | `--require-paths-exist` | false | Error if any input paths are missing |
 | `--submitter-name` | "CLI" | Name of the submitting application |
+
+> **Note on `--submitter-name` vs `--submitter-info`:** Python has an
+> inconsistency: `bundle submit` uses `--submitter-name` (not deprecated),
+> while `bundle gui-submit` has both `--submitter-name` (DEPRECATED) and
+> `--submitter-info` (its replacement, which accepts structured key=value
+> pairs, inline JSON, or file paths). The Rust CLI implements
+> `--submitter-name` for `bundle submit`, matching Python. When
+> `gui-submit` is implemented, it should use `--submitter-info` and
+> deprecate `--submitter-name` on that command only.
 | `--known-asset-path` | — | Paths that should not generate warnings (repeatable) |
 | `--force-s3-check` | config | Force S3 existence verification for every file |
 | `--no-force-s3-check` | — | Skip S3 existence verification |
+| `--save-debug-snapshot` | — | EXPERIMENTAL: save snapshot dir (or .zip) instead of submitting |
 
 ### Parameter Validation
 
@@ -48,13 +58,22 @@ bundle submit <dir> -p Frames=1-100
   ├── Apply --storage-profile-id separately (not in shared CliOptions)
   ├── Resolve force_s3_check: --force-s3-check > --no-force-s3-check > config
   ├── Create progress bars (hashing + upload, via ProgressBarManager)
+  ├── If --save-debug-snapshot ends in .zip, create temp dir for snapshot
   │
   ├── Call create_job_from_job_bundle(SubmitJobParams)
   │   ├── Library sends status messages via print_callback → printed to stdout
-  │   │   (e.g., "Uploading attachments...", "Creating job...", job ID)
+  │   ├── When debug_snapshot_dir is set:
+  │   │   ├── Hashing runs normally
+  │   │   ├── Upload replaced by snapshot_assets (copies files locally)
+  │   │   ├── CreateJob NOT called — returns Ok(None)
+  │   │   └── save_debug_snapshot writes: create_job_args.json, per-param
+  │   │       files, submit_job.sh/.bat (with aws s3 cp + create-job),
+  │   │       queue.json
   │   └── On failure: error propagated as CliError::Operation
   │       (hashing failure, upload failure, CreateJob failure, polling timeout)
   │
+  ├── If --save-debug-snapshot .zip: zip temp dir, clean up
+  ├── Print "Saved job debug snapshot: <path>" if snapshot mode
   └── On success: update defaults.job_id in config file
       └── Only when no CLI overrides were provided for profile/farm/queue/storage
 ```

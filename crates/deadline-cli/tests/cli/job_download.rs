@@ -481,3 +481,293 @@ async fn job_download_output_yes_flag_defaults_to_create_copy() {
         "--yes",
     ]));
 }
+
+// ===========================================================================
+// F7: AUDIT-008 — Cross-OS root mismatch prompts for new path
+// ===========================================================================
+
+/// When a job's output root was created on a different OS (e.g., Windows path
+/// on a Linux host), the CLI should prompt the user for a new root path.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_cross_os_root_prompts_for_new_path() {
+    let harness = TestHarness::new().await;
+
+    // Job with a Windows root path on a posix host
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "C:\\Users\\artist\\outputs",
+                    "rootPathFormat": "windows",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Mock S3 to return a manifest with the Windows root
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 100,
+        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1700000000}]
+    }).to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", "C:\\Users\\artist\\outputs")],
+    ).await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+
+    // Pipe a new root path via stdin
+    let new_root = harness.config_dir.path().join("new_output_root");
+    let stdin_input = format!("{}\ny\n", new_root.display());
+
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--yes",
+    ])
+    .write_stdin(stdin_input)
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should show the mismatch warning
+    assert!(
+        stdout.contains("does not match") || stdout.contains("different"),
+        "Expected cross-OS mismatch warning, got: {stdout}"
+    );
+}
+
+/// When auto_accept is false and roots are listed, user can select 'y' to proceed.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_root_editing_loop_accepts_y_to_proceed() {
+    let harness = TestHarness::new().await;
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    // Pipe 'y' to confirm proceeding without changes
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+    ])
+    .write_stdin("y\n")
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should show the root listing with indices
+    assert!(
+        stdout.contains("[0]") || stdout.contains("root director"),
+        "Expected root directory listing, got: {stdout}"
+    );
+}
+
+/// When auto_accept is false and user enters 'n', download should be canceled.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_root_editing_loop_n_cancels() {
+    let harness = TestHarness::new().await;
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    // Pipe 'n' to cancel
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+    ])
+    .write_stdin("n\n")
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("canceled") || stdout.contains("cancelled"),
+        "Expected download canceled message, got: {stdout}"
+    );
+}
+
+
+/// When auto_accept is false and user selects an index to edit, then 'y' to
+/// proceed, the download should use the new root path.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_root_editing_select_index_then_proceed() {
+    let harness = TestHarness::new().await;
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    let new_root = harness.config_dir.path().join("edited_root");
+    // Select index 0, enter new root, then 'y' to proceed
+    let stdin_input = format!("0\n{}\ny\n", new_root.display());
+
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+    ])
+    .write_stdin(stdin_input)
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should show the root listing with index [0]
+    assert!(
+        stdout.contains("[0]"),
+        "Expected root directory listing with indices, got: {stdout}"
+    );
+}
+
+/// In JSON output mode, cross-OS root mismatch should emit JSON messages
+/// instead of human-readable prompts.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_json_mode_cross_os_root_emits_json() {
+    let harness = TestHarness::new().await;
+
+    // Job with a Windows root path on a posix host
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "C:\\Users\\artist\\outputs",
+                    "rootPathFormat": "windows",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    let new_root = harness.config_dir.path().join("json_root");
+    // JSON mode: respond with pathConfirm message
+    let json_response = serde_json::json!({
+        "messageType": "pathConfirm",
+        "value": [new_root.to_string_lossy()]
+    });
+    let stdin_input = format!("{}\n", json_response);
+
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--output", "json",
+        "--yes",
+    ])
+    .write_stdin(stdin_input)
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // JSON mode should emit structured JSON with messageType "path"
+    assert!(
+        stdout.contains("\"messageType\"") && stdout.contains("path"),
+        "Expected JSON path message in output, got: {stdout}"
+    );
+}
+
+/// With --yes, the root editing loop should be skipped (auto_accept),
+/// but cross-OS mismatch prompts should still appear.
+#[ignore = "S3 download mock chain needs asset-root metadata header support"]
+#[tokio::test]
+async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() {
+    let harness = TestHarness::new().await;
+
+    // Windows root on posix host — mismatch should still prompt even with --yes
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Yes Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "C:\\Users\\artist\\outputs",
+                    "rootPathFormat": "windows",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_list_empty(&harness.server).await;
+
+    // Provide a new root via stdin (cross-OS prompt still fires with --yes)
+    let new_root = harness.config_dir.path().join("yes_cross_os");
+    let stdin_input = format!("{}\n", new_root.display());
+
+    let output = harness.cli(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--yes",
+    ])
+    .write_stdin(stdin_input)
+    .output()
+    .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Cross-OS mismatch prompt should appear even with --yes
+    assert!(
+        stdout.contains("does not match") || stdout.contains("different"),
+        "Expected cross-OS mismatch warning even with --yes, got: {stdout}"
+    );
+    // But the root editing loop (index selection) should NOT appear
+    assert!(
+        !stdout.contains("[0]") || !stdout.contains("index of root"),
+        "Expected no root editing loop with --yes"
+    );
+}

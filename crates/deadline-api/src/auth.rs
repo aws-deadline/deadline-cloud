@@ -223,11 +223,17 @@ async fn login_inner(
     let monitor_path = get_monitor_path(config);
     let profile_name = session::display_profile_name(config);
 
+    let stdin_cfg = if cfg!(windows) {
+        std::process::Stdio::piped()
+    } else {
+        std::process::Stdio::null()
+    };
+
     let mut child = std::process::Command::new(&monitor_path)
         .args(["login", "--profile", &profile_name])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .stdin(std::process::Stdio::null())
+        .stdin(stdin_cfg)
         .spawn()
         .map_err(|_| {
             format!(

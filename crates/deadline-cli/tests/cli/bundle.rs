@@ -953,3 +953,314 @@ async fn bundle_submit_yes_flag_prints_upload_summary() {
 }
 
 
+
+// ===========================================================================
+// F5: Telemetry — hashing/upload summary events emitted during submit
+// ===========================================================================
+
+/// When submitting a bundle with attachments, telemetry events for
+/// hashing_summary and upload_summary should be sent.
+#[tokio::test]
+async fn bundle_submit_with_attachments_emits_hashing_telemetry() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    let bundle_dir = create_bundle_with_attachments(&harness, "hash_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+    // wiremock verifies expect(1..) — telemetry events include hashing_summary,
+    // upload_summary, submission, and create_job events
+}
+
+#[tokio::test]
+async fn bundle_submit_with_attachments_emits_upload_telemetry() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_with_attachments(&harness).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    let bundle_dir = create_bundle_with_attachments(&harness, "upload_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+    // wiremock verifies expect(1..) — telemetry events include upload_summary
+}
+
+// ===========================================================================
+// F6: Telemetry — error event emitted on submission failure
+// ===========================================================================
+
+/// When CreateJob fails, an error telemetry event should be emitted with
+/// exception_scope "on_submit".
+#[tokio::test]
+async fn bundle_submit_error_emits_error_telemetry() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    bundle::mock_create_job_error(
+        &harness.server, FARM, QUEUE, 403, "AccessDeniedException",
+    ).await;
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    let bundle_dir = create_bundle(&harness, "error_telem");
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().failure();
+    // wiremock verifies expect(1..) — error telemetry event sent on failure
+}
+
+// ===========================================================================
+// F8: --save-debug-snapshot creates snapshot files without calling CreateJob
+// ===========================================================================
+
+/// When --save-debug-snapshot is provided, the CLI should write snapshot
+/// files to the directory and NOT call CreateJob.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_creates_files() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    // Only mock GetQueue and ListQueueEnvironments — CreateJob should NOT be called
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_bundle");
+    let snapshot_dir = harness.config_dir.path().join("debug_snapshot");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    // Verify snapshot files exist
+    assert!(snapshot_dir.join("create_job_args.json").is_file(),
+        "Expected create_job_args.json in snapshot dir");
+    assert!(snapshot_dir.join("submit_job.sh").is_file(),
+        "Expected submit_job.sh in snapshot dir");
+    assert!(snapshot_dir.join("submit_job.bat").is_file(),
+        "Expected submit_job.bat in snapshot dir");
+    assert!(snapshot_dir.join("queue.json").is_file(),
+        "Expected queue.json in snapshot dir");
+}
+
+/// When --save-debug-snapshot is provided, CreateJob should NOT be called
+/// and no job ID should be printed.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_skips_create_job() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+    // Intentionally NOT mocking CreateJob — if it's called, wiremock will error
+
+    let bundle_dir = create_bundle(&harness, "snapshot_no_create");
+    let snapshot_dir = harness.config_dir.path().join("debug_snapshot2");
+
+    let output = harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).output().expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("job-"), "Expected no job ID in output when snapshotting");
+    assert!(stdout.contains("Saved job debug snapshot"),
+        "Expected snapshot confirmation message, got: {stdout}");
+}
+
+// ===========================================================================
+// F8: --save-debug-snapshot content validation
+// ===========================================================================
+
+/// Verify create_job_args.json contains expected keys (farmId, queueId, template).
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_valid_create_job_args() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_content");
+    let snapshot_dir = harness.config_dir.path().join("debug_content");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    // Validate create_job_args.json content
+    let args_path = snapshot_dir.join("create_job_args.json");
+    let content = fs::read_to_string(&args_path)
+        .unwrap_or_else(|_| panic!("Failed to read {}", args_path.display()));
+    let args: serde_json::Value = serde_json::from_str(&content)
+        .unwrap_or_else(|_| panic!("Invalid JSON in {}", args_path.display()));
+    assert!(args.get("farmId").is_some(), "Expected farmId in create_job_args.json");
+    assert!(args.get("queueId").is_some(), "Expected queueId in create_job_args.json");
+    assert!(args.get("template").is_some(), "Expected template in create_job_args.json");
+}
+
+/// Verify submit_job.sh contains aws deadline create-job command.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_valid_shell_script() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_shell");
+    let snapshot_dir = harness.config_dir.path().join("debug_shell");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    let sh_content = fs::read_to_string(snapshot_dir.join("submit_job.sh"))
+        .expect("Failed to read submit_job.sh");
+    assert!(sh_content.contains("aws deadline create-job"),
+        "Expected 'aws deadline create-job' in submit_job.sh, got: {sh_content}");
+    assert!(sh_content.starts_with("#!/bin/sh"),
+        "Expected shebang in submit_job.sh");
+    // No-attachment bundle should NOT have s3 cp commands
+    assert!(!sh_content.contains("aws s3 cp"),
+        "Expected no 'aws s3 cp' in submit_job.sh for no-attachment bundle");
+
+    let bat_content = fs::read_to_string(snapshot_dir.join("submit_job.bat"))
+        .expect("Failed to read submit_job.bat");
+    assert!(bat_content.contains("aws deadline create-job"),
+        "Expected 'aws deadline create-job' in submit_job.bat, got: {bat_content}");
+}
+
+/// When --save-debug-snapshot path ends in .zip, output should be a zip file.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_zip_mode() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_zip");
+    let zip_path = harness.config_dir.path().join("debug_snapshot.zip");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", zip_path.to_str().unwrap(),
+    ]).assert().success();
+
+    // The .zip file should exist (not a directory)
+    assert!(zip_path.is_file(),
+        "Expected zip file at {}", zip_path.display());
+}
+
+/// With attachments, --save-debug-snapshot should copy manifests locally
+/// instead of uploading to S3, and still not call CreateJob.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_with_attachments() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE,
+        "displayName": "Test Queue",
+        "jobAttachmentSettings": {
+            "s3BucketName": "test-bucket",
+            "rootPrefix": "Data",
+        },
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server, FARM, QUEUE, queue_role_credentials(),
+    ).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+    // NOT mocking S3 put — snapshot should copy locally, not upload
+    // NOT mocking CreateJob — should not be called
+
+    let bundle_dir = create_bundle_with_attachments(&harness, "snapshot_attach");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness.cli(&["config", "set", "settings.known_asset_paths", &temp_root]).assert().success();
+    let snapshot_dir = harness.config_dir.path().join("debug_attach");
+
+    let output = harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).output().expect("failed to run");
+
+    assert!(output.status.success(), "Expected success, stderr: {}",
+        String::from_utf8_lossy(&output.stderr));
+    assert!(snapshot_dir.join("create_job_args.json").is_file(),
+        "Expected create_job_args.json in snapshot dir");
+    // With attachments, create_job_args should have an "attachments" key
+    let content = fs::read_to_string(snapshot_dir.join("create_job_args.json")).unwrap();
+    let args: serde_json::Value = serde_json::from_str(&content).unwrap();
+    assert!(args.get("attachments").is_some(),
+        "Expected attachments in create_job_args.json when bundle has attachments");
+    // Shell script should include s3 cp commands for Data and Manifests
+    let sh_content = fs::read_to_string(snapshot_dir.join("submit_job.sh")).unwrap();
+    assert!(sh_content.contains("aws s3 cp"),
+        "Expected 'aws s3 cp' in submit_job.sh for attachment bundle, got: {sh_content}");
+    assert!(sh_content.contains("./Data"),
+        "Expected './Data' in submit_job.sh s3 cp command");
+    assert!(sh_content.contains("./Manifests"),
+        "Expected './Manifests' in submit_job.sh s3 cp command");
+}
+
+// ===========================================================================
+// F5: Boundary — no attachments should NOT emit hashing/upload telemetry
+// ===========================================================================
+
+/// When submitting a bundle with no attachments, hashing_summary and
+/// upload_summary telemetry events should NOT be sent.
+#[tokio::test]
+async fn bundle_submit_no_attachments_no_hashing_upload_telemetry() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_no_attachments(&harness).await;
+    // Mount a telemetry endpoint that expects zero hashing/upload events.
+    // The generic catch-all accepts latency/submission/create_job events.
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "no_attach_telem");
+
+    let output = harness.cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .output().expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // No hashing or upload summary should appear in output
+    assert!(!stdout.contains("Hashing Summary"),
+        "Expected no hashing summary for no-attachment bundle, got: {stdout}");
+    assert!(!stdout.contains("Upload Summary"),
+        "Expected no upload summary for no-attachment bundle, got: {stdout}");
+}

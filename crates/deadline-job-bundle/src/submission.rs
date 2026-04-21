@@ -216,6 +216,7 @@ pub struct SubmitJobParams<'a> {
     pub known_asset_paths: Vec<String>,
     pub auto_accept: bool,
     pub force_s3_check: Option<bool>,
+    pub debug_snapshot_dir: Option<String>,
     pub config: Option<&'a IniConfig>,
     pub print_callback: Box<dyn Fn(&str) + Send + 'a>,
     pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
@@ -449,6 +450,20 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 }
             }
 
+            // F5: Emit hashing summary telemetry
+            if let Some(tc) = params.telemetry {
+                let mut details = std::collections::HashMap::new();
+                details.insert("total_files".into(), json!(hashing_summary.total_files));
+                details.insert("total_bytes".into(), json!(hashing_summary.total_bytes));
+                details.insert("processed_files".into(), json!(hashing_summary.processed_files));
+                details.insert("processed_bytes".into(), json!(hashing_summary.processed_bytes));
+                details.insert("skipped_files".into(), json!(hashing_summary.skipped_files));
+                details.insert("skipped_bytes".into(), json!(hashing_summary.skipped_bytes));
+                details.insert("total_time".into(), json!(hashing_summary.total_time));
+                details.insert("transfer_rate".into(), json!(hashing_summary.transfer_rate));
+                tc.record_event("com.amazon.rum.deadline.job_attachments.hashing_summary", details, false);
+            }
+
             let ja_settings = queue.get("jobAttachmentSettings").unwrap();
             let s3_settings = JobAttachmentS3Settings::from_root_path(&format!(
                 "{}/{}",
@@ -459,19 +474,43 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
             let upload_ctx = upload::S3UploadContext::new(s3_client, account_id, params.config)
                 .map_err(|e| op_err(e.to_string()))?;
 
-            let (upload_summary, attachments) = upload::upload_assets(
-                &farm_id, &queue_id, &s3_settings,
-                &manifests, &upload_ctx,
-                params.upload_progress_callback,
-                cache_dir_str,
-                Some(force_s3_check),
-            ).await.map_err(|e| op_err(e.to_string()))?;
+            let (upload_summary, attachments) = if let Some(ref snap_dir) = params.debug_snapshot_dir {
+                // F8: Snapshot assets locally instead of uploading to S3
+                upload::snapshot_assets(
+                    &farm_id, &queue_id, &s3_settings,
+                    std::path::Path::new(snap_dir),
+                    &manifests,
+                    params.upload_progress_callback,
+                ).map_err(|e| op_err(e.to_string()))?
+            } else {
+                upload::upload_assets(
+                    &farm_id, &queue_id, &s3_settings,
+                    &manifests, &upload_ctx,
+                    params.upload_progress_callback,
+                    cache_dir_str,
+                    Some(force_s3_check),
+                ).await.map_err(|e| op_err(e.to_string()))?
+            };
 
             if upload_summary.processed_files > 0 {
                 print("Upload Summary:");
                 for line in upload_summary.to_string().lines() {
                     print(&format!("    {line}"));
                 }
+            }
+
+            // F5: Emit upload summary telemetry
+            if let Some(tc) = params.telemetry {
+                let mut details = std::collections::HashMap::new();
+                details.insert("total_files".into(), json!(upload_summary.total_files));
+                details.insert("total_bytes".into(), json!(upload_summary.total_bytes));
+                details.insert("processed_files".into(), json!(upload_summary.processed_files));
+                details.insert("processed_bytes".into(), json!(upload_summary.processed_bytes));
+                details.insert("skipped_files".into(), json!(upload_summary.skipped_files));
+                details.insert("skipped_bytes".into(), json!(upload_summary.skipped_bytes));
+                details.insert("total_time".into(), json!(upload_summary.total_time));
+                details.insert("transfer_rate".into(), json!(upload_summary.transfer_rate));
+                tc.record_event("com.amazon.rum.deadline.job_attachments.upload_summary", details, false);
             }
 
             let mut att_json = attachments.to_json();
@@ -532,6 +571,12 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         tc.record_event("com.amazon.rum.deadline.submission", details, false);
     }
 
+    // F8: If debug snapshot dir is set, save snapshot and return without calling CreateJob
+    if let Some(ref snapshot_dir) = params.debug_snapshot_dir {
+        save_debug_snapshot(snapshot_dir, &create_job_args, &queue)?;
+        return Ok(None);
+    }
+
     let response = api::create_job(&create_job_args, params.config, None).await?;
 
     let job_id = response.get("jobId").and_then(|v| v.as_str())
@@ -562,6 +607,148 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     print(&format!("{status_message}\n{job_id}"));
 
     Ok(Some(job_id))
+}
+
+/// Write a debug snapshot of the CreateJob payload and helper scripts.
+fn save_debug_snapshot(
+    snapshot_dir: &str,
+    create_job_args: &serde_json::Map<String, Value>,
+    queue: &Value,
+) -> Result<(), DeadlineError> {
+    use std::fs;
+    use std::io::Write;
+
+    fs::create_dir_all(snapshot_dir)
+        .map_err(|e| op_err(format!("Failed to create snapshot dir: {e}")))?;
+
+    // 1. create_job_args.json
+    let args_json = serde_json::to_string_pretty(&Value::Object(create_job_args.clone()))
+        .map_err(|e| op_err(format!("Failed to serialize create_job_args: {e}")))?;
+    fs::write(
+        std::path::Path::new(snapshot_dir).join("create_job_args.json"),
+        &args_json,
+    ).map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
+
+    // 2. Per-parameter files + CLI args list
+    let mut cli_args: Vec<(String, String)> = Vec::new();
+    for (param_name, param_value) in create_job_args {
+        let kebab = camel_to_kebab(param_name);
+        match param_value {
+            Value::Object(_) | Value::Array(_) => {
+                let file_name = format!("{kebab}_param.json");
+                let content = serde_json::to_string_pretty(param_value)
+                    .unwrap_or_default();
+                let _ = fs::write(
+                    std::path::Path::new(snapshot_dir).join(&file_name),
+                    &content,
+                );
+                cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
+            }
+            Value::String(s) if s.contains('\n') => {
+                let file_name = format!("{kebab}_param.data");
+                let _ = fs::write(
+                    std::path::Path::new(snapshot_dir).join(&file_name),
+                    s.as_bytes(),
+                );
+                cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
+            }
+            _ => {
+                cli_args.push((format!("--{kebab}"), param_value.to_string().trim_matches('"').to_string()));
+            }
+        }
+    }
+
+    // Determine S3 path for attachment upload commands in scripts
+    let s3_base = queue.get("jobAttachmentSettings").and_then(|ja| {
+        let bucket = ja.get("s3BucketName").and_then(|v| v.as_str())?;
+        let prefix = ja.get("rootPrefix").and_then(|v| v.as_str())?;
+        Some(format!("s3://{bucket}/{prefix}"))
+    });
+    let has_attachments = create_job_args.contains_key("attachments");
+
+    // 3. submit_job.sh
+    let sh_path = std::path::Path::new(snapshot_dir).join("submit_job.sh");
+    let mut sh = fs::File::create(&sh_path)
+        .map_err(|e| op_err(format!("Failed to create submit_job.sh: {e}")))?;
+    writeln!(sh, "#!/bin/sh").ok();
+    writeln!(sh, "# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.").ok();
+    writeln!(sh, "set -xeuo pipefail").ok();
+    writeln!(sh, "cd \"$(dirname \"$0\")\"").ok();
+    writeln!(sh).ok();
+    if has_attachments {
+        if let Some(ref base) = s3_base {
+            write_s3_copy_commands(&mut sh, base, " \\\n")
+                .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
+        }
+    }
+    write_create_job_commands(&mut sh, &cli_args, " \\\n")
+        .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
+
+    // 4. submit_job.bat
+    let bat_path = std::path::Path::new(snapshot_dir).join("submit_job.bat");
+    let mut bat = fs::File::create(&bat_path)
+        .map_err(|e| op_err(format!("Failed to create submit_job.bat: {e}")))?;
+    writeln!(bat, "REM Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.").ok();
+    writeln!(bat, "cd /d \"%~dp0\"").ok();
+    writeln!(bat).ok();
+    if has_attachments {
+        if let Some(ref base) = s3_base {
+            write_s3_copy_commands(&mut bat, base, " ^\r\n")
+                .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
+        }
+    }
+    write_create_job_commands(&mut bat, &cli_args, " ^\r\n")
+        .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
+
+    // 5. queue.json
+    let queue_json = serde_json::to_string_pretty(queue)
+        .unwrap_or_else(|_| "{}".to_string());
+    fs::write(
+        std::path::Path::new(snapshot_dir).join("queue.json"),
+        &queue_json,
+    ).map_err(|e| op_err(format!("Failed to write queue.json: {e}")))?;
+
+    Ok(())
+}
+
+fn write_s3_copy_commands(
+    w: &mut impl std::io::Write,
+    s3_base: &str,
+    continuation: &str,
+) -> std::io::Result<()> {
+    for subdir in ["Data", "Manifests"] {
+        write!(w, "aws s3 cp{continuation}", )?;
+        write!(w, "    --recursive{continuation}")?;
+        write!(w, "    ./{subdir}{continuation}")?;
+        writeln!(w, "    {s3_base}/{subdir}")?;
+        writeln!(w)?;
+    }
+    Ok(())
+}
+
+fn write_create_job_commands(
+    w: &mut impl std::io::Write,
+    cli_args: &[(String, String)],
+    continuation: &str,
+) -> std::io::Result<()> {
+    write!(w, "aws deadline create-job")?;
+    for (flag, val) in cli_args {
+        write!(w, "{continuation}    {flag} {val}")?;
+    }
+    writeln!(w)?;
+    Ok(())
+}
+
+/// Convert camelCase to kebab-case.
+fn camel_to_kebab(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            result.push('-');
+        }
+        result.push(c.to_ascii_lowercase());
+    }
+    result
 }
 
 /// Walk input directories recursively, adding files to input_filenames.

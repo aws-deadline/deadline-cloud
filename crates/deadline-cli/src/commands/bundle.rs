@@ -81,6 +81,11 @@ pub enum BundleAction {
         /// Skip S3 existence verification
         #[arg(long = "no-force-s3-check", overrides_with = "force_s3_check")]
         no_force_s3_check: bool,
+
+        /// EXPERIMENTAL — Save a debug snapshot instead of submitting.
+        /// Generates a directory (or .zip) with CreateJob args and scripts.
+        #[arg(long = "save-debug-snapshot")]
+        save_debug_snapshot: Option<String>,
     },
 }
 
@@ -130,6 +135,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             known_asset_path,
             force_s3_check,
             no_force_s3_check,
+            save_debug_snapshot,
         } => {
             let job_parameters = parse_parameters(&parameter)?;
 
@@ -173,6 +179,20 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
 
             let telemetry = deadline_api::telemetry::create_telemetry(Some(&config));
 
+            // F8: If snapshot path ends in .zip, use a temp dir then zip after
+            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot.as_ref().is_some_and(|p| p.ends_with(".zip")) {
+                let tmp = std::env::temp_dir().join(format!("deadline-snapshot-{}", std::process::id()));
+                std::fs::create_dir_all(&tmp).map_err(|e| CliError::Operation(format!("Failed to create temp dir: {e}")))?;
+                Some(tmp)
+            } else {
+                None
+            };
+            let effective_snapshot_dir = match (&save_debug_snapshot, &snapshot_tmpdir) {
+                (Some(_), Some(tmp)) => Some(tmp.to_string_lossy().to_string()),
+                (Some(p), None) => Some(p.clone()),
+                _ => None,
+            };
+
             let submit_params = SubmitJobParams {
                 job_bundle_dir: job_bundle_dir.clone(),
                 job_parameters,
@@ -191,6 +211,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                         .unwrap_or_default(),
                 ).unwrap_or(false),
                 force_s3_check: resolved_force_s3_check,
+                debug_snapshot_dir: effective_snapshot_dir,
                 config: Some(&config),
                 print_callback: Box::new(|msg| println!("{msg}")),
                 hashing_progress_callback: Some(Box::new(move |meta| {
@@ -206,6 +227,11 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let job_id = match create_job_from_job_bundle(submit_params).await {
                 Ok(id) => id,
                 Err(e) => {
+                    // F6: Emit error telemetry before flushing
+                    let mut details = std::collections::HashMap::new();
+                    details.insert("exception_scope".into(), serde_json::json!("on_submit"));
+                    details.insert("exception_type".into(), serde_json::json!("DeadlineOperationError"));
+                    telemetry.record_event("com.amazon.rum.deadline.error", details, false);
                     drop(telemetry); // Flush telemetry before exit
                     let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
                     let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
@@ -216,6 +242,20 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
 
             // Flush telemetry events before process exits
             drop(telemetry);
+
+            if let Some(ref snap_path) = save_debug_snapshot {
+                // F8: If zip mode, create the zip from the temp dir
+                if let Some(ref tmp) = snapshot_tmpdir {
+                    if let Some(parent) = std::path::Path::new(snap_path).parent() {
+                        std::fs::create_dir_all(parent).ok();
+                    }
+                    create_zip_from_dir(tmp, snap_path)
+                        .map_err(|e| CliError::Operation(format!("Failed to create zip: {e}")))?;
+                    let _ = std::fs::remove_dir_all(tmp);
+                }
+                println!("Saved job debug snapshot:");
+                println!("    {snap_path}");
+            }
 
             // Update defaults.job_id only when no CLI overrides were provided
             if profile.is_none()
@@ -231,4 +271,19 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             Ok(())
         }
     }
+}
+
+/// Create a zip file from a directory's contents.
+fn create_zip_from_dir(src_dir: &std::path::Path, zip_path: &str) -> Result<(), String> {
+    let status = std::process::Command::new("zip")
+        .args(["-r", "-j", zip_path, "."])
+        .current_dir(src_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| format!("Failed to run zip: {e}"))?;
+    if !status.success() {
+        return Err(format!("zip exited with status {status}"));
+    }
+    Ok(())
 }
