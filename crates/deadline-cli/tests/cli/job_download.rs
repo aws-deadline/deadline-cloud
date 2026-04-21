@@ -66,6 +66,31 @@ async fn setup_no_output_mocks(harness: &TestHarness) {
     s3::mock_s3_list_empty(&harness.server).await;
 }
 
+/// Set up mocks for a download-output test where one output manifest exists
+/// in S3 with the given asset root. Returns a single file `render.exr`.
+async fn setup_manifest_mocks(harness: &TestHarness, job: serde_json::Value, asset_root: &str) {
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 100,
+        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1700000000}]
+    }).to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", asset_root)],
+    ).await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+}
+
 // =====================================================================
 // Missing required args (derived from apply_cli_options_to_config)
 // =====================================================================
@@ -378,10 +403,6 @@ async fn job_download_output_help_shows_usage() {
 
 /// When files already exist at the download target and no --conflict-resolution
 /// is specified, the CLI should detect conflicts and show a message.
-///
-/// Ignored: requires S3 GetObject mock with SDK-compatible x-amz-meta-asset-root
-/// header for the full manifest download chain to work.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_existing_files_shows_conflict_prompt() {
     let harness = TestHarness::new().await;
@@ -488,7 +509,6 @@ async fn job_download_output_yes_flag_defaults_to_create_copy() {
 
 /// When a job's output root was created on a different OS (e.g., Windows path
 /// on a Linux host), the CLI should prompt the user for a new root path.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_cross_os_root_prompts_for_new_path() {
     let harness = TestHarness::new().await;
@@ -558,15 +578,13 @@ async fn job_download_output_cross_os_root_prompts_for_new_path() {
 }
 
 /// When auto_accept is false and roots are listed, user can select 'y' to proceed.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_root_editing_loop_accepts_y_to_proceed() {
     let harness = TestHarness::new().await;
 
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
-    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
-    sts::mock_get_caller_identity(&harness.server).await;
-    s3::mock_s3_list_empty(&harness.server).await;
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+    setup_manifest_mocks(&harness, job_with_attachments(), output_root).await;
 
     // Pipe 'y' to confirm proceeding without changes
     let output = harness.cli(&[
@@ -589,15 +607,13 @@ async fn job_download_output_root_editing_loop_accepts_y_to_proceed() {
 }
 
 /// When auto_accept is false and user enters 'n', download should be canceled.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_root_editing_loop_n_cancels() {
     let harness = TestHarness::new().await;
 
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
-    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
-    sts::mock_get_caller_identity(&harness.server).await;
-    s3::mock_s3_list_empty(&harness.server).await;
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+    setup_manifest_mocks(&harness, job_with_attachments(), output_root).await;
 
     // Pipe 'n' to cancel
     let output = harness.cli(&[
@@ -621,15 +637,13 @@ async fn job_download_output_root_editing_loop_n_cancels() {
 
 /// When auto_accept is false and user selects an index to edit, then 'y' to
 /// proceed, the download should use the new root path.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_root_editing_select_index_then_proceed() {
     let harness = TestHarness::new().await;
 
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
-    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
-    sts::mock_get_caller_identity(&harness.server).await;
-    s3::mock_s3_list_empty(&harness.server).await;
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+    setup_manifest_mocks(&harness, job_with_attachments(), output_root).await;
 
     let new_root = harness.config_dir.path().join("edited_root");
     // Select index 0, enter new root, then 'y' to proceed
@@ -656,7 +670,6 @@ async fn job_download_output_root_editing_select_index_then_proceed() {
 
 /// In JSON output mode, cross-OS root mismatch should emit JSON messages
 /// instead of human-readable prompts.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_json_mode_cross_os_root_emits_json() {
     let harness = TestHarness::new().await;
@@ -679,10 +692,7 @@ async fn job_download_output_json_mode_cross_os_root_emits_json() {
             "fileSystem": "COPIED"
         }
     });
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
-    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
-    sts::mock_get_caller_identity(&harness.server).await;
-    s3::mock_s3_list_empty(&harness.server).await;
+    setup_manifest_mocks(&harness, job, "C:\\Users\\artist\\outputs").await;
 
     let new_root = harness.config_dir.path().join("json_root");
     // JSON mode: respond with pathConfirm message
@@ -715,7 +725,6 @@ async fn job_download_output_json_mode_cross_os_root_emits_json() {
 
 /// With --yes, the root editing loop should be skipped (auto_accept),
 /// but cross-OS mismatch prompts should still appear.
-#[ignore = "S3 download mock chain needs asset-root metadata header support"]
 #[tokio::test]
 async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() {
     let harness = TestHarness::new().await;
@@ -738,10 +747,7 @@ async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() 
             "fileSystem": "COPIED"
         }
     });
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
-    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
-    sts::mock_get_caller_identity(&harness.server).await;
-    s3::mock_s3_list_empty(&harness.server).await;
+    setup_manifest_mocks(&harness, job, "C:\\Users\\artist\\outputs").await;
 
     // Provide a new root via stdin (cross-OS prompt still fires with --yes)
     let new_root = harness.config_dir.path().join("yes_cross_os");

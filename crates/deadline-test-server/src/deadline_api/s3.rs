@@ -69,13 +69,20 @@ pub async fn mock_s3_list_objects(server: &MockServer, keys: &[&str]) {
         .await;
 }
 
+/// Percent-encode an S3 key path for wiremock's `path()` matcher.
+///
+/// The AWS S3 SDK percent-encodes special characters (e.g. `:` → `%3A`)
+/// in the HTTP request path. wiremock's `path()` matcher compares against
+/// the raw percent-encoded URL, so mock paths must be encoded the same way.
+fn encode_s3_path(key: &str) -> String {
+    format!("/{}", key.replace(':', "%3A"))
+}
+
 /// Mount an S3 GetObject response for a specific key with the given body.
 pub async fn mock_s3_get_object(server: &MockServer, key: &str, body: &[u8]) {
     use wiremock::matchers::path;
-    // S3 path-style: /<bucket>/<key>
-    // With endpoint override, the SDK uses path-style addressing
     Mock::given(method("GET"))
-        .and(path(format!("/{key}")))
+        .and(path(encode_s3_path(key)))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_bytes(body.to_vec())
@@ -100,7 +107,7 @@ pub async fn mock_s3_get_object_with_metadata(
         response = response.insert_header(format!("x-amz-meta-{k}"), *v);
     }
     Mock::given(method("GET"))
-        .and(path(format!("/{key}")))
+        .and(path(encode_s3_path(key)))
         .respond_with(response)
         .mount(server)
         .await;
