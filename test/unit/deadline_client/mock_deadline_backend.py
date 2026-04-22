@@ -247,6 +247,8 @@ class MockDeadlineBackend:
             "queueId": queue_id,
             "farmId": farmId,
             "displayName": displayName,
+            "status": kwargs.pop("status", "ACTIVE"),
+            "defaultBudgetAction": kwargs.pop("defaultBudgetAction", "NONE"),
             "createdAt": self._now(),
             "createdBy": "mock-user",
             **kwargs,
@@ -260,6 +262,37 @@ class MockDeadlineBackend:
         if key not in self.queues:
             raise _resource_not_found("queue", queueId, "GetQueue")
         return self.queues[key]
+
+    @route("GET", "/farms/{farmId}/queues/{queueId}/environments", "ListQueueEnvironments")
+    def list_queue_environments(
+        self, *, farmId: str, queueId: str, nextToken: str | None = None, **kwargs
+    ) -> dict:
+        params: dict = {"farmId": farmId, "queueId": queueId}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListQueueEnvironments", params)
+        if (farmId, queueId) not in self.queues:
+            raise _resource_not_found("queue", queueId, "ListQueueEnvironments")
+        return {"environments": []}
+
+    @route("GET", "/farms/{farmId}/queues/{queueId}/user-roles", "AssumeQueueRoleForUser")
+    def assume_queue_role_for_user(self, *, farmId: str, queueId: str) -> dict:
+        self._validate("AssumeQueueRoleForUser", {"farmId": farmId, "queueId": queueId})
+        if (farmId, queueId) not in self.queues:
+            raise _resource_not_found("queue", queueId, "AssumeQueueRoleForUser")
+        # Mirror whatever static creds tests configured; default to placeholders.
+        creds = getattr(
+            self,
+            "queue_user_credentials",
+            {
+                "accessKeyId": "testing",
+                "secretAccessKey": "testing",
+                "sessionToken": "testing",
+                "expiration": self._now() + timedelta(hours=1),
+            },
+        )
+        return {"credentials": creds}
 
     # ========== Fleet APIs ==========
 
@@ -401,11 +434,13 @@ class MockDeadlineBackend:
             "jobId": job_id,
             "name": job_name,
             "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "",
             "taskRunStatus": "PENDING",
             "priority": priority,
             "createdAt": now,
             "createdBy": "mock-user",
             "startedAt": now,
+            **({"attachments": kwargs["attachments"]} if "attachments" in kwargs else {}),
         }
 
         # Auto-create steps and tasks from template

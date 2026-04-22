@@ -509,20 +509,3 @@ These are the manual test cases for the client software release cycle, covering 
 | Verify 'Export job bundle' button in GUI Submitter | | |
 | Verify all GUI Submitter dialogue controls work | Verify all dropdown options, menus, input fields, toggles, checkboxes, radio buttons work as expected. Verify all tabs: Shared job settings, Job-specific settings, Job attachments, Host requirements (both 'Run on all worker hosts' and 'Run on worker hosts that meet the following requirements' options). | |
 | Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
-
-## Job Attachments Tests
-
-| Test Case | Test Steps | Notes |
-|---|---|---|
-| Submit render job with job attachments | | |
-| Verify job attachments are uploaded to s3 during the render submission process | | |
-| `deadline attachment upload` command | | |
-| `deadline attachment download` command | | |
-| `deadline manifest snapshot` | | |
-| `deadline manifest diff` command | | |
-| `deadline manifest download` | | |
-| `deadline manifest upload` | | |
-| Path mapping rules | | |
-| `deadline job download-output` with overwrite files option | Download output to a folder where output already exists, select overwrite. | |
-| `deadline job download-output` with skip option | Download output to a folder where output already exists, select skip. | |
-| `deadline job download-output` with create copy/append option | Download output to a folder where output already exists, select create copy/append. | |

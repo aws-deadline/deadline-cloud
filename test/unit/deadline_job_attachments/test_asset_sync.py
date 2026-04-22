@@ -28,6 +28,7 @@ from deadline.job_attachments.exceptions import (
 )
 from deadline.job_attachments.models import (
     Attachments,
+    FileConflictResolution,
     Job,
     JobAttachmentsFileSystem,
     JobAttachmentS3Settings,
@@ -1256,6 +1257,55 @@ class TestAssetSync:
             ("default_job_attachment_s3_settings"),
         ],
     )
+    def test_step_dependency_download_uses_overwrite_conflict_resolution(
+        self,
+        tmp_path: Path,
+        default_queue: Queue,
+        default_job: Job,
+        s3_settings_fixture_name: str,
+        test_manifest_one: dict,
+        request: pytest.FixtureRequest,
+    ):
+        """Downloads should always use OVERWRITE conflict resolution since the worker
+        downloads into a fresh session directory."""
+        # GIVEN
+        s3_settings: JobAttachmentS3Settings = request.getfixturevalue(s3_settings_fixture_name)
+        default_queue.jobAttachmentSettings = s3_settings
+        dest_dir = "assetroot-27bggh78dd2b568ab123"
+        test_manifest = decode_manifest(json.dumps(test_manifest_one))
+        assert default_job.attachments
+
+        # WHEN — no step dependencies
+        with patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.get_manifest_from_s3",
+            return_value=test_manifest,
+        ), patch(
+            f"{deadline.__package__}.job_attachments.asset_sync.download_files_from_manifests",
+            side_effect=[DownloadSummaryStatistics()],
+        ) as mock_download, patch(
+            f"{deadline.__package__}.job_attachments.asset_sync._get_unique_dest_dir_name",
+            side_effect=[dest_dir],
+        ), patch.object(Path, "stat", MagicMock(st_mtime_ns=1234512345123451)):
+            self.default_asset_sync.attachment_sync_inputs(
+                s3_settings,
+                default_job.attachments,
+                default_queue.queueId,
+                default_job.jobId,
+                tmp_path,
+                on_downloading_files=MagicMock(return_value=True),
+            )
+
+            # THEN — should always use OVERWRITE
+            mock_download.assert_called_once()
+            call_kwargs = mock_download.call_args
+            assert call_kwargs.kwargs.get("conflict_resolution") == FileConflictResolution.OVERWRITE
+
+    @pytest.mark.parametrize(
+        ("s3_settings_fixture_name"),
+        [
+            ("default_job_attachment_s3_settings"),
+        ],
+    )
     def test_attachment_sync_inputs_with_step_dependencies_same_root_vfs_on_posix(
         self,
         tmp_path: Path,
@@ -1567,6 +1617,7 @@ class TestAssetSync:
                 session=ANY,
                 on_downloading_files=mock_on_downloading_files,
                 logger=getLogger("deadline.job_attachments"),
+                conflict_resolution=FileConflictResolution.OVERWRITE,
             )
 
     @pytest.mark.parametrize(
