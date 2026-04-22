@@ -7,7 +7,7 @@ import sys
 import pytest
 import click
 
-from deadline.client.cli._groups.job_group import _validate_and_normalize_include_paths
+from deadline.client.cli._groups._job_download_helpers import _validate_and_normalize_include_paths
 
 
 class TestValidateAndNormalizePathFilters:

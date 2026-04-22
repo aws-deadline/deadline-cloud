@@ -305,3 +305,25 @@ def _download_mapped_manifests(
                 return True
 
             return _do_download(on_downloading_files=_on_progress_json)
+
+
+def _validate_and_normalize_include_paths(filters: list[str]) -> list[str]:
+    """
+    Validates and normalizes include paths.
+    - Rejects filters containing '..' (path traversal prevention)
+    - Converts backslashes to forward slashes (Windows compatibility)
+    - Strips leading './'
+    - Normalizes '//' to '/'
+    """
+    normalized = []
+    for f in filters:
+        if ".." in f:
+            raise click.BadParameter(f"Path filter must not contain '..': {f}")
+        f = f.replace("\\", "/")
+        if f.startswith("./"):
+            f = f[2:]
+        while "//" in f:
+            f = f.replace("//", "/")
+        if f:
+            normalized.append(f)
+    return normalized

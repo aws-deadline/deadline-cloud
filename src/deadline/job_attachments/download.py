@@ -1250,14 +1250,7 @@ def _matches_any_filter(file_path: str, filters: list[str]) -> bool:
     - Exact match: filter "renders/frame_001.exr" matches only that path
     - Directory prefix: filter "renders/" matches all paths starting with "renders/"
     """
-    for f in filters:
-        if f.endswith("/"):
-            if file_path.startswith(f):
-                return True
-        else:
-            if file_path == f:
-                return True
-    return False
+    return any(file_path.startswith(f) if f.endswith("/") else file_path == f for f in filters)
 
 
 def _filter_paths(

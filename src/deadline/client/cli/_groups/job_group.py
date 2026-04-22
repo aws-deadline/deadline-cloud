@@ -63,6 +63,7 @@ from ._job_download_helpers import (
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
+    _validate_and_normalize_include_paths,
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
@@ -964,28 +965,6 @@ def _assert_valid_path(path: str) -> None:
         raise ValueError(f"Path {path} is not an absolute path.")
 
 
-def _validate_and_normalize_include_paths(filters: list[str]) -> list[str]:
-    """
-    Validates and normalizes include paths.
-    - Rejects filters containing '..' (path traversal prevention)
-    - Converts backslashes to forward slashes (Windows compatibility)
-    - Strips leading './'
-    - Normalizes '//' to '/'
-    """
-    normalized = []
-    for f in filters:
-        if ".." in f:
-            raise click.BadParameter(f"Path filter must not contain '..': {f}")
-        f = f.replace("\\", "/")
-        if f.startswith("./"):
-            f = f[2:]
-        while "//" in f:
-            f = f.replace("//", "/")
-        if f:
-            normalized.append(f)
-    return normalized
-
-
 @cli_job.command(name="download-output")
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -1064,11 +1043,12 @@ def job_download_output(
             if not stripped:
                 break
             filters.append(stripped)
-        try:
-            tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
-            sys.stdin = open(tty_path)  # noqa: SIM115
-        except OSError:
-            pass  # Non-interactive environment (CI, Tauri) — no TTY to reopen
+        if output != "json":
+            try:
+                tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
+                sys.stdin = open(tty_path)  # noqa: SIM115
+            except OSError:
+                pass  # Non-interactive environment — no TTY to reopen
     if filters:
         filters = _validate_and_normalize_include_paths(filters)
     path_filters = filters or None
