@@ -7,10 +7,16 @@ from typing import List
 from deadline.job_attachments.download import (
     _matches_any_filter,
     _filter_paths,
+    _filter_manifests,
 )
 from deadline.job_attachments.models import ManifestPathGroup
+from deadline.job_attachments.asset_manifests.base_manifest import (
+    BaseAssetManifest,
+    BaseManifestPath,
+)
 from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
 from deadline.job_attachments.asset_manifests.v2023_03_03 import (
+    AssetManifest as AssetManifestv2023_03_03,
     ManifestPath as ManifestPathv2023_03_03,
 )
 
@@ -107,3 +113,55 @@ class TestFilterPaths:
         result = _filter_paths(paths_by_root, ["a.txt"])
         assert "/has_match" in result
         assert "/no_match" not in result
+
+
+class TestFilterManifests:
+    def _make_manifest(self, paths: List[str]) -> BaseAssetManifest:
+        manifest_paths: List[BaseManifestPath] = [
+            ManifestPathv2023_03_03(path=p, hash="abc123", size=100, mtime=1234000000)
+            for p in paths
+        ]
+        return AssetManifestv2023_03_03(
+            hash_alg=HashAlgorithm.XXH128,
+            paths=manifest_paths,
+            total_size=len(paths) * 100,
+        )
+
+    def test_exact_filter(self):
+        manifests_by_root = {"/root": [self._make_manifest(["a.txt", "b.txt", "c.txt"])]}
+        result = _filter_manifests(manifests_by_root, ["b.txt"])
+        assert "/root" in result
+        assert [p.path for p in result["/root"][0].paths] == ["b.txt"]
+
+    def test_directory_prefix_filter(self):
+        manifests_by_root = {
+            "/root": [self._make_manifest(["renders/a.exr", "renders/b.exr", "textures/c.png"])]
+        }
+        result = _filter_manifests(manifests_by_root, ["renders/"])
+        assert [p.path for p in result["/root"][0].paths] == ["renders/a.exr", "renders/b.exr"]
+
+    def test_no_matches_returns_empty(self):
+        manifests_by_root = {"/root": [self._make_manifest(["a.txt"])]}
+        result = _filter_manifests(manifests_by_root, ["nonexistent.txt"])
+        assert result == {}
+
+    def test_empty_root_removed(self):
+        manifests_by_root = {
+            "/has_match": [self._make_manifest(["a.txt"])],
+            "/no_match": [self._make_manifest(["b.txt"])],
+        }
+        result = _filter_manifests(manifests_by_root, ["a.txt"])
+        assert "/has_match" in result
+        assert "/no_match" not in result
+
+    def test_multiple_manifests_per_root(self):
+        manifests_by_root = {
+            "/root": [
+                self._make_manifest(["a.txt", "b.txt"]),
+                self._make_manifest(["c.txt", "d.txt"]),
+            ]
+        }
+        result = _filter_manifests(manifests_by_root, ["a.txt", "c.txt"])
+        assert len(result["/root"]) == 2
+        assert [p.path for p in result["/root"][0].paths] == ["a.txt"]
+        assert [p.path for p in result["/root"][1].paths] == ["c.txt"]

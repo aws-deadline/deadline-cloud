@@ -1285,6 +1285,28 @@ def _filter_paths(
     return filtered
 
 
+def _filter_manifests(
+    manifests_by_root: dict[str, list[BaseAssetManifest]],
+    path_filters: list[str],
+) -> dict[str, list[BaseAssetManifest]]:
+    """
+    Filter BaseAssetManifest objects to only include files matching the given filters.
+    Each filter is an exact relative file path or a directory prefix (ending with '/').
+    Returns a new dict with manifests whose paths have been filtered; empty manifests are removed.
+    """
+    filtered: dict[str, list[BaseAssetManifest]] = {}
+    for root, manifest_list in manifests_by_root.items():
+        filtered_manifests = []
+        for manifest in manifest_list:
+            matching = [p for p in manifest.paths if _matches_any_filter(p.path, path_filters)]
+            if matching:
+                manifest.paths = matching
+                filtered_manifests.append(manifest)
+        if filtered_manifests:
+            filtered[root] = filtered_manifests
+    return filtered
+
+
 def _ensure_paths_within_directory(root_path: str, paths_relative_to_root: list[str]) -> None:
     """
     Validates the given paths to ensure that they are within the given root path.
