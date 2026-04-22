@@ -1,0 +1,83 @@
+name: DCM Integration Test (Windows)
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  test:
+    name: DCM E2E Test (Windows)
+    runs-on: windows-latest
+    environment: integ
+    timeout-minutes: 20
+    env:
+      MONITOR_SUBDOMAIN: ${{ secrets.MONITOR_SUBDOMAIN }}
+      MONITOR_REGION: ${{ secrets.MONITOR_REGION }}
+      MONITOR_USERNAME: ${{ secrets.MONITOR_USERNAME }}
+      MONITOR_PASSWORD: ${{ secrets.MONITOR_PASSWORD }}
+      MONITOR_ID: monitor-00000000000000000000000000000000
+      # Drive Edge (the default browser on the Windows runner). The IdC sign-in
+      # form labels match Firefox's; Edge auto-dispatches deadline-cloud-monitor:// .
+      BROWSER_NAME: Edge
+      OPEN_LINK_LABELS: "Open,Open Link,Open link,Yes"
+      SCREENSHOT_DIR: ${{ github.workspace }}\screenshots
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Disable Edge first-run experience
+        # Without these policies, Edge shows 3+ layered welcome screens on first
+        # launch that cover the IdC sign-in page and have no obvious dismiss.
+        shell: pwsh
+        run: |
+          New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Force | Out-Null
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name 'HideFirstRunExperience' -Value 1 -Type DWord
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name 'BrowserSignin' -Value 0 -Type DWord
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name 'SyncDisabled' -Value 1 -Type DWord
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name 'RestoreOnStartup' -Value 1 -Type DWord
+
+      - name: Install deadline CLI and xa11y
+        run: pip install . 'xa11y>=0.7.1'
+        shell: pwsh
+
+      - name: Install DCM
+        # The NSIS installer (/S = silent) installs DCM and registers the
+        # deadline-cloud-monitor:// URL scheme via the Windows registry. We just
+        # need to put the install dir on PATH so the deadline CLI can find the
+        # binary (DCM's create-profile will write its absolute path to
+        # ~/.deadline/config automatically).
+        shell: pwsh
+        run: |
+          $EXE = (Invoke-RestMethod https://downloads.deadlinecloud.amazonaws.com/manifest.json).latest.windows_x64
+          Invoke-WebRequest $EXE -OutFile dcm-setup.exe
+          Start-Process -Wait -FilePath .\dcm-setup.exe -ArgumentList '/S'
+          Start-Sleep -Seconds 5
+          "$env:LOCALAPPDATA\DeadlineCloudMonitor" | Out-File $env:GITHUB_PATH -Append
+
+      - name: Create DCM profile
+        shell: pwsh
+        run: |
+          & "$env:LOCALAPPDATA\DeadlineCloudMonitor\DeadlineCloudMonitor.exe" `
+            create-profile --profile dcm-test `
+            --monitor-id $env:MONITOR_ID `
+            --monitor-url "https://$env:MONITOR_SUBDOMAIN.$env:MONITOR_REGION.deadlinecloud.amazonaws.com" `
+            --enable-auto-login --set-as-deadline-default
+
+      - name: Prepare screenshot dir
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path $env:SCREENSHOT_DIR
+
+      - name: Run E2E test
+        shell: pwsh
+        run: python .github/scripts/dcm_e2e_test.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-windows
+          path: ${{ env.SCREENSHOT_DIR }}\*.png
+          if-no-files-found: ignore

@@ -1,0 +1,101 @@
+name: DCM Integration Test (Linux)
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  test:
+    name: DCM E2E Test (Linux)
+    # Ubuntu 22.04 is the newest ubuntu runner that still has libwebkit2gtk-4.0-37,
+    # which the DCM .deb depends on (Tauri v1 runtime).
+    runs-on: ubuntu-22.04
+    environment: integ
+    timeout-minutes: 20
+    env:
+      MONITOR_SUBDOMAIN: ${{ secrets.MONITOR_SUBDOMAIN }}
+      MONITOR_REGION: ${{ secrets.MONITOR_REGION }}
+      MONITOR_USERNAME: ${{ secrets.MONITOR_USERNAME }}
+      MONITOR_PASSWORD: ${{ secrets.MONITOR_PASSWORD }}
+      MONITOR_ID: monitor-00000000000000000000000000000000
+      DISPLAY: ':99'
+      # Force GTK/Firefox to use the AT-SPI accessibility backend so xa11y can
+      # read the browser's DOM tree. Without these, Firefox doesn't expose web
+      # content to AT-SPI and xa11y sees only the chrome (tabs, buttons, etc.).
+      GTK_MODULES: gail:atk-bridge
+      GTK_A11Y: atk
+      GNOME_ACCESSIBILITY: '1'
+      ACCESSIBILITY_ENABLED: '1'
+      MOZ_ENABLE_WAYLAND: '0'
+      MOZ_ACCESSIBILITY_ATK2: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 at-spi2-core \
+            libayatana-appindicator3-1 libwebkit2gtk-4.0-37 desktop-file-utils
+
+      - name: Install Firefox
+        # Ubuntu 22.04+ ships Firefox as a snap transitional package which
+        # doesn't work without snapd. Install the Mozilla tarball directly and
+        # register it as the default http/https handler so DCM's xdg-open works.
+        run: |
+          curl -sL 'https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US' -o /tmp/ff.tar.xz
+          sudo tar -xJf /tmp/ff.tar.xz -C /opt
+          sudo ln -sf /opt/firefox/firefox /usr/local/bin/firefox
+          mkdir -p ~/.local/share/applications
+          cat > ~/.local/share/applications/firefox.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Firefox
+          Exec=/opt/firefox/firefox %u
+          MimeType=x-scheme-handler/http;x-scheme-handler/https;
+          Terminal=false
+          EOF
+          update-desktop-database ~/.local/share/applications
+          xdg-mime default firefox.desktop x-scheme-handler/http
+          xdg-mime default firefox.desktop x-scheme-handler/https
+
+      - name: Start Xvfb + session bus + AT-SPI
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 1
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+          /usr/libexec/at-spi-bus-launcher --launch-immediately &
+          sleep 2
+
+      - name: Install deadline CLI and xa11y
+        run: pip install . 'xa11y>=0.7.1'
+
+      - name: Install DCM (.deb)
+        # .deb auto-registers deadline-cloud-monitor:// scheme handler and installs
+        # the binary to /usr/bin, so no symlinks or manual xdg-mime calls are needed.
+        run: |
+          DEB=$(curl -s https://downloads.deadlinecloud.amazonaws.com/manifest.json | python -c "import sys,json; print(json.load(sys.stdin)['latest']['linux_deb'])")
+          curl -sL "$DEB" -o /tmp/dcm.deb
+          sudo apt-get install -y /tmp/dcm.deb
+
+      - name: Create DCM profile
+        run: |
+          deadline-cloud-monitor create-profile --profile dcm-test \
+            --monitor-id "$MONITOR_ID" \
+            --monitor-url "https://${MONITOR_SUBDOMAIN}.${MONITOR_REGION}.deadlinecloud.amazonaws.com" \
+            --enable-auto-login --set-as-deadline-default
+
+      - name: Run E2E test
+        run: python .github/scripts/dcm_e2e_test.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-linux
+          path: /tmp/*.png
+          if-no-files-found: ignore

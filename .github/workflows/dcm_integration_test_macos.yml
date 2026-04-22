@@ -1,0 +1,64 @@
+name: DCM Integration Test (macOS)
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  test:
+    name: DCM E2E Test (macOS)
+    runs-on: macos-latest
+    environment: integ
+    timeout-minutes: 20
+    env:
+      MONITOR_SUBDOMAIN: ${{ secrets.MONITOR_SUBDOMAIN }}
+      MONITOR_REGION: ${{ secrets.MONITOR_REGION }}
+      MONITOR_USERNAME: ${{ secrets.MONITOR_USERNAME }}
+      MONITOR_PASSWORD: ${{ secrets.MONITOR_PASSWORD }}
+      MONITOR_ID: monitor-00000000000000000000000000000000
+      # Drive Safari (the default browser on the macOS runner). The IdC sign-in
+      # form labels match Firefox's, and Safari auto-dispatches the
+      # deadline-cloud-monitor:// URL scheme without an "Open Link" prompt.
+      BROWSER_NAME: Safari
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install deadline CLI and xa11y
+        run: pip install . 'xa11y>=0.7.1'
+
+      - name: Install DCM
+        # The .dmg installer drops Deadline Cloud Monitor.app into /Applications
+        # and registers the deadline-cloud-monitor:// URL scheme via the app's
+        # Info.plist. We add the app bundle's MacOS dir to PATH so the deadline
+        # CLI can find the binary by name.
+        run: |
+          DMG=$(curl -s https://downloads.deadlinecloud.amazonaws.com/manifest.json \
+            | python -c "import sys,json,urllib.parse as u; print(u.quote(json.load(sys.stdin)['latest']['mac_aarch64'], safe=':/'))")
+          curl -sL "$DMG" -o /tmp/dcm.dmg
+          hdiutil attach /tmp/dcm.dmg -nobrowse -quiet
+          cp -R "/Volumes/Deadline Cloud Monitor/Deadline Cloud Monitor.app" /Applications/
+          hdiutil detach "/Volumes/Deadline Cloud Monitor" -quiet
+          echo "/Applications/Deadline Cloud Monitor.app/Contents/MacOS" >> $GITHUB_PATH
+
+      - name: Create DCM profile
+        run: |
+          "/Applications/Deadline Cloud Monitor.app/Contents/MacOS/Deadline Cloud Monitor" \
+            create-profile --profile dcm-test \
+            --monitor-id "$MONITOR_ID" \
+            --monitor-url "https://${MONITOR_SUBDOMAIN}.${MONITOR_REGION}.deadlinecloud.amazonaws.com" \
+            --enable-auto-login --set-as-deadline-default
+
+      - name: Run E2E test
+        run: python .github/scripts/dcm_e2e_test.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-macos
+          path: /tmp/*.png
+          if-no-files-found: ignore
