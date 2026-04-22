@@ -1267,9 +1267,8 @@ class OutputDownloader:
     If no session is provided the default credentials path will be used, see:
     https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials
 
-    TODO: The download location is OS-specific to the *submitting machine* matching
-    the profile of the submitting machine. The OS of the *downloading machine* might be different, so we need to check that
-    and apply path mapping rules in that case.
+    Path mapping for cross-OS downloads is handled at the CLI layer via set_root_path(),
+    consistent with how queue sync-output applies path mapping externally.
     """
 
     def __init__(

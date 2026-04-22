@@ -7,15 +7,41 @@ See docs/design/deadline-tests-mock-backend.md for design details.
 """
 
 from __future__ import annotations
+import json as _json
+import re as _re
+import threading as _threading
+import traceback as _traceback
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler as _BaseHTTPRequestHandler
+from http.server import HTTPServer as _HTTPServer
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs as _parse_qs
+from urllib.parse import urlparse as _urlparse
 
 import botocore.loaders
 import botocore.session
 from botocore.exceptions import ClientError
 from botocore.model import ServiceModel
 from botocore.validate import ParamValidator
+
+
+API_PREFIX = "/2023-10-12"
+
+
+def route(method: str, path: str, operation: str):
+    """Tag a backend method with an HTTP route and botocore operation name.
+
+    The mock HTTP server discovers these annotations to build its routing
+    table. The `operation` name is used for response-shape validation against
+    the botocore Deadline service model.
+    """
+
+    def decorator(fn):
+        fn.__http_route__ = (method, f"{API_PREFIX}{path}", operation)
+        return fn
+
+    return decorator
 
 
 def _resource_not_found(resource_type: str, resource_id: str, operation: str) -> ClientError:
@@ -50,6 +76,8 @@ class MockDeadlineBackend:
     def __init__(self, validate_params: bool = True):
         self.farms: dict[str, dict] = {}
         self.queues: dict[tuple, dict] = {}
+        self.fleets: dict[tuple, dict] = {}  # (farmId, fleetId)
+        self.workers: dict[tuple, dict] = {}  # (farmId, fleetId, workerId)
         self.jobs: dict[tuple, dict] = {}
         self.steps: dict[tuple, dict] = {}
         self.tasks: dict[tuple, dict] = {}
@@ -187,6 +215,7 @@ class MockDeadlineBackend:
 
     # ========== Farm APIs ==========
 
+    @route("POST", "/farms", "CreateFarm")
     def create_farm(self, *, displayName: str, **kwargs) -> dict:
         params = {"displayName": displayName, **kwargs}
         self._validate("CreateFarm", params)
@@ -200,6 +229,7 @@ class MockDeadlineBackend:
         }
         return {"farmId": farm_id}
 
+    @route("GET", "/farms/{farmId}", "GetFarm")
     def get_farm(self, *, farmId: str) -> dict:
         self._validate("GetFarm", {"farmId": farmId})
         if farmId not in self.farms:
@@ -208,6 +238,7 @@ class MockDeadlineBackend:
 
     # ========== Queue APIs ==========
 
+    @route("POST", "/farms/{farmId}/queues", "CreateQueue")
     def create_queue(self, *, farmId: str, displayName: str, **kwargs) -> dict:
         params = {"farmId": farmId, "displayName": displayName, **kwargs}
         self._validate("CreateQueue", params)
@@ -222,6 +253,7 @@ class MockDeadlineBackend:
         }
         return {"queueId": queue_id}
 
+    @route("GET", "/farms/{farmId}/queues/{queueId}", "GetQueue")
     def get_queue(self, *, farmId: str, queueId: str) -> dict:
         self._validate("GetQueue", {"farmId": farmId, "queueId": queueId})
         key = (farmId, queueId)
@@ -229,8 +261,121 @@ class MockDeadlineBackend:
             raise _resource_not_found("queue", queueId, "GetQueue")
         return self.queues[key]
 
+    # ========== Fleet APIs ==========
+
+    _DEFAULT_FLEET_CONFIG = {
+        "customerManaged": {
+            "mode": "NO_SCALING",
+            "workerCapabilities": {
+                "vCpuCount": {"min": 1},
+                "memoryMiB": {"min": 1024},
+                "osFamily": "LINUX",
+                "cpuArchitectureType": "x86_64",
+            },
+        }
+    }
+
+    @route("POST", "/farms/{farmId}/fleets", "CreateFleet")
+    def create_fleet(self, *, farmId: str, displayName: str, **kwargs) -> dict:
+        params = {"farmId": farmId, "displayName": displayName, **kwargs}
+        self._validate("CreateFleet", params)
+        if farmId not in self.farms:
+            raise _resource_not_found("farm", farmId, "CreateFleet")
+        fleet_id = self._gen_id("fleet")
+        now = self._now()
+        self.fleets[(farmId, fleet_id)] = {
+            "fleetId": fleet_id,
+            "farmId": farmId,
+            "displayName": displayName,
+            "description": kwargs.get("description", ""),
+            "status": "ACTIVE",
+            "workerCount": 0,
+            "minWorkerCount": kwargs.get("minWorkerCount", 0),
+            "maxWorkerCount": kwargs.get("maxWorkerCount", 1),
+            "configuration": kwargs.get("configuration", self._DEFAULT_FLEET_CONFIG),
+            "roleArn": kwargs.get("roleArn", "arn:aws:iam::000000000000:role/mock"),
+            "createdAt": now,
+            "createdBy": "mock-user",
+        }
+        return {"fleetId": fleet_id}
+
+    @route("GET", "/farms/{farmId}/fleets/{fleetId}", "GetFleet")
+    def get_fleet(self, *, farmId: str, fleetId: str) -> dict:
+        self._validate("GetFleet", {"farmId": farmId, "fleetId": fleetId})
+        key = (farmId, fleetId)
+        if key not in self.fleets:
+            raise _resource_not_found("fleet", fleetId, "GetFleet")
+        return dict(self.fleets[key])
+
+    @route("GET", "/farms/{farmId}/fleets", "ListFleets")
+    def list_fleets(
+        self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs
+    ) -> dict:
+        params = {"farmId": farmId, "maxResults": maxResults}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListFleets", params)
+        fleets = [dict(f) for k, f in self.fleets.items() if k[0] == farmId]
+        return {"fleets": fleets}
+
+    # ========== Worker APIs ==========
+
+    @route("POST", "/farms/{farmId}/fleets/{fleetId}/workers", "CreateWorker")
+    def create_worker(self, *, farmId: str, fleetId: str, **kwargs) -> dict:
+        params = {"farmId": farmId, "fleetId": fleetId, **kwargs}
+        self._validate("CreateWorker", params)
+        if (farmId, fleetId) not in self.fleets:
+            raise _resource_not_found("fleet", fleetId, "CreateWorker")
+        worker_id = self._gen_id("worker")
+        now = self._now()
+        self.workers[(farmId, fleetId, worker_id)] = {
+            "farmId": farmId,
+            "fleetId": fleetId,
+            "workerId": worker_id,
+            "status": kwargs.get("status", "CREATED"),
+            "createdAt": now,
+            "createdBy": "mock-user",
+        }
+        return {"workerId": worker_id}
+
+    @route("GET", "/farms/{farmId}/fleets/{fleetId}/workers/{workerId}", "GetWorker")
+    def get_worker(self, *, farmId: str, fleetId: str, workerId: str) -> dict:
+        self._validate("GetWorker", {"farmId": farmId, "fleetId": fleetId, "workerId": workerId})
+        key = (farmId, fleetId, workerId)
+        if key not in self.workers:
+            raise _resource_not_found("worker", workerId, "GetWorker")
+        return dict(self.workers[key])
+
+    @route("POST", "/farms/{farmId}/search/workers", "SearchWorkers")
+    def search_workers(
+        self,
+        *,
+        farmId: str,
+        fleetIds: list,
+        itemOffset: int = 0,
+        pageSize: int = 100,
+        **kwargs,
+    ) -> dict:
+        params = {
+            "farmId": farmId,
+            "fleetIds": fleetIds,
+            "itemOffset": itemOffset,
+            "pageSize": pageSize,
+            **kwargs,
+        }
+        self._validate("SearchWorkers", params)
+        workers = [dict(w) for k, w in self.workers.items() if k[0] == farmId and k[1] in fleetIds]
+        total = len(workers)
+        page = workers[itemOffset : itemOffset + pageSize]
+        result: dict = {"workers": page, "totalResults": total}
+        if itemOffset + pageSize < total:
+            result["nextItemOffset"] = itemOffset + pageSize
+        return result
+
     # ========== Job APIs ==========
 
+    @route("POST", "/farms/{farmId}/queues/{queueId}/jobs", "CreateJob")
     def create_job(
         self, *, farmId: str, queueId: str, template: str, priority: int = 50, **kwargs
     ) -> dict:
@@ -268,6 +413,7 @@ class MockDeadlineBackend:
 
         return {"jobId": job_id}
 
+    @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}", "GetJob")
     def get_job(self, *, farmId: str, queueId: str, jobId: str) -> dict:
         self._validate("GetJob", {"farmId": farmId, "queueId": queueId, "jobId": jobId})
         key = (farmId, queueId, jobId)
@@ -275,6 +421,7 @@ class MockDeadlineBackend:
             raise _resource_not_found("job", jobId, "GetJob")
         return self.jobs[key]
 
+    @route("POST", "/farms/{farmId}/search/jobs", "SearchJobs")
     def search_jobs(
         self,
         *,
@@ -312,6 +459,7 @@ class MockDeadlineBackend:
 
     # ========== Step APIs ==========
 
+    @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}", "GetStep")
     def get_step(self, *, farmId: str, queueId: str, jobId: str, stepId: str) -> dict:
         self._validate(
             "GetStep", {"farmId": farmId, "queueId": queueId, "jobId": jobId, "stepId": stepId}
@@ -323,6 +471,11 @@ class MockDeadlineBackend:
 
     # ========== Task APIs ==========
 
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
+        "GetTask",
+    )
     def get_task(self, *, farmId: str, queueId: str, jobId: str, stepId: str, taskId: str) -> dict:
         self._validate(
             "GetTask",
@@ -341,6 +494,7 @@ class MockDeadlineBackend:
 
     # ========== Session APIs ==========
 
+    @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions", "ListSessions")
     def list_sessions(
         self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None
     ) -> dict:
@@ -352,6 +506,11 @@ class MockDeadlineBackend:
         sessions = [s for key, s in self.sessions.items() if key[:3] == prefix]
         return {"sessions": sessions}
 
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}/actions",
+        "ListSessionActions",
+    )
     def list_session_actions(
         self,
         *,
@@ -576,3 +735,150 @@ class MockDeadlineBackend:
         deadline_mock.search_jobs.side_effect = self.search_jobs
         deadline_mock.batch_get_step.side_effect = self.batch_get_step
         deadline_mock.batch_get_task.side_effect = self.batch_get_task
+        deadline_mock.create_fleet.side_effect = self.create_fleet
+        deadline_mock.get_fleet.side_effect = self.get_fleet
+        deadline_mock.list_fleets.side_effect = self.list_fleets
+        deadline_mock.create_worker.side_effect = self.create_worker
+        deadline_mock.get_worker.side_effect = self.get_worker
+        deadline_mock.search_workers.side_effect = self.search_workers
+
+
+# ========== HTTP Server ==========
+#
+# Runs the backend over HTTP, speaking the Deadline Cloud rest-json protocol
+# so the real `deadline` CLI can be pointed at it via AWS_ENDPOINT_URL_DEADLINE.
+# Routes are discovered from `@route`-decorated methods on MockDeadlineBackend.
+# Responses are filtered and validated against the botocore service model.
+
+_INT_QUERY_PARAMS = {"maxResults", "itemOffset", "pageSize"}
+
+
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def _discover_routes(backend):
+    """Find @route-decorated methods on the backend and compile patterns."""
+    routes = []
+    for name in dir(backend):
+        fn = getattr(backend, name)
+        info = getattr(fn, "__http_route__", None)
+        if info is None:
+            continue
+        method, path, operation = info
+        pattern = _re.compile("^" + _re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", path) + "$")
+        routes.append((method, pattern, fn, operation))
+    return routes
+
+
+class _ResponseValidator:
+    def __init__(self):
+        session = botocore.session.get_session()
+        loader = session.get_component("data_loader")
+        self._model = ServiceModel(loader.load_service_model("deadline", "service-2"))
+        self._validator = ParamValidator()
+
+    def _filter(self, shape, value):
+        """Recursively drop keys that aren't part of the shape."""
+        if shape is None or value is None:
+            return value
+        t = shape.type_name
+        if t == "structure":
+            members = shape.members
+            return {k: self._filter(members[k], v) for k, v in value.items() if k in members}
+        if t == "list":
+            return [self._filter(shape.member, v) for v in value]
+        if t == "map":
+            return {k: self._filter(shape.value, v) for k, v in value.items()}
+        return value
+
+    def filter_and_validate(self, operation_name, response):
+        output_shape = self._model.operation_model(operation_name).output_shape
+        if output_shape is None:
+            return response
+        filtered = self._filter(output_shape, response)
+        report = self._validator.validate(filtered, output_shape)
+        if report.has_errors():
+            raise ValueError(
+                f"Mock response for {operation_name} failed validation: {report.generate_report()}"
+            )
+        return filtered
+
+
+def _make_handler(routes, validator):
+    class _Handler(_BaseHTTPRequestHandler):
+        def log_message(self, format, *args):  # silence stderr access logs
+            return
+
+        def _send_json(self, status, body, error_code=None):
+            data = _json.dumps(body, default=_json_default).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            if error_code:
+                self.send_header("x-amzn-errortype", error_code)
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _dispatch(self, method):
+            parsed = _urlparse(self.path)
+            for route_method, pattern, handler_fn, op_name in routes:
+                if route_method != method:
+                    continue
+                m = pattern.match(parsed.path)
+                if not m:
+                    continue
+                kwargs = dict(m.groupdict())
+                for k, v in _parse_qs(parsed.query).items():
+                    kwargs[k] = int(v[0]) if k in _INT_QUERY_PARAMS else v[0]
+                length = int(self.headers.get("Content-Length", 0))
+                if length:
+                    kwargs.update(_json.loads(self.rfile.read(length)))
+                try:
+                    result = handler_fn(**kwargs)
+                    result = validator.filter_and_validate(op_name, result)
+                    self._send_json(200, result)
+                except ClientError as exc:
+                    err = exc.response["Error"]
+                    code = err.get("Code", "InternalServerException")
+                    status = 404 if code == "ResourceNotFoundException" else 400
+                    self._send_json(status, {"message": err.get("Message", "")}, error_code=code)
+                except Exception as exc:  # noqa: BLE001
+                    _traceback.print_exc()
+                    self._send_json(
+                        500, {"message": str(exc)}, error_code="InternalServerException"
+                    )
+                return
+            self._send_json(
+                404,
+                {"message": f"No route for {method} {parsed.path}"},
+                error_code="NotFoundException",
+            )
+
+        def do_GET(self):  # noqa: N802
+            self._dispatch("GET")
+
+        def do_POST(self):  # noqa: N802
+            self._dispatch("POST")
+
+    return _Handler
+
+
+def start_server(backend: "MockDeadlineBackend", port: int = 0):
+    """Start the HTTP server in a daemon thread. Returns (server, base_url, thread).
+
+    Binds to 127.0.0.1. Callers pointing the ``deadline`` CLI at this server via
+    ``AWS_ENDPOINT_URL_DEADLINE`` must also disable botocore's ``management.``
+    host-prefix injection for Deadline API calls (e.g. via the sitecustomize
+    shim in ``test_cli_fleet_worker_subprocess.py``).
+    """
+    routes = _discover_routes(backend)
+    validator = _ResponseValidator()
+    handler_cls = _make_handler(routes, validator)
+    server = _HTTPServer(("127.0.0.1", port), handler_cls)
+    actual_port = server.server_address[1]
+    thread = _threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, f"http://127.0.0.1:{actual_port}", thread
