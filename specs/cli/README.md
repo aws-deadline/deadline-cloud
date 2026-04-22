@@ -32,14 +32,12 @@ Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
 ## Status
 
 Implemented: config, auth (login/logout/status), farm list/get, queue
-list/get/export-credentials, fleet list/get, worker list/get, job
+list/get/export-credentials/get-storage-profile/paramdefs/sync-output,
+fleet list/get, worker list/get, job
 list/get/search/wait/logs/cancel/requeue-tasks/download-output, attachment
 download/upload, manifest snapshot/diff/download/upload, bundle
 submit/gui-submit, handle-web-url.
 
 Gaps:
-- `bundle submit --json` output format
-- `bundle submit --save-debug-snapshot` mode
-- `job download-output` interactive prompts (root-editing, conflict resolution)
-- `queue sync-output`
+- `bundle submit --output json` output format
 - `job trace-schedule` — experimental, deferred

@@ -351,13 +351,6 @@ Uses `get_queue_scoped_config` for the S3 client. DCM users get queue
 role credentials via `AssumeQueueRoleForUser`. Non-DCM users use their
 base AWS credentials. Same pattern as `attachment download`.
 
-### Not Yet Implemented
-
-- Interactive root-editing loop (users can only use `--yes` path for now)
-- Cross-OS root path mismatch interactive prompt
-- Conflict resolution interactive prompt (when neither `--conflict-resolution`
-  nor `--yes` is provided)
-
 ## Differences from Python CLI
 
 | Aspect | Python | Rust |
@@ -367,4 +360,4 @@ base AWS credentials. Same pattern as `attachment download`.
 | Estimated time | Separate helper function | Inline in `print_job_details` |
 | `job wait` progress | Callback-based | Closure passed to `wait_for_job_completion` |
 | `job requeue-tasks` | `--step-id`, `--task-ids` filters | `--run-status` filter only |
-| `job download-output` | Interactive root-editing loop, conflict prompt | `--yes` path only (interactive prompts deferred) |
+| `job download-output` conflict | Interactive Skip/Overwrite/CreateCopy menu | Defaults to CreateCopy with file detection warning |

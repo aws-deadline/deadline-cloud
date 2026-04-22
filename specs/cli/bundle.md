@@ -128,5 +128,4 @@ This matches Python's behavior where `auto_accept=True` + unknown paths raises
 | Parameter format | `-p Name=Value` only | `-p Name=Value` only |
 | GUI submit | `bundle gui-submit` command | Not yet implemented |
 | `--json` output | Supported | Not yet implemented |
-| `--save-debug-snapshot` | Supported | Not yet implemented |
 | Submitter name default | "deadline-cloud-cli" | "CLI" |

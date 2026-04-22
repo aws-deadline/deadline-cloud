@@ -23,11 +23,11 @@ Dependencies: `deadline-config`.
 Implemented: session management, auth, login/logout, all list/get/search
 operations for farms/queues/fleets/jobs/workers/sessions/steps/tasks,
 queue credentials, queue parameters, job monitoring, log retrieval,
-telemetry integration, CreateJob API call and creation polling.
+telemetry integration, CreateJob API call and creation polling,
+queue/fleet credential scoping for CloudWatch and S3.
 
 Gaps:
 - `job trace-schedule` support APIs — experimental, deferred
-- Smithy model response filtering — low priority
 
 ## Gotchas & Constraints
 

@@ -29,18 +29,19 @@ Implemented: hashing, manifest encode/decode, hash cache, S3 check cache,
 progress tracking, path grouping, manifest creation, S3 upload/download,
 manifest merging, output manifest retrieval, attachment download/upload API,
 manifest snapshot/diff/merge/upload/download, OutputDownloader (job output
-download orchestration), path mapping from storage profiles.
+download orchestration), path mapping from storage profiles, incremental
+download state and checkpoint persistence.
 
 Gaps:
-- Job attachments orchestration (`submit_job_attachments` full flow)
-- VFS (virtual filesystem) — deferred
 - Parallel S3 transfer — proven in spike, not yet in production paths
-- File permission management on download
+  (AUDIT-011, AUDIT-012, AUDIT-014, AUDIT-049)
+- VFS (virtual filesystem) — deferred (worker-agent scope)
+- File permission management on download — deferred (worker-agent scope)
 
 ## Gotchas & Constraints
 
-- The hash cache table is `hashesV5` — it will NOT read entries from the
-  legacy `hashesV4` table. First run after migration starts with a cold cache.
+- The hash cache table is `hashesV4` — compatible with Python's hash cache.
+  Both CLIs share one cache with zero re-hashing when switching between tools.
 
 - Manifest path entries use POSIX-style relative paths regardless of the
   host OS. Windows paths are converted to POSIX at manifest creation time.
@@ -68,7 +69,5 @@ Mirrors the Python `deadline.job_attachments` package. Key differences:
 - Python uses `boto3.s3.transfer.TransferManager` for parallel uploads;
   Rust is currently sequential (parallel proven in spike, not yet wired)
 - Python uses `hashlib` for xxh128; Rust uses the `xxhash-rust` crate
-- Python's `HashCache` uses `hashesV4` table with formatted datetime
-  strings; Rust uses `hashesV5` with integer nanosecond mtime (not compatible)
 - Python uses `concurrent.futures.ThreadPoolExecutor` for parallel hashing;
   Rust hashes sequentially (fast enough due to xxh128 speed)

@@ -36,24 +36,24 @@ pick and execute work items.
 | 0c | TelemetryClient (common) | ✅ Done | `api_job_lifecycle.md` | — |
 | 0d | Config read/write | ✅ Done | `config.md`, `cli.md` | — |
 | 0e | Test server infrastructure | ✅ Done | — | — |
-| 0f | CLI root & common utilities | ⚠️ Gaps | `cli.md` | 0d |
+| 0f | CLI root & common utilities | ✅ Done | `cli.md` | 0d |
 | 0g | Session creation & auth status | ✅ Done | `session.md`, `api_resource_management.md`, `cli.md` | 0d |
 | 0h | Queue/job credentials & diagnostics | ✅ Done | `api_resource_management.md`, `api_job_lifecycle.md`, `cli.md` | 0g |
 | 0i | GUI FFI spike | ✅ Done | — | 0g |
-| 1 | Session caching & user-agent | ⚠️ Gaps | `session.md` | 0g |
-| 2 | Login/logout | ⚠️ Gaps | `api_resource_management.md`, `cli.md` | 1 |
+| 1 | Session caching & user-agent | ✅ Done | `session.md` | 0g |
+| 2 | Login/logout | ✅ Done | `api_resource_management.md`, `cli.md` | 1 |
 | 3 | Queue user credentials | ✅ Done | `session.md` | 1 |
 | 4 | Queue parameters | ✅ Done | `api_resource_management.md`, `cli.md` | 1 |
-| 5 | Telemetry API integration | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
-| 6 | Job monitoring & logs | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 5 | Telemetry API integration | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 1 |
+| 6 | Job monitoring & logs | ✅ Done | `api_job_lifecycle.md`, `cli.md` | 1 |
 | 7 | Job bundle | ✅ Done | `job_bundle.md`, `cli.md` | 1, 4 |
-| 8 | Job attachments: core | ⚠️ Gaps | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
+| 8 | Job attachments: core | ✅ Done | `job_attachments_data_transfer.md`, `job_attachments_orchestration.md` | 1 |
 | 9 | Job attachments: transfer | ⚠️ Gaps | `job_attachments_data_transfer.md`, `cli.md` | 3, 8 |
 | 10 | Job attachments: orchestration | ✅ Done | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 11 | Submit job bundle | ⚠️ Gaps | `api_job_lifecycle.md`, `cli.md` | 7, 9 |
 | 12 | Job cancel | ✅ Done | `cli.md` | 6 |
 | 12b | Job search command | ✅ Done | `cli.md` | 6 |
-| 13 | Job download & sync-output | ⚠️ Gaps | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
+| 13 | Job download & sync-output | ✅ Done | `job_attachments_orchestration.md`, `job_attachments_data_transfer.md`, `cli.md` | 9 |
 | 14 | Handle web URL | ✅ Done | `cli.md` | 13 |
 | 15 | Job requeue-tasks | ✅ Done | `cli.md` | 6 |
 | 15b | Job get search & estimated time | ✅ Done | `cli.md` | 6 |
@@ -70,12 +70,10 @@ pick and execute work items.
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
-**Dependency status:** All core feature dependencies are resolved. Every
-remaining ⚠️ Gaps item is leaf-level — none block other work items.
-#16 (GUI FFI) is deferred; #17 (MCP) is a placeholder — crate exists
-but has no implementation. Remaining gaps are performance (#9), UX
-polish (#11, #13), platform support (#0f, #2, #8), telemetry (#5),
-and new Python features (#18-21).
+**Dependency status:** All core feature dependencies are resolved. Only
+3 items remain as ⚠️ Gaps: #9 (parallel/multipart S3 transfer), #11
+(`bundle submit --output json`), and #17 (MCP server — empty crate).
+#16 (GUI FFI) is deferred. New features #18-21 are not started.
 
 **Next action item:** Pick next work item from the table.
 
@@ -96,9 +94,9 @@ after the core CLI commands are complete.
 - **#13**: Expanded to include download-side orchestration from old #10:
   path mapping from storage profiles, incremental downloads, manifest
   download CLI, plus the original `job download-output` and
-  `queue sync-output` CLI commands. Split into three batches:
-  Batch A (`job download-output` ✅), Batch B (path mapping),
-  Batch C (`queue sync-output` + incremental downloads).
+  `queue sync-output` CLI commands. All three batches complete:
+  Batch A (`job download-output` ✅), Batch B (path mapping ✅),
+  Batch C (`queue sync-output` + incremental downloads ✅).
 - **#17**: Corrected from ✅ Done to ⚠️ Gaps. The `deadline-mcp` crate
   exists but contains only a doc comment — no tool definitions, no
   `mcp-server` CLI subcommand. The spec says "Placeholder —
