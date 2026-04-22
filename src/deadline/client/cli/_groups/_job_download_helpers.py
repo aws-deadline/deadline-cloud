@@ -179,12 +179,55 @@ def _transform_manifests_to_absolute_paths(
     return result
 
 
+def _resolve_conflict_resolution(
+    conflict_resolution_setting: str,
+    auto_accept: bool,
+    conflicting_filenames: list[str],
+) -> Optional[FileConflictResolution]:
+    """Determine file conflict resolution, prompting the user if needed.
+
+    Shared logic for both the mapped-manifest and OutputDownloader download paths.
+
+    Args:
+        conflict_resolution_setting: raw config setting string (e.g. "CREATE_COPY", "NOT_SELECTED").
+        auto_accept: whether to skip interactive prompts (--yes flag).
+        conflicting_filenames: list of absolute paths that already exist locally.
+
+    Returns:
+        FileConflictResolution to use, or None if the user canceled.
+    """
+    if conflict_resolution_setting != FileConflictResolution.NOT_SELECTED.name:
+        return FileConflictResolution[conflict_resolution_setting]
+
+    if auto_accept:
+        return FileConflictResolution.CREATE_COPY
+
+    if not conflicting_filenames:
+        return FileConflictResolution.CREATE_COPY
+
+    # Lazy import to avoid circular dependency
+    from .job_group import _get_conflict_resolution_selection_message
+
+    click.echo(_get_conflict_resolution_selection_message(conflicting_filenames))
+    user_choice = click.prompt(
+        "> Please enter your choice (1, 2, 3, or n to cancel the download)",
+        type=click.Choice(["1", "2", "3", "n"]),
+        default="3",
+    )
+    if user_choice == "n":
+        click.echo("Output download canceled.")
+        return None
+
+    return FileConflictResolution(int(user_choice))
+
+
 def _download_mapped_manifests(
     mapped_manifests: dict[str, Any],
     queue: dict[str, Any],
     queue_role_session: Any,
     conflict_resolution_setting: str,
     is_json_format: bool,
+    auto_accept: bool = False,
 ) -> Any:
     """Download output files using path-mapped manifests with progress reporting.
 
@@ -199,16 +242,25 @@ def _download_mapped_manifests(
         queue_role_session: boto3 session with queue role credentials for S3 access.
         conflict_resolution_setting: the raw config setting string for conflict resolution.
         is_json_format: whether to emit JSON progress lines instead of a click progressbar.
+        auto_accept: whether to skip interactive prompts (--yes flag).
 
     Returns:
-        DownloadSummaryStatistics from the download.
+        DownloadSummaryStatistics from the download, or None if canceled.
     """
-    # Determine conflict resolution: use config setting if specified, otherwise CREATE_COPY.
-    # No interactive prompt on the mapped path — the user opted into automatic mapping.
-    if conflict_resolution_setting != FileConflictResolution.NOT_SELECTED.name:
-        file_conflict_resolution = FileConflictResolution[conflict_resolution_setting]
-    else:
-        file_conflict_resolution = FileConflictResolution.CREATE_COPY
+    from pathlib import Path as _Path
+
+    # Check for conflicting files at the mapped destinations
+    conflicting_filenames: list[str] = []
+    for manifest in mapped_manifests.values():
+        for manifest_path in manifest.paths:
+            if _Path(manifest_path.path).is_file():
+                conflicting_filenames.append(manifest_path.path)
+
+    file_conflict_resolution = _resolve_conflict_resolution(
+        conflict_resolution_setting, auto_accept, conflicting_filenames
+    )
+    if file_conflict_resolution is None:
+        return None
 
     s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
     sigint_handler = SigIntHandler()

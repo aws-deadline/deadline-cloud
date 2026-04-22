@@ -19,7 +19,7 @@ pyinstrument == 5.*
 # MCP (Model Context Protocol) library for MCP unit tests
 mcp >= 1.13.0; python_version >= '3.10'
 # OpenJD model library for job template parsing in mock backend
-openjd-model >= 0.8.0; python_version >= '3.9'
+openjd-model >= 0.9.0; python_version >= '3.9'
 
 # GUI testing dependencies
 pytest-qt == 4.*; platform_system in "Windows Darwin" and python_version >= "3.9"

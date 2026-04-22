@@ -20,6 +20,7 @@ from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
 from deadline.client.cli._groups._job_download_helpers import (
     ResolvedStorageProfiles,
+    _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
 )
@@ -366,6 +367,60 @@ MOCK_GET_QUEUE_RESPONSE = {
         "rootPrefix": "AWS Deadline Cloud",
     },
 }
+
+
+# ─── _resolve_conflict_resolution ────────────────────────────────────────────
+
+
+class TestResolveConflictResolution:
+    def test_config_setting_takes_priority(self) -> None:
+        """When conflict_resolution is set in config, use it directly without prompting."""
+        result = _resolve_conflict_resolution("SKIP", auto_accept=False, conflicting_filenames=[])
+        from deadline.job_attachments.models import FileConflictResolution
+
+        assert result == FileConflictResolution.SKIP
+
+    def test_auto_accept_defaults_to_create_copy(self) -> None:
+        """When auto_accept is True, default to CREATE_COPY without prompting."""
+        result = _resolve_conflict_resolution(
+            "NOT_SELECTED", auto_accept=True, conflicting_filenames=["/some/file.txt"]
+        )
+        from deadline.job_attachments.models import FileConflictResolution
+
+        assert result == FileConflictResolution.CREATE_COPY
+
+    def test_no_conflicts_defaults_to_create_copy(self) -> None:
+        """When there are no conflicting files, default to CREATE_COPY."""
+        result = _resolve_conflict_resolution(
+            "NOT_SELECTED", auto_accept=False, conflicting_filenames=[]
+        )
+        from deadline.job_attachments.models import FileConflictResolution
+
+        assert result == FileConflictResolution.CREATE_COPY
+
+    @patch("deadline.client.cli._groups._job_download_helpers.click")
+    def test_user_cancels_returns_none(self, mock_click: MagicMock) -> None:
+        """When user enters 'n', return None to signal cancellation."""
+        mock_click.prompt.return_value = "n"
+        mock_click.echo = MagicMock()
+        mock_click.Choice = MagicMock()
+        result = _resolve_conflict_resolution(
+            "NOT_SELECTED", auto_accept=False, conflicting_filenames=["/existing/file.txt"]
+        )
+        assert result is None
+
+    @patch("deadline.client.cli._groups._job_download_helpers.click")
+    def test_user_selects_overwrite(self, mock_click: MagicMock) -> None:
+        """When user enters '2' (overwrite), return OVERWRITE."""
+        mock_click.prompt.return_value = "2"
+        mock_click.echo = MagicMock()
+        mock_click.Choice = MagicMock()
+        result = _resolve_conflict_resolution(
+            "NOT_SELECTED", auto_accept=False, conflicting_filenames=["/existing/file.txt"]
+        )
+        from deadline.job_attachments.models import FileConflictResolution
+
+        assert result == FileConflictResolution.OVERWRITE
 
 
 class TestCliDownloadOutputStorageProfileOptions:

@@ -60,6 +60,7 @@ from ._job_helpers import (
 from ._job_download_helpers import (
     JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
+    _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
 )
@@ -612,7 +613,10 @@ def _download_job_output(
                     queue_role_session=queue_role_session,
                     conflict_resolution_setting=conflict_resolution,
                     is_json_format=is_json_format,
+                    auto_accept=auto_accept,
                 )
+                if download_summary is None:
+                    return
                 click.echo(_get_download_summary_message(download_summary, is_json_format))
                 click.echo()
                 return
@@ -719,29 +723,12 @@ def _download_job_output(
         click.echo("\nSummary of file paths to download:")
         click.echo(textwrap.indent(summarize_path_list(all_output_paths), "  "))
 
-    # If the conflict resolution option was not specified, auto-accept is false, and
-    # if there are any conflicting files in local, prompt users to select a resolution method.
-    # (skip, overwrite, or make a copy.)
-    if conflict_resolution != FileConflictResolution.NOT_SELECTED.name:
-        file_conflict_resolution = FileConflictResolution[conflict_resolution]
-    elif auto_accept:
-        file_conflict_resolution = FileConflictResolution.CREATE_COPY
-    else:
-        file_conflict_resolution = FileConflictResolution.CREATE_COPY
-        conflicting_filenames = _get_conflicting_filenames(output_paths_by_root)
-        if conflicting_filenames:
-            click.echo(_get_conflict_resolution_selection_message(conflicting_filenames))
-            user_choice = click.prompt(
-                "> Please enter your choice (1, 2, 3, or n to cancel the download)",
-                type=click.Choice(["1", "2", "3", "n"]),
-                default="3",
-            )
-            if user_choice == "n":
-                click.echo("Output download canceled.")
-                return
-            else:
-                resolution_choice_int = int(user_choice)
-                file_conflict_resolution = FileConflictResolution(resolution_choice_int)
+    # Resolve conflict resolution — shared logic for both mapped and unmapped paths
+    file_conflict_resolution = _resolve_conflict_resolution(
+        conflict_resolution, auto_accept, _get_conflicting_filenames(output_paths_by_root)
+    )
+    if file_conflict_resolution is None:
+        return
 
     # TODO: remove logging level setting when the max number connections for boto3 client
     # in Job Attachments library can be increased (currently using default number, 10, which
