@@ -7,6 +7,8 @@
 
 ## Summary
 
+**Legend:** ✅ = Resolved (fixed / no issue / accepted) · 🔴 = Open · ⊘ = Dropped (not a bug / out of scope)
+
 | Priority | Count | Fixed | No Issue / Accepted | Remaining |
 |----------|-------|-------|---------------------|-----------|
 | Critical | 4     | 4     | 0                   | 0         |
@@ -39,7 +41,7 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ## Critical Findings
 
-### AUDIT-001: `queue sync-output` does not download files
+### ✅ AUDIT-001: `queue sync-output` does not download files
 
 - **Category:** ~~Bug~~ Fixed
 - **Priority:** ~~Critical~~ N/A
@@ -49,7 +51,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-002: `known_asset_paths` config separator uses wrong character
+### ✅ AUDIT-002: `known_asset_paths` config separator uses wrong character
 
 - **Category:** Bug
 - **Priority:** Critical
@@ -59,7 +61,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** On Unix, splits on `/`, destroying every absolute path. The known-asset-paths feature is completely broken in Rust.
 - **Resolution:** Fixed — changed to path-list separator (`:` / `;`)
 
-### AUDIT-003: `auto_accept` + unknown paths proceeds instead of canceling
+### ✅ AUDIT-003: `auto_accept` + unknown paths proceeds instead of canceling
 
 - **Category:** Bug
 - **Priority:** Critical
@@ -69,7 +71,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Rust silently uploads files from unexpected locations when `--yes` is used — opposite of Python's safety behavior.
 - **Resolution:** Fixed
 
-### AUDIT-004: INI key case sensitivity mismatch
+### ✅ AUDIT-004: INI key case sensitivity mismatch
 
 - **Category:** Bug
 - **Priority:** Critical
@@ -83,7 +85,7 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ## High Findings
 
-### AUDIT-005: Default profile DCM detection skipped
+### ✅ AUDIT-005: Default profile DCM detection skipped
 
 - **Category:** Behavioral gap
 - **Priority:** High
@@ -93,7 +95,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** DCM credentials in `[default]` AWS profile are not detected. Queue role assumption, auth status source, and login/logout all break for default-profile DCM users.
 - **Resolution:** Fixed
 
-### AUDIT-006: `fleet get --queue-id` mode missing
+### ✅ AUDIT-006: `fleet get --queue-id` mode missing
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -103,7 +105,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-007: `queue sync-output` job discovery limited to 100 results
+### ✅ AUDIT-007: `queue sync-output` job discovery limited to 100 results
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -113,7 +115,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-008: `job download-output` no interactive root path editing
+### ✅ AUDIT-008: `job download-output` no interactive root path editing
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -123,7 +125,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed (2026-04-21, gap sweep F7)
 
-### AUDIT-009: Upload confirmation prompt only for unknown paths
+### ✅ AUDIT-009: Upload confirmation prompt only for unknown paths
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -133,7 +135,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-010: No telemetry events during submission
+### ✅ AUDIT-010: No telemetry events during submission
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -143,7 +145,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — core telemetry achieved.
 - **Resolution:** Fixed
 
-### AUDIT-011: Upload is sequential (no parallelism)
+### 🔴 AUDIT-011: Upload is sequential (no parallelism)
 
 - **Category:** Behavioral gap
 - **Priority:** High
@@ -153,7 +155,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Significantly slower uploads for jobs with many small files.
 - **Resolution:** Pending
 
-### AUDIT-012: Download is sequential (no parallelism)
+### 🔴 AUDIT-012: Download is sequential (no parallelism)
 
 - **Category:** Behavioral gap
 - **Priority:** High
@@ -163,7 +165,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Significantly slower downloads for jobs with many files.
 - **Resolution:** Pending
 
-### AUDIT-013: Hash cache schema incompatible between Python and Rust
+### ✅ AUDIT-013: Hash cache schema incompatible between Python and Rust
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~High~~ N/A
@@ -173,7 +175,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — full interop achieved. Both CLIs share one cache.
 - **Resolution:** Fixed
 
-### AUDIT-014: No multipart upload (5GB PutObject limit)
+### 🔴 AUDIT-014: No multipart upload (5GB PutObject limit)
 
 - **Category:** Behavioral gap
 - **Priority:** High
@@ -187,7 +189,7 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ## Medium Findings
 
-### AUDIT-015: `auth status --output` is case-sensitive
+### ✅ AUDIT-015: `auth status --output` is case-sensitive
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -197,7 +199,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Scripts using uppercase `JSON` get wrong output format.
 - **Resolution:** Fixed
 
-### AUDIT-016: `auth status` JSON key order differs
+### ✅ AUDIT-016: `auth status` JSON key order differs
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -207,7 +209,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Scripts depending on key order break.
 - **Resolution:** Fixed — use json_with_spaces() for spaced JSON output
 
-### AUDIT-017: Login polling DCM exit code 0 handling differs
+### ✅ AUDIT-017: Login polling DCM exit code 0 handling differs
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -217,7 +219,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Edge case where DCM exits cleanly before credentials propagate. Rust errors; Python eventually succeeds.
 - **Resolution:** No Issue — Rust is more correct. Python's `p.poll()` returns `0` for exit code 0, which is falsy in Python, causing the loop to silently ignore process exit. Rust correctly detects any process exit (including code 0) and reports it as an error when authentication hasn't been confirmed. The Python behavior is a latent bug.
 
-### AUDIT-018: INI colon delimiter not supported
+### ✅ AUDIT-018: INI colon delimiter not supported
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -227,7 +229,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** ~~Config files using `:` delimiter lose settings in Rust.~~ None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-019: INI section/key ordering changes on write
+### ✅ AUDIT-019: INI section/key ordering changes on write
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -237,7 +239,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** ~~Round-tripping config through Rust reorders sections/keys, creating noisy diffs.~~ None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-020: `suggest_resources` dispatch strategy differs
+### ✅ AUDIT-020: `suggest_resources` dispatch strategy differs
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -247,7 +249,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** ~~May show irrelevant suggestions (e.g., listing queues for a fleet error).~~ None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-021: Unexpected error messages lack context
+### ✅ AUDIT-021: Unexpected error messages lack context
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -257,7 +259,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Users debugging unexpected errors get significantly less information.
 - **Resolution:** No Issue — Rust's error model is fundamentally different. All errors are typed `CliError` variants with descriptive messages. Python's prefix only applies to unhandled `Exception` (truly unexpected errors), which in Rust would be panics, not `Result::Err`. There are no "unexpected exceptions" in the Rust CLI.
 
-### AUDIT-022: `apply_cli_options_to_config` missing `conflict_resolution` and `storage_profile_id`
+### ✅ AUDIT-022: `apply_cli_options_to_config` missing `conflict_resolution` and `storage_profile_id`
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -267,7 +269,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Commands accepting these flags can't override via common options path.
 - **Resolution:** Fixed — added storage_profile_id and conflict_resolution to CliOptions
 
-### AUDIT-023: Negative timedelta formatting differs
+### ✅ AUDIT-023: Negative timedelta formatting differs
 
 - **Category:** Bug
 - **Priority:** Medium
@@ -277,7 +279,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Confusing output when log timestamps precede reference start time.
 - **Resolution:** Fixed — format_timedelta uses unsigned_abs for negative values
 
-### AUDIT-024: YAML output key ordering differs
+### ✅ AUDIT-024: YAML output key ordering differs
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -287,7 +289,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** YAML output has different key order between CLIs.
 - **Resolution:** Pending — accepted difference per `specs/patterns.md`
 
-### AUDIT-025: `worker list/get` missing resource suggestion on error
+### ✅ AUDIT-025: `worker list/get` missing resource suggestion on error
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -297,7 +299,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** No helpful suggestions for mistyped fleet/worker IDs.
 - **Resolution:** Fixed — worker list/get now call suggest_resources_on_client_error
 
-### AUDIT-026: `job logs --session-action-id` option missing
+### ✅ AUDIT-026: `job logs --session-action-id` option missing
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Medium~~ N/A
@@ -307,7 +309,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-027: `job cancel --mark-as` has no value validation
+### ✅ AUDIT-027: `job cancel --mark-as` has no value validation
 
 - **Category:** Bug
 - **Priority:** Medium
@@ -317,7 +319,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Confusing API errors instead of clean CLI usage errors.
 - **Resolution:** Fixed
 
-### AUDIT-028: `job requeue-tasks --run-status` has no value validation
+### ✅ AUDIT-028: `job requeue-tasks --run-status` has no value validation
 
 - **Category:** Bug
 - **Priority:** Medium
@@ -327,7 +329,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Typos silently requeue zero tasks with no warning.
 - **Resolution:** Fixed
 
-### AUDIT-029: `job logs` relative timestamp bug for auto-selected sessions
+### ✅ AUDIT-029: `job logs` relative timestamp bug for auto-selected sessions
 
 - **Category:** Bug
 - **Priority:** Medium
@@ -337,7 +339,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Relative timestamps are wrong (relative to "now" instead of session start) in the common auto-select case.
 - **Resolution:** Fixed
 
-### AUDIT-030: `handle-web-url` macOS support missing
+### ⊘ AUDIT-030: `handle-web-url` macOS support missing
 
 - **Category:** ~~Behavioral gap~~ False finding
 - **Priority:** ~~Medium~~ N/A
@@ -352,7 +354,7 @@ Findings already documented in `specs/python-observations.md` (observations
   stated Python supports macOS via `lsregister`/plist; verified this is
   not the case in the Python source.
 
-### AUDIT-031: `--save-debug-snapshot` not implemented
+### ✅ AUDIT-031: `--save-debug-snapshot` not implemented
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Medium~~ N/A
@@ -362,7 +364,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed (2026-04-21, gap sweep F8)
 
-### AUDIT-032: `suggest_resources_on_client_error` not used in bundle submit
+### ✅ AUDIT-032: `suggest_resources_on_client_error` not used in bundle submit
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -372,7 +374,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Raw API errors without helpful suggestions on submission failure.
 - **Resolution:** Fixed — bundle submit now calls suggest_resources_on_client_error
 
-### AUDIT-033: `defaults.job_id` not set by library function
+### ✅ AUDIT-033: `defaults.job_id` not set by library function
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -382,7 +384,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Non-CLI callers (GUI FFI, MCP) won't have `defaults.job_id` auto-updated.
 - **Resolution:** No Issue — The Rust CLI sets `defaults.job_id` in `bundle.rs:207-213` with an equivalent condition: `profile.is_none() && farm_id.is_none() && queue_id.is_none() && storage_profile_id.is_none()`. This matches Python's `config is None` semantics (no CLI overrides applied). Placing this in the CLI layer rather than the library is an intentional architectural choice.
 
-### AUDIT-034: `--submitter-info` not implemented
+### ⊘ AUDIT-034: `--submitter-info` not implemented
 
 - **Category:** Behavioral gap
 - **Priority:** Medium
@@ -392,7 +394,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Cannot pass structured submitter metadata.
 - **Resolution:** Pending
 
-### AUDIT-035: Download path traversal not validated
+### ✅ AUDIT-035: Download path traversal not validated
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Medium~~ N/A
@@ -402,7 +404,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-036: Download output manifest merge order differs
+### ✅ AUDIT-036: Download output manifest merge order differs
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Medium~~ N/A
@@ -416,7 +418,7 @@ Findings already documented in `specs/python-observations.md` (observations
 
 ## Low Findings
 
-### AUDIT-037: `job cancel`/`requeue-tasks` confirmation prompt behavior differs
+### ✅ AUDIT-037: `job cancel`/`requeue-tasks` confirmation prompt behavior differs
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -426,7 +428,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Minor UX difference.
 - **Resolution:** Fixed — re-prompt loop with EOF handling
 
-### AUDIT-038: `job get --search-term` task summary missing statuses
+### ✅ AUDIT-038: `job get --search-term` task summary missing statuses
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -436,7 +438,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Incomplete task summaries for jobs with these statuses.
 - **Resolution:** Fixed — added INTERRUPTING and NOT_COMPATIBLE to format_task_summary
 
-### AUDIT-039: `job wait` verbose output goes to stderr in Rust
+### ✅ AUDIT-039: `job wait` verbose output goes to stderr in Rust
 
 - **Category:** Extra Rust behavior
 - **Priority:** Low
@@ -446,7 +448,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Different stream separation. Rust's approach is arguably better.
 - **Resolution:** Pending — accepted difference
 
-### AUDIT-040: `job requeue-tasks` no adaptive retry strategy
+### ✅ AUDIT-040: `job requeue-tasks` no adaptive retry strategy
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -456,7 +458,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-041: `job trace-schedule` command missing
+### 🔴 AUDIT-041: `job trace-schedule` command missing
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -466,7 +468,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Cannot generate performance trace data. Marked EXPERIMENTAL in Python.
 - **Resolution:** Pending — noted as deferred in progress.md
 
-### AUDIT-042: Windows stdin handling for login subprocess
+### ✅ AUDIT-042: Windows stdin handling for login subprocess
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -476,7 +478,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed (2026-04-21, gap sweep F1)
 
-### AUDIT-043: User-agent string mechanism differs
+### ✅ AUDIT-043: User-agent string mechanism differs
 
 - **Category:** Accepted difference
 - **Priority:** Low
@@ -486,7 +488,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Content identical, header position differs. Rust SDK limitation.
 - **Resolution:** Accepted difference
 
-### AUDIT-044: INI multiline values not supported
+### ✅ AUDIT-044: INI multiline values not supported
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -496,7 +498,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-045: `--version` output format differs
+### ✅ AUDIT-045: `--version` output format differs
 
 - **Category:** Nice-to-have
 - **Priority:** Low
@@ -506,7 +508,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Scripts parsing version output may break.
 - **Resolution:** Fixed — version format matches Python click output
 
-### AUDIT-046: `require_setting` uses exit code 1 instead of 2
+### ✅ AUDIT-046: `require_setting` uses exit code 1 instead of 2
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -516,7 +518,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — dead code removed.
 - **Resolution:** Fixed — deleted unused function
 
-### AUDIT-047: `manifest download` CLI is a stub
+### ✅ AUDIT-047: `manifest download` CLI is a stub
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -526,7 +528,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-048: `manifest upload` missing farm/queue credential derivation
+### ✅ AUDIT-048: `manifest upload` missing farm/queue credential derivation
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -536,7 +538,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### AUDIT-049: No multipart download for large files
+### 🔴 AUDIT-049: No multipart download for large files
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -546,7 +548,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Slower for large files; potential OOM for very large files.
 - **Resolution:** Pending
 
-### AUDIT-050: `force_s3_check` skips cache update
+### ✅ AUDIT-050: `force_s3_check` skips cache update
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -556,7 +558,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Subsequent uploads won't benefit from cache.
 - **Resolution:** No Issue — Both Python and Rust skip the cache *read* when `force_s3_check=true` and perform the S3 HeadObject check. The Rust code at `upload.rs:931` uses `force_s3_check != Some(true)` which exactly matches Python's `force_s3_check is not True` semantics. Behavior is equivalent.
 
-### AUDIT-051: Download duplicate path collision not handled
+### ⊘ AUDIT-051: Download duplicate path collision not handled
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -566,7 +568,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Cross-OS downloads with same relative paths silently overwrite.
 - **Resolution:** Pending
 
-### AUDIT-052: `decode_manifest` rejects empty paths array
+### ✅ AUDIT-052: `decode_manifest` rejects empty paths array
 
 - **Category:** Behavioral gap
 - **Priority:** Low
@@ -576,7 +578,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Edge case — empty manifests rejected in Rust.
 - **Resolution:** No Issue — Python also rejects empty paths arrays. Python's `validate.py:78-79` returns `(False, "paths must have a least one item")` for `len(paths) < 1`. Both implementations reject empty paths with the same error message. Behavior matches exactly.
 
-### AUDIT-053: Windows long path (UNC) handling missing
+### ✅ AUDIT-053: Windows long path (UNC) handling missing
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -586,7 +588,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed (2026-04-21, gap sweep F3)
 
-### AUDIT-054: `--redirect-output` is Unix-only in Rust
+### ✅ AUDIT-054: `--redirect-output` is Unix-only in Rust
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -596,7 +598,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed (2026-04-21, gap sweep F2)
 
-### AUDIT-055: `job download-output` conflict resolution prompt missing
+### ✅ AUDIT-055: `job download-output` conflict resolution prompt missing
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -606,7 +608,7 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — conflict detection achieved (test coverage partial due to S3 mock gap).
 - **Resolution:** Fixed
 
-### AUDIT-056: `suggest_resources` missing storage profile chain
+### ✅ AUDIT-056: `suggest_resources` missing storage profile chain
 
 - **Category:** ~~Behavioral gap~~ Fixed
 - **Priority:** ~~Low~~ N/A
@@ -625,21 +627,21 @@ findings above.
 
 ### Remaining Open (5)
 
-| ID | Title | Priority | Category |
-|----|-------|----------|----------|
-| AUDIT-011 | Upload sequential (no parallelism) | High | Performance |
-| AUDIT-012 | Download sequential (no parallelism) | High | Performance |
-| AUDIT-014 | No multipart upload (5GB limit) | High | Performance |
-| AUDIT-041 | `job trace-schedule` missing | Low | Deferred (EXPERIMENTAL in Python) |
-| AUDIT-049 | No multipart download | Low | Performance |
+| | ID | Title | Priority | Category |
+|---|---|-------|----------|----------|
+| 🔴 | AUDIT-011 | Upload sequential (no parallelism) | High | Performance |
+| 🔴 | AUDIT-012 | Download sequential (no parallelism) | High | Performance |
+| 🔴 | AUDIT-014 | No multipart upload (5GB limit) | High | Performance |
+| 🔴 | AUDIT-041 | `job trace-schedule` missing | Low | Deferred (EXPERIMENTAL in Python) |
+| 🔴 | AUDIT-049 | No multipart download | Low | Performance |
 
 ### Investigated and Dropped (2)
 
-| ID | Title | Reason |
-|----|-------|--------|
-| AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
-| AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
+| | ID | Title | Reason |
+|---|---|-------|--------|
+| ⊘ | AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
+| ⊘ | AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
 
 ### Resolved (49)
 
-Fixed: 42 · No Issue: 5 · Accepted difference: 3 · False finding: 1
+✅ Fixed: 42 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2
