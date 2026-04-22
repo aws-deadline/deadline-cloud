@@ -55,14 +55,28 @@ src/
 - **`deadline_login(config_path)`** → `{"success": "..."}` or `{"error": "..."}`
 - **`deadline_logout(config_path)`** → `{"success": "..."}` or `{"error": "..."}`
 
-### Batch D: Submission (not yet implemented)
+### Batch D: Submission (implemented)
 
-- **`deadline_create_job_from_job_bundle(...)`** — Complex: 5 callback types for progress, confirmation, cancellation.
+- **`deadline_create_job_from_job_bundle(params_json, print_cb, hashing_cb, upload_cb, confirm_cb, continue_cb, user_data)`**
+  → `{"job_id": "..."}` or `{"error": "..."}`
 
-### Batch E: Telemetry (not yet implemented)
+  `params_json` is a JSON object with fields: `job_bundle_dir` (required),
+  `name`, `priority`, `max_failed_tasks_count`, `max_retries_per_task`,
+  `max_worker_count`, `target_task_run_status`, `job_attachments_file_system`,
+  `require_paths_exist`, `submitter_name`, `known_asset_paths`, `auto_accept`,
+  `force_s3_check`, `debug_snapshot_dir`, `config_path`, `job_parameters`.
 
-- **`deadline_init_telemetry(...)`**
-- **`deadline_record_telemetry_event(...)`**
+  Five C callback types (all optional, null-safe):
+  - `PrintCallback(message, user_data)` — status messages
+  - `ProgressCallback(metadata_json, user_data) -> bool` — hashing/upload progress, return false to cancel
+  - `ConfirmationCallback(message, default_response, user_data) -> bool` — interactive confirmation
+  - `ContinueCallback(user_data) -> bool` — create_job polling
+
+### Batch E: Telemetry (implemented)
+
+- **`deadline_init_telemetry(config_path)`** → opaque `*mut c_void` handle
+- **`deadline_record_telemetry_event(handle, event_type, event_details_json)`** → `{"success": true}` or `{"error": "..."}`
+- **`deadline_free_telemetry(handle)`** — null-safe deallocation
 
 ### Error convention
 

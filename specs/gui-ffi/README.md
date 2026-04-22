@@ -11,6 +11,7 @@ Consumers: `gui/` Python widgets (via `_ffi.py`), DCC submitter plugins
 | Document | Description |
 |----------|-------------|
 | [architecture.md](architecture.md) | Module layout, FFI boundary design, memory ownership, threading, callbacks |
+| [dcc-profiles.md](dcc-profiles.md) | Per-DCC integration profiles: what each submitter imports, how it shows GUI, what it needs from the Rust migration |
 
 ## Status
 
@@ -32,14 +33,16 @@ Consumers: `gui/` Python widgets (via `_ffi.py`), DCC submitter plugins
 | `deadline_check_api_available` | C | `auth::check_deadline_api_available` |
 | `deadline_login` | C | `auth::login` |
 | `deadline_logout` | C | `auth::logout` |
+| `deadline_create_job_from_job_bundle` | D | `submission::create_job_from_job_bundle` |
+| `deadline_init_telemetry` | E | `telemetry::create_telemetry` |
+| `deadline_record_telemetry_event` | E | `TelemetryClient::record_event` |
+| `deadline_free_telemetry` | E | `drop(Box<TelemetryClient>)` |
 
 ### Not yet implemented
 
 | Function | Batch | Wraps | Complexity |
 |----------|-------|-------|------------|
-| `deadline_create_job_from_job_bundle` | D | Full submission flow | High — 5 callback types |
-| `deadline_init_telemetry` | E | Telemetry client creation | Low |
-| `deadline_record_telemetry_event` | E | Event recording | Low |
+| — | — | — | All batches implemented |
 
 ## Migration Phases
 

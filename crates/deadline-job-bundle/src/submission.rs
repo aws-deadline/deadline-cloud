@@ -222,6 +222,7 @@ pub struct SubmitJobParams<'a> {
     pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub upload_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub continue_callback: Option<Box<dyn Fn() -> bool + Send>>,
+    pub interactive_confirmation_callback: Option<Box<dyn Fn(&str, bool) -> bool + Send>>,
     pub telemetry: Option<&'a deadline_api::telemetry::TelemetryClient>,
 }
 
@@ -396,7 +397,13 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                     print("Job submission canceled (settings.auto_accept enabled and there were unknown paths).");
                     return Err(op_err("Job submission canceled (settings.auto_accept enabled and there were unknown paths).".into()));
                 } else {
-                    let should_continue = params.continue_callback.as_ref().map_or(true, |cb| cb());
+                    let msg = format!(
+                        "WARNING: {} file(s) found outside of known asset paths.\nDo you wish to proceed?",
+                        outside.len()
+                    );
+                    let should_continue = params.interactive_confirmation_callback
+                        .as_ref()
+                        .map_or(true, |cb| cb(&msg, false));
                     if !should_continue {
                         return Err(op_err("Submission canceled by user.".into()));
                     }

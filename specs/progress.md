@@ -63,7 +63,7 @@ pick and execute work items.
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
 | 16 | GUI FFI remaining | In progress | — | 1-14 |
 | 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
-| 16b | FFI: submission with callbacks, telemetry | Not started | — | 16a, 11 |
+| 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
 | 16c | Python FFI wrapper (`gui/_ffi.py`) | Not started | — | 16b |
 | 16d | Port Python Qt code into `gui/` package | Not started | — | 16c |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |

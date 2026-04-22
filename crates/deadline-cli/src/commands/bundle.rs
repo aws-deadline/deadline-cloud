@@ -221,6 +221,10 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     upload_progress.lock().unwrap().callback(meta.progress as u64)
                 })),
                 continue_callback: Some(Box::new(|| crate::common::should_continue())),
+                interactive_confirmation_callback: Some(Box::new(|msg, _default| {
+                    println!("{msg}");
+                    crate::common::should_continue()
+                })),
                 telemetry: Some(&telemetry),
             };
 

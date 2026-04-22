@@ -5,12 +5,284 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active Work Item
 
-**#16 — GUI FFI remaining** (was Deferred, now In Progress)
+None. Pick next from `specs/progress.md`.
 
-Expand the `deadline-gui-ffi` crate from 4 spike functions to the full
-API surface needed by Python Qt widgets and DCC submitter plugins.
+Add `deadline_create_job_from_job_bundle` (Batch D) and telemetry FFI
+functions (Batch E) to `deadline-gui-ffi`. This is the most complex FFI
+function — 5 C callback types bridging Python Qt signals to Rust closures.
 
-## Step Status
+### Sub-item context
+
+Parent: #16 — GUI FFI remaining. Previous sub-item #16a (config, resource
+listing, auth — 10 functions, 25 tests) is ✅ Done.
+
+## Step Status — #16b
+
+**Step 1 (Study Python): ✅ Complete (gate passed)**
+
+Studied:
+- Python `_submit_job_bundle.py`: `create_job_from_job_bundle` signature
+  (20+ parameters, 5 callback types, hooks integration, telemetry events)
+- Python `_telemetry.py`: `TelemetryClient`, `record_event`,
+  `get_deadline_cloud_library_telemetry_client`, `record_hashing_summary`,
+  `record_upload_summary`
+- Python `_job_submission_worker.py`: QThread pattern — 5 callbacks wired
+  to Qt signals, `_confirmation_event` threading.Event for blocking
+  confirmation, cancellation flag
+- Rust `submission.rs`: `SubmitJobParams` struct, `create_job_from_job_bundle`
+  — already has `print_callback`, `hashing_progress_callback`,
+  `upload_progress_callback`, `continue_callback`. Missing:
+  `interactive_confirmation_callback(message, default) -> bool`
+- Rust `telemetry.rs`: `TelemetryClient` with `record_event`,
+  `create_telemetry`, `create_telemetry_with_metadata`. Background
+  thread + mpsc. Already fully functional.
+- Rust `gui-ffi/lib.rs`: 14 existing `extern "C"` functions, established
+  patterns (JSON strings, `read_c_str`, `make_runtime`, `json_to_ptr`,
+  `error_to_ptr`, `StatusCallback` type)
+- `specs/gui-ffi/architecture.md`: callback flow, threading model,
+  memory ownership
+- `specs/gui-ffi/dcc-profiles.md`: all 9 DCCs, Unreal needs
+  `create_job_from_job_bundle` + telemetry without Qt
+
+### Key findings
+
+1. **Rust submission is missing `interactive_confirmation_callback`.**
+   Python has `interactive_confirmation_callback(message: str, default: bool) -> bool`
+   used for: (a) unknown asset path warnings, (b) hooks confirmation,
+   (c) GUI auto_accept override. Rust's `continue_callback: Fn() -> bool`
+   is used for both unknown-path confirmation AND create_job polling —
+   it can't pass a message or default. Need to either:
+   - (a) Add `interactive_confirmation_callback` to `SubmitJobParams` in
+     `deadline-job-bundle`, or
+   - (b) Handle it entirely in the FFI layer by wrapping the Rust
+     `continue_callback` with the C callback.
+
+   **Decision: Option (a)** — add to `SubmitJobParams`. The Rust library
+   should support the same callback contract as Python for non-FFI callers
+   too (MCP server, future Rust GUI).
+
+2. **Telemetry FFI is straightforward.** Rust `TelemetryClient` already
+   exists with `create_telemetry()` and `record_event()`. The FFI just
+   needs to:
+   - `deadline_init_telemetry(config_path)` → create + store a handle
+   - `deadline_record_telemetry_event(handle, event_type, event_details_json)`
+   - Handle: opaque pointer to a `Box<TelemetryClient>`
+
+3. **5 C callback types needed for submission FFI:**
+   - `PrintCallback: fn(message: *const c_char, user_data: *mut c_void)`
+   - `ProgressCallback: fn(metadata_json: *const c_char, user_data: *mut c_void) -> bool`
+     (shared by hashing + upload — same signature, return false to cancel)
+   - `ConfirmationCallback: fn(message: *const c_char, default_response: bool, user_data: *mut c_void) -> bool`
+   - `ContinueCallback: fn(user_data: *mut c_void) -> bool`
+     (for create_job polling — no arguments, just "should I keep waiting?")
+
+4. **`from_gui` flag.** Python's `create_job_from_job_bundle` has
+   `from_gui: bool = False` which affects telemetry `usage_mode` and
+   auto_accept behavior. Rust's `SubmitJobParams` doesn't have this.
+   The FFI should pass `from_gui=true` since it's always called from GUI.
+
+5. **Hooks integration.** Python's submission loads hooks from
+   `DEADLINE_HOOKS_DIR` and bundle `hooks.yaml`. Rust's
+   `create_job_from_job_bundle` doesn't implement hooks yet (#18 is
+   Not started). The FFI can defer hooks — DCC submitters don't use
+   hooks today. The `interactive_confirmation_callback` is still needed
+   for the asset path warning flow.
+
+6. **Progress metadata serialization.** The `ProgressReportMetadata`
+   struct needs to cross the FFI as JSON. Fields: `status`, `progress`,
+   `transfer_rate`, `progress_message`, `processed_files`.
+
+**Step 2 (Write Tests): ✅ Complete**
+
+Wrote 16 new tests (8 submission, 8 telemetry). Audited for redundancy
+(removed 1 duplicate) and missing coverage (added 2 edge cases).
+All fail to compile before implementation — confirmed Red phase.
+
+**Step 3 (Implement): ✅ Complete**
+
+Implemented 4 new `extern "C"` FFI functions + 1 library change:
+- `deadline_create_job_from_job_bundle` (Batch D) — 5 C callback types
+- `deadline_init_telemetry`, `deadline_record_telemetry_event`,
+  `deadline_free_telemetry` (Batch E) — opaque handle pattern
+- Added `interactive_confirmation_callback` to `SubmitJobParams`
+
+Results: 1165 tests pass, 0 failures. 43 gui-ffi tests (16 new).
+
+**Step 4 (Compare CLIs): ✅ Complete**
+
+CLI-vs-CLI diffs (3/3 MATCH): `auth status`, `auth status --output json`,
+`config get defaults.farm_id`. All identical output.
+
+`bundle submit` comparison: both CLIs fail identically (no auth). The
+`interactive_confirmation_callback` change only affects the unknown-path
+warning flow during active submission — not reachable without auth.
+
+FFI functions (Batch D + E) have no CLI equivalent — they're called via
+ctypes from Python, not through the CLI binary. CLI comparison is N/A
+for these.
+
+**Step 5 (Audit & Fix): ✅ Complete**
+
+Findings:
+1. (Improvement, deferred) No `catch_unwind` on FFI functions — pre-existing
+   pattern across all FFI functions, not introduced by #16b.
+2. (Improvement, deferred) Rust submission confirmation flow is simpler than
+   Python's (missing `from_gui` nuance, `_generate_message_for_asset_paths`
+   detailed message) — pre-existing library difference, not introduced by #16b.
+No bugs found. No code changes needed.
+
+**Step 6 (Write spec): ✅ Complete**
+
+Updated specs:
+- `specs/gui-ffi/architecture.md` — Batch D/E function signatures, callback
+  types, params_json fields
+- `specs/gui-ffi/README.md` — status table updated, Batch D/E implemented
+
+**Step 7 (Commit): ✅ Ready**
+
+### Implementation Plan
+
+#### Phase 1: Add `interactive_confirmation_callback` to Rust library
+
+**Crate:** `deadline-job-bundle/src/submission.rs`
+
+Add to `SubmitJobParams`:
+```rust
+pub interactive_confirmation_callback: Option<Box<dyn Fn(&str, bool) -> bool + Send>>,
+```
+
+Wire it into the unknown-path warning flow (replacing the current
+`continue_callback` usage at line 399) and keep `continue_callback`
+for the `wait_for_create_job_to_complete` polling only.
+
+Update the CLI caller in `deadline-cli` to pass a confirmation callback
+that uses the existing interactive prompt.
+
+#### Phase 2: Batch D — `deadline_create_job_from_job_bundle` FFI
+
+**Crate:** `deadline-gui-ffi/src/lib.rs`
+
+New FFI function with C callback types:
+
+```c
+// C signature (what Python ctypes sees):
+char* deadline_create_job_from_job_bundle(
+    const char* params_json,        // JSON with all scalar params
+    PrintCallback print_cb,
+    ProgressCallback hashing_cb,
+    ProgressCallback upload_cb,
+    ConfirmationCallback confirm_cb,
+    ContinueCallback continue_cb,
+    void* user_data                 // opaque, passed to all callbacks
+);
+```
+
+The `params_json` contains: `job_bundle_dir`, `job_parameters`,
+`name`, `priority`, `max_failed_tasks_count`, `max_retries_per_task`,
+`max_worker_count`, `target_task_run_status`, `job_attachments_file_system`,
+`require_paths_exist`, `submitter_name`, `known_asset_paths`,
+`debug_snapshot_dir`, `config_path`, `force_s3_check`.
+
+Implementation:
+1. Parse `params_json` into fields
+2. Read config from `config_path` (or default)
+3. Create tokio runtime
+4. Wrap C callbacks into Rust closures
+5. Build `SubmitJobParams` with the closures
+6. Call `create_job_from_job_bundle(params).await`
+7. Return `{"job_id": "..."}` or `{"error": "..."}`
+
+#### Phase 3: Batch E — Telemetry FFI
+
+**Crate:** `deadline-gui-ffi/src/lib.rs`
+
+Two new FFI functions:
+
+```c
+// Returns opaque handle (pointer to TelemetryClient)
+void* deadline_init_telemetry(const char* config_path);
+
+// Record an event. handle is from deadline_init_telemetry.
+char* deadline_record_telemetry_event(
+    void* handle,
+    const char* event_type,
+    const char* event_details_json
+);
+
+// Free the telemetry handle
+void deadline_free_telemetry(void* handle);
+```
+
+Implementation:
+1. `deadline_init_telemetry`: call `create_telemetry(config)`, box it,
+   return as `*mut c_void`
+2. `deadline_record_telemetry_event`: cast handle back to
+   `&TelemetryClient`, parse JSON details, call `record_event`
+3. `deadline_free_telemetry`: drop the `Box<TelemetryClient>`
+
+### Crates/Modules Changed
+
+| Crate | File | Changes |
+|-------|------|---------|
+| `deadline-job-bundle` | `submission.rs` | Add `interactive_confirmation_callback` to `SubmitJobParams`, wire into unknown-path flow |
+| `deadline-cli` | `commands/bundle.rs` | Pass confirmation callback to `SubmitJobParams` |
+| `deadline-gui-ffi` | `lib.rs` | Add `deadline_create_job_from_job_bundle`, `deadline_init_telemetry`, `deadline_record_telemetry_event`, `deadline_free_telemetry`, 4 callback type aliases |
+| `specs/gui-ffi` | `architecture.md` | Update with Batch D/E function signatures, callback types |
+| `specs/gui-ffi` | `README.md` | Update status section |
+
+### Cross-Reference: Test Spec Cases → Planned Rust Tests
+
+| Batch | Test Case | Planned Rust Test Name |
+|-------|-----------|----------------------|
+| D | Submission with all callbacks | `create_job_calls_print_callback` |
+| D | Null callbacks safe | `create_job_null_callbacks_returns_json` |
+| D | Null params_json returns error | `create_job_null_params_returns_error` |
+| D | Invalid JSON returns error | `create_job_invalid_json_returns_error` |
+| D | Missing required fields returns error | `create_job_missing_bundle_dir_returns_error` |
+| D | Confirmation callback receives message | `create_job_confirmation_callback_receives_message` |
+| D | Progress callback receives metadata JSON | `create_job_progress_callback_receives_json` |
+| D | Cancellation via progress callback | `create_job_cancel_via_progress_callback` |
+| E | Init telemetry returns handle | `init_telemetry_returns_non_null_handle` |
+| E | Init telemetry null config uses default | `init_telemetry_null_config_returns_handle` |
+| E | Record event with valid handle | `record_event_valid_handle_returns_success` |
+| E | Record event null handle returns error | `record_event_null_handle_returns_error` |
+| E | Free telemetry null safe | `free_telemetry_null_does_not_crash` |
+| E | Free telemetry valid handle | `free_telemetry_valid_handle_does_not_crash` |
+
+### Batching Strategy
+
+Two batches, ordered by dependency:
+
+1. **Batch D (Submission)** — 1 FFI function + library change.
+   Highest complexity: 5 callback types, JSON params, async runtime.
+   Sub-steps:
+   a. Add `interactive_confirmation_callback` to `SubmitJobParams`
+   b. Update CLI caller
+   c. Implement FFI function
+   d. Write tests
+
+2. **Batch E (Telemetry)** — 3 FFI functions. Low complexity: thin
+   wrappers around existing `TelemetryClient`. Opaque handle pattern.
+
+### Design Decisions
+
+- **Phase 1 bundled with FFI.** The `interactive_confirmation_callback`
+  addition to `SubmitJobParams` ships in the same commit as the FFI
+  implementation. It's a GUI-essential callback (unknown-path warning
+  dialog) and doesn't make sense as a standalone change.
+
+### Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Confirmation callback blocks worker thread waiting for main thread response | This is by design — Python's `_confirmation_event.wait()` does the same. The FFI callback is synchronous. |
+| `SubmitJobParams` change breaks CLI caller | Small change — add one optional field, update one call site |
+| Telemetry handle lifetime across FFI | Use `Box::into_raw` / `Box::from_raw` pattern. Python wrapper must call `deadline_free_telemetry`. |
+| Panic in callback crosses FFI boundary | Wrap all FFI functions in `std::panic::catch_unwind` |
+
+---
+
+## Previous Work Item: #16a (Batches A-C) — ✅ Done
 
 **Step 1 (Study Python): ✅ Complete**
 
