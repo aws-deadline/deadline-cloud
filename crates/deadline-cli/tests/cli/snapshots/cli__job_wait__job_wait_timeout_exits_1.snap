@@ -29,7 +29,7 @@ exit_code: 1
 ----- stdout -----
 Job ID: job-aaa
 Job Name: Render Job
-Error waiting for job completion: Timeout waiting for job job-aaa to complete after 1.5 seconds
+Error waiting for job completion: Timeout waiting for job job-aaa to complete after [TIME] seconds
 
 ----- stderr -----
 Waiting for job job-aaa to complete...

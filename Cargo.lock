@@ -989,6 +989,7 @@ dependencies = [
  "deadline-job-attachments",
  "deadline-job-bundle",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

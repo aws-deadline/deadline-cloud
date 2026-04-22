@@ -61,7 +61,13 @@ pick and execute work items.
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
 | 15e | Behavioral parity audit | ✅ Done | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
-| 16 | GUI FFI remaining | Deferred | — | 1-14 |
+| 16 | GUI FFI remaining | In progress | — | 1-14 |
+| 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
+| 16b | FFI: submission with callbacks, telemetry | Not started | — | 16a, 11 |
+| 16c | Python FFI wrapper (`gui/_ffi.py`) | Not started | — | 16b |
+| 16d | Port Python Qt code into `gui/` package | Not started | — | 16c |
+| 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
+| 16f | DCC submitter dependency switchover | Not started | — | 16e |
 | 17 | MCP server | ⚠️ Gaps | `mcp.md` | 1-14 |
 | 18 | Submission hooks | Not started | `submission_hooks.md` | 11 |
 | 19 | Update checker | Not started | `new_features.md` | 0g |
@@ -73,14 +79,14 @@ pick and execute work items.
 **Dependency status:** All core feature dependencies are resolved. Only
 3 items remain as ⚠️ Gaps: #9 (parallel/multipart S3 transfer), #11
 (`bundle submit --output json`), and #17 (MCP server — empty crate).
-#16 (GUI FFI) is deferred. New features #18-21 are not started.
+#16 (GUI FFI) is in progress. New features #18-21 are not started.
 
 **Next action item:** Pick next work item from the table.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
 
-**Deferred items:** #16-17 (GUI FFI, MCP) ship as part of the CLI deliverable
+**Deferred items:** #17 (MCP) ships as part of the CLI deliverable
 after the core CLI commands are complete.
 
 **Scope changes:**
@@ -137,6 +143,51 @@ after the core CLI commands are complete.
 **Audit gaps:** See `audit_reports/2026-04-17-behavioral-parity.md` for
 the full audit report with all findings, resolutions, and remaining open
 items. 5 findings remain open (4 performance, 1 deferred experimental).
+
+**GUI FFI migration plan (#16a-16f):**
+
+`deadline-cloud-rs` is a complete replacement for `deadline-cloud-python`.
+The Python Qt GUI code must ship from this repo, backed by the Rust shared
+library. The migration has 6 sub-items:
+
+- **#16a — FFI: config, resource listing, auth** (✅ Done): 10 `extern "C"`
+  functions in `deadline-gui-ffi`: config read/get/set, list farms/queues/
+  storage profiles/queue parameters, check API available, login, logout.
+  25 tests passing.
+- **#16b — FFI: submission + telemetry** (Not started): The complex
+  `deadline_create_job_from_job_bundle` function with 5 callback types
+  (print, hashing progress, upload progress, confirmation, cancellation).
+  Plus `deadline_init_telemetry` and `deadline_record_telemetry_event`.
+- **#16c — Python FFI wrapper** (Not started): Create `gui/_ffi.py` — a
+  thin ctypes wrapper (~200 lines) that loads the `.dylib`/`.so`/`.dll`,
+  declares function signatures, handles JSON serialization/deserialization,
+  and exposes Pythonic methods. All ctypes boilerplate lives here.
+- **#16d — Port Python Qt code** (Not started): Copy the `deadline.client.ui`
+  module from `deadline-cloud-python` into `gui/deadline/client/ui/`. Pure
+  presentation files (~15) copy unchanged. Business logic callers (~6 files)
+  get rewired to use `_ffi.py` instead of `import deadline.client.api`.
+  Also port pure Python data classes and utilities (~10 files) that DCC
+  submitters import: `AssetReferences`, `JobParameter`, `SubmitterInfo`,
+  `deadline_yaml_dump`, `DeadlineOperationError`, `path_utils`, etc.
+- **#16e — Python packaging** (Not started): Create `gui/pyproject.toml`
+  so the Python Qt code is installable as a package. The package must
+  bundle or locate the Rust shared library. Installer/conda recipe
+  includes both the Rust CLI binary and the Python+Rust GUI package.
+- **#16f — DCC submitter switchover** (Not started): Update each DCC
+  submitter repo (Blender, Maya, Nuke, Houdini, Cinema 4D, VRED, 3ds Max,
+  Unreal Engine) to depend on the new Python package from `deadline-cloud-rs`
+  instead of `deadline-cloud-python`. DCC submitter code itself barely
+  changes — same import paths, same `SubmitJobToDeadlineDialog` API.
+
+Python files by category (from `deadline-cloud-python/src/deadline/client/ui/`):
+
+| Category | Files | Changes needed |
+|----------|-------|----------------|
+| Pure presentation (widgets) | ~15 | None — copy as-is |
+| Qt threading infrastructure | 3 (`_async_runner.py`, `_async_task.py`, `_thread_pool.py`) | None |
+| Business logic callers | 6 (`_deadline_controller.py`, `deadline_authentication_status.py`, `_job_submission_worker.py`, `deadline_config_dialog.py`, `cli_job_submitter.py`, `job_bundle_submitter.py`) | Rewire to FFI |
+| Data classes / utilities | ~10 (`AssetReferences`, `JobParameter`, `SubmitterInfo`, `_yaml.py`, `exceptions.py`, `path_utils.py`, etc.) | None — copy as-is |
+| New | 1 (`_ffi.py`) | Write from scratch |
 
 **Missing config settings (discovered 2026-04-20):**
 - `settings.allow_bundle_hooks` (default `false`) — needed for #18

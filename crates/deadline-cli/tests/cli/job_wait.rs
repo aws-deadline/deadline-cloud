@@ -13,6 +13,7 @@ fn insta_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"Elapsed time: .* seconds", "Elapsed time: [TIME] seconds");
     settings.add_filter(r"\[[\d.]+s elapsed.*\]", "[ELAPSED]");
+    settings.add_filter(r"after [\d.]+ seconds", "after [TIME] seconds");
     settings.add_filter(r"\r.*\n", "");  // strip \r status line overwrites
     settings
 }
