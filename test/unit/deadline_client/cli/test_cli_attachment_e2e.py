@@ -195,6 +195,67 @@ def _s3_client(endpoint_url: str):
     )
 
 
+# ---- helpers -----------------------------------------------------------------
+
+
+def _seed_output_job(
+    backend: MockDeadlineBackend,
+    s3_endpoint: str,
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    asset_root: str,
+    files: dict[str, bytes],
+    step_id: str = "step-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0",
+    task_id: str = "task-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0-0",
+) -> None:
+    """Seed S3 with CAS objects + output manifest and register the job in the mock backend."""
+    s3 = _s3_client(s3_endpoint)
+    manifest_paths = []
+    for rel_path, content in files.items():
+        file_hash = hash_data(content, HashAlgorithm.XXH128)
+        s3.put_object(Bucket=BUCKET, Key=f"{ROOT_PREFIX}/Data/{file_hash}.xxh128", Body=content)
+        manifest_paths.append(
+            {"hash": file_hash, "mtime": 1234000000, "path": rel_path, "size": len(content)}
+        )
+
+    manifest_body = json.dumps(
+        {
+            "hashAlg": "xxh128",
+            "manifestVersion": "2023-03-03",
+            "paths": manifest_paths,
+            "totalSize": sum(len(c) for c in files.values()),
+        }
+    ).encode()
+    manifest_key = (
+        f"{ROOT_PREFIX}/Manifests/{farm_id}/{queue_id}/{job_id}/{step_id}/{task_id}/"
+        f"sessionaction-0/outputmanifestv2023-03-03_output"
+    )
+    s3.put_object(
+        Bucket=BUCKET, Key=manifest_key, Body=manifest_body, Metadata={"asset-root": asset_root}
+    )
+
+    backend.jobs[(farm_id, queue_id, job_id)] = {
+        "jobId": job_id,
+        "name": f"test-job-{job_id[-4:]}",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "",
+        "priority": 50,
+        "createdAt": backend._now(),
+        "createdBy": "tester",
+        "taskRunStatus": "READY",
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": asset_root,
+                    "rootPathFormat": "windows" if os.name == "nt" else "posix",
+                }
+            ],
+            "fileSystem": "COPIED",
+        },
+    }
+
+
 # ---- tests ------------------------------------------------------------------
 
 
@@ -595,6 +656,255 @@ def test_cli_job_download_output(deadline_setup, tmp_path):
     )
     assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
     assert (Path(asset_root) / "result.txt").read_text() == "rendered-output"
+
+
+def test_cli_job_download_output_include_path(deadline_setup, tmp_path):
+    """
+    `deadline job download-output --include-path` with a directory prefix
+    downloads only files under that directory.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"
+    asset_root = str(tmp_path / "filtered_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.exr": b"frame-two",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-path",
+        "renders/",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert (Path(asset_root) / "renders" / "frame_002.exr").read_bytes() == b"frame-two"
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+
+def test_cli_job_download_output_include_path_exact_file(deadline_setup, tmp_path):
+    """
+    `deadline job download-output --include-path` with an exact file path
+    downloads only that single file.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2"
+    asset_root = str(tmp_path / "exact_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.exr": b"frame-two",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-path",
+        "renders/frame_001.exr",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert not (Path(asset_root) / "renders" / "frame_002.exr").exists()
+
+
+def test_cli_job_download_output_include_path_multiple(deadline_setup, tmp_path):
+    """
+    Multiple --include-path values are OR'd: files matching any filter are downloaded.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3"
+    asset_root = str(tmp_path / "multi_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "logs/render.log": b"log-data",
+        "scripts/setup.mel": b"mel-script",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-path",
+        "renders/frame_001.exr",
+        "--include-path",
+        "scripts/",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert (Path(asset_root) / "scripts" / "setup.mel").read_bytes() == b"mel-script"
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+
+def test_cli_job_download_output_include_path_no_match(deadline_setup, tmp_path):
+    """
+    --include-path with a filter that matches nothing reports no output files.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4"
+    asset_root = str(tmp_path / "nomatch_outputs")
+    Path(asset_root).mkdir()
+
+    files = {"renders/frame_001.exr": b"frame-one"}
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-path",
+        "nonexistent.txt",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+    assert "no output files available" in r.stdout.lower()
+
+    assert not (Path(asset_root) / "renders" / "frame_001.exr").exists()
+
+
+def test_cli_job_download_output_include_path_stdin(deadline_setup, tmp_path):
+    """
+    --include-path-stdin reads paths from stdin (one per line, empty line terminates).
+    This mirrors DCM's usage pattern where the desktop app pipes paths to the CLI.
+    Interactive prompts are skipped when stdin is consumed.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5"
+    asset_root = str(tmp_path / "stdin_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.exr": b"frame-two",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    # Pipe paths via stdin with empty-line sentinel, like DCM does
+    stdin_data = "renders/frame_001.exr\nrenders/frame_002.exr\n\n"
+    r = subprocess.run(
+        [
+            "deadline",
+            "job",
+            "download-output",
+            "--job-id",
+            job_id,
+            "--include-path-stdin",
+            "--conflict-resolution",
+            "OVERWRITE",
+        ],
+        env=env,
+        input=stdin_data,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert (Path(asset_root) / "renders" / "frame_002.exr").read_bytes() == b"frame-two"
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+
+def test_cli_job_download_output_include_path_stdin_json(deadline_setup, tmp_path):
+    """
+    --include-path-stdin with --output json mirrors DCM's exact invocation pattern.
+    Verifies JSON progress output and no interactive prompts.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6"
+    asset_root = str(tmp_path / "stdin_json_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    stdin_data = "renders/frame_001.exr\n\n"
+    r = subprocess.run(
+        [
+            "deadline",
+            "job",
+            "download-output",
+            "--job-id",
+            job_id,
+            "--include-path-stdin",
+            "--output",
+            "json",
+        ],
+        env=env,
+        input=stdin_data,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+    # Verify output is JSON lines (DCM parses these)
+    for line in r.stdout.strip().splitlines():
+        json.loads(line)  # Should not raise
 
 
 @pytest.mark.skipif(

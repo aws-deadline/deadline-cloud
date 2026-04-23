@@ -63,7 +63,7 @@ from ._job_download_helpers import (
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
-    _validate_and_normalize_include_paths,
+    _normalize_include_paths,
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
@@ -502,13 +502,14 @@ def _download_job_output(
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
     path_filters: Optional[list[str]] = None,
+    force_auto_accept: bool = False,
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
     """
     deadline = api.get_boto3_client("deadline", config=config)
 
-    auto_accept = config_file.str2bool(
+    auto_accept = force_auto_accept or config_file.str2bool(
         config_file.get_setting("settings.auto_accept", config=config)
     )
     conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
@@ -1043,14 +1044,8 @@ def job_download_output(
             if not stripped:
                 break
             filters.append(stripped)
-        if output != "json":
-            try:
-                tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
-                sys.stdin = open(tty_path)  # noqa: SIM115
-            except OSError:
-                pass  # Non-interactive environment — no TTY to reopen
     if filters:
-        filters = _validate_and_normalize_include_paths(filters)
+        filters = _normalize_include_paths(filters)
     path_filters = filters or None
 
     # Get a temporary config object with the standard options handled
@@ -1074,6 +1069,7 @@ def job_download_output(
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
             path_filters=path_filters,
+            force_auto_accept=include_path_stdin,
         )
     except Exception as e:
         if is_json_format:
