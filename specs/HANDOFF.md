@@ -7,16 +7,18 @@ consulting the Work Items table in `specs/progress.md`.
 
 None. Pick next from `specs/progress.md`.
 
-Add `deadline_create_job_from_job_bundle` (Batch D) and telemetry FFI
-functions (Batch E) to `deadline-gui-ffi`. This is the most complex FFI
-function — 5 C callback types bridging Python Qt signals to Rust closures.
+## Step Status — #16c (completed)
 
-### Sub-item context
+**Steps 1-7: ✅ All complete**
 
-Parent: #16 — GUI FFI remaining. Previous sub-item #16a (config, resource
-listing, auth — 10 functions, 25 tests) is ✅ Done.
+Audit findings (Step 5):
+1. (Bug, fixed) `_encode('')` returned None — empty strings now encode correctly
+2. (Improvement, fixed) `_callbacks.clear()` after each callback-using call
+3. (Improvement, fixed) Removed unused imports
 
-## Step Status — #16b
+28 Python tests pass in 0.5s against stub server. 1165 Rust tests pass.
+
+## Step Status — #16b (previous)
 
 **Step 1 (Study Python): ✅ Complete (gate passed)**
 

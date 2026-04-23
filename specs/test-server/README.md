@@ -8,6 +8,7 @@ subprocess tests. Dev-dependency of `deadline-cli`.
 | Document | Description |
 |----------|-------------|
 | [architecture.md](architecture.md) | Module layout, test harness design, mock API surface |
+| [python-ffi-testing.md](python-ffi-testing.md) | How Python GUI tests use the same stub server as Rust tests |
 
 ## Status
 

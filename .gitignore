@@ -1,2 +1,3 @@
 /target
 .kiro/settings/
+__pycache__/

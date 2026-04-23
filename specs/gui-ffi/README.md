@@ -19,10 +19,10 @@ Consumers: `gui/` Python widgets (via `_ffi.py`), DCC submitter plugins
 
 | Function | Batch | Wraps |
 |----------|-------|-------|
-| `deadline_free_string` | Spike | Memory management |
-| `deadline_get_credentials_source` | Spike | `auth::get_credentials_source` |
-| `deadline_check_auth_status` | Spike | `auth::check_authentication_status` |
-| `deadline_check_auth_status_with_progress` | Spike | Same + callbacks |
+| `deadline_free_string` | — | Memory management |
+| `deadline_get_credentials_source` | Auth Status | `auth::get_credentials_source` |
+| `deadline_check_auth_status` | Auth Status | `auth::check_authentication_status` |
+| `deadline_check_auth_status_with_progress` | Auth Status | Same + callbacks |
 | `deadline_read_config` | A | `config_file::read_config_from` |
 | `deadline_get_setting` | A | `config_file::get_setting_with_config` |
 | `deadline_set_setting` | A | `config_file::set_setting_in_config` + write |
@@ -50,11 +50,25 @@ This crate is one piece of the full GUI migration. See `specs/progress.md`
 items #16a-16f for the complete plan. The phases are:
 
 1. **#16a** ✅ FFI functions for config, resource listing, auth
-2. **#16b** — FFI functions for submission (with callbacks) and telemetry
-3. **#16c** — Python `_ffi.py` wrapper (ctypes boilerplate, in `gui/`)
+2. **#16b** ✅ FFI functions for submission (with callbacks) and telemetry
+3. **#16c** ✅ Python `_ffi.py` wrapper (ctypes boilerplate, in `gui/`)
 4. **#16d** — Port Python Qt code into `gui/` (rewire ~6 files to use FFI)
 5. **#16e** — Python packaging for the `gui/` directory
 6. **#16f** — DCC submitter dependency switchover
+
+## Python Wrapper (`gui/deadline/client/_ffi.py`)
+
+Implemented in #16c. Thin ctypes wrapper (~250 lines) that:
+- Loads the shared library via `_find_library()` (env var / installed / dev paths)
+- Declares all 18 function signatures in `_declare_signatures()`
+- Provides `_call_json()` helper for memory management (call → parse → free → error check)
+- Exposes 15 Pythonic methods matching the `deadline.client.api` surface
+- Defines 5 CFUNCTYPE callback types for submission progress/confirmation
+- Raises `DeadlineOperationError` on FFI errors (same exception callers already catch)
+
+28 pytest tests in `gui/tests/test_ffi.py`, all running against a local
+wiremock stub server (`ffi-test-server` binary). See
+`specs/test-server/python-ffi-testing.md` for the test infrastructure design.
 
 ## Gotchas & Constraints
 

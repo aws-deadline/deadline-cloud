@@ -67,14 +67,15 @@ fn make_runtime() -> Result<tokio::runtime::Runtime, *mut c_char> {
         .map_err(|e| error_to_ptr(&format!("Failed to create runtime: {e}")))
 }
 
-// ── Spike functions (existing) ───────────────────────────────────
+// ── Auth Status ──────────────────────────────────────────────────
 
 /// Return the AWS credentials source as a JSON string.
 #[unsafe(no_mangle)]
 pub extern "C" fn deadline_get_credentials_source(
-    _config_json: *const c_char,
+    config_path: *const c_char,
 ) -> *mut c_char {
-    let source = deadline_api::auth::get_credentials_source(None);
+    let config = read_config_at(config_path).ok();
+    let source = deadline_api::auth::get_credentials_source(config.as_ref());
     json_to_ptr(&serde_json::json!({
         "credentials_source": source.to_string(),
     }))
@@ -84,13 +85,14 @@ pub extern "C" fn deadline_get_credentials_source(
 /// auth_status, and api_available fields.
 #[unsafe(no_mangle)]
 pub extern "C" fn deadline_check_auth_status(
-    _config_json: *const c_char,
+    config_path: *const c_char,
 ) -> *mut c_char {
+    let config = read_config_at(config_path).ok();
     let rt = match make_runtime() { Ok(rt) => rt, Err(p) => return p };
     let result = rt.block_on(async {
-        let source = deadline_api::auth::get_credentials_source(None);
-        let status = deadline_api::auth::check_authentication_status(None).await;
-        let api_available = deadline_api::auth::check_deadline_api_available(None).await;
+        let source = deadline_api::auth::get_credentials_source(config.as_ref());
+        let status = deadline_api::auth::check_authentication_status(config.as_ref()).await;
+        let api_available = deadline_api::auth::check_deadline_api_available(config.as_ref()).await;
         serde_json::json!({
             "credentials_source": source.to_string(),
             "auth_status": status.to_string(),
@@ -106,10 +108,11 @@ type StatusCallback = extern "C" fn(message: *const c_char, user_data: *mut c_vo
 /// Check authentication status with progress callbacks.
 #[unsafe(no_mangle)]
 pub extern "C" fn deadline_check_auth_status_with_progress(
-    _config_json: *const c_char,
+    config_path: *const c_char,
     on_progress: Option<StatusCallback>,
     user_data: *mut c_void,
 ) -> *mut c_char {
+    let config = read_config_at(config_path).ok();
     let notify = |msg: &str| {
         if let Some(cb) = on_progress {
             if let Ok(c_msg) = CString::new(msg) {
@@ -121,11 +124,11 @@ pub extern "C" fn deadline_check_auth_status_with_progress(
     let rt = match make_runtime() { Ok(rt) => rt, Err(p) => return p };
     rt.block_on(async {
         notify("Checking credentials source...");
-        let source = deadline_api::auth::get_credentials_source(None);
+        let source = deadline_api::auth::get_credentials_source(config.as_ref());
         notify("Checking authentication status...");
-        let status = deadline_api::auth::check_authentication_status(None).await;
+        let status = deadline_api::auth::check_authentication_status(config.as_ref()).await;
         notify("Checking API availability...");
-        let api_available = deadline_api::auth::check_deadline_api_available(None).await;
+        let api_available = deadline_api::auth::check_deadline_api_available(config.as_ref()).await;
         notify("Done");
         json_to_ptr(&serde_json::json!({
             "credentials_source": source.to_string(),
@@ -554,7 +557,7 @@ mod tests {
         CString::new(s).unwrap()
     }
 
-    // ── Spike tests (existing) ──────────────────────────────────
+    // ── Auth Status tests ─────────────────────────────────────────
 
     #[test]
     fn get_credentials_source_null_config_returns_valid_json() {
