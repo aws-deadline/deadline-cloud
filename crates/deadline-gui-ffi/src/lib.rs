@@ -542,6 +542,10 @@ mod tests {
     use std::ffi::CStr;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    use deadline_test_server::deadline_api::{farms, queues, queue_resources, sts};
+    use deadline_test_server::TestHarness;
+    use serial_test::serial;
+
     /// Helper: call an FFI function, parse the returned JSON, free the string.
     fn call_ffi_json(ptr: *mut c_char) -> serde_json::Value {
         assert!(!ptr.is_null(), "FFI function returned null");
@@ -551,18 +555,58 @@ mod tests {
         val
     }
 
-    /// Helper: create a CString from a &str and return its pointer.
-    /// The CString is returned to keep it alive for the caller's scope.
     fn to_c_str(s: &str) -> CString {
         CString::new(s).unwrap()
+    }
+
+    /// Env vars to clean so host environment doesn't interfere.
+    const CLEAN_VARS: &[&str] = &[
+        "AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_CONFIG_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE", "AWS_SESSION_TOKEN",
+        "AWS_SECURITY_TOKEN", "AWS_ENDPOINT_URL",
+    ];
+
+    /// Set up env vars pointing at the stub server, invalidate session cache.
+    fn setup_stub_env(harness: &TestHarness) {
+        let port = harness.server.address().port();
+        let ep = format!("http://localhost:{port}");
+        unsafe {
+            for var in CLEAN_VARS { std::env::remove_var(var); }
+            std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &ep);
+            std::env::set_var("AWS_ENDPOINT_URL_STS", &ep);
+            std::env::set_var("AWS_ENDPOINT_URL_S3", &ep);
+            std::env::set_var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
+            std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+            std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+            std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
+            std::env::set_var("DEADLINE_CONFIG_FILE_PATH", &harness.config_path);
+        }
+        deadline_api::session::invalidate_session_cache();
+    }
+
+    /// Create a TestHarness with mocks mounted, using a dedicated runtime.
+    /// Returns (runtime, harness) — keep both alive for the test duration.
+    /// The runtime is needed because wiremock's server runs on it.
+    fn make_stub(
+        mocks: impl FnOnce(&tokio::runtime::Runtime, &TestHarness),
+    ) -> (tokio::runtime::Runtime, TestHarness) {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let harness = rt.block_on(TestHarness::new());
+        mocks(&rt, &harness);
+        setup_stub_env(&harness);
+        (rt, harness)
     }
 
     // ── Auth Status tests ─────────────────────────────────────────
 
     #[test]
-    fn get_credentials_source_null_config_returns_valid_json() {
+    #[serial]
+    fn get_credentials_source_returns_host_provided() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(sts::mock_get_caller_identity(&h.server));
+        });
         let json = call_ffi_json(deadline_get_credentials_source(std::ptr::null()));
-        assert!(json.get("credentials_source").is_some());
+        assert_eq!(json["credentials_source"], "HOST_PROVIDED");
     }
 
     #[test]
@@ -571,11 +615,18 @@ mod tests {
     }
 
     #[test]
-    fn check_auth_status_null_config_returns_valid_json() {
+    #[serial]
+    fn check_auth_status_returns_authenticated() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(sts::mock_get_caller_identity(&h.server));
+            rt.block_on(farms::mock_list_farms(&h.server, &[
+                serde_json::json!({"farmId": "farm-stub", "displayName": "Stub Farm"}),
+            ]));
+        });
         let json = call_ffi_json(deadline_check_auth_status(std::ptr::null()));
-        assert!(json.get("credentials_source").is_some());
-        assert!(json.get("auth_status").is_some());
-        assert!(json.get("api_available").is_some());
+        assert_eq!(json["credentials_source"], "HOST_PROVIDED");
+        assert_eq!(json["auth_status"], "AUTHENTICATED");
+        assert_eq!(json["api_available"], true);
     }
 
     static CALLBACK_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -585,12 +636,15 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn check_auth_status_with_progress_calls_callback() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(sts::mock_get_caller_identity(&h.server));
+            rt.block_on(farms::mock_list_farms(&h.server, &[]));
+        });
         CALLBACK_COUNT.store(0, Ordering::SeqCst);
         let result = deadline_check_auth_status_with_progress(
-            std::ptr::null(),
-            Some(test_callback),
-            std::ptr::null_mut(),
+            std::ptr::null(), Some(test_callback), std::ptr::null_mut(),
         );
         assert!(!result.is_null());
         assert!(CALLBACK_COUNT.load(Ordering::SeqCst) >= 3);
@@ -598,11 +652,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn check_auth_status_with_progress_null_callback_does_not_crash() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(sts::mock_get_caller_identity(&h.server));
+            rt.block_on(farms::mock_list_farms(&h.server, &[]));
+        });
         let json = call_ffi_json(deadline_check_auth_status_with_progress(
-            std::ptr::null(),
-            None,
-            std::ptr::null_mut(),
+            std::ptr::null(), None, std::ptr::null_mut(),
         ));
         assert!(json.get("credentials_source").is_some());
     }
@@ -753,31 +810,29 @@ mod tests {
     // ── Batch B: Resource Listing FFI ───────────────────────────
 
     #[test]
-    fn list_farms_returns_json_with_farms_array() {
-        // With no config (null), should attempt to call the API.
-        // Without a stub server, this will return an error — that's fine,
-        // we just verify the function exists and returns valid JSON.
+    #[serial]
+    fn list_farms_returns_canned_farm() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(farms::mock_list_farms(&h.server, &[
+                serde_json::json!({"farmId": "farm-abc", "displayName": "My Farm"}),
+            ]));
+        });
         let json = call_ffi_json(deadline_list_farms(std::ptr::null()));
-        assert!(json.is_object());
-        // Either has "farms" array or "error" string
-        assert!(
-            json.get("farms").is_some() || json.get("error").is_some(),
-            "should return farms or error: {json}"
-        );
+        assert_eq!(json["farms"][0]["farmId"], "farm-abc");
+        assert_eq!(json["farms"][0]["displayName"], "My Farm");
     }
 
     #[test]
-    fn list_queues_returns_json_with_queues_array() {
-        let c_farm = to_c_str("farm-abc123");
-        let json = call_ffi_json(deadline_list_queues(
-            c_farm.as_ptr(),
-            std::ptr::null(),
-        ));
-        assert!(json.is_object());
-        assert!(
-            json.get("queues").is_some() || json.get("error").is_some(),
-            "should return queues or error: {json}"
-        );
+    #[serial]
+    fn list_queues_returns_canned_queue() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(queues::mock_list_queues(&h.server, "farm-abc", &[
+                serde_json::json!({"queueId": "queue-xyz", "displayName": "My Queue"}),
+            ]));
+        });
+        let c_farm = to_c_str("farm-abc");
+        let json = call_ffi_json(deadline_list_queues(c_farm.as_ptr(), std::ptr::null()));
+        assert_eq!(json["queues"][0]["queueId"], "queue-xyz");
     }
 
     #[test]
@@ -791,19 +846,20 @@ mod tests {
     }
 
     #[test]
-    fn list_storage_profiles_returns_json() {
-        let c_farm = to_c_str("farm-abc123");
-        let c_queue = to_c_str("queue-abc123");
+    #[serial]
+    fn list_storage_profiles_returns_canned_profile() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(queue_resources::mock_list_storage_profiles_for_queue(
+                &h.server, "farm-abc", "queue-xyz",
+                &[serde_json::json!({"storageProfileId": "sp-1", "displayName": "SP"})],
+            ));
+        });
+        let c_farm = to_c_str("farm-abc");
+        let c_queue = to_c_str("queue-xyz");
         let json = call_ffi_json(deadline_list_storage_profiles_for_queue(
-            c_farm.as_ptr(),
-            c_queue.as_ptr(),
-            std::ptr::null(),
+            c_farm.as_ptr(), c_queue.as_ptr(), std::ptr::null(),
         ));
-        assert!(json.is_object());
-        assert!(
-            json.get("storageProfiles").is_some() || json.get("error").is_some(),
-            "should return storageProfiles or error: {json}"
-        );
+        assert_eq!(json["storageProfiles"][0]["storageProfileId"], "sp-1");
     }
 
     #[test]
@@ -817,19 +873,19 @@ mod tests {
     }
 
     #[test]
-    fn get_queue_parameters_returns_json() {
-        let c_farm = to_c_str("farm-abc123");
-        let c_queue = to_c_str("queue-abc123");
+    #[serial]
+    fn get_queue_parameters_returns_empty_list() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(queue_resources::mock_list_queue_environments(
+                &h.server, "farm-abc", "queue-xyz", &[],
+            ));
+        });
+        let c_farm = to_c_str("farm-abc");
+        let c_queue = to_c_str("queue-xyz");
         let json = call_ffi_json(deadline_get_queue_parameter_definitions(
-            c_farm.as_ptr(),
-            c_queue.as_ptr(),
-            std::ptr::null(),
+            c_farm.as_ptr(), c_queue.as_ptr(), std::ptr::null(),
         ));
-        assert!(json.is_object());
-        assert!(
-            json.get("parameters").is_some() || json.get("error").is_some(),
-            "should return parameters or error: {json}"
-        );
+        assert_eq!(json["parameters"].as_array().unwrap().len(), 0);
     }
 
     #[test]
@@ -845,40 +901,29 @@ mod tests {
     // ── Batch C: Auth Actions FFI ───────────────────────────────
 
     #[test]
-    fn check_api_available_returns_bool_json() {
-        // Should return {"api_available": true/false} or {"error": "..."}
+    #[serial]
+    fn check_api_available_returns_true_with_stub() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(farms::mock_list_farms(&h.server, &[]));
+        });
         let json = call_ffi_json(deadline_check_api_available(std::ptr::null()));
-        assert!(json.is_object());
-        assert!(
-            json.get("api_available").is_some() || json.get("error").is_some(),
-            "should return api_available or error: {json}"
-        );
+        assert_eq!(json["api_available"], true);
     }
 
     #[test]
-    fn login_null_config_returns_json() {
-        // login without config — will fail (no DCM), but should return
-        // valid JSON error, not crash.
+    #[serial]
+    fn login_without_dcm_returns_error() {
+        let (_rt, _h) = make_stub(|_rt, _h| {});
         let json = call_ffi_json(deadline_login(std::ptr::null()));
-        assert!(json.is_object());
+        assert!(json.get("error").is_some());
     }
 
     #[test]
-    fn logout_null_config_returns_json() {
-        // logout without config — should succeed (no-op if not logged in)
-        // or return a valid JSON error.
+    #[serial]
+    fn logout_without_dcm_returns_result() {
+        let (_rt, _h) = make_stub(|_rt, _h| {});
         let json = call_ffi_json(deadline_logout(std::ptr::null()));
-        assert!(json.is_object());
-    }
-
-    #[test]
-    fn logout_returns_success_field() {
-        let json = call_ffi_json(deadline_logout(std::ptr::null()));
-        // Should have either "success" or "error"
-        assert!(
-            json.get("success").is_some() || json.get("error").is_some(),
-            "should return success or error: {json}"
-        );
+        assert!(json.get("success").is_some() || json.get("error").is_some());
     }
 
     // ── Batch D: Submission FFI ─────────────────────────────────

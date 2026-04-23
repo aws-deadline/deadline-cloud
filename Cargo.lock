@@ -988,7 +988,9 @@ dependencies = [
  "deadline-config",
  "deadline-job-attachments",
  "deadline-job-bundle",
+ "deadline-test-server",
  "serde_json",
+ "serial_test",
  "tempfile",
  "tokio",
 ]
