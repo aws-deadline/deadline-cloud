@@ -4,6 +4,8 @@ mod attachment;
 mod auth;
 #[path = "cli/bundle.rs"]
 mod bundle;
+#[path = "cli/bundle_hooks.rs"]
+mod bundle_hooks;
 #[path = "cli/common.rs"]
 mod common;
 #[path = "cli/config.rs"]

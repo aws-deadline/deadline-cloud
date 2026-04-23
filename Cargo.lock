@@ -1028,6 +1028,7 @@ dependencies = [
  "deadline-api",
  "deadline-config",
  "deadline-job-attachments",
+ "libc",
  "log",
  "regex",
  "serde",

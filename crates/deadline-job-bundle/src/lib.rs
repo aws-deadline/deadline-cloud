@@ -1,4 +1,5 @@
 pub mod history;
+pub mod hooks;
 pub mod loader;
 pub mod parameters;
 pub mod submission;

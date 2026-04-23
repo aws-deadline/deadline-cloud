@@ -13,16 +13,17 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61829"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61829"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61829"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:62867"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:62867"
+    AWS_ENDPOINT_URL_S3: "http://localhost:62867"
+    AWS_ENDPOINT_URL_STS: "http://localhost:62867"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpy2rYe9/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpy2rYe9
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpzy4h7z/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpzy4h7z
 ---
 success: true
 exit_code: 0
@@ -103,6 +104,16 @@ settings.force_s3_check: false (default)
    reliable but slower, skips cache integrity check since every file is
    verified). When 'false' or unset, use local cache with periodic integrity
    sampling against S3 (balanced default).
+
+settings.allow_bundle_hooks: false (default)
+   Allow execution of hooks defined in job bundle hooks.yaml/hooks.json files.
+   When 'true', bundle hooks will run with a confirmation prompt (unless
+   auto_accept is enabled). When 'false', bundle hooks are ignored.
+
+settings.allow_environment_hooks: false (default)
+   Allow execution of hooks from DEADLINE_HOOKS_DIR environment variable. When
+   'true', hooks from the directory specified by DEADLINE_HOOKS_DIR will run.
+   When 'false', environment hooks are ignored.
 
 
 ----- stderr -----

@@ -7,6 +7,50 @@ consulting the Work Items table in `specs/progress.md`.
 
 None — pick next from `specs/progress.md`.
 
+### Implementation Plan
+
+Pre/post-submission hook framework. External scripts run during
+`bundle submit`: pre-hooks can modify the CreateJob payload (JSON
+in/out via stdin/stdout), post-hooks run after job creation (failures
+only warn). Two sources: `hooks.yaml` in the job bundle, and
+`DEADLINE_HOOKS_DIR` environment variable. Gated by config settings.
+
+#### Crates/modules that change
+
+| Crate | Module | Change |
+|-------|--------|--------|
+| `deadline-config` | `settings.rs` | 2 new settings: `allow_bundle_hooks`, `allow_environment_hooks` |
+| `deadline-job-bundle` | `hooks.rs` (new) | Models, validation, merging, executor, manager |
+| `deadline-job-bundle` | `lib.rs` | Add `pub mod hooks;` |
+| `deadline-job-bundle` | `submission.rs` | Integrate hooks into `create_job_from_job_bundle` |
+
+#### Batching strategy
+
+| Batch | Scope | Test Spec Sections |
+|-------|-------|--------------------|
+| 1 | Models, validation, merging, config settings | §54, §55, §56, §62 |
+| 2 | Execution and management (subprocess, timeout, stdin, env) | §57 |
+| 3 | CLI integration (config gating, env hooks, confirmation) | §58 |
+
+#### Cross-reference: Test Spec → Rust Test Names
+
+| Spec | Cases | Location | Rust Test Names |
+|------|-------|----------|-----------------|
+| §54 #1-2 | HookDefinition | `hooks.rs` L1 | `hook_definition_from_dict_minimal_defaults`, `hook_definition_from_dict_full_fields` |
+| §54 #3-5 | HookConfiguration | `hooks.rs` L1 | `hook_configuration_from_dict_empty_defaults`, `hook_configuration_from_dict_explicit_version`, `hook_configuration_from_dict_both_hook_types` |
+| §54 #6-10 | HookMetadata | `hooks.rs` L1 | `hook_metadata_to_dict_all_fields`, `hook_metadata_to_dict_without_optional`, `hook_metadata_to_json_roundtrip`, `hook_metadata_to_env_vars_all_fields`, `hook_metadata_to_env_vars_without_optional` |
+| §54 #11-13 | HookResult | `hooks.rs` L1 | `hook_result_success`, `hook_result_failure_exit_code`, `hook_result_failure_timeout` |
+| §55 #14-24 | validate_configuration | `hooks.rs` L1 | `validate_config_valid` through `validate_config_unsupported_version` (11 tests) |
+| §55 #25-29 | validate_modified_payload | `hooks.rs` L1 | `validate_payload_valid` through `validate_payload_input_filenames_not_list` (5 tests) |
+| §56 #30-34 | merge_asset_references | `hooks.rs` L1 | `merge_refs_both_none` through `merge_refs_all_fields` (5 tests) |
+| §56 #35-37 | merge_payload | `hooks.rs` L1 | `merge_payload_simple_override`, `merge_payload_new_field`, `merge_payload_asset_references` |
+| §57 #38-41 | load_hooks | `hooks.rs` L1 | `load_hooks_no_file` through `load_hooks_both_error` (4 tests) |
+| §57 #42-52 | pre-submission execution | `hooks.rs` L1 | `pre_hook_success_no_output` through `pre_hook_hooks_origin_resolution` (11 tests) |
+| §57 #53-57 | post-submission execution | `hooks.rs` L1 | `post_hook_failure_warns` through `post_hook_runs_after_success` (5 tests) |
+| §57 #58 | confirmation message | `hooks.rs` L1 | `confirmation_message_format` |
+| §58 #59-67 | CLI integration | `bundle_hooks.rs` L2 | `bundle_submit_hooks_enabled` through `bundle_submit_hooks_confirmation_prompt` (9 tests) |
+| §62 #27-30 | Config settings | `config_file.rs` L1 | `setting_allow_bundle_hooks_default`, `setting_allow_environment_hooks_default` (existing test pattern) |
+
 ## Recently Completed — #16d Batches 2-4
 
 Port Python Qt code into `gui/` (Batches 2-4).

@@ -179,6 +179,24 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             description: "Controls S3 verification behavior for job attachments. When 'true', always verify files exist in S3 via HEAD request before skipping upload (most reliable but slower, skips cache integrity check since every file is verified). When 'false' or unset, use local cache with periodic integrity sampling against S3 (balanced default).",
         },
     ),
+    (
+        "settings.allow_bundle_hooks",
+        SettingDef {
+            default: "false",
+            depend: None,
+            section_format: None,
+            description: "Allow execution of hooks defined in job bundle hooks.yaml/hooks.json files. When 'true', bundle hooks will run with a confirmation prompt (unless auto_accept is enabled). When 'false', bundle hooks are ignored.",
+        },
+    ),
+    (
+        "settings.allow_environment_hooks",
+        SettingDef {
+            default: "false",
+            depend: None,
+            section_format: None,
+            description: "Allow execution of hooks from DEADLINE_HOOKS_DIR environment variable. When 'true', hooks from the directory specified by DEADLINE_HOOKS_DIR will run. When 'false', environment hooks are ignored.",
+        },
+    ),
 ];
 
 /// Look up a setting definition by name. Returns `None` if unknown.

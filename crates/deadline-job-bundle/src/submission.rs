@@ -1,3 +1,4 @@
+use crate::hooks::{self, HookManager, HookMetadata};
 use deadline_api::errors::DeadlineError;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -243,6 +244,77 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     // 1. Validate symlink containment
     validate_directory_symlink_containment(&params.job_bundle_dir)?;
 
+    // 1b. Load hooks from bundle and/or environment
+    let allow_bundle_hooks = config_file::str2bool(
+        &get_setting("settings.allow_bundle_hooks", params.config),
+    ).unwrap_or(false);
+    let allow_env_hooks = config_file::str2bool(
+        &get_setting("settings.allow_environment_hooks", params.config),
+    ).unwrap_or(false);
+    let env_hooks_dir = std::env::var("DEADLINE_HOOKS_DIR").ok();
+
+    let mut merged_hooks: Option<hooks::HookConfiguration> = None;
+
+    // Check environment hooks
+    if let Some(ref ehd) = env_hooks_dir {
+        if allow_env_hooks {
+            if Path::new(ehd).is_dir() {
+                let mut env_mgr = HookManager::new(ehd, Box::new(|_| {}));
+                if let Some(eh) = env_mgr.load_hooks()? {
+                    merged_hooks = Some(eh.clone());
+                }
+            } else {
+                print(&format!("Warning: DEADLINE_HOOKS_DIR '{ehd}' is not a valid directory"));
+            }
+        } else {
+            print("Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\nEnable with: deadline config set settings.allow_environment_hooks true");
+        }
+    }
+
+    // Check bundle hooks
+    let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, Box::new(|_| {}));
+    let bundle_hooks = bundle_mgr.load_hooks()?;
+    if let Some(bh) = bundle_hooks {
+        if !bh.pre_submission.is_empty() || !bh.post_submission.is_empty() {
+            if allow_bundle_hooks {
+                match merged_hooks.as_mut() {
+                    Some(mh) => {
+                        mh.pre_submission.extend(bh.pre_submission.clone());
+                        mh.post_submission.extend(bh.post_submission.clone());
+                    }
+                    None => merged_hooks = Some(bh.clone()),
+                }
+            } else {
+                print("Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\nEnable with: deadline config set settings.allow_bundle_hooks true");
+            }
+        }
+    }
+
+    // Show confirmation and build the hook manager we'll actually use
+    let mut hook_manager = HookManager::new(&params.job_bundle_dir,
+        Box::new(|s| { eprintln!("{s}"); }));
+    hook_manager.hooks = merged_hooks.clone();
+
+    if let Some(ref mh) = merged_hooks {
+        if !mh.pre_submission.is_empty() || !mh.post_submission.is_empty() {
+            if !params.auto_accept {
+                let msg = hooks::generate_hooks_confirmation_message(mh, &params.job_bundle_dir);
+                match &params.interactive_confirmation_callback {
+                    None => {
+                        print(&msg);
+                        print("Job submission canceled (hooks present but user confirmation not available).");
+                        return Err(op_err("Job submission canceled.".into()));
+                    }
+                    Some(cb) => {
+                        if !cb(&format!("{msg}Do you want to run these hooks?"), true) {
+                            return Err(op_err("Job submission canceled (user declined hooks).".into()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 2. Load template
     let (mut file_contents, file_type) = read_yaml_or_json(&params.job_bundle_dir, "template", true)?;
 
@@ -320,6 +392,45 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
     if !storage_profile_id.is_empty() {
         create_job_args.insert("storageProfileId".into(), json!(storage_profile_id));
+    }
+
+    // 6b. Execute pre-submission hooks (before hashing/uploading)
+    if hook_manager.hooks.as_ref().is_some_and(|h| !h.pre_submission.is_empty()) {
+        let template_obj = parse_yaml_or_json_content(&file_contents, &file_type, &params.job_bundle_dir, "template")?;
+        let mut hook_metadata = HookMetadata {
+            job_name: template_obj.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            priority: params.priority.unwrap_or(50),
+            farm_id: farm_id.clone(),
+            queue_id: queue_id.clone(),
+            job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
+                .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
+                .to_string_lossy().into_owned(),
+            parameters: parameters.iter()
+                .filter_map(|p| Some((p.get("name")?.as_str()?.to_string(), p.get("value").cloned().unwrap_or(Value::Null))))
+                .collect(),
+            submitter_name: submitter_name.to_string(),
+            asset_references: asset_references.to_dict(),
+            submission_payload: serde_json::json!({}),
+            storage_profile_id: if storage_profile_id.is_empty() { None } else { Some(storage_profile_id.clone()) },
+            job_id: None,
+        };
+        let hook_result = hook_manager.execute_pre_submission_hooks(&mut hook_metadata, serde_json::json!({}))?;
+
+        // Merge any asset references from hooks
+        if let Some(refs) = hook_result.get("attachments").and_then(|a| a.get("assetReferences")) {
+            if let Some(arr) = refs.get("inputFilenames").and_then(|v| v.as_array()) {
+                for f in arr { if let Some(s) = f.as_str() { asset_references.input_filenames.insert(s.to_string()); } }
+            }
+            if let Some(arr) = refs.get("inputDirectories").and_then(|v| v.as_array()) {
+                for d in arr { if let Some(s) = d.as_str() { asset_references.input_directories.insert(s.to_string()); } }
+            }
+            if let Some(arr) = refs.get("outputDirectories").and_then(|v| v.as_array()) {
+                for d in arr { if let Some(s) = d.as_str() { asset_references.output_directories.insert(s.to_string()); } }
+            }
+            if let Some(arr) = refs.get("referencedPaths").and_then(|v| v.as_array()) {
+                for p in arr { if let Some(s) = p.as_str() { asset_references.referenced_paths.insert(s.to_string()); } }
+            }
+        }
     }
 
     // 7. Handle attachments
@@ -612,6 +723,28 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
     print(&format!("Submitted job bundle:\n   {}", params.job_bundle_dir));
     print(&format!("{status_message}\n{job_id}"));
+
+    // 11. Execute post-submission hooks
+    if hook_manager.hooks.as_ref().is_some_and(|h| !h.post_submission.is_empty()) {
+        let template_obj = parse_yaml_or_json_content(&file_contents, &file_type, &params.job_bundle_dir, "template")
+            .unwrap_or(serde_json::json!({}));
+        let post_metadata = HookMetadata {
+            job_name: template_obj.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            priority: params.priority.unwrap_or(50),
+            farm_id: farm_id.clone(),
+            queue_id: queue_id.clone(),
+            job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
+                .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
+                .to_string_lossy().into_owned(),
+            parameters: std::collections::HashMap::new(),
+            submitter_name: submitter_name.to_string(),
+            asset_references: serde_json::json!({}),
+            submission_payload: serde_json::json!({}),
+            storage_profile_id: if storage_profile_id.is_empty() { None } else { Some(storage_profile_id.clone()) },
+            job_id: Some(job_id.clone()),
+        };
+        hook_manager.execute_post_submission_hooks(&post_metadata);
+    }
 
     Ok(Some(job_id))
 }

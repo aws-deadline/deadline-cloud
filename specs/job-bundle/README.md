@@ -21,6 +21,7 @@ Dependencies: `deadline-api` (API calls), `deadline-job-attachments`
 | [template-loading.md](template-loading.md) | Bundle discovery, symlink containment, template validation |
 | [parameter-validation.md](parameter-validation.md) | Type system, coercion, constraints, queue environment merge |
 | [submission-pipeline.md](submission-pipeline.md) | Full orchestration: validate → merge → upload → CreateJob → poll |
+| [submission-hooks.md](submission-hooks.md) | Pre/post-submission hook framework: config gating, execution, payload merging |
 
 ## Status
 
@@ -30,7 +31,6 @@ YAML serialization, frame range parsing, job submission orchestration.
 
 Gaps:
 - `--json` output format for submission results
-- `--save-debug-snapshot` mode
 
 ## Gotchas & Constraints
 

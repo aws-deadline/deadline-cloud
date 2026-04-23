@@ -30,6 +30,14 @@ different things — see "When Both Levels Add Value" below.
 2. **Green.** Write the minimum implementation to make the tests pass.
 3. **Refactor.** Clean up the implementation. Tests must still pass.
 
+### Red phase: stub requirements
+
+Implementation stubs must use `todo!()` so tests fail immediately with
+a clear signal that the code hasn't been written yet. Tests themselves
+must be complete — full setup, real assertions, real expected values.
+When the real implementation replaces the `todo!()`, tests pass or fail
+based on whether the behavior is correct.
+
 **Bug-driven updates:** Never fix a bug without a failing test first. If an
 existing test should have caught it, strengthen that test. If no test covers
 the code path, write a new one.
