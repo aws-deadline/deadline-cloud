@@ -65,7 +65,7 @@ pick and execute work items.
 | 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
 | 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
 | 16c | Python FFI wrapper (`gui/_ffi.py`) | ✅ Done | — | 16b |
-| 16d | Port Python Qt code into `gui/` package | In progress | — | 16c |
+| 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
 | 17 | MCP server | ⚠️ Gaps | `mcp.md` | 1-14 |
@@ -207,3 +207,11 @@ Python files by category (from `deadline-cloud-python/src/deadline/client/ui/`):
   tests. Identify Level 1 tests fully subsumed by Level 2 snapshots
   (per testing.md removal rule). Consolidate tests that exercise the
   same code path with minor variations into parameterized test cases.
+- **GUI Python code smell audit**: Review ported `gui/` Python code for
+  patterns that no longer make sense now that Rust handles business logic.
+  Known examples: `config_file.py` re-implements profile-scoped config
+  resolution in Python (should use temp-file + FFI path instead),
+  `_get_ffi()` singleton duplicated across 7 files (centralize), widgets
+  passing `ConfigParser` objects for preview (replace with temp config
+  file written to disk and passed as `config_path` to FFI). Goal: keep
+  Python side as thin presentation-only, push all logic to Rust.

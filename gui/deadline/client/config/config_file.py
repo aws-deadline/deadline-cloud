@@ -22,7 +22,13 @@ def _get_ffi() -> DeadlineFFI:
 
 
 def get_setting(setting_name: str, config=None) -> str:
-    """Get a setting value. config parameter accepted for API compat but ignored."""
+    """Get a setting value.
+
+    If config (a ConfigParser) is provided, reads from it directly
+    using the Python-side section/key layout. Otherwise routes through FFI.
+    """
+    if config is not None:
+        return _get_setting_from_config(setting_name, config)
     try:
         return _get_ffi().get_setting(setting_name)
     except DeadlineOperationError:
@@ -30,6 +36,39 @@ def get_setting(setting_name: str, config=None) -> str:
         raise DOE(
             f"AWS Deadline Cloud configuration has no setting named {setting_name!r}."
         )
+
+
+def _get_setting_from_config(setting_name: str, config) -> str:
+    """Read a setting from a ConfigParser object.
+
+    Matches Python's get_setting behavior: settings in the 'defaults'
+    section are profile-scoped, so 'defaults.farm_id' looks for
+    'profile-<name> defaults' section. The profile name comes from
+    'defaults.aws_profile_name' or falls back to '(default)'.
+    """
+    parts = setting_name.split(".", 1)
+    if len(parts) != 2:
+        return ""
+    section, key = parts
+
+    # Resolve profile name for profile-scoped sections
+    if section == "defaults":
+        profile = config.get("defaults", "aws_profile_name", fallback="(default)")
+        scoped = f"profile-{profile} defaults"
+        val = config.get(scoped, key, fallback=None)
+        if val is not None:
+            return val
+        return ""
+    elif section == "settings":
+        profile = config.get("defaults", "aws_profile_name", fallback="(default)")
+        scoped = f"profile-{profile} settings"
+        val = config.get(scoped, key, fallback=None)
+        if val is not None:
+            return val
+        # Fall back to global settings section
+        return config.get("settings", key, fallback="")
+
+    return config.get(section, key, fallback="")
 
 
 def set_setting(setting_name: str, value: str, config=None) -> None:

@@ -27,7 +27,9 @@ Consumers: `gui/` Python widgets (via `_ffi.py`), DCC submitter plugins
 | `deadline_get_setting` | A | `config_file::get_setting_with_config` |
 | `deadline_set_setting` | A | `config_file::set_setting_in_config` + write |
 | `deadline_list_farms` | B | `api::list_farms` |
+| `deadline_get_farm` | B+ | `api::get_farm` |
 | `deadline_list_queues` | B | `api::list_queues` |
+| `deadline_get_queue` | B+ | `api::get_queue` |
 | `deadline_list_storage_profiles_for_queue` | B | `api::list_storage_profiles_for_queue` |
 | `deadline_get_queue_parameter_definitions` | B | `queue_parameters::get_queue_parameter_definitions` |
 | `deadline_check_api_available` | C | `auth::check_deadline_api_available` |
@@ -52,7 +54,7 @@ items #16a-16f for the complete plan. The phases are:
 1. **#16a** ✅ FFI functions for config, resource listing, auth
 2. **#16b** ✅ FFI functions for submission (with callbacks) and telemetry
 3. **#16c** ✅ Python `_ffi.py` wrapper (ctypes boilerplate, in `gui/`)
-4. **#16d** — Port Python Qt code into `gui/` (rewire ~6 files to use FFI)
+4. **#16d** ✅ Port Python Qt code into `gui/` (55 files, 10 rewired to use FFI)
 5. **#16e** — Python packaging for the `gui/` directory
 6. **#16f** — DCC submitter dependency switchover
 

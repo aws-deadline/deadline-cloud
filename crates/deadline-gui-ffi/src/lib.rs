@@ -215,6 +215,47 @@ pub extern "C" fn deadline_list_farms(config_path: *const c_char) -> *mut c_char
     }
 }
 
+/// Get a single farm. Returns farm JSON or `{"error": "..."}`.
+#[unsafe(no_mangle)]
+pub extern "C" fn deadline_get_farm(
+    farm_id: *const c_char,
+    config_path: *const c_char,
+) -> *mut c_char {
+    let farm = match read_c_str(farm_id) {
+        Some(f) => f,
+        None => return error_to_ptr("farm_id is null"),
+    };
+    let config = match read_config_at(config_path) { Ok(c) => c, Err(e) => return error_to_ptr(&e) };
+    let rt = match make_runtime() { Ok(rt) => rt, Err(p) => return p };
+    match rt.block_on(deadline_api::api::get_farm(&farm, Some(&config), None)) {
+        Ok(val) => json_to_ptr(&val),
+        Err(e) => error_to_ptr(&e.to_string()),
+    }
+}
+
+/// Get a single queue. Returns queue JSON or `{"error": "..."}`.
+#[unsafe(no_mangle)]
+pub extern "C" fn deadline_get_queue(
+    farm_id: *const c_char,
+    queue_id: *const c_char,
+    config_path: *const c_char,
+) -> *mut c_char {
+    let farm = match read_c_str(farm_id) {
+        Some(f) => f,
+        None => return error_to_ptr("farm_id is null"),
+    };
+    let queue = match read_c_str(queue_id) {
+        Some(q) => q,
+        None => return error_to_ptr("queue_id is null"),
+    };
+    let config = match read_config_at(config_path) { Ok(c) => c, Err(e) => return error_to_ptr(&e) };
+    let rt = match make_runtime() { Ok(rt) => rt, Err(p) => return p };
+    match rt.block_on(deadline_api::api::get_queue(&farm, &queue, Some(&config), None)) {
+        Ok(val) => json_to_ptr(&val),
+        Err(e) => error_to_ptr(&e.to_string()),
+    }
+}
+
 /// List queues for a farm. Returns `{"queues": [...]}` or `{"error": "..."}`.
 #[unsafe(no_mangle)]
 pub extern "C" fn deadline_list_queues(
@@ -820,6 +861,54 @@ mod tests {
         let json = call_ffi_json(deadline_list_farms(std::ptr::null()));
         assert_eq!(json["farms"][0]["farmId"], "farm-abc");
         assert_eq!(json["farms"][0]["displayName"], "My Farm");
+    }
+
+    #[test]
+    #[serial]
+    fn get_farm_returns_canned_farm() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(farms::mock_get_farm(&h.server,
+                serde_json::json!({"farmId": "farm-abc", "displayName": "My Farm", "description": "desc"}),
+            ));
+        });
+        let c_farm = to_c_str("farm-abc");
+        let json = call_ffi_json(deadline_get_farm(c_farm.as_ptr(), std::ptr::null()));
+        assert_eq!(json["farmId"], "farm-abc");
+        assert_eq!(json["displayName"], "My Farm");
+    }
+
+    #[test]
+    fn get_farm_null_farm_id_returns_error() {
+        let json = call_ffi_json(deadline_get_farm(std::ptr::null(), std::ptr::null()));
+        assert!(json.get("error").is_some());
+    }
+
+    #[test]
+    #[serial]
+    fn get_queue_returns_canned_queue() {
+        let (_rt, _h) = make_stub(|rt, h| {
+            rt.block_on(queues::mock_get_queue(&h.server, "farm-abc",
+                serde_json::json!({"queueId": "queue-xyz", "displayName": "My Queue", "description": "desc"}),
+            ));
+        });
+        let c_farm = to_c_str("farm-abc");
+        let c_queue = to_c_str("queue-xyz");
+        let json = call_ffi_json(deadline_get_queue(c_farm.as_ptr(), c_queue.as_ptr(), std::ptr::null()));
+        assert_eq!(json["queueId"], "queue-xyz");
+        assert_eq!(json["displayName"], "My Queue");
+    }
+
+    #[test]
+    fn get_queue_null_farm_id_returns_error() {
+        let json = call_ffi_json(deadline_get_queue(std::ptr::null(), std::ptr::null(), std::ptr::null()));
+        assert!(json.get("error").is_some());
+    }
+
+    #[test]
+    fn get_queue_null_queue_id_returns_error() {
+        let c_farm = to_c_str("farm-abc");
+        let json = call_ffi_json(deadline_get_queue(c_farm.as_ptr(), std::ptr::null(), std::ptr::null()));
+        assert!(json.get("error").is_some());
     }
 
     #[test]

@@ -129,6 +129,12 @@ class DeadlineFFI:
         lib.deadline_check_api_available.argtypes = [ctypes.c_char_p]
         lib.deadline_check_api_available.restype = ctypes.c_void_p
 
+        lib.deadline_get_farm.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        lib.deadline_get_farm.restype = ctypes.c_void_p
+
+        lib.deadline_get_queue.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.deadline_get_queue.restype = ctypes.c_void_p
+
         lib.deadline_login.argtypes = [ctypes.c_char_p]
         lib.deadline_login.restype = ctypes.c_void_p
 
@@ -252,6 +258,27 @@ class DeadlineFFI:
         )
         data = self._call_json(ptr)
         return data["parameters"]
+
+    # ── Resource Details ────────────────────────────────────────
+
+    def get_farm(
+        self, farm_id: str, config_path: Optional[str] = None
+    ) -> dict:
+        ptr = self._lib.deadline_get_farm(
+            _encode(farm_id), _encode(config_path),
+        )
+        return self._call_json(ptr)
+
+    def get_queue(
+        self,
+        farm_id: str,
+        queue_id: str,
+        config_path: Optional[str] = None,
+    ) -> dict:
+        ptr = self._lib.deadline_get_queue(
+            _encode(farm_id), _encode(queue_id), _encode(config_path),
+        )
+        return self._call_json(ptr)
 
     # ── Auth Actions ─────────────────────────────────────────────
 

@@ -26,6 +26,16 @@ async fn main() {
     )
     .await;
 
+    farms::mock_get_farm(
+        &harness.server,
+        json!({
+            "farmId": "farm-abc123def4567890abc123def4567890",
+            "displayName": "Test Farm",
+            "description": "A test farm",
+        }),
+    )
+    .await;
+
     // Queues
     queues::mock_list_queues(
         &harness.server,
@@ -34,6 +44,17 @@ async fn main() {
             "queueId": "queue-abc123def4567890abc123def4567890",
             "displayName": "Test Queue",
         })],
+    )
+    .await;
+
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc123def4567890abc123def4567890",
+        json!({
+            "queueId": "queue-abc123def4567890abc123def4567890",
+            "displayName": "Test Queue",
+            "description": "A test queue",
+        }),
     )
     .await;
 

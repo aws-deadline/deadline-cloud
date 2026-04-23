@@ -45,7 +45,9 @@ src/
 ### Batch B: Resource listing
 
 - **`deadline_list_farms(config_path)`** → `{"farms": [...]}` or `{"error": "..."}`
+- **`deadline_get_farm(farm_id, config_path)`** → farm JSON or `{"error": "..."}`
 - **`deadline_list_queues(farm_id, config_path)`** → `{"queues": [...]}` or `{"error": "..."}`
+- **`deadline_get_queue(farm_id, queue_id, config_path)`** → queue JSON or `{"error": "..."}`
 - **`deadline_list_storage_profiles_for_queue(farm_id, queue_id, config_path)`** → `{"storageProfiles": [...]}`
 - **`deadline_get_queue_parameter_definitions(farm_id, queue_id, config_path)`** → `{"parameters": [...]}`
 

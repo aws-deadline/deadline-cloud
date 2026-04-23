@@ -24,6 +24,17 @@ class AwsAuthenticationStatus(str, Enum):
     NEEDS_LOGIN = "NEEDS_LOGIN"
 
 
+class FileConflictResolution(str, Enum):
+    CREATE_COPY = "CREATE_COPY"
+    SKIP = "SKIP"
+    OVERWRITE = "OVERWRITE"
+
+
+class JobAttachmentsFileSystem(str, Enum):
+    COPIED = "COPIED"
+    VIRTUAL = "VIRTUAL"
+
+
 @dataclass
 class ProgressReportMetadata:
     """Progress info passed from FFI callbacks during hashing/upload."""
@@ -33,3 +44,13 @@ class ProgressReportMetadata:
     transfer_rate: float = 0.0
     progress_message: str = ""
     processed_files: int = 0
+
+
+def str2bool(val: str) -> bool:
+    """Convert a string to a boolean, matching Python's ConfigParser conventions."""
+    v = val.lower().strip()
+    if v in ("true", "yes", "1", "on"):
+        return True
+    if v in ("false", "no", "0", "off"):
+        return False
+    raise ValueError(f"Cannot convert {val!r} to bool")

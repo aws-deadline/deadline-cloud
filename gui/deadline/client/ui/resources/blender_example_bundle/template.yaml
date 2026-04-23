@@ -1,0 +1,68 @@
+specificationVersion: 'jobtemplate-2023-09'
+name: Blender scene submission
+parameterDefinitions:
+  - name: Frames
+    type: STRING
+    description: The frames to render.
+    default: "1-10"
+  - name: BlenderFile
+    type: PATH
+    objectType: FILE
+    dataFlow: IN
+    description: Choose the Blender scene you want to render.
+  - name: OutputDir
+    type: PATH
+    objectType: DIRECTORY
+    dataFlow: OUT
+    description: Choose the render output directory.
+  - name: OutputPattern
+    type: STRING
+    default: "output_####"
+    description: Enter the output filename pattern (without extension).
+  - name: Format
+    type: STRING
+    description: Choose the file format to render as.
+    default: PNG
+    allowedValues: [TGA, RAWTGA, JPEG, IRIS, IRIZ, PNG, HDR, TIFF, OPEN_EXR, OPEN_EXR_MULTILAYER, CINEON, DPX, DDS, JP2, WEBP]
+  - name: CondaPackages
+    type: STRING
+    default: "blender"
+    description: List the conda packages to use, separated by spaces. Needs a queue environment to consume it.
+  - name: RezPackages
+    type: STRING
+    default: "blender"
+    description: List the rez packages to use, separated by spaces. Needs a queue environment to consume it.
+steps:
+- name: RenderBlender
+  parameterSpace:
+    taskParameterDefinitions:
+    - name: Frame
+      type: INT
+      range: "{{Param.Frames}}"
+
+  script:
+    actions:
+      onRun:
+        command: '{{ Task.File.run }}'
+
+    embeddedFiles:
+      - name: run
+        data: |
+          #!/bin/env bash
+
+          set -euo pipefail
+
+          echo "Blender file: {{Param.BlenderFile}}"
+          echo "Output directory: {{Param.OutputDir}}
+
+          mkdir -p "{{Param.OutputDir}}"
+
+          set -x
+
+          blender --background "{{Param.BlenderFile}}" \
+                  --render-output "{{Param.OutputDir}}/{{Param.OutputPattern}}" \
+                  --render-format {{Param.Format}} \
+                  --use-extension true \
+                  --render-frame {{Task.Param.Frame }}
+        runnable: true
+        type: TEXT
