@@ -68,7 +68,7 @@ process along the lines of the following as a starting point:
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
-4. Add Squish GUI tests for your changes if applicable. Ensure that all Squish GUI tests pass. (See [Squish GUI tests](#squish-tests))
+4. Add GUI tests (`hatch run gui:test`) or Squish GUI tests for your changes if applicable. Ensure that all GUI tests pass. (See [GUI tests](#gui-tests-pytest-qt) and [Squish GUI tests](#squish-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -103,7 +103,9 @@ The tests for this package have three forms:
    without requiring an AWS account.
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
-3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license.
+3. GUI tests - Tests that verify the Deadline GUI widgets and dialogs using [pytest-qt](https://pytest-qt.readthedocs.io/).
+   These use MockDeadlineBackend for API responses and require no AWS account or Squish license.
+4. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license.
 
 ### Writing Tests
 
@@ -187,6 +189,18 @@ Notes:
 * AWS Developers note: If testing with a non-production deployment of AWS Deadline Cloud then you will have to
 define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
 production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
+
+### GUI Tests (pytest-qt)
+
+GUI tests are located under the `test/gui` directory. They use [pytest-qt](https://pytest-qt.readthedocs.io/) to test Qt widgets and dialogs in-process, with `MockDeadlineBackend` providing fake API responses. No AWS credentials or Squish license required.
+
+#### Running GUI Tests
+
+```sh
+hatch run gui:test
+```
+
+These tests run automatically in CI on Linux, macOS, and Windows as part of the Code Quality workflow.
 
 ### Squish GUI Submitter Tests
 

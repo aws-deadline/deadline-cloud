@@ -15,6 +15,16 @@ lint = ["style", "typing"]
 [[envs.all.matrix]]
 python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
+[envs.gui]
+extra-dependencies = [
+  "pytest",
+  "pytest-qt == 4.*",
+  "PySide6-Essentials >= 6.6, < 6.9",
+]
+
+[envs.gui.scripts]
+test = "pytest --no-cov -vvv {args:test/gui}"
+
 [envs.integ]
 pre-install-commands = [
   "pip install -r requirements-integ-testing.txt",
