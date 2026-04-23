@@ -65,7 +65,7 @@ pick and execute work items.
 | 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
 | 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
 | 16c | Python FFI wrapper (`gui/_ffi.py`) | ✅ Done | — | 16b |
-| 16d | Port Python Qt code into `gui/` package | Not started | — | 16c |
+| 16d | Port Python Qt code into `gui/` package | In progress | — | 16c |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
 | 17 | MCP server | ⚠️ Gaps | `mcp.md` | 1-14 |
