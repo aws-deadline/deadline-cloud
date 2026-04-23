@@ -685,7 +685,7 @@ def test_cli_job_download_output_include_path(deadline_setup, tmp_path):
         "download-output",
         "--job-id",
         job_id,
-        "--include-path",
+        "--include",
         "renders/",
         "--conflict-resolution",
         "OVERWRITE",
@@ -724,7 +724,7 @@ def test_cli_job_download_output_include_path_exact_file(deadline_setup, tmp_pat
         "download-output",
         "--job-id",
         job_id,
-        "--include-path",
+        "--include",
         "renders/frame_001.exr",
         "--conflict-resolution",
         "OVERWRITE",
@@ -762,9 +762,9 @@ def test_cli_job_download_output_include_path_multiple(deadline_setup, tmp_path)
         "download-output",
         "--job-id",
         job_id,
-        "--include-path",
+        "--include",
         "renders/frame_001.exr",
-        "--include-path",
+        "--include",
         "scripts/",
         "--conflict-resolution",
         "OVERWRITE",
@@ -799,7 +799,7 @@ def test_cli_job_download_output_include_path_no_match(deadline_setup, tmp_path)
         "download-output",
         "--job-id",
         job_id,
-        "--include-path",
+        "--include",
         "nonexistent.txt",
         "--conflict-resolution",
         "OVERWRITE",
@@ -811,100 +811,176 @@ def test_cli_job_download_output_include_path_no_match(deadline_setup, tmp_path)
     assert not (Path(asset_root) / "renders" / "frame_001.exr").exists()
 
 
-def test_cli_job_download_output_include_path_stdin(deadline_setup, tmp_path):
+def test_cli_job_download_output_exclude(deadline_setup, tmp_path):
     """
-    --include-path-stdin reads paths from stdin (one per line, empty line terminates).
-    This mirrors DCM's usage pattern where the desktop app pipes paths to the CLI.
-    Interactive prompts are skipped when stdin is consumed.
+    --exclude removes files from the download set after --include is applied.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
     job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5"
-    asset_root = str(tmp_path / "stdin_outputs")
+    asset_root = str(tmp_path / "exclude_outputs")
     Path(asset_root).mkdir()
 
     files = {
         "renders/frame_001.exr": b"frame-one",
-        "renders/frame_002.exr": b"frame-two",
-        "logs/render.log": b"log-data",
+        "renders/draft/frame_002.exr": b"frame-two-draft",
+        "renders/frame_003.exr": b"frame-three",
     }
     _seed_output_job(
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    # Pipe paths via stdin with empty-line sentinel, like DCM does
-    stdin_data = "renders/frame_001.exr\nrenders/frame_002.exr\n\n"
-    r = subprocess.run(
-        [
-            "deadline",
-            "job",
-            "download-output",
-            "--job-id",
-            job_id,
-            "--include-path-stdin",
-            "--conflict-resolution",
-            "OVERWRITE",
-        ],
-        env=env,
-        input=stdin_data,
-        capture_output=True,
-        text=True,
-        timeout=120,
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include",
+        "renders/",
+        "--exclude",
+        "renders/draft/",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
     )
     assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
 
     assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
-    assert (Path(asset_root) / "renders" / "frame_002.exr").read_bytes() == b"frame-two"
-    assert not (Path(asset_root) / "logs" / "render.log").exists()
+    assert (Path(asset_root) / "renders" / "frame_003.exr").read_bytes() == b"frame-three"
+    assert not (Path(asset_root) / "renders" / "draft" / "frame_002.exr").exists()
 
 
-def test_cli_job_download_output_include_path_stdin_json(deadline_setup, tmp_path):
+def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
     """
-    --include-path-stdin with --output json mirrors DCM's exact invocation pattern.
-    Verifies JSON progress output and no interactive prompts.
+    --include with glob patterns (e.g. *.exr) filters using fnmatch.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
     job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6"
-    asset_root = str(tmp_path / "stdin_json_outputs")
+    asset_root = str(tmp_path / "glob_outputs")
     Path(asset_root).mkdir()
 
     files = {
         "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.png": b"frame-two-png",
+        "renders/frame_003.exr": b"frame-three",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include",
+        "renders/*.exr",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert (Path(asset_root) / "renders" / "frame_003.exr").read_bytes() == b"frame-three"
+    assert not (Path(asset_root) / "renders" / "frame_002.png").exists()
+
+
+def test_cli_job_download_output_include_exclude_config(deadline_setup, tmp_path):
+    """
+    --include-exclude-config accepts a JSON file with include/exclude patterns,
+    matching the manifest CLI pattern.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7"
+    asset_root = str(tmp_path / "config_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/draft/frame_002.exr": b"draft",
         "logs/render.log": b"log-data",
     }
     _seed_output_job(
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    stdin_data = "renders/frame_001.exr\n\n"
-    r = subprocess.run(
-        [
-            "deadline",
-            "job",
-            "download-output",
-            "--job-id",
-            job_id,
-            "--include-path-stdin",
-            "--output",
-            "json",
-        ],
-        env=env,
-        input=stdin_data,
-        capture_output=True,
-        text=True,
-        timeout=120,
+    config_file = tmp_path / "filters.json"
+    config_file.write_text(json.dumps({"include": ["renders/"], "exclude": ["renders/draft/"]}))
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-exclude-config",
+        str(config_file),
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
     )
     assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
 
     assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert not (Path(asset_root) / "renders" / "draft" / "frame_002.exr").exists()
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
-    # Verify output is JSON lines (DCM parses these)
-    for line in r.stdout.strip().splitlines():
-        json.loads(line)  # Should not raise
+
+def test_cli_job_download_output_include_exclude_config_large_inline_json(deadline_setup, tmp_path):
+    """
+    --include-exclude-config with a large inline JSON blob containing many paths.
+    This mirrors DCM's usage where the desktop app may pass hundreds of file paths.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8"
+    asset_root = str(tmp_path / "large_config_outputs")
+    Path(asset_root).mkdir()
+
+    # Generate 200 files, select 150 of them via include config
+    num_total = 200
+    num_selected = 150
+    files = {f"renders/frame_{i:04d}.exr": f"content-{i}".encode() for i in range(num_total)}
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    # Build a large inline JSON with 150 exact paths
+    selected_paths = [f"renders/frame_{i:04d}.exr" for i in range(num_selected)]
+    config_json = json.dumps({"include": selected_paths})
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-exclude-config",
+        config_json,
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    # Verify exactly the 50 selected files were downloaded
+    for i in range(num_selected):
+        assert (
+            Path(asset_root) / "renders" / f"frame_{i:04d}.exr"
+        ).read_bytes() == f"content-{i}".encode()
+
+    # Verify the rest were NOT downloaded
+    for i in range(num_selected, num_total):
+        assert not (Path(asset_root) / "renders" / f"frame_{i:04d}.exr").exists()
 
 
 @pytest.mark.skipif(

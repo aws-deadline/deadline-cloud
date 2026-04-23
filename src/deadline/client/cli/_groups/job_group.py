@@ -60,10 +60,10 @@ from ._job_helpers import (
 from ._job_download_helpers import (
     JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
+    _parse_include_exclude,
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
-    _normalize_include_paths,
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
@@ -501,15 +501,15 @@ def _download_job_output(
     task_id: Optional[str],
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
-    path_filters: Optional[list[str]] = None,
-    force_auto_accept: bool = False,
+    include_filters: Optional[list[str]] = None,
+    exclude_filters: Optional[list[str]] = None,
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
     """
     deadline = api.get_boto3_client("deadline", config=config)
 
-    auto_accept = force_auto_accept or config_file.str2bool(
+    auto_accept = config_file.str2bool(
         config_file.get_setting("settings.auto_accept", config=config)
     )
     conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
@@ -561,7 +561,8 @@ def _download_job_output(
         task_id=task_id,
         session_action_id=session_action_id,
         session=queue_role_session,
-        path_filters=path_filters,
+        include_filters=include_filters,
+        exclude_filters=exclude_filters,
     )
 
     def _check_and_warn_long_output_paths(
@@ -608,8 +609,10 @@ def _download_job_output(
                 session_action_id=session_action_id,
                 session=queue_role_session,
             )
-            if path_filters:
-                manifests_by_root = _filter_manifests(manifests_by_root, path_filters)
+            if include_filters:
+                manifests_by_root = _filter_manifests(
+                    manifests_by_root, include_filters, exclude_filters
+                )
             mapped_manifests = _transform_manifests_to_absolute_paths(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
@@ -974,14 +977,24 @@ def _assert_valid_path(path: str) -> None:
 @click.option("--step-id", help="The step to use.")
 @click.option("--task-id", help="The task to use.")
 @click.option(
-    "--include-path",
+    "-i",
+    "--include",
     multiple=True,
-    help="Download only files matching this relative path or directory prefix (trailing /). Repeatable.",
+    help="Glob pattern for files to download. Supports *, ?, [seq]. "
+    "A trailing / matches all files under that directory. Repeatable",
 )
 @click.option(
-    "--include-path-stdin",
-    is_flag=True,
-    help="Read include paths from stdin, one per line.",
+    "-e",
+    "--exclude",
+    multiple=True,
+    help="Glob pattern for files to exclude from download. Applied after --include. Repeatable",
+)
+@click.option(
+    "-ie",
+    "--include-exclude-config",
+    default=None,
+    help="JSON string or file path with include/exclude patterns, "
+    'e.g. \'{"include": ["renders/*.exr"], "exclude": ["renders/draft/"]}\'',
 )
 @click.option(
     "--ignore-storage-profiles",
@@ -1025,7 +1038,14 @@ def _assert_valid_path(path: str) -> None:
 )
 @_handle_error
 def job_download_output(
-    step_id, task_id, output, ignore_storage_profiles, include_path, include_path_stdin, **args
+    step_id,
+    task_id,
+    output,
+    ignore_storage_profiles,
+    include,
+    exclude,
+    include_exclude_config,
+    **args,
 ):
     """
     Download the output of a Deadline Cloud job that was saved as job
@@ -1037,16 +1057,9 @@ def job_download_output(
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
 
-    filters = list(include_path)
-    if include_path_stdin:
-        for line in sys.stdin:
-            stripped = line.strip()
-            if not stripped:
-                break
-            filters.append(stripped)
-    if filters:
-        filters = _normalize_include_paths(filters)
-    path_filters = filters or None
+    include_filters, exclude_filters = _parse_include_exclude(
+        include, exclude, include_exclude_config
+    )
 
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1068,8 +1081,8 @@ def job_download_output(
             task_id=task_id,
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
-            path_filters=path_filters,
-            force_auto_accept=include_path_stdin,
+            include_filters=include_filters,
+            exclude_filters=exclude_filters,
         )
     except Exception as e:
         if is_json_format:

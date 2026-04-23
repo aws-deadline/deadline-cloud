@@ -307,9 +307,9 @@ def _download_mapped_manifests(
             return _do_download(on_downloading_files=_on_progress_json)
 
 
-def _normalize_include_paths(filters: list[str]) -> list[str]:
+def _normalize_filters(filters: list[str]) -> list[str]:
     """
-    Normalizes include paths.
+    Normalizes path filter patterns.
     - Converts backslashes to forward slashes (Windows compatibility)
     - Strips leading './'
     - Normalizes '//' to '/'
@@ -324,3 +324,29 @@ def _normalize_include_paths(filters: list[str]) -> list[str]:
         if f:
             normalized.append(f)
     return normalized
+
+
+def _parse_include_exclude(
+    include: tuple[str, ...],
+    exclude: tuple[str, ...],
+    include_exclude_config: Optional[str],
+) -> tuple[Optional[list[str]], Optional[list[str]]]:
+    """
+    Parse --include, --exclude, and --include-exclude-config into normalized filter lists.
+    --include/--exclude take precedence over --include-exclude-config.
+    Returns (include_filters, exclude_filters) where either may be None.
+    """
+    if include or exclude:
+        include_filters = _normalize_filters(list(include)) if include else ["*"]
+        exclude_filters = _normalize_filters(list(exclude)) if exclude else None
+        return include_filters, exclude_filters
+
+    if include_exclude_config:
+        from ....job_attachments._glob import _process_glob_inputs
+
+        glob_config = _process_glob_inputs(include_exclude_config)
+        parsed_include = _normalize_filters(glob_config.include_glob) or None
+        parsed_exclude = _normalize_filters(glob_config.exclude_glob) or None
+        return parsed_include, parsed_exclude
+
+    return None, None

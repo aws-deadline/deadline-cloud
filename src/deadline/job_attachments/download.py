@@ -1246,27 +1246,34 @@ def mount_vfs_from_manifests(
 
 def _matches_any_filter(file_path: str, filters: list[str]) -> bool:
     """
-    Check if a file path matches any of the given filters.
-    - Exact match: filter "renders/frame_001.exr" matches only that path
-    - Directory prefix: filter "renders/" matches all paths starting with "renders/"
+    Check if a file path matches any of the given filters using glob-style matching.
+    Uses fnmatch for pattern matching (supports *, ?, [seq], [!seq]).
+    A filter ending with '/' is treated as a directory prefix (matches all files under it).
     """
-    return any(file_path.startswith(f) if f.endswith("/") else file_path == f for f in filters)
+    from fnmatch import fnmatch
+
+    return any(
+        file_path.startswith(f) if f.endswith("/") else fnmatch(file_path, f) for f in filters
+    )
 
 
 def _filter_paths(
     paths_by_root: dict[str, ManifestPathGroup],
     path_filters: list[str],
+    exclude_filters: Optional[list[str]] = None,
 ) -> dict[str, ManifestPathGroup]:
     """
-    Filter ManifestPathGroups to only include files matching the given filters.
-    Each filter is an exact relative file path or a directory prefix (ending with '/').
-    Filters are matched against file paths across all asset roots.
+    Filter ManifestPathGroups using glob-style include/exclude patterns.
+    Include filters select files; exclude filters remove from the included set.
+    Filters are matched against relative file paths across all asset roots.
     """
     filtered: dict[str, ManifestPathGroup] = {}
     for root, group in paths_by_root.items():
         filtered_group = ManifestPathGroup()
         for hash_alg, file_list in group.files_by_hash_alg.items():
             matching = [f for f in file_list if _matches_any_filter(f.path, path_filters)]
+            if exclude_filters:
+                matching = [f for f in matching if not _matches_any_filter(f.path, exclude_filters)]
             if matching:
                 if hash_alg not in filtered_group.files_by_hash_alg:
                     filtered_group.files_by_hash_alg[hash_alg] = matching
@@ -1281,10 +1288,10 @@ def _filter_paths(
 def _filter_manifests(
     manifests_by_root: dict[str, list[BaseAssetManifest]],
     path_filters: list[str],
+    exclude_filters: Optional[list[str]] = None,
 ) -> dict[str, list[BaseAssetManifest]]:
     """
-    Filter BaseAssetManifest objects to only include files matching the given filters.
-    Each filter is an exact relative file path or a directory prefix (ending with '/').
+    Filter BaseAssetManifest objects using glob-style include/exclude patterns.
     Returns a new dict with manifests whose paths have been filtered; empty manifests are removed.
     """
     filtered: dict[str, list[BaseAssetManifest]] = {}
@@ -1292,6 +1299,8 @@ def _filter_manifests(
         filtered_manifests = []
         for manifest in manifest_list:
             matching = [p for p in manifest.paths if _matches_any_filter(p.path, path_filters)]
+            if exclude_filters:
+                matching = [p for p in matching if not _matches_any_filter(p.path, exclude_filters)]
             if matching:
                 manifest.paths = matching
                 filtered_manifests.append(manifest)
@@ -1338,7 +1347,8 @@ class OutputDownloader:
         task_id: Optional[str] = None,
         session_action_id: Optional[str] = None,
         session: Optional[boto3.Session] = None,
-        path_filters: Optional[list[str]] = None,
+        include_filters: Optional[list[str]] = None,
+        exclude_filters: Optional[list[str]] = None,
     ) -> None:
         self.s3_settings = s3_settings
         self.session = session
@@ -1352,8 +1362,10 @@ class OutputDownloader:
             session_action_id=session_action_id,
             session=session,
         )
-        if path_filters:
-            self.outputs_by_root = _filter_paths(self.outputs_by_root, path_filters)
+        if include_filters:
+            self.outputs_by_root = _filter_paths(
+                self.outputs_by_root, include_filters, exclude_filters
+            )
 
     def get_output_paths_by_root(self) -> dict[str, list[str]]:
         """

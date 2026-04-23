@@ -377,7 +377,8 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         path_separator = "/" if sys.platform != "win32" else "\\"
@@ -491,7 +492,8 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         path_separator = "/" if sys.platform != "win32" else "\\"
@@ -592,7 +594,8 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         path_separator = "/" if sys.platform != "win32" else "\\"
@@ -676,7 +679,8 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         assert (
@@ -778,7 +782,8 @@ def test_cli_job_download_output_stdout_with_json_format(
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         expected_json_title = {"messageType": "title", "value": "Mock Job"}
@@ -1395,7 +1400,8 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(
             task_id="task-2",
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
@@ -1482,7 +1488,8 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
         path_separator = "/" if sys.platform != "win32" else "\\"
@@ -1714,7 +1721,8 @@ def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
             task_id=MOCK_TASK_ID,
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
 
 

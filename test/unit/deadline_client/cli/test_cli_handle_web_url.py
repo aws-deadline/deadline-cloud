@@ -306,7 +306,8 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             task_id=None,
             session_action_id=None,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
@@ -372,7 +373,8 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             task_id=MOCK_TASK_ID,
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
-            path_filters=None,
+            include_filters=None,
+            exclude_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,

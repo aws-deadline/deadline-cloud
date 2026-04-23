@@ -49,9 +49,18 @@ class TestMatchesAnyFilter:
     def test_nested_directory_prefix(self):
         assert _matches_any_filter("a/b/c/file.txt", ["a/b/"]) is True
 
-    def test_exact_match_no_trailing_slash(self):
-        """Exact filter without trailing slash should not match subdirectory files."""
-        assert _matches_any_filter("renders/frame_001.exr", ["renders"]) is False
+    def test_glob_wildcard(self):
+        assert _matches_any_filter("renders/frame_001.exr", ["renders/*.exr"]) is True
+
+    def test_glob_wildcard_no_match(self):
+        assert _matches_any_filter("renders/frame_001.png", ["renders/*.exr"]) is False
+
+    def test_glob_question_mark(self):
+        assert _matches_any_filter("renders/frame_00?.exr", ["renders/frame_00?.exr"]) is True
+
+    def test_glob_recursive(self):
+        """fnmatch does not support ** recursion — it matches as a literal wildcard."""
+        assert _matches_any_filter("a/b/c.txt", ["a/*/c.txt"]) is True
 
 
 class TestFilterPaths:
@@ -114,6 +123,22 @@ class TestFilterPaths:
         assert "/has_match" in result
         assert "/no_match" not in result
 
+    def test_exclude_filters(self):
+        paths_by_root = {
+            "/root": self._make_group(["renders/a.exr", "renders/draft/b.exr", "renders/c.exr"])
+        }
+        result = _filter_paths(paths_by_root, ["renders/"], ["renders/draft/"])
+        files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
+        assert set(files) == {"renders/a.exr", "renders/c.exr"}
+
+    def test_glob_pattern(self):
+        paths_by_root = {
+            "/root": self._make_group(["renders/a.exr", "renders/b.png", "textures/c.exr"])
+        }
+        result = _filter_paths(paths_by_root, ["renders/*.exr"])
+        files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
+        assert files == ["renders/a.exr"]
+
 
 class TestFilterManifests:
     def _make_manifest(self, paths: List[str]) -> BaseAssetManifest:
@@ -165,3 +190,12 @@ class TestFilterManifests:
         assert len(result["/root"]) == 2
         assert [p.path for p in result["/root"][0].paths] == ["a.txt"]
         assert [p.path for p in result["/root"][1].paths] == ["c.txt"]
+
+    def test_exclude_filters(self):
+        manifests_by_root = {
+            "/root": [
+                self._make_manifest(["renders/a.exr", "renders/draft/b.exr", "renders/c.exr"])
+            ]
+        }
+        result = _filter_manifests(manifests_by_root, ["renders/"], ["renders/draft/"])
+        assert [p.path for p in result["/root"][0].paths] == ["renders/a.exr", "renders/c.exr"]
