@@ -42,7 +42,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
     match action {
         FleetAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let resp = api::list_fleets(&farm, Some(&config), None).await.map_err(|e| {
                 CliError::Operation(format!("Failed to get Fleets from Deadline:\n{e}"))
             })?;
@@ -69,7 +69,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
                 &["farm_id"],
             )?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
 
             if let Some(fleet) = fleet_id {
                 // --fleet-id mode
@@ -96,7 +96,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             } else {
                 // --queue-id mode (or default queue from config)
                 let queue = queue_id
-                    .or_else(|| config_file::get_setting_with_config("defaults.queue_id", &config).ok().filter(|s| !s.is_empty()))
+                    .or_else(|| config_file::get_setting("defaults.queue_id", &config).ok().filter(|s| !s.is_empty()))
                     .ok_or_else(|| CliError::Operation(
                         "Missing '--fleet-id', '--queue-id', or default Queue ID configuration".into()
                     ))?;

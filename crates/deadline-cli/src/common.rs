@@ -68,37 +68,37 @@ pub fn apply_cli_options_to_config(
     use deadline_config::config_file;
 
     if let Some(ref v) = options.profile {
-        config_file::set_setting_in_config("defaults.aws_profile_name", v, config)
+        config_file::set_setting("defaults.aws_profile_name", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.farm_id {
-        config_file::set_setting_in_config("defaults.farm_id", v, config)
+        config_file::set_setting("defaults.farm_id", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.queue_id {
-        config_file::set_setting_in_config("defaults.queue_id", v, config)
+        config_file::set_setting("defaults.queue_id", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.job_id {
-        config_file::set_setting_in_config("defaults.job_id", v, config)
+        config_file::set_setting("defaults.job_id", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if options.yes {
-        config_file::set_setting_in_config("settings.auto_accept", "true", config)
+        config_file::set_setting("settings.auto_accept", "true", config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.storage_profile_id {
-        config_file::set_setting_in_config("settings.storage_profile_id", v, config)
+        config_file::set_setting("settings.storage_profile_id", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
     if let Some(ref v) = options.conflict_resolution {
-        config_file::set_setting_in_config("settings.conflict_resolution", v, config)
+        config_file::set_setting("settings.conflict_resolution", v, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
     }
 
     for &req in required {
         let setting_name = format!("defaults.{req}");
-        let value = config_file::get_setting_with_config(&setting_name, config)
+        let value = config_file::get_setting(&setting_name, config)
             .map_err(|e| CliConfigError::Operation(e.to_string()))?;
 
         if value.is_empty() {
@@ -472,7 +472,7 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         assert_eq!(
-            deadline_config::config_file::get_setting_with_config(
+            deadline_config::config_file::get_setting(
                 "defaults.aws_profile_name",
                 &config
             )
@@ -480,7 +480,7 @@ mod tests {
             "my-profile"
         );
         assert_eq!(
-            deadline_config::config_file::get_setting_with_config("defaults.farm_id", &config)
+            deadline_config::config_file::get_setting("defaults.farm_id", &config)
                 .unwrap(),
             "farm-abc"
         );
@@ -493,7 +493,7 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         // aws_profile_name should still be the default "(default)"
-        let val = deadline_config::config_file::get_setting_with_config(
+        let val = deadline_config::config_file::get_setting(
             "defaults.aws_profile_name",
             &config,
         )
@@ -543,7 +543,7 @@ mod tests {
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
-        let val = deadline_config::config_file::get_setting_with_config(
+        let val = deadline_config::config_file::get_setting(
             "settings.auto_accept",
             &config,
         )
@@ -560,7 +560,7 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_config::config_file::get_setting_with_config(
+        let val = deadline_config::config_file::get_setting(
             "settings.storage_profile_id", &config,
         ).unwrap();
         assert_eq!(val, "sp-abc");
@@ -575,7 +575,7 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_config::config_file::get_setting_with_config(
+        let val = deadline_config::config_file::get_setting(
             "settings.conflict_resolution", &config,
         ).unwrap();
         assert_eq!(val, "CREATE_COPY");

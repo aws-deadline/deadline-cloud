@@ -5,10 +5,10 @@
 //
 // Design: The primary API operates on IniConfig values passed explicitly.
 // CLI commands call read_config_from() once at startup, apply CLI flag
-// overrides in memory via set_setting_in_config(), then thread the
-// IniConfig through all downstream calls via get_setting_with_config().
-// The free functions (get_setting, set_setting, etc.) are convenience
-// wrappers that read from / write to the default config file path.
+// overrides in memory via set_setting(), then thread the
+// IniConfig through all downstream calls via get_setting().
+// The _from_disk / _to_disk functions are convenience wrappers that
+// read from / write to the default config file path.
 
 use crate::ini::{IniConfig, IniParseError};
 use crate::settings::{self, SettingDef, SETTINGS, find_setting};
@@ -168,7 +168,7 @@ fn get_section_prefixes(setting_def: &SettingDef, config: &IniConfig) -> Vec<Str
 fn resolve_default(setting_def: &SettingDef, config: &IniConfig) -> String {
     let default = setting_def.default;
     if default.contains('{') {
-        let profile = get_setting_with_config("defaults.aws_profile_name", config)
+        let profile = get_setting("defaults.aws_profile_name", config)
             .unwrap_or_else(|_| "(default)".to_string());
         default.replace("{aws_profile_name}", &profile)
     } else {
@@ -206,7 +206,7 @@ fn validate_setting(setting_name: &str) -> Result<&'static SettingDef, ConfigErr
 
 /// Get a setting value using an already-loaded config.
 /// This is the primary API — most callers should use this.
-pub fn get_setting_with_config(
+pub fn get_setting(
     setting_name: &str,
     config: &IniConfig,
 ) -> Result<String, ConfigError> {
@@ -221,13 +221,13 @@ pub fn get_setting_with_config(
 }
 
 /// Convenience: read from disk, then get the setting.
-pub fn get_setting(setting_name: &str) -> Result<String, ConfigError> {
+pub fn get_setting_from_disk(setting_name: &str) -> Result<String, ConfigError> {
     let config = read_config()?;
-    get_setting_with_config(setting_name, &config)
+    get_setting(setting_name, &config)
 }
 
 /// Get the default value using an already-loaded config.
-pub fn get_setting_default_with_config(
+pub fn get_setting_default(
     setting_name: &str,
     config: &IniConfig,
 ) -> Result<String, ConfigError> {
@@ -236,14 +236,14 @@ pub fn get_setting_default_with_config(
 }
 
 /// Convenience: read from disk, then get the default.
-pub fn get_setting_default(setting_name: &str) -> Result<String, ConfigError> {
+pub fn get_setting_default_from_disk(setting_name: &str) -> Result<String, ConfigError> {
     let config = read_config()?;
-    get_setting_default_with_config(setting_name, &config)
+    get_setting_default(setting_name, &config)
 }
 
 /// Set a setting value in a config object without writing to disk.
 /// This is the primary API — most callers should use this.
-pub fn set_setting_in_config(
+pub fn set_setting(
     setting_name: &str,
     value: &str,
     config: &mut IniConfig,
@@ -256,26 +256,26 @@ pub fn set_setting_in_config(
 }
 
 /// Convenience: read from disk, set the value, write back.
-pub fn set_setting(setting_name: &str, value: &str) -> Result<(), ConfigError> {
+pub fn set_setting_to_disk(setting_name: &str, value: &str) -> Result<(), ConfigError> {
     let mut config = read_config()?;
-    set_setting_in_config(setting_name, value, &mut config)?;
+    set_setting(setting_name, value, &mut config)?;
     write_config(&config)?;
     Ok(())
 }
 
 /// Clear a setting in a config object without writing to disk.
-pub fn clear_setting_in_config(
+pub fn clear_setting(
     setting_name: &str,
     config: &mut IniConfig,
 ) -> Result<(), ConfigError> {
-    let default = get_setting_default_with_config(setting_name, config)?;
-    set_setting_in_config(setting_name, &default, config)
+    let default = get_setting_default(setting_name, config)?;
+    set_setting(setting_name, &default, config)
 }
 
 /// Convenience: read from disk, clear the setting, write back.
-pub fn clear_setting(setting_name: &str) -> Result<(), ConfigError> {
-    let default = get_setting_default(setting_name)?;
-    set_setting(setting_name, &default)
+pub fn clear_setting_to_disk(setting_name: &str) -> Result<(), ConfigError> {
+    let default = get_setting_default_from_disk(setting_name)?;
+    set_setting_to_disk(setting_name, &default)
 }
 
 // ---------------------------------------------------------------------------
@@ -303,10 +303,10 @@ pub fn get_best_profile_for_farm(
     let mut scratch = config.clone();
 
     let default_profile =
-        get_setting_with_config("defaults.aws_profile_name", &scratch).unwrap_or_default();
+        get_setting("defaults.aws_profile_name", &scratch).unwrap_or_default();
 
     // Priority 1: default profile's farm matches
-    if get_setting_with_config("defaults.farm_id", &scratch).unwrap_or_default() == farm_id {
+    if get_setting("defaults.farm_id", &scratch).unwrap_or_default() == farm_id {
         return default_profile;
     }
 
@@ -314,15 +314,15 @@ pub fn get_best_profile_for_farm(
     let queue_id = queue_id.filter(|q| !q.is_empty());
 
     for &profile in aws_profile_names {
-        let _ = set_setting_in_config("defaults.aws_profile_name", profile, &mut scratch);
+        let _ = set_setting("defaults.aws_profile_name", profile, &mut scratch);
 
         let profile_farm =
-            get_setting_with_config("defaults.farm_id", &scratch).unwrap_or_default();
+            get_setting("defaults.farm_id", &scratch).unwrap_or_default();
         if profile_farm == farm_id {
             // Priority 2: farm + queue match
             if let Some(qid) = queue_id {
                 let profile_queue =
-                    get_setting_with_config("defaults.queue_id", &scratch).unwrap_or_default();
+                    get_setting("defaults.queue_id", &scratch).unwrap_or_default();
                 if profile_queue == qid {
                     return profile.to_string();
                 }
@@ -572,7 +572,7 @@ mod tests {
     fn get_setting_default_aws_profile_name() {
         let config = IniConfig::new();
         assert_eq!(
-            get_setting_default_with_config("defaults.aws_profile_name", &config).unwrap(),
+            get_setting_default("defaults.aws_profile_name", &config).unwrap(),
             "(default)"
         );
     }
@@ -581,7 +581,7 @@ mod tests {
     fn get_setting_default_auto_accept() {
         let config = IniConfig::new();
         assert_eq!(
-            get_setting_default_with_config("settings.auto_accept", &config).unwrap(),
+            get_setting_default("settings.auto_accept", &config).unwrap(),
             "false"
         );
     }
@@ -590,7 +590,7 @@ mod tests {
     fn get_setting_default_conflict_resolution() {
         let config = IniConfig::new();
         assert_eq!(
-            get_setting_default_with_config("settings.conflict_resolution", &config).unwrap(),
+            get_setting_default("settings.conflict_resolution", &config).unwrap(),
             "NOT_SELECTED"
         );
     }
@@ -599,7 +599,7 @@ mod tests {
     fn get_setting_default_log_level() {
         let config = IniConfig::new();
         assert_eq!(
-            get_setting_default_with_config("settings.log_level", &config).unwrap(),
+            get_setting_default("settings.log_level", &config).unwrap(),
             "WARNING"
         );
     }
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn get_setting_default_job_history_dir_substitutes_profile() {
         let config = IniConfig::new();
-        let val = get_setting_default_with_config("settings.job_history_dir", &config).unwrap();
+        let val = get_setting_default("settings.job_history_dir", &config).unwrap();
         assert!(
             val.contains("(default)"),
             "should substitute aws_profile_name into default: {val}"
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn get_setting_default_nonexistent_returns_error() {
         let config = IniConfig::new();
-        assert!(get_setting_default_with_config("settings.nonexistent", &config).is_err());
+        assert!(get_setting_default("settings.nonexistent", &config).is_err());
     }
 
     // -- hierarchical get/set --
@@ -626,16 +626,16 @@ mod tests {
     fn get_farm_id_default_profile_returns_empty() {
         // farm_id under default profile "(default)" → empty default
         let config = IniConfig::new();
-        let val = get_setting_with_config("defaults.farm_id", &config).unwrap();
+        let val = get_setting("defaults.farm_id", &config).unwrap();
         assert_eq!(val, "");
     }
 
     #[test]
     fn set_and_get_farm_id_under_default_profile() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.farm_id", "farm-123", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-123", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.farm_id", &config).unwrap(),
+            get_setting("defaults.farm_id", &config).unwrap(),
             "farm-123"
         );
     }
@@ -643,10 +643,10 @@ mod tests {
     #[test]
     fn set_and_get_farm_id_under_custom_profile() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "MyProfile", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-abc", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "MyProfile", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-abc", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.farm_id", &config).unwrap(),
+            get_setting("defaults.farm_id", &config).unwrap(),
             "farm-abc"
         );
     }
@@ -654,11 +654,11 @@ mod tests {
     #[test]
     fn get_queue_id_with_profile_and_farm_set() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "P1", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-1", &mut config).unwrap();
-        set_setting_in_config("defaults.queue_id", "queue-1", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "P1", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
+        set_setting("defaults.queue_id", "queue-1", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.queue_id", &config).unwrap(),
+            get_setting("defaults.queue_id", &config).unwrap(),
             "queue-1"
         );
     }
@@ -666,12 +666,12 @@ mod tests {
     #[test]
     fn get_job_id_with_full_hierarchy() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "P1", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-1", &mut config).unwrap();
-        set_setting_in_config("defaults.queue_id", "queue-1", &mut config).unwrap();
-        set_setting_in_config("defaults.job_id", "job-1", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "P1", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
+        set_setting("defaults.queue_id", "queue-1", &mut config).unwrap();
+        set_setting("defaults.job_id", "job-1", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.job_id", &config).unwrap(),
+            get_setting("defaults.job_id", &config).unwrap(),
             "job-1"
         );
     }
@@ -679,11 +679,11 @@ mod tests {
     #[test]
     fn get_storage_profile_id_farm_scoped() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "P1", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-1", &mut config).unwrap();
-        set_setting_in_config("settings.storage_profile_id", "sp-1", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "P1", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
+        set_setting("settings.storage_profile_id", "sp-1", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("settings.storage_profile_id", &config).unwrap(),
+            get_setting("settings.storage_profile_id", &config).unwrap(),
             "sp-1"
         );
     }
@@ -691,8 +691,8 @@ mod tests {
     #[test]
     fn get_job_history_dir_with_custom_profile() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "MyProfile", &mut config).unwrap();
-        let val = get_setting_with_config("settings.job_history_dir", &config).unwrap();
+        set_setting("defaults.aws_profile_name", "MyProfile", &mut config).unwrap();
+        let val = get_setting("settings.job_history_dir", &config).unwrap();
         assert!(
             val.contains("MyProfile"),
             "should substitute profile name: {val}"
@@ -703,13 +703,13 @@ mod tests {
     fn switch_profile_isolates_farm_id() {
         let mut config = IniConfig::new();
         // Set farm under profile A
-        set_setting_in_config("defaults.aws_profile_name", "ProfileA", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-A", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "ProfileA", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-A", &mut config).unwrap();
         // Switch to profile B
-        set_setting_in_config("defaults.aws_profile_name", "ProfileB", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "ProfileB", &mut config).unwrap();
         // farm_id should be empty under profile B
         assert_eq!(
-            get_setting_with_config("defaults.farm_id", &config).unwrap(),
+            get_setting("defaults.farm_id", &config).unwrap(),
             ""
         );
     }
@@ -717,12 +717,12 @@ mod tests {
     #[test]
     fn switch_farm_isolates_queue_id() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.farm_id", "farm-X", &mut config).unwrap();
-        set_setting_in_config("defaults.queue_id", "queue-X", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-X", &mut config).unwrap();
+        set_setting("defaults.queue_id", "queue-X", &mut config).unwrap();
         // Switch farm
-        set_setting_in_config("defaults.farm_id", "farm-Y", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-Y", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.queue_id", &config).unwrap(),
+            get_setting("defaults.queue_id", &config).unwrap(),
             ""
         );
     }
@@ -730,10 +730,10 @@ mod tests {
     #[test]
     fn set_with_explicit_config_does_not_write_disk() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.farm_id", "farm-mem", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-mem", &mut config).unwrap();
         // Value is in memory
         assert_eq!(
-            get_setting_with_config("defaults.farm_id", &config).unwrap(),
+            get_setting("defaults.farm_id", &config).unwrap(),
             "farm-mem"
         );
         // No file was written — this is an in-memory-only operation
@@ -742,8 +742,8 @@ mod tests {
     #[test]
     fn set_creates_new_section() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "NewProf", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-new", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "NewProf", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-new", &mut config).unwrap();
         // The section "profile-NewProf defaults" should exist
         assert_eq!(config.get("profile-NewProf defaults", "farm_id"), Some("farm-new"));
     }
@@ -751,10 +751,10 @@ mod tests {
     #[test]
     fn clear_reverts_to_default() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "Prof", &mut config).unwrap();
-        clear_setting_in_config("defaults.aws_profile_name", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "Prof", &mut config).unwrap();
+        clear_setting("defaults.aws_profile_name", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.aws_profile_name", &config).unwrap(),
+            get_setting("defaults.aws_profile_name", &config).unwrap(),
             "(default)"
         );
     }
@@ -762,11 +762,11 @@ mod tests {
     #[test]
     fn clear_farm_scoped_setting() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.farm_id", "farm-1", &mut config).unwrap();
-        set_setting_in_config("settings.storage_profile_id", "sp-1", &mut config).unwrap();
-        clear_setting_in_config("settings.storage_profile_id", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
+        set_setting("settings.storage_profile_id", "sp-1", &mut config).unwrap();
+        clear_setting("settings.storage_profile_id", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("settings.storage_profile_id", &config).unwrap(),
+            get_setting("settings.storage_profile_id", &config).unwrap(),
             ""
         );
     }
@@ -774,11 +774,11 @@ mod tests {
     #[test]
     fn clear_with_explicit_config_does_not_write_disk() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", "X", &mut config).unwrap();
-        clear_setting_in_config("defaults.aws_profile_name", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "X", &mut config).unwrap();
+        clear_setting("defaults.aws_profile_name", &mut config).unwrap();
         // Just verifying it doesn't panic — no disk write
         assert_eq!(
-            get_setting_with_config("defaults.aws_profile_name", &config).unwrap(),
+            get_setting("defaults.aws_profile_name", &config).unwrap(),
             "(default)"
         );
     }
@@ -787,15 +787,15 @@ mod tests {
     fn hierarchy_switch_profile_restores_previous_values() {
         let mut config = IniConfig::new();
         // Set up profile A with farm
-        set_setting_in_config("defaults.aws_profile_name", "A", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-A", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "A", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-A", &mut config).unwrap();
         // Switch to B
-        set_setting_in_config("defaults.aws_profile_name", "B", &mut config).unwrap();
-        set_setting_in_config("defaults.farm_id", "farm-B", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "B", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-B", &mut config).unwrap();
         // Switch back to A
-        set_setting_in_config("defaults.aws_profile_name", "A", &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", "A", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.farm_id", &config).unwrap(),
+            get_setting("defaults.farm_id", &config).unwrap(),
             "farm-A"
         );
     }
@@ -803,12 +803,12 @@ mod tests {
     #[test]
     fn hierarchy_clear_farm_reverts_queue_scope() {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.farm_id", "farm-1", &mut config).unwrap();
-        set_setting_in_config("defaults.queue_id", "queue-1", &mut config).unwrap();
+        set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
+        set_setting("defaults.queue_id", "queue-1", &mut config).unwrap();
         // Clear farm → queue should now resolve under default empty farm
-        clear_setting_in_config("defaults.farm_id", &mut config).unwrap();
+        clear_setting("defaults.farm_id", &mut config).unwrap();
         assert_eq!(
-            get_setting_with_config("defaults.queue_id", &config).unwrap(),
+            get_setting("defaults.queue_id", &config).unwrap(),
             ""
         );
     }
@@ -816,39 +816,39 @@ mod tests {
     #[test]
     fn get_setting_no_dot_returns_error() {
         let config = IniConfig::new();
-        let err = get_setting_with_config("bad_name", &config).unwrap_err();
+        let err = get_setting("bad_name", &config).unwrap_err();
         assert!(err.to_string().contains("is not valid"));
     }
 
     #[test]
     fn get_setting_unknown_name_returns_error() {
         let config = IniConfig::new();
-        let err = get_setting_with_config("settings.nonexistent", &config).unwrap_err();
+        let err = get_setting("settings.nonexistent", &config).unwrap_err();
         assert!(err.to_string().contains("has no setting"));
     }
 
     #[test]
     fn set_setting_no_dot_returns_error() {
         let mut config = IniConfig::new();
-        assert!(set_setting_in_config("bad", "val", &mut config).is_err());
+        assert!(set_setting("bad", "val", &mut config).is_err());
     }
 
     #[test]
     fn set_setting_unknown_name_returns_error() {
         let mut config = IniConfig::new();
-        assert!(set_setting_in_config("settings.fake", "val", &mut config).is_err());
+        assert!(set_setting("settings.fake", "val", &mut config).is_err());
     }
 
     #[test]
     fn clear_setting_no_dot_returns_error() {
         let mut config = IniConfig::new();
-        assert!(clear_setting_in_config("bad", &mut config).is_err());
+        assert!(clear_setting("bad", &mut config).is_err());
     }
 
     #[test]
     fn clear_setting_unknown_name_returns_error() {
         let mut config = IniConfig::new();
-        assert!(clear_setting_in_config("settings.fake", &mut config).is_err());
+        assert!(clear_setting("settings.fake", &mut config).is_err());
     }
 
     // -- get_best_profile_for_farm --
@@ -859,20 +859,20 @@ mod tests {
         assignments: &[(&str, &str, &str)], // (profile, farm_id, queue_id)
     ) -> IniConfig {
         let mut config = IniConfig::new();
-        set_setting_in_config("defaults.aws_profile_name", default_profile, &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", default_profile, &mut config).unwrap();
 
         for &(profile, farm, queue) in assignments {
-            set_setting_in_config("defaults.aws_profile_name", profile, &mut config).unwrap();
+            set_setting("defaults.aws_profile_name", profile, &mut config).unwrap();
             if !farm.is_empty() {
-                set_setting_in_config("defaults.farm_id", farm, &mut config).unwrap();
+                set_setting("defaults.farm_id", farm, &mut config).unwrap();
             }
             if !queue.is_empty() {
-                set_setting_in_config("defaults.queue_id", queue, &mut config).unwrap();
+                set_setting("defaults.queue_id", queue, &mut config).unwrap();
             }
         }
 
         // Restore default profile
-        set_setting_in_config("defaults.aws_profile_name", default_profile, &mut config).unwrap();
+        set_setting("defaults.aws_profile_name", default_profile, &mut config).unwrap();
         config
     }
 
@@ -991,7 +991,7 @@ mod tests {
         let _ = get_best_profile_for_farm(&config, &profiles, "farm-1", None);
         // Default profile should be unchanged
         assert_eq!(
-            get_setting_with_config("defaults.aws_profile_name", &config).unwrap(),
+            get_setting("defaults.aws_profile_name", &config).unwrap(),
             "Original"
         );
     }

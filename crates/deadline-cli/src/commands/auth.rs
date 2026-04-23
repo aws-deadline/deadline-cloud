@@ -54,7 +54,7 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
     let config = if let Some(p) = profile {
         let mut c = config_file::read_config()
             .map_err(|e| CliError::Operation(e.to_string()))?;
-        config_file::set_setting_in_config("defaults.aws_profile_name", &p, &mut c)
+        config_file::set_setting("defaults.aws_profile_name", &p, &mut c)
             .map_err(|e| CliError::Operation(e.to_string()))?;
         Some(c)
     } else {

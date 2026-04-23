@@ -53,7 +53,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
         }
         FarmAction::Get { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             match api::get_farm(&farm, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));

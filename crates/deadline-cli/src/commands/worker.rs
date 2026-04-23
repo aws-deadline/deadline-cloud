@@ -45,7 +45,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
     match action {
         WorkerAction::List { profile, farm_id, fleet_id, page_size, item_offset } => {
             let config = setup(profile, farm_id)?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let resp = match api::search_workers(&farm, &[&fleet_id], item_offset, page_size, Some(&config), None).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -67,7 +67,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         }
         WorkerAction::Get { profile, farm_id, fleet_id, worker_id } => {
             let config = setup(profile, farm_id)?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let resp = match api::get_worker(&farm, &fleet_id, &worker_id, Some(&config), None).await {
                 Ok(r) => r,
                 Err(e) => {

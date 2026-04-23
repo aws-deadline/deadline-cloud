@@ -56,7 +56,7 @@ fn setup_config(
 }
 
 fn get(config: &IniConfig, setting: &str) -> String {
-    config_file::get_setting_with_config(setting, config).unwrap_or_default()
+    config_file::get_setting(setting, config).unwrap_or_default()
 }
 
 #[derive(Subcommand)]
@@ -866,7 +866,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
 /// Read auto_accept from config (already set by apply_cli_options_to_config when --yes).
 fn is_auto_accept(config: &deadline_config::ini::IniConfig) -> bool {
-    config_file::get_setting_with_config("settings.auto_accept", config)
+    config_file::get_setting("settings.auto_accept", config)
         .ok()
         .and_then(|v| config_file::str2bool(&v).ok())
         .unwrap_or(false)
@@ -1473,7 +1473,7 @@ pub(crate) async fn download_output_impl(
                 }
                 println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
             }
-            let setting = config_file::get_setting_with_config("settings.conflict_resolution", config)
+            let setting = config_file::get_setting("settings.conflict_resolution", config)
                 .unwrap_or_default();
             match setting.to_uppercase().as_str() {
                 "SKIP" => FileConflictResolution::Skip,

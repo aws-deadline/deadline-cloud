@@ -88,9 +88,9 @@ async fn resolve_s3_context(
         Ok(S3Context { sdk_config, s3_root_uri: uri })
     } else {
         // No --profile: derive S3 URI from queue settings, use queue-scoped credentials
-        let farm_id = config_file::get_setting_with_config("defaults.farm_id", config)
+        let farm_id = config_file::get_setting("defaults.farm_id", config)
             .map_err(|e| CliError::Operation(e.to_string()))?;
-        let queue_id = config_file::get_setting_with_config("defaults.queue_id", config)
+        let queue_id = config_file::get_setting("defaults.queue_id", config)
             .map_err(|e| CliError::Operation(e.to_string()))?;
 
         // Derive S3 root URI from queue's jobAttachmentSettings (unless explicitly provided)
@@ -154,7 +154,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
 
             // Resolve conflict resolution
             let resolution = conflict_resolution.unwrap_or_else(|| {
-                let setting = config_file::get_setting_with_config(
+                let setting = config_file::get_setting(
                     "settings.conflict_resolution",
                     &config,
                 )

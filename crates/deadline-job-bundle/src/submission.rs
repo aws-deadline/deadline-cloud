@@ -228,8 +228,8 @@ pub struct SubmitJobParams<'a> {
 
 fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
     match config {
-        Some(c) => config_file::get_setting_with_config(name, c).unwrap_or_default(),
-        None => config_file::get_setting(name).unwrap_or_default(),
+        Some(c) => config_file::get_setting(name, c).unwrap_or_default(),
+        None => config_file::get_setting_from_disk(name).unwrap_or_default(),
     }
 }
 

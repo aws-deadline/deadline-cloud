@@ -274,9 +274,9 @@ pub fn resolve_opt_out(config: Option<&IniConfig>) -> bool {
         return config_file::str2bool(&env_val).unwrap_or(false);
     }
     let val = match config {
-        Some(c) => config_file::get_setting_with_config("telemetry.opt_out", c)
+        Some(c) => config_file::get_setting("telemetry.opt_out", c)
             .unwrap_or_default(),
-        None => config_file::get_setting("telemetry.opt_out").unwrap_or_default(),
+        None => config_file::get_setting_from_disk("telemetry.opt_out").unwrap_or_default(),
     };
     config_file::str2bool(&val).unwrap_or(false)
 }
@@ -293,13 +293,13 @@ pub fn validate_or_generate_identifier(existing: Option<&str>) -> String {
 
 fn get_or_create_identifier(config: Option<&IniConfig>) -> String {
     let existing = match config {
-        Some(c) => config_file::get_setting_with_config("telemetry.identifier", c).ok(),
-        None => config_file::get_setting("telemetry.identifier").ok(),
+        Some(c) => config_file::get_setting("telemetry.identifier", c).ok(),
+        None => config_file::get_setting_from_disk("telemetry.identifier").ok(),
     };
     let id = validate_or_generate_identifier(existing.as_deref());
     if existing.as_deref() != Some(&id) {
         // Save the new identifier — best effort
-        let _ = config_file::set_setting("telemetry.identifier", &id);
+        let _ = config_file::set_setting_to_disk("telemetry.identifier", &id);
     }
     id
 }

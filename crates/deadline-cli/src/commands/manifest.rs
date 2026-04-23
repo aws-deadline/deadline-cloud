@@ -204,8 +204,8 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 &["farm_id", "queue_id"],
             )?;
 
-            let farm = deadline_config::config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let queue = deadline_config::config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
             let _asset = match asset_type.to_lowercase().as_str() {
                 "input" => deadline_job_attachments::manifest_ops::AssetType::Input,
@@ -318,8 +318,8 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                         },
                         &["farm_id", "queue_id"],
                     )?;
-                    let farm = deadline_config::config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-                    let queue = deadline_config::config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+                    let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+                    let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
                     let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config), None).await
                         .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;

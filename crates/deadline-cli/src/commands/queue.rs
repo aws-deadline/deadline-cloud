@@ -204,7 +204,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
     match action {
         QueueAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             match api::list_queues(&farm, Some(&config), None).await {
                 Ok(resp) => {
                     let empty = vec![];
@@ -228,8 +228,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         }
         QueueAction::Get { profile, farm_id, queue_id } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match api::get_queue(&farm, &queue, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
@@ -248,8 +248,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::ExportCredentials { profile, farm_id, queue_id, mode } => {
             let start = std::time::Instant::now();
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
             let telemetry = create_telemetry(Some(&config));
 
@@ -306,8 +306,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         }
         QueueAction::GetStorageProfile { profile, farm_id, queue_id, storage_profile_id } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config), None).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
@@ -323,8 +323,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         }
         QueueAction::Paramdefs { profile, farm_id, queue_id } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
-            let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-            let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match deadline_api::queue_parameters::get_queue_parameter_definitions(
                 &farm, &queue, Some(&config), None,
             ).await {
@@ -410,18 +410,18 @@ async fn run_sync_output(
 
     // Override storage profile if provided via CLI
     if let Some(ref sp_id) = storage_profile_id {
-        let _ = config_file::set_setting_in_config("settings.storage_profile_id", sp_id, &mut config);
+        let _ = config_file::set_setting("settings.storage_profile_id", sp_id, &mut config);
     }
 
-    let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-    let queue_id_str = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+    let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+    let queue_id_str = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
     // Resolve storage profile
     let local_storage_profile_id: Option<String> = if ignore_storage_profiles {
         eprintln!("Ignoring all storage profiles.");
         None
     } else {
-        let sp_id = config_file::get_setting_with_config("settings.storage_profile_id", &config)
+        let sp_id = config_file::get_setting("settings.storage_profile_id", &config)
             .unwrap_or_default();
         if sp_id.is_empty() {
             return Err(CliError::Operation(

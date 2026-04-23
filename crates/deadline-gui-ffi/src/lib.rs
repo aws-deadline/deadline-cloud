@@ -164,7 +164,7 @@ pub extern "C" fn deadline_get_setting(
         Ok(c) => c,
         Err(e) => return error_to_ptr(&e),
     };
-    match deadline_config::config_file::get_setting_with_config(&name, &config) {
+    match deadline_config::config_file::get_setting(&name, &config) {
         Ok(val) => json_to_ptr(&serde_json::json!({"value": val})),
         Err(e) => error_to_ptr(&e.to_string()),
     }
@@ -193,7 +193,7 @@ pub extern "C" fn deadline_set_setting(
         Ok(c) => c,
         Err(e) => return error_to_ptr(&e.to_string()),
     };
-    if let Err(e) = deadline_config::config_file::set_setting_in_config(&name, &val, &mut config) {
+    if let Err(e) = deadline_config::config_file::set_setting(&name, &val, &mut config) {
         return error_to_ptr(&e.to_string());
     }
     match deadline_config::config_file::write_config_to(&config, &path) {

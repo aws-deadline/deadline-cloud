@@ -77,8 +77,8 @@ fn show(output: OutputFormat) -> Result<(), CliError> {
             println!();
 
             for name in config_file::setting_names() {
-                let value = config_file::get_setting_with_config(name, &config)?;
-                let default = config_file::get_setting_default_with_config(name, &config)?;
+                let value = config_file::get_setting(name, &config)?;
+                let default = config_file::get_setting_default(name, &config)?;
                 let suffix = if value == default { "(default)" } else { "" };
 
                 println!("{name}: {value} {suffix}");
@@ -99,7 +99,7 @@ fn show(output: OutputFormat) -> Result<(), CliError> {
                 ),
             );
             for name in config_file::setting_names() {
-                let value = config_file::get_setting_with_config(name, &config)?;
+                let value = config_file::get_setting(name, &config)?;
                 map.insert(name.into(), serde_json::Value::String(value));
             }
             println!("{}", json_with_spaces(&serde_json::Value::Object(map)));
@@ -109,17 +109,17 @@ fn show(output: OutputFormat) -> Result<(), CliError> {
 }
 
 fn get(setting_name: &str) -> Result<(), CliError> {
-    let value = config_file::get_setting(setting_name)?;
+    let value = config_file::get_setting_from_disk(setting_name)?;
     println!("{value}");
     Ok(())
 }
 
 fn set(setting_name: &str, value: &str) -> Result<(), CliError> {
-    config_file::set_setting(setting_name, value)?;
+    config_file::set_setting_to_disk(setting_name, value)?;
     Ok(())
 }
 
 fn clear(setting_name: &str) -> Result<(), CliError> {
-    config_file::clear_setting(setting_name)?;
+    config_file::clear_setting_to_disk(setting_name)?;
     Ok(())
 }

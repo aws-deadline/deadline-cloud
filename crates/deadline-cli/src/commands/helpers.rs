@@ -9,7 +9,7 @@ pub fn apply_profile(profile: Option<String>) -> Result<Option<IniConfig>, CliEr
     match profile {
         Some(p) => {
             let mut config = config_file::read_config()?;
-            config_file::set_setting_in_config("defaults.aws_profile_name", &p, &mut config)?;
+            config_file::set_setting("defaults.aws_profile_name", &p, &mut config)?;
             Ok(Some(config))
         }
         None => Ok(None),

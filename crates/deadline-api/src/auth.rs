@@ -325,8 +325,8 @@ fn logout_inner(
 
 fn get_monitor_path(config: Option<&deadline_config::ini::IniConfig>) -> String {
     match config {
-        Some(c) => deadline_config::config_file::get_setting_with_config("deadline-cloud-monitor.path", c).unwrap_or_default(),
-        None => deadline_config::config_file::get_setting("deadline-cloud-monitor.path").unwrap_or_default(),
+        Some(c) => deadline_config::config_file::get_setting("deadline-cloud-monitor.path", c).unwrap_or_default(),
+        None => deadline_config::config_file::get_setting_from_disk("deadline-cloud-monitor.path").unwrap_or_default(),
     }
 }
 

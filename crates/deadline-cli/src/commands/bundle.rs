@@ -157,7 +157,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
 
             // Handle storage_profile_id separately (not in shared CliOptions)
             if let Some(ref sp) = storage_profile_id {
-                config_file::set_setting_in_config("settings.storage_profile_id", sp, &mut config)
+                config_file::set_setting("settings.storage_profile_id", sp, &mut config)
                     .map_err(|e| CliError::Operation(e.to_string()))?;
             }
 
@@ -207,7 +207,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 submitter_name: Some(submitter_name.unwrap_or_else(|| "CLI".into())),
                 known_asset_paths: known_asset_path,
                 auto_accept: yes || config_file::str2bool(
-                    &config_file::get_setting_with_config("settings.auto_accept", &config)
+                    &config_file::get_setting("settings.auto_accept", &config)
                         .unwrap_or_default(),
                 ).unwrap_or(false),
                 force_s3_check: resolved_force_s3_check,
@@ -237,8 +237,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     details.insert("exception_type".into(), serde_json::json!("DeadlineOperationError"));
                     telemetry.record_event("com.amazon.rum.deadline.error", details, false);
                     drop(telemetry); // Flush telemetry before exit
-                    let farm = config_file::get_setting_with_config("defaults.farm_id", &config).unwrap_or_default();
-                    let queue = config_file::get_setting_with_config("defaults.queue_id", &config).unwrap_or_default();
+                    let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+                    let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
                     let suggestion = suggest_resources_on_client_error(&e.to_string(), "CreateJob", Some(&farm), Some(&queue), None, Some(&config)).await;
                     return Err(CliError::Operation(format!("{e}{suggestion}")));
                 }
@@ -268,7 +268,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 && storage_profile_id.is_none()
             {
                 if let Some(ref id) = job_id {
-                    let _ = config_file::set_setting("defaults.job_id", id);
+                    let _ = config_file::set_setting_to_disk("defaults.job_id", id);
                 }
             }
 

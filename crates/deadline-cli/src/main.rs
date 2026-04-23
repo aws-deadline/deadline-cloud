@@ -112,7 +112,7 @@ fn resolve_log_level(cli_level: Option<&str>) -> String {
     }
 
     // Read from config
-    let config_level = deadline_config::config_file::get_setting("settings.log_level")
+    let config_level = deadline_config::config_file::get_setting_from_disk("settings.log_level")
         .unwrap_or_default()
         .to_uppercase();
 

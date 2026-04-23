@@ -5,7 +5,7 @@
 //! retrieval. The caller provides an `SdkConfig` with credentials; this module
 //! builds a properly-configured S3 client on top of it.
 
-use deadline_config::config_file::{get_setting, get_setting_with_config};
+use deadline_config::config_file::{get_setting, get_setting_from_disk};
 use deadline_config::ini::IniConfig;
 use crate::errors::JobAttachmentsError;
 
@@ -73,8 +73,8 @@ pub fn get_s3_max_pool_connections(
     config: Option<&IniConfig>,
 ) -> Result<i32, JobAttachmentsError> {
     let value_str = match config {
-        Some(c) => get_setting_with_config("settings.s3_max_pool_connections", c),
-        None => get_setting("settings.s3_max_pool_connections"),
+        Some(c) => get_setting("settings.s3_max_pool_connections", c),
+        None => get_setting_from_disk("settings.s3_max_pool_connections"),
     }
     .map_err(|e| {
         JobAttachmentsError::AssetSync(format!(
@@ -106,8 +106,8 @@ pub fn get_small_file_threshold_multiplier(
     config: Option<&IniConfig>,
 ) -> Result<i32, JobAttachmentsError> {
     let value_str = match config {
-        Some(c) => get_setting_with_config("settings.small_file_threshold_multiplier", c),
-        None => get_setting("settings.small_file_threshold_multiplier"),
+        Some(c) => get_setting("settings.small_file_threshold_multiplier", c),
+        None => get_setting_from_disk("settings.small_file_threshold_multiplier"),
     }
     .map_err(|e| {
         JobAttachmentsError::AssetSync(format!(
@@ -196,7 +196,7 @@ pub async fn get_account_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deadline_config::config_file::set_setting_in_config;
+    use deadline_config::config_file::set_setting;
     use deadline_config::ini::IniConfig;
 
     // ===  cases 1-3: Constants ===
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn build_s3_client_uses_pool_connections_from_config() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "20", &mut config).unwrap();
+        set_setting("settings.s3_max_pool_connections", "20", &mut config).unwrap();
         let sdk_config = aws_config::SdkConfig::builder()
             .behavior_version(aws_config::BehaviorVersion::latest())
             .region(aws_config::Region::new("us-west-2"))
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn get_s3_max_pool_connections_valid_integer() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "10", &mut config).unwrap();
+        set_setting("settings.s3_max_pool_connections", "10", &mut config).unwrap();
         let result = get_s3_max_pool_connections(Some(&config));
         assert_eq!(result.unwrap(), 10);
     }
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn get_s3_max_pool_connections_not_integer_errors() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "abc", &mut config).unwrap();
+        set_setting("settings.s3_max_pool_connections", "abc", &mut config).unwrap();
         let result = get_s3_max_pool_connections(Some(&config));
         assert!(result.is_err());
     }
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn get_s3_max_pool_connections_zero_errors() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "0", &mut config).unwrap();
+        set_setting("settings.s3_max_pool_connections", "0", &mut config).unwrap();
         let result = get_s3_max_pool_connections(Some(&config));
         assert!(result.is_err());
     }
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn get_s3_max_pool_connections_negative_errors() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "-5", &mut config).unwrap();
+        set_setting("settings.s3_max_pool_connections", "-5", &mut config).unwrap();
         let result = get_s3_max_pool_connections(Some(&config));
         assert!(result.is_err());
     }
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn get_small_file_threshold_multiplier_valid() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.small_file_threshold_multiplier", "20", &mut config)
+        set_setting("settings.small_file_threshold_multiplier", "20", &mut config)
             .unwrap();
         assert_eq!(get_small_file_threshold_multiplier(Some(&config)).unwrap(), 20);
     }
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn get_small_file_threshold_multiplier_not_integer_errors() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.small_file_threshold_multiplier", "abc", &mut config)
+        set_setting("settings.small_file_threshold_multiplier", "abc", &mut config)
             .unwrap();
         assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
     }
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn get_small_file_threshold_multiplier_zero_errors() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.small_file_threshold_multiplier", "0", &mut config)
+        set_setting("settings.small_file_threshold_multiplier", "0", &mut config)
             .unwrap();
         assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
     }
@@ -328,8 +328,8 @@ mod tests {
     #[test]
     fn compute_upload_config_defaults() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "50", &mut config).unwrap();
-        set_setting_in_config("settings.small_file_threshold_multiplier", "20", &mut config)
+        set_setting("settings.s3_max_pool_connections", "50", &mut config).unwrap();
+        set_setting("settings.small_file_threshold_multiplier", "20", &mut config)
             .unwrap();
         let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
         // 8MB * 20 = 160MB
@@ -341,8 +341,8 @@ mod tests {
     #[test]
     fn compute_upload_config_small_multiplier() {
         let mut config = IniConfig::new();
-        set_setting_in_config("settings.s3_max_pool_connections", "10", &mut config).unwrap();
-        set_setting_in_config("settings.small_file_threshold_multiplier", "2", &mut config)
+        set_setting("settings.s3_max_pool_connections", "10", &mut config).unwrap();
+        set_setting("settings.small_file_threshold_multiplier", "2", &mut config)
             .unwrap();
         let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
         // 8MB * 2 = 16MB
