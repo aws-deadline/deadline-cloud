@@ -179,7 +179,7 @@ _incremental_output_download()
 
 ### 4.4 Path Mapping Implementation
 
-**File:** `src/deadline/job_attachments/_path_mapping.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py`
 
 #### 4.4.1 Rule Generation
 
@@ -225,7 +225,7 @@ class _PathMappingRuleApplier:
 
 ### 4.5 Download File Operations
 
-**File:** `src/deadline/job_attachments/download.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/download.py`
 
 #### 4.5.1 OutputDownloader Class
 
@@ -268,7 +268,7 @@ def download_files(
 
 ### 5.1 StorageProfile
 
-**File:** `src/deadline/job_attachments/models.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/models.py`
 
 ```python
 @dataclass
@@ -281,7 +281,7 @@ class StorageProfile:
 
 ### 5.2 FileSystemLocation
 
-**File:** `src/deadline/job_attachments/models.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/models.py`
 
 ```python
 @dataclass
@@ -520,7 +520,7 @@ Note: Both profiles are fetched via the typed API (`api.get_storage_profile_for_
 
 Since the function is private (underscore-prefixed) with only two call sites (`_incremental_download.py` and the new `_job_download_helpers.py`), we refactor it directly instead of adding an adapter.
 
-**File:** `src/deadline/job_attachments/_path_mapping.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py`
 
 ```python
 def _generate_path_mapping_rules(
@@ -827,12 +827,12 @@ Each helper function is independently testable in `test/unit/deadline_client/cli
 | Incremental download | `src/deadline/client/cli/_incremental_download.py` |
 | Job submission API | `src/deadline/client/api/_submit_job_bundle.py` |
 | Storage profile API | `src/deadline/client/api/_get_storage_profile_for_queue.py` |
-| S3AssetManager | `src/deadline/job_attachments/upload.py` |
-| OutputDownloader | `src/deadline/job_attachments/download.py` |
-| Path mapping | `src/deadline/job_attachments/_path_mapping.py` |
-| Hash algorithms | `src/deadline/job_attachments/asset_manifests/hash_algorithms.py` |
-| Hash cache | `src/deadline/job_attachments/caches/hash_cache.py` |
-| Models | `src/deadline/job_attachments/models.py` |
+| S3AssetManager | `deadline-cloud-job-attachments/src/deadline/job_attachments/upload.py` |
+| OutputDownloader | `deadline-cloud-job-attachments/src/deadline/job_attachments/download.py` |
+| Path mapping | `deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py` |
+| Hash algorithms | `deadline-cloud-job-attachments/src/deadline/job_attachments/asset_manifests/hash_algorithms.py` |
+| Hash cache | `deadline-cloud-job-attachments/src/deadline/job_attachments/caches/hash_cache.py` |
+| Models | `deadline-cloud-job-attachments/src/deadline/job_attachments/models.py` |
 | Config file | `src/deadline/client/config/config_file.py` |
 
 ---
@@ -905,7 +905,7 @@ Key operations:
 
 ### 12.3 Asset Manager: `S3AssetManager`
 
-**File:** `src/deadline/job_attachments/upload.py`
+**File:** `deadline-cloud-job-attachments/src/deadline/job_attachments/upload.py`
 
 ```
 S3AssetManager.__init__()

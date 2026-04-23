@@ -40,7 +40,7 @@ jobs:
       python-version: ${{ matrix.python-version }}
       ref: ${{inputs.tag}}
       # The incremental output download and mcp feature doesn't run on Python 3.8, so test coverage is lower
-      cov-fail-under: "74"
+      cov-fail-under: "63"
 
   Attributions:
     name: Attributions

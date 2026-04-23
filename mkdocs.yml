@@ -51,19 +51,6 @@ nav:
       - "exceptions": code_reference/client_exceptions.md
       - "job_bundle": code_reference/client_job_bundle.md
       - "ui": code_reference/client_ui.md
-    - "deadline.job_attachments":
-      - "api": code_reference/job_attachments_api.md
-      - "asset_manifests": code_reference/job_attachments_asset_manifests.md
-      - "asset_sync": code_reference/job_attachments_asset_sync.md
-      - "caches": code_reference/job_attachments_caches.md
-      - "download": code_reference/job_attachments_download.md
-      - "exceptions": code_reference/job_attachments_exceptions.md
-      - "models": code_reference/job_attachments_models.md
-      - "os_file_permission": code_reference/job_attachments_os_file_permission.md
-      - "progress_tracker": code_reference/job_attachments_progress_tracker.md
-      - "upload": code_reference/job_attachments_upload.md
-      - "vfs": code_reference/job_attachments_vfs.md
-  - Job Attachments Guide: job_attachments_guide.md
   - Submission Hooks: submission-hooks.md
   - MCP Guide: mcp_guide.md
 

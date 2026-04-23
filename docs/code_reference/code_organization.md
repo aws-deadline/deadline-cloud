@@ -1,8 +1,7 @@
 # Code organization
 
-This repository is split up into two main modules:
-1. `src/client`
-2. `src/job_attachments`
+The main module in this repository is `src/client`. Job attachments functionality
+lives in the separate [`deadline-cloud-job-attachments`](https://github.com/aws-deadline/deadline-cloud-job-attachments) package.
 
 The `src/client` organization is laid out below.
 

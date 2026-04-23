@@ -21,10 +21,6 @@ src/deadline/
 │   ├── ui/           # Qt/PySide GUI components
 │   ├── job_bundle/   # Job bundle handling and history
 │   └── dataclasses/  # Data structures
-├── job_attachments/  # File transfer to/from S3
-│   ├── api/          # Public job attachments API
-│   ├── caches/       # Hash and S3 check caches
-│   └── asset_manifests/  # Manifest handling
 ├── mcp/              # MCP server (public)
 ├── _mcp/             # MCP server (internal)
 └── common/           # Shared utilities

@@ -40,12 +40,10 @@ dependencies = [
   # Click 8.2 dropped python 3.8/3.9 support
   "click >= 8.1.7",
   "pyyaml >= 6.0",
-  # Job Attachments
+  "deadline-job-attachments == 0.0.1",
   "typing_extensions >= 4.8",
-  "xxhash >= 3.4,< 3.8",
-  "pywin32 >= 307; sys_platform == 'win32'",
+  "psutil >= 7.0.0",
   "QtPy == 2.4.*",
-  "psutil >= 7.0.0"
 ]
 
 [project.urls]
@@ -84,7 +82,7 @@ version-file = "_version.py"
 path = "hatch_custom_hook.py"
 
 [tool.hatch.build.hooks.custom.copy_version_py]
-destinations = ["src/deadline/client", "src/deadline/job_attachments"]
+destinations = ["src/deadline/client"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/*", "hatch_custom_hook.py", "THIRD_PARTY_LICENSES"]
@@ -109,7 +107,7 @@ explicit_package_bases = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["qtpy.*", "boto3.*", "botocore.*", "moto.*", "xxhash"]
+module = ["qtpy.*", "boto3.*", "botocore.*", "moto.*"]
 
 [[tool.mypy.overrides]]
 module = "deadline.client.ui.*"
@@ -125,13 +123,6 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["deadline"]
-
-[tool.ruff.lint.per-file-ignores]
-# We need to use a platform assertion to short-circuit mypy type checking on non-Windows platforms
-# https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
-# This causes imports to come after regular Python statements causing flake8 rule E402 to be flagged
-"src/deadline/job_attachments/_windows/*.py" = ["E402"]
-
 
 # Configuration for pytest; enable coverage for deadline_worker_agent, emit
 # XML, HTML, and terminal reports.
@@ -151,7 +142,6 @@ looponfailroots = ["src", "test/unit"]
 markers = [
   "no_setup: mark that test shouldn't use default setups",
   "integ: tests that run against AWS resources",
-  "docker: marks tests to be run only in a Docker environment",
   "cross_account: tests that run against other aws accounts",
   "asyncio: mark test as async",
 ]
@@ -172,12 +162,9 @@ source = ["src/"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 80
+fail_under = 69
 
 # https://github.com/wemake-services/coverage-conditional-plugin
-[tool.coverage.coverage_conditional_plugin.omit]
-"sys_platform != 'win32'" = ["src/deadline/job_attachments/_windows/*.py"]
-
 [tool.coverage.coverage_conditional_plugin.rules]
 # This cannot be empty otherwise coverage-conditional-plugin crashes with:
 # AttributeError: 'NoneType' object has no attribute 'items'
@@ -225,12 +212,3 @@ lstrip_blocks = true
 
 [tool.semantic_release.branches.release]
 match = "(mainline|release|patch_.*)"
-
-[tool.importlinter]
-root_package = "deadline"
-
-[[tool.importlinter.contracts]]
-name = "Job Attachments must not import from Client"
-type = "forbidden"
-source_modules = ["deadline.job_attachments"]
-forbidden_modules = ["deadline.client"]
