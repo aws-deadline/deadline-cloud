@@ -324,13 +324,3 @@ def _normalize_filters(filters: list[str]) -> list[str]:
         if f:
             normalized.append(f)
     return normalized
-
-
-def _parse_include_filters(include: tuple[str, ...]) -> Optional[list[str]]:
-    """
-    Parse --include into a normalized filter list.
-    Returns include_filters or None if no filters specified.
-    """
-    if include:
-        return _normalize_filters(list(include)) or None
-    return None

@@ -60,7 +60,7 @@ from ._job_helpers import (
 from ._job_download_helpers import (
     JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
-    _parse_include_filters,
+    _normalize_filters,
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
@@ -501,7 +501,7 @@ def _download_job_output(
     task_id: Optional[str],
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
-    include_filters: Optional[list[str]] = None,
+    include_patterns: Optional[list[str]] = None,
     submission_path: bool = False,
 ):
     """
@@ -552,7 +552,7 @@ def _download_job_output(
         for manifest in job_attachments_manifests:
             root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
 
-    # When --submission-path is set, filter against the submission (S3) paths.
+    # When --submission-path is set, filter against the submission paths.
     # Otherwise, filtering happens later against workstation paths.
     job_output_downloader = OutputDownloader(
         s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
@@ -563,7 +563,7 @@ def _download_job_output(
         task_id=task_id,
         session_action_id=session_action_id,
         session=queue_role_session,
-        include_filters=include_filters if submission_path else None,
+        include_filters=include_patterns if submission_path else None,
     )
 
     def _check_and_warn_long_output_paths(
@@ -610,13 +610,13 @@ def _download_job_output(
                 session_action_id=session_action_id,
                 session=queue_role_session,
             )
-            if include_filters and submission_path:
-                manifests_by_root = _filter_manifests(manifests_by_root, include_filters)
+            if include_patterns and submission_path:
+                manifests_by_root = _filter_manifests(manifests_by_root, include_patterns)
             mapped_manifests = _transform_manifests_to_absolute_paths(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
-            if include_filters and not submission_path:
-                mapped_manifests = _filter_manifests(mapped_manifests, include_filters)
+            if include_patterns and not submission_path:
+                mapped_manifests = _filter_manifests(mapped_manifests, include_patterns)
             if mapped_manifests:
                 download_summary = _download_mapped_manifests(
                     mapped_manifests=mapped_manifests,
@@ -726,8 +726,8 @@ def _download_job_output(
 
     # Apply include filters against workstation paths (default behavior).
     # When --submission-path is set, filtering was already applied at the S3/submission level.
-    if include_filters and not submission_path:
-        job_output_downloader.apply_include_filters(include_filters)
+    if include_patterns and not submission_path:
+        job_output_downloader.apply_include_filters(include_patterns)
         output_paths_by_root = job_output_downloader.get_output_paths_by_root()
         if output_paths_by_root == {}:
             click.echo(_get_no_output_message(is_json_format))
@@ -1061,7 +1061,7 @@ def job_download_output(
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
 
-    include_filters = _parse_include_filters(include)
+    include_patterns = _normalize_filters(list(include)) or None
 
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1083,7 +1083,7 @@ def job_download_output(
             task_id=task_id,
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
-            include_filters=include_filters,
+            include_patterns=include_patterns,
             submission_path=submission_path,
         )
     except Exception as e:

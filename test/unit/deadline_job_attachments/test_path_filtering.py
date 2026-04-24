@@ -24,44 +24,48 @@ from deadline.job_attachments.asset_manifests.v2023_03_03 import (
 
 class TestMatchesAnyFilter:
     def test_exact_match(self):
-        assert _matches_any_filter("renders/frame_001.exr", ["renders/frame_001.exr"]) is True
+        assert _matches_any_filter("/root/renders/frame_001.exr", ["renders/frame_001.exr"]) is True
 
     def test_exact_no_match(self):
-        assert _matches_any_filter("renders/frame_002.exr", ["renders/frame_001.exr"]) is False
+        assert (
+            _matches_any_filter("/root/renders/frame_002.exr", ["renders/frame_001.exr"]) is False
+        )
 
     def test_directory_prefix_match(self):
-        assert _matches_any_filter("renders/frame_001.exr", ["renders/"]) is True
+        assert _matches_any_filter("/root/renders/frame_001.exr", ["/root/renders/"]) is True
 
     def test_directory_prefix_no_match(self):
-        assert _matches_any_filter("textures/wood.exr", ["renders/"]) is False
+        assert _matches_any_filter("/root/textures/wood.exr", ["/root/renders/"]) is False
 
     def test_directory_prefix_does_not_match_similar_names(self):
         """'renders/' should NOT match 'renders_v2/file.exr'"""
-        assert _matches_any_filter("renders_v2/file.exr", ["renders/"]) is False
+        assert _matches_any_filter("/root/renders_v2/file.exr", ["/root/renders/"]) is False
 
     def test_multiple_filters_or(self):
         assert (
-            _matches_any_filter("textures/wood.exr", ["renders/frame_001.exr", "textures/"]) is True
+            _matches_any_filter(
+                "/root/textures/wood.exr", ["renders/frame_001.exr", "/root/textures/"]
+            )
+            is True
         )
 
     def test_empty_filters(self):
-        assert _matches_any_filter("renders/frame_001.exr", []) is False
+        assert _matches_any_filter("/root/renders/frame_001.exr", []) is False
 
     def test_nested_directory_prefix(self):
-        assert _matches_any_filter("a/b/c/file.txt", ["a/b/"]) is True
+        assert _matches_any_filter("/root/a/b/c/file.txt", ["/root/a/b/"]) is True
 
     def test_glob_wildcard(self):
-        assert _matches_any_filter("renders/frame_001.exr", ["renders/*.exr"]) is True
+        assert _matches_any_filter("/root/renders/frame_001.exr", ["renders/*.exr"]) is True
 
     def test_glob_wildcard_no_match(self):
-        assert _matches_any_filter("renders/frame_001.png", ["renders/*.exr"]) is False
+        assert _matches_any_filter("/root/renders/frame_001.png", ["renders/*.exr"]) is False
 
     def test_glob_question_mark(self):
-        assert _matches_any_filter("renders/frame_00?.exr", ["renders/frame_00?.exr"]) is True
+        assert _matches_any_filter("/root/renders/frame_00x.exr", ["renders/frame_00?.exr"]) is True
 
     def test_glob_recursive(self):
-        """fnmatch does not support ** recursion — it matches as a literal wildcard."""
-        assert _matches_any_filter("a/b/c.txt", ["a/*/c.txt"]) is True
+        assert _matches_any_filter("/root/a/b/c.txt", ["*/a/*/c.txt"]) is True
 
     def test_glob_full_path_wildcard(self):
         """Patterns like '*/renders/*.png' should match against full paths."""
@@ -72,7 +76,7 @@ class TestMatchesAnyFilter:
         assert _matches_any_filter("/root/renders/frame.png", ["*.png"]) is True
 
     def test_relative_path_suffix_match(self):
-        """Plain relative paths match as a suffix of the full path."""
+        """Relative paths are auto-prepended with */ and matched via fnmatch."""
         assert _matches_any_filter("/home/user/renders/frame.exr", ["renders/frame.exr"]) is True
 
     def test_relative_path_no_partial_match(self):
@@ -80,11 +84,18 @@ class TestMatchesAnyFilter:
         assert _matches_any_filter("/home/user/xrenders/frame.exr", ["renders/frame.exr"]) is False
 
     def test_relative_path_exact_file(self):
-        """Single filename matches as suffix."""
+        """Single filename matches anywhere under root."""
         assert _matches_any_filter("/root/renders/frame.exr", ["frame.exr"]) is True
 
     def test_relative_path_no_match(self):
         assert _matches_any_filter("/root/renders/frame.exr", ["other.exr"]) is False
+
+    def test_relative_glob(self):
+        """Relative globs like 'renders/*.exr' match without needing a leading */."""
+        assert _matches_any_filter("/home/user/renders/frame.exr", ["renders/*.exr"]) is True
+
+    def test_relative_glob_no_match(self):
+        assert _matches_any_filter("/home/user/renders/frame.png", ["renders/*.exr"]) is False
 
 
 class TestFullPath:

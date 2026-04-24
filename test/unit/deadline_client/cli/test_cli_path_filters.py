@@ -1,10 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Tests for _normalize_filters and _parse_include_filters."""
+"""Tests for _normalize_filters."""
 
 from deadline.client.cli._groups._job_download_helpers import (
     _normalize_filters,
-    _parse_include_filters,
 )
 
 
@@ -37,24 +36,8 @@ class TestNormalizeFilters:
         result = _normalize_filters([".\\renders\\\\frame.exr"])
         assert result == ["renders/frame.exr"]
 
+    def test_empty_input_returns_empty(self):
+        assert _normalize_filters([]) == []
 
-class TestParseIncludeFilters:
-    def test_include_only(self):
-        result = _parse_include_filters(("renders/",))
-        assert result == ["renders/"]
-
-    def test_no_filters(self):
-        result = _parse_include_filters(())
-        assert result is None
-
-    def test_multiple_include_patterns(self):
-        result = _parse_include_filters(("*.exr", "*/renders/*.png"))
-        assert result == ["*.exr", "*/renders/*.png"]
-
-    def test_relative_paths(self):
-        result = _parse_include_filters(("renders/frame_001.exr", "logs/render.log"))
-        assert result == ["renders/frame_001.exr", "logs/render.log"]
-
-    def test_mixed_globs_and_relative(self):
-        result = _parse_include_filters(("*.exr", "renders/frame_001.exr"))
-        assert result == ["*.exr", "renders/frame_001.exr"]
+    def test_all_empty_returns_empty(self):
+        assert _normalize_filters(["", ""]) == []
