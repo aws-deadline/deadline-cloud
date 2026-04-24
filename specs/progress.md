@@ -79,8 +79,7 @@ pick and execute work items.
 
 **Dependency status:** All core feature dependencies are resolved. Only
 2 items remain as ⚠️ Gaps: #9 (parallel/multipart S3 transfer) and #11
-(`bundle submit --output json`). #16 (GUI FFI) and #17 (MCP server)
-are in progress. New features #19-21 are not started.
+(`bundle submit --output json`). #16 (GUI FFI) is in progress.
 
 **Next action item:** Pick next work item from the table.
 
@@ -142,7 +141,7 @@ after the core CLI commands are complete.
 
 **Audit gaps:** See `audit_reports/2026-04-17-behavioral-parity.md` for
 the full audit report with all findings, resolutions, and remaining open
-items. 5 findings remain open (4 performance, 1 deferred experimental).
+items. 4 findings remain open (all performance).
 
 **GUI FFI migration plan (#16a-16f):**
 
@@ -195,6 +194,12 @@ Python files by category (from `deadline-cloud-python/src/deadline/client/ui/`):
 - `settings.submitter_update_notification` (default `true`) — needed for #19
 
 **Technical debt:**
+- **Spec docs audit**: Review `specs/` docs to ensure they reflect
+  current implementation. Known stale areas: `specs/api/README.md` may
+  still list `trace-schedule` support APIs as a gap; `specs/cli/job.md`
+  needs a `trace-schedule` section; `#20` description in "New work items"
+  section above still says "Not started" context. General sweep for
+  references to deferred/experimental items that are now done.
 - **#15d**: Audit all Level 1 tests in library crates to identify which
   can be converted to or supplemented with Level 2 CLI subprocess tests.
   Per TESTING.md rule 1: "If the CLI can exercise it, test it through
