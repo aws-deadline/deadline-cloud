@@ -60,7 +60,7 @@ from ._job_helpers import (
 from ._job_download_helpers import (
     JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
-    _parse_include_config,
+    _parse_include_filters,
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
@@ -990,16 +990,9 @@ def _assert_valid_path(path: str) -> None:
     "-i",
     "--include",
     multiple=True,
-    help="Glob pattern for files to include in download. Matched against the full path "
-    "(root + relative). Supports *, ?, [seq]. A trailing / matches all files under "
-    "that directory. Repeatable",
-)
-@click.option(
-    "-ic",
-    "--include-config",
-    default=None,
-    help="JSON string or file path with include patterns, "
-    'e.g. \'{"include": ["*/renders/*.exr"]}\'',
+    help="Glob pattern or relative path for files to include in download. Matched against "
+    "the full path (root + relative). Supports *, ?, [seq]. A trailing / matches all "
+    "files under that directory. Repeatable",
 )
 @click.option(
     "--submission-path",
@@ -1055,7 +1048,6 @@ def job_download_output(
     output,
     ignore_storage_profiles,
     include,
-    include_config,
     submission_path,
     **args,
 ):
@@ -1069,7 +1061,7 @@ def job_download_output(
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
 
-    include_filters = _parse_include_config(include, include_config)
+    include_filters = _parse_include_filters(include)
 
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(

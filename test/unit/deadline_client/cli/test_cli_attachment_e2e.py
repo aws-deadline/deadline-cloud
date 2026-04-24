@@ -930,17 +930,16 @@ def test_cli_job_download_output_relative_path_filter(deadline_setup, tmp_path):
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_relative_paths_via_include_config(deadline_setup, tmp_path):
+def test_cli_job_download_output_relative_paths_with_submission_path(deadline_setup, tmp_path):
     """
-    --include-config with relative paths in JSON and --submission-path.
-    This is the DCM integration path: relative paths from manifests passed
-    as JSON, filtered against submission paths.
+    --include with relative paths and --submission-path filters against
+    submission paths. This is the DCM integration path.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
     job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaab02"
-    asset_root = str(tmp_path / "relconfig_outputs")
+    asset_root = str(tmp_path / "relsubmit_outputs")
     Path(asset_root).mkdir()
 
     files = {
@@ -952,16 +951,16 @@ def test_cli_job_download_output_relative_paths_via_include_config(deadline_setu
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    config_json = json.dumps({"include": ["renders/frame_001.exr", "logs/render.log"]})
-
     r = _run(
         env,
         "job",
         "download-output",
         "--job-id",
         job_id,
-        "--include-config",
-        config_json,
+        "--include",
+        "renders/frame_001.exr",
+        "--include",
+        "logs/render.log",
         "--submission-path",
         "--conflict-resolution",
         "OVERWRITE",
@@ -1011,100 +1010,6 @@ def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
     assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
     assert (Path(asset_root) / "renders" / "frame_003.exr").read_bytes() == b"frame-three"
     assert not (Path(asset_root) / "renders" / "frame_002.png").exists()
-
-
-def test_cli_job_download_output_include_config(deadline_setup, tmp_path):
-    """
-    --include-config accepts a JSON file with include patterns.
-    """
-    backend, farm_id, queue_id, env = deadline_setup
-    _configure_defaults(env, farm_id, queue_id)
-
-    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8"
-    asset_root = str(tmp_path / "config_outputs")
-    Path(asset_root).mkdir()
-
-    files = {
-        "renders/frame_001.exr": b"frame-one",
-        "renders/draft/frame_002.exr": b"draft",
-        "logs/render.log": b"log-data",
-    }
-    _seed_output_job(
-        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
-    )
-
-    config_file = tmp_path / "filters.json"
-    config_file.write_text(json.dumps({"include": ["*/renders/*"]}))
-
-    r = _run(
-        env,
-        "job",
-        "download-output",
-        "--job-id",
-        job_id,
-        "--include-config",
-        str(config_file),
-        "--submission-path",
-        "--conflict-resolution",
-        "OVERWRITE",
-        "--yes",
-    )
-    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
-
-    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
-    # renders/draft/frame_002.exr matches */renders/* via fnmatch (single * matches path segments)
-    assert (Path(asset_root) / "renders" / "draft" / "frame_002.exr").read_bytes() == b"draft"
-    assert not (Path(asset_root) / "logs" / "render.log").exists()
-
-
-def test_cli_job_download_output_include_config_large_inline_json(deadline_setup, tmp_path):
-    """
-    --include-config with a large inline JSON blob containing many paths.
-    This mirrors DCM's usage where the desktop app may pass hundreds of file paths.
-    """
-    backend, farm_id, queue_id, env = deadline_setup
-    _configure_defaults(env, farm_id, queue_id)
-
-    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9"
-    asset_root = str(tmp_path / "large_config_outputs")
-    Path(asset_root).mkdir()
-
-    # Generate 200 files, select 150 of them via include config
-    num_total = 200
-    num_selected = 150
-    files = {f"renders/frame_{i:04d}.exr": f"content-{i}".encode() for i in range(num_total)}
-    _seed_output_job(
-        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
-    )
-
-    # Build a large inline JSON with 150 exact paths (using glob to match full paths)
-    selected_paths = [f"*/renders/frame_{i:04d}.exr" for i in range(num_selected)]
-    config_json = json.dumps({"include": selected_paths})
-
-    r = _run(
-        env,
-        "job",
-        "download-output",
-        "--job-id",
-        job_id,
-        "--include-config",
-        config_json,
-        "--submission-path",
-        "--conflict-resolution",
-        "OVERWRITE",
-        "--yes",
-    )
-    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
-
-    # Verify exactly the 50 selected files were downloaded
-    for i in range(num_selected):
-        assert (
-            Path(asset_root) / "renders" / f"frame_{i:04d}.exr"
-        ).read_bytes() == f"content-{i}".encode()
-
-    # Verify the rest were NOT downloaded
-    for i in range(num_selected, num_total):
-        assert not (Path(asset_root) / "renders" / f"frame_{i:04d}.exr").exists()
 
 
 @pytest.mark.skipif(

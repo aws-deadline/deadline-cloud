@@ -326,22 +326,11 @@ def _normalize_filters(filters: list[str]) -> list[str]:
     return normalized
 
 
-def _parse_include_config(
-    include: tuple[str, ...],
-    include_config: Optional[str],
-) -> Optional[list[str]]:
+def _parse_include_filters(include: tuple[str, ...]) -> Optional[list[str]]:
     """
-    Parse --include and --include-config into a normalized filter list.
-    --include takes precedence over --include-config.
+    Parse --include into a normalized filter list.
     Returns include_filters or None if no filters specified.
     """
     if include:
         return _normalize_filters(list(include)) or None
-
-    if include_config:
-        from ....job_attachments._glob import _process_glob_inputs
-
-        glob_config = _process_glob_inputs(include_config)
-        return _normalize_filters(glob_config.include_glob) or None
-
     return None
