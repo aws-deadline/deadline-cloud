@@ -6,6 +6,7 @@ from typing import List
 
 from deadline.job_attachments.download import (
     _matches_any_filter,
+    _full_path,
     _filter_paths,
     _filter_manifests,
 )
@@ -62,6 +63,32 @@ class TestMatchesAnyFilter:
         """fnmatch does not support ** recursion — it matches as a literal wildcard."""
         assert _matches_any_filter("a/b/c.txt", ["a/*/c.txt"]) is True
 
+    def test_glob_full_path_wildcard(self):
+        """Patterns like '*/renders/*.png' should match against full paths."""
+        assert _matches_any_filter("/home/user/renders/frame.png", ["*/renders/*.png"]) is True
+
+    def test_glob_extension_only(self):
+        """Simple extension patterns like '*.png' should match full paths."""
+        assert _matches_any_filter("/root/renders/frame.png", ["*.png"]) is True
+
+
+class TestFullPath:
+    def test_unix_root(self):
+        assert _full_path("/home/user", "renders/frame.png") == "/home/user/renders/frame.png"
+
+    def test_windows_root_backslashes(self):
+        """Windows root paths with backslashes are normalized to forward slashes."""
+        assert (
+            _full_path("C:\\Users\\artist\\project", "renders/frame.png")
+            == "C:/Users/artist/project/renders/frame.png"
+        )
+
+    def test_trailing_slash_root(self):
+        assert _full_path("/root/", "file.txt") == "/root/file.txt"
+
+    def test_trailing_backslash_root(self):
+        assert _full_path("C:\\root\\", "file.txt") == "C:/root/file.txt"
+
 
 class TestFilterPaths:
     def _make_group(self, paths: List[str]) -> ManifestPathGroup:
@@ -73,20 +100,29 @@ class TestFilterPaths:
         group.total_bytes = len(paths) * 100
         return group
 
-    def test_exact_filter(self):
-        paths_by_root = {"/root": self._make_group(["a.txt", "b.txt", "c.txt"])}
-        result = _filter_paths(paths_by_root, ["b.txt"])
-        assert list(result.keys()) == ["/root"]
-        assert [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]] == [
-            "b.txt"
+    def test_glob_against_full_path(self):
+        """Filters match against root + relative path."""
+        paths_by_root = {
+            "/home/user/project": self._make_group(["renders/a.exr", "textures/b.png"])
+        }
+        result = _filter_paths(paths_by_root, ["*/renders/*.exr"])
+        files = [
+            f.path for f in result["/home/user/project"].files_by_hash_alg[HashAlgorithm.XXH128]
         ]
-        assert result["/root"].total_bytes == 100
+        assert files == ["renders/a.exr"]
+
+    def test_extension_filter_against_full_path(self):
+        """Simple extension patterns match against full paths."""
+        paths_by_root = {"/root": self._make_group(["a.exr", "b.png"])}
+        result = _filter_paths(paths_by_root, ["*.exr"])
+        files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
+        assert files == ["a.exr"]
 
     def test_directory_prefix_filter(self):
         paths_by_root = {
             "/root": self._make_group(["renders/a.exr", "renders/b.exr", "textures/c.png"])
         }
-        result = _filter_paths(paths_by_root, ["renders/"])
+        result = _filter_paths(paths_by_root, ["/root/renders/"])
         files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
         assert files == ["renders/a.exr", "renders/b.exr"]
 
@@ -100,7 +136,7 @@ class TestFilterPaths:
             "/root1": self._make_group(["shared/file.txt", "other.txt"]),
             "/root2": self._make_group(["shared/file.txt", "different.txt"]),
         }
-        result = _filter_paths(paths_by_root, ["shared/file.txt"])
+        result = _filter_paths(paths_by_root, ["*/shared/file.txt"])
         assert "/root1" in result
         assert "/root2" in result
 
@@ -110,7 +146,7 @@ class TestFilterPaths:
                 ["renders/a.exr", "renders/b.exr", "textures/c.png", "scripts/setup.mel"]
             )
         }
-        result = _filter_paths(paths_by_root, ["renders/", "scripts/setup.mel"])
+        result = _filter_paths(paths_by_root, ["/root/renders/", "*/setup.mel"])
         files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
         assert set(files) == {"renders/a.exr", "renders/b.exr", "scripts/setup.mel"}
 
@@ -119,24 +155,28 @@ class TestFilterPaths:
             "/has_match": self._make_group(["a.txt"]),
             "/no_match": self._make_group(["b.txt"]),
         }
-        result = _filter_paths(paths_by_root, ["a.txt"])
+        result = _filter_paths(paths_by_root, ["*/a.txt"])
         assert "/has_match" in result
         assert "/no_match" not in result
-
-    def test_exclude_filters(self):
-        paths_by_root = {
-            "/root": self._make_group(["renders/a.exr", "renders/draft/b.exr", "renders/c.exr"])
-        }
-        result = _filter_paths(paths_by_root, ["renders/"], ["renders/draft/"])
-        files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
-        assert set(files) == {"renders/a.exr", "renders/c.exr"}
 
     def test_glob_pattern(self):
         paths_by_root = {
             "/root": self._make_group(["renders/a.exr", "renders/b.png", "textures/c.exr"])
         }
-        result = _filter_paths(paths_by_root, ["renders/*.exr"])
+        result = _filter_paths(paths_by_root, ["*/renders/*.exr"])
         files = [f.path for f in result["/root"].files_by_hash_alg[HashAlgorithm.XXH128]]
+        assert files == ["renders/a.exr"]
+
+    def test_windows_root_path(self):
+        """Windows backslash roots are normalized so forward-slash patterns match."""
+        paths_by_root = {
+            "C:\\Users\\artist\\project": self._make_group(["renders/a.exr", "logs/b.log"])
+        }
+        result = _filter_paths(paths_by_root, ["*/renders/*.exr"])
+        files = [
+            f.path
+            for f in result["C:\\Users\\artist\\project"].files_by_hash_alg[HashAlgorithm.XXH128]
+        ]
         assert files == ["renders/a.exr"]
 
 
@@ -152,17 +192,19 @@ class TestFilterManifests:
             total_size=len(paths) * 100,
         )
 
-    def test_exact_filter(self):
-        manifests_by_root = {"/root": [self._make_manifest(["a.txt", "b.txt", "c.txt"])]}
-        result = _filter_manifests(manifests_by_root, ["b.txt"])
-        assert "/root" in result
-        assert [p.path for p in result["/root"][0].paths] == ["b.txt"]
+    def test_glob_against_full_path(self):
+        """Filters match against root + relative path."""
+        manifests_by_root = {
+            "/home/user": [self._make_manifest(["renders/a.exr", "textures/b.png"])]
+        }
+        result = _filter_manifests(manifests_by_root, ["*/renders/*.exr"])
+        assert [p.path for p in result["/home/user"][0].paths] == ["renders/a.exr"]
 
     def test_directory_prefix_filter(self):
         manifests_by_root = {
             "/root": [self._make_manifest(["renders/a.exr", "renders/b.exr", "textures/c.png"])]
         }
-        result = _filter_manifests(manifests_by_root, ["renders/"])
+        result = _filter_manifests(manifests_by_root, ["/root/renders/"])
         assert [p.path for p in result["/root"][0].paths] == ["renders/a.exr", "renders/b.exr"]
 
     def test_no_matches_returns_empty(self):
@@ -175,7 +217,7 @@ class TestFilterManifests:
             "/has_match": [self._make_manifest(["a.txt"])],
             "/no_match": [self._make_manifest(["b.txt"])],
         }
-        result = _filter_manifests(manifests_by_root, ["a.txt"])
+        result = _filter_manifests(manifests_by_root, ["*/a.txt"])
         assert "/has_match" in result
         assert "/no_match" not in result
 
@@ -186,16 +228,7 @@ class TestFilterManifests:
                 self._make_manifest(["c.txt", "d.txt"]),
             ]
         }
-        result = _filter_manifests(manifests_by_root, ["a.txt", "c.txt"])
+        result = _filter_manifests(manifests_by_root, ["*/a.txt", "*/c.txt"])
         assert len(result["/root"]) == 2
         assert [p.path for p in result["/root"][0].paths] == ["a.txt"]
         assert [p.path for p in result["/root"][1].paths] == ["c.txt"]
-
-    def test_exclude_filters(self):
-        manifests_by_root = {
-            "/root": [
-                self._make_manifest(["renders/a.exr", "renders/draft/b.exr", "renders/c.exr"])
-            ]
-        }
-        result = _filter_manifests(manifests_by_root, ["renders/"], ["renders/draft/"])
-        assert [p.path for p in result["/root"][0].paths] == ["renders/a.exr", "renders/c.exr"]

@@ -660,8 +660,8 @@ def test_cli_job_download_output(deadline_setup, tmp_path):
 
 def test_cli_job_download_output_include_path(deadline_setup, tmp_path):
     """
-    `deadline job download-output --include-path` with a directory prefix
-    downloads only files under that directory.
+    `deadline job download-output --include` with a glob pattern
+    downloads only files matching the pattern against the full path.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
@@ -686,7 +686,7 @@ def test_cli_job_download_output_include_path(deadline_setup, tmp_path):
         "--job-id",
         job_id,
         "--include",
-        "renders/",
+        "*/renders/*",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -700,7 +700,7 @@ def test_cli_job_download_output_include_path(deadline_setup, tmp_path):
 
 def test_cli_job_download_output_include_path_exact_file(deadline_setup, tmp_path):
     """
-    `deadline job download-output --include-path` with an exact file path
+    `deadline job download-output --include` with an exact file glob
     downloads only that single file.
     """
     backend, farm_id, queue_id, env = deadline_setup
@@ -725,7 +725,7 @@ def test_cli_job_download_output_include_path_exact_file(deadline_setup, tmp_pat
         "--job-id",
         job_id,
         "--include",
-        "renders/frame_001.exr",
+        "*/frame_001.exr",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -738,7 +738,7 @@ def test_cli_job_download_output_include_path_exact_file(deadline_setup, tmp_pat
 
 def test_cli_job_download_output_include_path_multiple(deadline_setup, tmp_path):
     """
-    Multiple --include-path values are OR'd: files matching any filter are downloaded.
+    Multiple --include values are OR'd: files matching any filter are downloaded.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
@@ -763,9 +763,9 @@ def test_cli_job_download_output_include_path_multiple(deadline_setup, tmp_path)
         "--job-id",
         job_id,
         "--include",
-        "renders/frame_001.exr",
+        "*/frame_001.exr",
         "--include",
-        "scripts/",
+        "*/scripts/*",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -811,26 +811,27 @@ def test_cli_job_download_output_include_path_no_match(deadline_setup, tmp_path)
     assert not (Path(asset_root) / "renders" / "frame_001.exr").exists()
 
 
-def test_cli_job_download_output_exclude(deadline_setup, tmp_path):
+def test_cli_job_download_output_include_matches_full_workstation_path(deadline_setup, tmp_path):
     """
-    --exclude removes files from the download set after --include is applied.
+    --include patterns match against the full workstation path (root + relative)
+    by default, so a pattern containing part of the root directory name works.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
     job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5"
-    asset_root = str(tmp_path / "exclude_outputs")
+    asset_root = str(tmp_path / "fullpath_outputs")
     Path(asset_root).mkdir()
 
     files = {
         "renders/frame_001.exr": b"frame-one",
-        "renders/draft/frame_002.exr": b"frame-two-draft",
-        "renders/frame_003.exr": b"frame-three",
+        "logs/render.log": b"log-data",
     }
     _seed_output_job(
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
+    # Use a pattern that includes the workstation root directory name
     r = _run(
         env,
         "job",
@@ -838,9 +839,7 @@ def test_cli_job_download_output_exclude(deadline_setup, tmp_path):
         "--job-id",
         job_id,
         "--include",
-        "renders/",
-        "--exclude",
-        "renders/draft/",
+        "*fullpath_outputs/renders/*",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -848,18 +847,57 @@ def test_cli_job_download_output_exclude(deadline_setup, tmp_path):
     assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
 
     assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
-    assert (Path(asset_root) / "renders" / "frame_003.exr").read_bytes() == b"frame-three"
-    assert not (Path(asset_root) / "renders" / "draft" / "frame_002.exr").exists()
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
+def test_cli_job_download_output_submission_path_flag(deadline_setup, tmp_path):
     """
-    --include with glob patterns (e.g. *.exr) filters using fnmatch.
+    --submission-path causes --include to filter against the original submission
+    paths (asset roots from S3) rather than the workstation paths.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
     job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6"
+    asset_root = str(tmp_path / "subpath_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    # Pattern uses the submission root path (same as asset_root in this case)
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include",
+        "*subpath_outputs/renders/*",
+        "--submission-path",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+
+def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
+    """
+    --include with glob patterns (e.g. *.exr) filters using fnmatch against full paths.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7"
     asset_root = str(tmp_path / "glob_outputs")
     Path(asset_root).mkdir()
 
@@ -879,7 +917,7 @@ def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
         "--job-id",
         job_id,
         "--include",
-        "renders/*.exr",
+        "*.exr",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -891,15 +929,14 @@ def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
     assert not (Path(asset_root) / "renders" / "frame_002.png").exists()
 
 
-def test_cli_job_download_output_include_exclude_config(deadline_setup, tmp_path):
+def test_cli_job_download_output_include_config(deadline_setup, tmp_path):
     """
-    --include-exclude-config accepts a JSON file with include/exclude patterns,
-    matching the manifest CLI pattern.
+    --include-config accepts a JSON file with include patterns.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
-    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7"
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8"
     asset_root = str(tmp_path / "config_outputs")
     Path(asset_root).mkdir()
 
@@ -913,7 +950,7 @@ def test_cli_job_download_output_include_exclude_config(deadline_setup, tmp_path
     )
 
     config_file = tmp_path / "filters.json"
-    config_file.write_text(json.dumps({"include": ["renders/"], "exclude": ["renders/draft/"]}))
+    config_file.write_text(json.dumps({"include": ["*/renders/*"]}))
 
     r = _run(
         env,
@@ -921,8 +958,9 @@ def test_cli_job_download_output_include_exclude_config(deadline_setup, tmp_path
         "download-output",
         "--job-id",
         job_id,
-        "--include-exclude-config",
+        "--include-config",
         str(config_file),
+        "--submission-path",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -930,19 +968,20 @@ def test_cli_job_download_output_include_exclude_config(deadline_setup, tmp_path
     assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
 
     assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
-    assert not (Path(asset_root) / "renders" / "draft" / "frame_002.exr").exists()
+    # renders/draft/frame_002.exr matches */renders/* via fnmatch (single * matches path segments)
+    assert (Path(asset_root) / "renders" / "draft" / "frame_002.exr").read_bytes() == b"draft"
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_include_exclude_config_large_inline_json(deadline_setup, tmp_path):
+def test_cli_job_download_output_include_config_large_inline_json(deadline_setup, tmp_path):
     """
-    --include-exclude-config with a large inline JSON blob containing many paths.
+    --include-config with a large inline JSON blob containing many paths.
     This mirrors DCM's usage where the desktop app may pass hundreds of file paths.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
 
-    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8"
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9"
     asset_root = str(tmp_path / "large_config_outputs")
     Path(asset_root).mkdir()
 
@@ -954,8 +993,8 @@ def test_cli_job_download_output_include_exclude_config_large_inline_json(deadli
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    # Build a large inline JSON with 150 exact paths
-    selected_paths = [f"renders/frame_{i:04d}.exr" for i in range(num_selected)]
+    # Build a large inline JSON with 150 exact paths (using glob to match full paths)
+    selected_paths = [f"*/renders/frame_{i:04d}.exr" for i in range(num_selected)]
     config_json = json.dumps({"include": selected_paths})
 
     r = _run(
@@ -964,8 +1003,9 @@ def test_cli_job_download_output_include_exclude_config_large_inline_json(deadli
         "download-output",
         "--job-id",
         job_id,
-        "--include-exclude-config",
+        "--include-config",
         config_json,
+        "--submission-path",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",

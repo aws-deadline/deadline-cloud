@@ -60,7 +60,7 @@ from ._job_helpers import (
 from ._job_download_helpers import (
     JSON_MSG_TYPE_PROGRESS,
     _download_mapped_manifests,
-    _parse_include_exclude,
+    _parse_include_config,
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
@@ -502,7 +502,7 @@ def _download_job_output(
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
     include_filters: Optional[list[str]] = None,
-    exclude_filters: Optional[list[str]] = None,
+    submission_path: bool = False,
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
@@ -552,6 +552,8 @@ def _download_job_output(
         for manifest in job_attachments_manifests:
             root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
 
+    # When --submission-path is set, filter against the submission (S3) paths.
+    # Otherwise, filtering happens later against workstation paths.
     job_output_downloader = OutputDownloader(
         s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
         farm_id=farm_id,
@@ -561,8 +563,7 @@ def _download_job_output(
         task_id=task_id,
         session_action_id=session_action_id,
         session=queue_role_session,
-        include_filters=include_filters,
-        exclude_filters=exclude_filters,
+        include_filters=include_filters if submission_path else None,
     )
 
     def _check_and_warn_long_output_paths(
@@ -609,13 +610,13 @@ def _download_job_output(
                 session_action_id=session_action_id,
                 session=queue_role_session,
             )
-            if include_filters:
-                manifests_by_root = _filter_manifests(
-                    manifests_by_root, include_filters, exclude_filters
-                )
+            if include_filters and submission_path:
+                manifests_by_root = _filter_manifests(manifests_by_root, include_filters)
             mapped_manifests = _transform_manifests_to_absolute_paths(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
+            if include_filters and not submission_path:
+                mapped_manifests = _filter_manifests(mapped_manifests, include_filters)
             if mapped_manifests:
                 download_summary = _download_mapped_manifests(
                     mapped_manifests=mapped_manifests,
@@ -722,6 +723,15 @@ def _download_job_output(
                 job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
             output_paths_by_root = job_output_downloader.get_output_paths_by_root()
             _check_and_warn_long_output_paths(output_paths_by_root)
+
+    # Apply include filters against workstation paths (default behavior).
+    # When --submission-path is set, filtering was already applied at the S3/submission level.
+    if include_filters and not submission_path:
+        job_output_downloader.apply_include_filters(include_filters)
+        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+        if output_paths_by_root == {}:
+            click.echo(_get_no_output_message(is_json_format))
+            return
 
     if not is_json_format:
         # Create and print a summary of all the paths to download
@@ -980,21 +990,23 @@ def _assert_valid_path(path: str) -> None:
     "-i",
     "--include",
     multiple=True,
-    help="Glob pattern for files to download. Supports *, ?, [seq]. "
-    "A trailing / matches all files under that directory. Repeatable",
+    help="Glob pattern for files to include in download. Matched against the full path "
+    "(root + relative). Supports *, ?, [seq]. A trailing / matches all files under "
+    "that directory. Repeatable",
 )
 @click.option(
-    "-e",
-    "--exclude",
-    multiple=True,
-    help="Glob pattern for files to exclude from download. Applied after --include. Repeatable",
-)
-@click.option(
-    "-ie",
-    "--include-exclude-config",
+    "-ic",
+    "--include-config",
     default=None,
-    help="JSON string or file path with include/exclude patterns, "
-    'e.g. \'{"include": ["renders/*.exr"], "exclude": ["renders/draft/"]}\'',
+    help="JSON string or file path with include patterns, "
+    'e.g. \'{"include": ["*/renders/*.exr"]}\'',
+)
+@click.option(
+    "--submission-path",
+    is_flag=True,
+    default=False,
+    help="Match include filters against the original submission paths instead of "
+    "the local workstation paths. By default, filters match against workstation paths.",
 )
 @click.option(
     "--ignore-storage-profiles",
@@ -1043,8 +1055,8 @@ def job_download_output(
     output,
     ignore_storage_profiles,
     include,
-    exclude,
-    include_exclude_config,
+    include_config,
+    submission_path,
     **args,
 ):
     """
@@ -1057,9 +1069,7 @@ def job_download_output(
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
 
-    include_filters, exclude_filters = _parse_include_exclude(
-        include, exclude, include_exclude_config
-    )
+    include_filters = _parse_include_config(include, include_config)
 
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(
@@ -1082,7 +1092,7 @@ def job_download_output(
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
             include_filters=include_filters,
-            exclude_filters=exclude_filters,
+            submission_path=submission_path,
         )
     except Exception as e:
         if is_json_format:

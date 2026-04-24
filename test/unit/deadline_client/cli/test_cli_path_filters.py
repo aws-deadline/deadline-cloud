@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Tests for _normalize_filters and _parse_include_exclude."""
+"""Tests for _normalize_filters and _parse_include_config."""
 
 from deadline.client.cli._groups._job_download_helpers import (
     _normalize_filters,
-    _parse_include_exclude,
+    _parse_include_config,
 )
 
 
@@ -38,42 +38,29 @@ class TestNormalizeFilters:
         assert result == ["renders/frame.exr"]
 
 
-class TestParseIncludeExclude:
+class TestParseIncludeConfig:
     def test_include_only(self):
-        inc, exc = _parse_include_exclude(("renders/",), (), None)
-        assert inc == ["renders/"]
-        assert exc is None
-
-    def test_exclude_only(self):
-        inc, exc = _parse_include_exclude((), ("*.log",), None)
-        assert inc == ["*"]
-        assert exc == ["*.log"]
-
-    def test_include_and_exclude(self):
-        inc, exc = _parse_include_exclude(("renders/",), ("renders/draft/",), None)
-        assert inc == ["renders/"]
-        assert exc == ["renders/draft/"]
+        result = _parse_include_config(("renders/",), None)
+        assert result == ["renders/"]
 
     def test_no_filters(self):
-        inc, exc = _parse_include_exclude((), (), None)
-        assert inc is None
-        assert exc is None
+        result = _parse_include_config((), None)
+        assert result is None
 
-    def test_config_json_string(self, tmp_path):
-        inc, exc = _parse_include_exclude(
-            (), (), '{"include": ["renders/*.exr"], "exclude": ["renders/draft/"]}'
-        )
-        assert inc == ["renders/*.exr"]
-        assert exc == ["renders/draft/"]
+    def test_config_json_string(self):
+        result = _parse_include_config((), '{"include": ["renders/*.exr"]}')
+        assert result == ["renders/*.exr"]
 
     def test_config_file(self, tmp_path):
         config_file = tmp_path / "filters.json"
         config_file.write_text('{"include": ["**/*.exr"]}')
-        inc, exc = _parse_include_exclude((), (), str(config_file))
-        assert inc == ["**/*.exr"]
-        assert exc is None
+        result = _parse_include_config((), str(config_file))
+        assert result == ["**/*.exr"]
 
     def test_cli_args_take_precedence_over_config(self):
-        inc, exc = _parse_include_exclude(("renders/",), (), '{"include": ["textures/"]}')
-        assert inc == ["renders/"]
-        assert exc is None
+        result = _parse_include_config(("renders/",), '{"include": ["textures/"]}')
+        assert result == ["renders/"]
+
+    def test_multiple_include_patterns(self):
+        result = _parse_include_config(("*.exr", "*/renders/*.png"), None)
+        assert result == ["*.exr", "*/renders/*.png"]

@@ -326,27 +326,22 @@ def _normalize_filters(filters: list[str]) -> list[str]:
     return normalized
 
 
-def _parse_include_exclude(
+def _parse_include_config(
     include: tuple[str, ...],
-    exclude: tuple[str, ...],
-    include_exclude_config: Optional[str],
-) -> tuple[Optional[list[str]], Optional[list[str]]]:
+    include_config: Optional[str],
+) -> Optional[list[str]]:
     """
-    Parse --include, --exclude, and --include-exclude-config into normalized filter lists.
-    --include/--exclude take precedence over --include-exclude-config.
-    Returns (include_filters, exclude_filters) where either may be None.
+    Parse --include and --include-config into a normalized filter list.
+    --include takes precedence over --include-config.
+    Returns include_filters or None if no filters specified.
     """
-    if include or exclude:
-        include_filters = _normalize_filters(list(include)) if include else ["*"]
-        exclude_filters = _normalize_filters(list(exclude)) if exclude else None
-        return include_filters, exclude_filters
+    if include:
+        return _normalize_filters(list(include)) or None
 
-    if include_exclude_config:
+    if include_config:
         from ....job_attachments._glob import _process_glob_inputs
 
-        glob_config = _process_glob_inputs(include_exclude_config)
-        parsed_include = _normalize_filters(glob_config.include_glob) or None
-        parsed_exclude = _normalize_filters(glob_config.exclude_glob) or None
-        return parsed_include, parsed_exclude
+        glob_config = _process_glob_inputs(include_config)
+        return _normalize_filters(glob_config.include_glob) or None
 
-    return None, None
+    return None
