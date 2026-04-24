@@ -15,6 +15,7 @@ import ntpath
 import posixpath
 from configparser import ConfigParser
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Optional
 
 import click
@@ -40,6 +41,13 @@ from ._sigint_handler import SigIntHandler
 
 # JSON message type for progress reporting (defined here to avoid circular import with job_group.py)
 JSON_MSG_TYPE_PROGRESS = "progress"
+
+
+class MatchPathsBy(str, Enum):
+    """Which paths --include filters are matched against."""
+
+    JOB = "JOB"
+    LOCAL = "LOCAL"
 
 
 @dataclass

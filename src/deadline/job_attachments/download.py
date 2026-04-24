@@ -7,10 +7,12 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import os
+import posixpath
 import re
 import time
 from collections import defaultdict
 from datetime import datetime
+from fnmatch import fnmatch
 from itertools import chain
 from logging import Logger, LoggerAdapter, getLogger
 from pathlib import Path
@@ -1245,30 +1247,34 @@ def mount_vfs_from_manifests(
 
 
 def _full_path(root: str, relative: str) -> str:
-    """Join root and relative path using forward slashes for consistent matching."""
-    normalized_root = root.replace("\\", "/")
-    if normalized_root.endswith("/"):
-        return normalized_root + relative
-    return normalized_root + "/" + relative
+    """Join root and relative path, normalizing to forward slashes for consistent matching.
+
+    Uses posixpath.join for consistency with _transform_manifests_to_absolute_paths
+    in _job_download_helpers.py, which joins roots and manifest paths the same way.
+    """
+    return posixpath.join(root.replace("\\", "/"), relative)
 
 
 def _matches_any_filter(file_path: str, filters: list[str]) -> bool:
     """
     Check if a file path matches any of the given filters using glob-style matching.
     Uses fnmatch for pattern matching (supports *, ?, [seq], [!seq]).
-    A filter ending with '/' is treated as a directory prefix (matches all files under it).
+    A filter ending with '/' matches all files under that directory.
     Relative filters (not starting with '/' or '*') are auto-prepended with '*/' so they
     match anywhere under the root — e.g. 'renders/*.exr' matches '*/renders/*.exr'.
     The file_path should be the full path (root + relative).
     """
-    from fnmatch import fnmatch
+
+    def _is_absolute(p: str) -> bool:
+        return p.startswith(("/", "*")) or (len(p) >= 2 and p[1] == ":")
 
     for f in filters:
         if f.endswith("/"):
-            if file_path.startswith(f):
+            pattern = f + "*" if _is_absolute(f) else "*/" + f + "*"
+            if fnmatch(file_path, pattern):
                 return True
         else:
-            pattern = f if f.startswith(("/", "*")) else "*/" + f
+            pattern = f if _is_absolute(f) else "*/" + f
             if fnmatch(file_path, pattern):
                 return True
     return False

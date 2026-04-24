@@ -97,6 +97,32 @@ class TestMatchesAnyFilter:
     def test_relative_glob_no_match(self):
         assert _matches_any_filter("/home/user/renders/frame.png", ["renders/*.exr"]) is False
 
+    def test_windows_full_path_with_glob(self):
+        """Windows full paths (normalized) match glob patterns."""
+        assert (
+            _matches_any_filter("C:/Users/artist/project/renders/frame.exr", ["*/renders/*.exr"])
+            is True
+        )
+
+    def test_windows_full_path_with_relative_filter(self):
+        """Relative filters match against normalized Windows full paths."""
+        assert (
+            _matches_any_filter("C:/Users/artist/project/renders/frame.exr", ["renders/frame.exr"])
+            is True
+        )
+
+    def test_windows_full_path_with_directory_filter(self):
+        """Directory filters match against normalized Windows full paths."""
+        assert (
+            _matches_any_filter(
+                "C:/Users/artist/project/renders/frame.exr", ["C:/Users/artist/project/renders/"]
+            )
+            is True
+        )
+
+    def test_windows_full_path_extension_glob(self):
+        assert _matches_any_filter("C:/Users/artist/project/frame.exr", ["*.exr"]) is True
+
 
 class TestFullPath:
     def test_unix_root(self):
