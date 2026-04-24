@@ -850,9 +850,9 @@ def test_cli_job_download_output_include_matches_full_workstation_path(deadline_
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_match_paths_by_source_flag(deadline_setup, tmp_path):
+def test_cli_job_download_output_match_paths_by_job_flag(deadline_setup, tmp_path):
     """
-    --match-paths-by SOURCE causes --include to filter against the original source
+    --match-paths-by JOB causes --include to filter against the original source
     paths rather than the workstation paths.
     """
     backend, farm_id, queue_id, env = deadline_setup
@@ -870,7 +870,7 @@ def test_cli_job_download_output_match_paths_by_source_flag(deadline_setup, tmp_
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    # Pattern uses the source root path (same as asset_root in this case)
+    # Pattern uses the job root path (same as asset_root in this case)
     r = _run(
         env,
         "job",
@@ -880,7 +880,7 @@ def test_cli_job_download_output_match_paths_by_source_flag(deadline_setup, tmp_
         "--include",
         "*subpath_outputs/renders/*",
         "--match-paths-by",
-        "SOURCE",
+        "JOB",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -931,12 +931,10 @@ def test_cli_job_download_output_relative_path_filter(deadline_setup, tmp_path):
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_relative_paths_with_match_paths_by_source(
-    deadline_setup, tmp_path
-):
+def test_cli_job_download_output_relative_paths_with_match_paths_by_job(deadline_setup, tmp_path):
     """
-    --include with relative paths and --match-paths-by SOURCE filters against
-    source paths. This is the DCM integration path.
+    --include with relative paths and --match-paths-by JOB filters against
+    job paths. This is the DCM integration path.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
@@ -965,7 +963,7 @@ def test_cli_job_download_output_relative_paths_with_match_paths_by_source(
         "--include",
         "logs/render.log",
         "--match-paths-by",
-        "SOURCE",
+        "JOB",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
