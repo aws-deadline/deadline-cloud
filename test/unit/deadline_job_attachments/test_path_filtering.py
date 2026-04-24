@@ -71,6 +71,21 @@ class TestMatchesAnyFilter:
         """Simple extension patterns like '*.png' should match full paths."""
         assert _matches_any_filter("/root/renders/frame.png", ["*.png"]) is True
 
+    def test_relative_path_suffix_match(self):
+        """Plain relative paths match as a suffix of the full path."""
+        assert _matches_any_filter("/home/user/renders/frame.exr", ["renders/frame.exr"]) is True
+
+    def test_relative_path_no_partial_match(self):
+        """Relative path must match complete path segments."""
+        assert _matches_any_filter("/home/user/xrenders/frame.exr", ["renders/frame.exr"]) is False
+
+    def test_relative_path_exact_file(self):
+        """Single filename matches as suffix."""
+        assert _matches_any_filter("/root/renders/frame.exr", ["frame.exr"]) is True
+
+    def test_relative_path_no_match(self):
+        assert _matches_any_filter("/root/renders/frame.exr", ["other.exr"]) is False
+
 
 class TestFullPath:
     def test_unix_root(self):
@@ -176,6 +191,15 @@ class TestFilterPaths:
         files = [
             f.path
             for f in result["C:\\Users\\artist\\project"].files_by_hash_alg[HashAlgorithm.XXH128]
+        ]
+        assert files == ["renders/a.exr"]
+
+    def test_relative_path_filter(self):
+        """Plain relative paths match as suffix against full path."""
+        paths_by_root = {"/home/user/project": self._make_group(["renders/a.exr", "logs/b.log"])}
+        result = _filter_paths(paths_by_root, ["renders/a.exr"])
+        files = [
+            f.path for f in result["/home/user/project"].files_by_hash_alg[HashAlgorithm.XXH128]
         ]
         assert files == ["renders/a.exr"]
 

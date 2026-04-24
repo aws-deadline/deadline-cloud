@@ -1252,19 +1252,34 @@ def _full_path(root: str, relative: str) -> str:
     return normalized_root + "/" + relative
 
 
+def _is_relative_filter(f: str) -> bool:
+    """Check if a filter is a plain relative path (no glob characters, not absolute)."""
+    return (
+        not any(c in f for c in ("*", "?", "[")) and not f.startswith("/") and not f.endswith("/")
+    )
+
+
 def _matches_any_filter(file_path: str, filters: list[str]) -> bool:
     """
     Check if a file path matches any of the given filters using glob-style matching.
     Uses fnmatch for pattern matching (supports *, ?, [seq], [!seq]).
     A filter ending with '/' is treated as a directory prefix (matches all files under it).
+    A plain relative path (no globs, not absolute) matches as a suffix of the full path.
     The file_path should be the full path (root + relative) to support patterns like
     '*/renders/*.png'.
     """
     from fnmatch import fnmatch
 
-    return any(
-        file_path.startswith(f) if f.endswith("/") else fnmatch(file_path, f) for f in filters
-    )
+    for f in filters:
+        if f.endswith("/"):
+            if file_path.startswith(f):
+                return True
+        elif _is_relative_filter(f):
+            if file_path.endswith("/" + f) or file_path == f:
+                return True
+        elif fnmatch(file_path, f):
+            return True
+    return False
 
 
 def _filter_paths(

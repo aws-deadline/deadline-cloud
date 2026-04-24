@@ -890,6 +890,90 @@ def test_cli_job_download_output_submission_path_flag(deadline_setup, tmp_path):
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
+def test_cli_job_download_output_relative_path_filter(deadline_setup, tmp_path):
+    """
+    --include with a plain relative path (no globs) matches as a suffix
+    against the full workstation path. This is the DCM use case.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaab01"
+    asset_root = str(tmp_path / "relpath_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.exr": b"frame-two",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include",
+        "renders/frame_001.exr",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert not (Path(asset_root) / "renders" / "frame_002.exr").exists()
+    assert not (Path(asset_root) / "logs" / "render.log").exists()
+
+
+def test_cli_job_download_output_relative_paths_via_include_config(deadline_setup, tmp_path):
+    """
+    --include-config with relative paths in JSON and --submission-path.
+    This is the DCM integration path: relative paths from manifests passed
+    as JSON, filtered against submission paths.
+    """
+    backend, farm_id, queue_id, env = deadline_setup
+    _configure_defaults(env, farm_id, queue_id)
+
+    job_id = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaab02"
+    asset_root = str(tmp_path / "relconfig_outputs")
+    Path(asset_root).mkdir()
+
+    files = {
+        "renders/frame_001.exr": b"frame-one",
+        "renders/frame_002.exr": b"frame-two",
+        "logs/render.log": b"log-data",
+    }
+    _seed_output_job(
+        backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
+    )
+
+    config_json = json.dumps({"include": ["renders/frame_001.exr", "logs/render.log"]})
+
+    r = _run(
+        env,
+        "job",
+        "download-output",
+        "--job-id",
+        job_id,
+        "--include-config",
+        config_json,
+        "--submission-path",
+        "--conflict-resolution",
+        "OVERWRITE",
+        "--yes",
+    )
+    assert r.returncode == 0, f"download-output failed: {r.stderr}\nstdout: {r.stdout}"
+
+    assert (Path(asset_root) / "renders" / "frame_001.exr").read_bytes() == b"frame-one"
+    assert (Path(asset_root) / "logs" / "render.log").read_bytes() == b"log-data"
+    assert not (Path(asset_root) / "renders" / "frame_002.exr").exists()
+
+
 def test_cli_job_download_output_glob_pattern(deadline_setup, tmp_path):
     """
     --include with glob patterns (e.g. *.exr) filters using fnmatch against full paths.
