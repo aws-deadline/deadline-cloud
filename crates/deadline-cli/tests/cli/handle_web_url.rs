@@ -46,7 +46,7 @@ fn queue_response() -> serde_json::Value {
 }
 
 // =====================================================================
-// Spec case 5: Wrong URL scheme
+// Wrong URL scheme
 // =====================================================================
 
 #[tokio::test]
@@ -58,7 +58,7 @@ async fn handle_web_url_wrong_scheme_errors() {
 }
 
 // =====================================================================
-// Spec case 6: Unsupported command in URL
+// Unsupported command in URL
 // =====================================================================
 
 #[tokio::test]
@@ -70,7 +70,7 @@ async fn handle_web_url_unsupported_command_errors() {
 }
 
 // =====================================================================
-// Spec case 7: Missing required URL parameters
+// Missing required URL parameters
 // =====================================================================
 
 #[tokio::test]
@@ -109,7 +109,7 @@ async fn handle_web_url_missing_all_params_errors() {
 }
 
 // =====================================================================
-// Spec case 8: URL provided with --install or --uninstall
+// URL provided with --install or --uninstall
 // =====================================================================
 
 #[tokio::test]
@@ -137,7 +137,7 @@ async fn handle_web_url_url_with_all_users_flag_errors() {
 }
 
 // =====================================================================
-// Spec case 12: Both --install and --uninstall
+// Both --install and --uninstall
 // =====================================================================
 
 #[tokio::test]
@@ -149,7 +149,7 @@ async fn handle_web_url_both_install_uninstall_errors() {
 }
 
 // =====================================================================
-// Spec case 13: No URL, no --install, no --uninstall
+// No URL, no --install, no --uninstall
 // =====================================================================
 
 #[tokio::test]
@@ -159,7 +159,7 @@ async fn handle_web_url_no_args_errors() {
 }
 
 // =====================================================================
-// Spec case 1: Happy path — required params only
+// Happy path — required params only
 // =====================================================================
 
 #[tokio::test]
@@ -178,7 +178,7 @@ async fn handle_web_url_download_output_required_params_succeeds() {
 }
 
 // =====================================================================
-// Spec case 2: Happy path — with step-id and task-id
+// Happy path — with step-id and task-id
 // =====================================================================
 
 #[tokio::test]

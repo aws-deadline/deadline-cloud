@@ -17,16 +17,30 @@ interrupted.
 
 - **Pass-through (13):** Call `deadline-api` functions, return
   `serde_json::Value` directly. Thin async methods.
-- **Custom (2):** `submit_job`, `download_job_output` — validation logic
-  + library calls. Not yet implemented (Batch 2-3).
-- **Composite (1):** `get_session_and_worker_logs` — calls get_session +
-  get_session_logs + get_worker_logs. Not yet implemented (Batch 3).
+- **Custom (2):** `submit_job` validates inputs (directory exists, params
+  are JSON array, farm_id/queue_id required) then calls
+  `create_job_from_job_bundle`. `download_job_output` validates inputs
+  (task_id requires step_id, job_id required, conflict_resolution valid)
+  then calls `download_output_impl`.
+- **Composite (1):** `get_session_and_worker_logs` calls `get_session` +
+  `get_session_logs` + `get_worker_logs` with graceful error handling
+  on worker logs.
+
+### Send+Sync workaround
+
+`submit_job` and `download_job_output` use `std::thread::spawn` +
+`Handle::block_on` to run the actual submission/download. This is
+because `SubmitJobParams` contains `Box<dyn Fn + Send>` callbacks
+that are `Send` but not `Sync`, and rmcp's `#[tool]` macro requires
+the handler future to be `Send`. Moving the work to a separate thread
+avoids the `Sync` requirement.
 
 ### Error handling
 
 Tool errors return `{"error": "...", "type": "..."}` as text content
 (not MCP protocol errors). Missing required params cause protocol-level
-errors via rmcp's deserialization.
+errors via rmcp's deserialization. Validation errors (bad directory,
+invalid JSON, missing IDs) return error dicts with type `"ValueError"`.
 
 ### Parameter filtering
 
@@ -42,7 +56,8 @@ key concepts, and configuration guidance.
 ## Dependencies
 
 `rmcp` v1.5 (server, transport-io, macros), `schemars` for JSON Schema
-generation, `deadline-api` for all AWS API calls.
+generation, `deadline-api` for all AWS API calls, `deadline-job-bundle`
+for submission, `deadline-job-attachments` for download.
 
 ## Known differences from Python
 
@@ -50,4 +65,7 @@ generation, `deadline-api` for all AWS API calls.
   boto3 pass-through). MCP schemas are self-describing so clients adapt.
 - `principalId` not exposed as a parameter — auto-injected internally.
 - `get_session_logs` missing `start_time`/`end_time` params (low priority).
+- `download_job_output` return omits `output` text field (Rust download
+  functions return structured data, not stdout text).
+- Worker logs `error` field omitted when null (Rust convention).
 - No telemetry recording yet (deferred).

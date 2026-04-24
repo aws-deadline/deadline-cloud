@@ -1,6 +1,6 @@
 //! Level 2 tests for submission hooks integration in `deadline bundle submit`.
 //!
-//! Tests §58 from the submission_hooks test spec: config gating,
+//! Tests for submission hooks: config gating,
 //! environment hooks, confirmation prompts, payload modification.
 
 use deadline_test_server::TestHarness;
@@ -115,7 +115,7 @@ async fn mock_submit_no_attachments(harness: &TestHarness) {
 }
 
 // =====================================================================
-// §58 #59: Bundle hooks enabled — pre-hooks run, submission proceeds
+// Bundle hooks enabled — pre-hooks run, submission proceeds
 // =====================================================================
 
 #[tokio::test]
@@ -130,7 +130,7 @@ async fn bundle_submit_hooks_enabled() {
 }
 
 // =====================================================================
-// §58 #60: Bundle hooks disabled — note printed, hooks skipped
+// Bundle hooks disabled — note printed, hooks skipped
 // =====================================================================
 
 #[tokio::test]
@@ -145,7 +145,7 @@ async fn bundle_submit_hooks_disabled_note() {
 }
 
 // =====================================================================
-// §58 #61: Environment hooks enabled
+// Environment hooks enabled
 // =====================================================================
 
 #[tokio::test]
@@ -162,7 +162,7 @@ async fn bundle_submit_env_hooks_enabled() {
 }
 
 // =====================================================================
-// §58 #62: Environment hooks disabled — warning printed
+// Environment hooks disabled — warning printed
 // =====================================================================
 
 #[tokio::test]
@@ -179,7 +179,7 @@ async fn bundle_submit_env_hooks_disabled_warning() {
 }
 
 // =====================================================================
-// §58 #63: Both bundle and env hooks enabled — env runs first
+// Both bundle and env hooks enabled — env runs first
 // =====================================================================
 
 #[tokio::test]
@@ -197,7 +197,7 @@ async fn bundle_submit_both_hook_sources() {
 }
 
 // =====================================================================
-// §58 #64: Pre-hook modifies payload with --yes
+// Pre-hook modifies payload with --yes
 // =====================================================================
 
 #[tokio::test]
@@ -212,7 +212,7 @@ async fn bundle_submit_pre_hook_modifies_payload() {
 }
 
 // =====================================================================
-// §58 #65: Pre-hook fails — submission canceled
+// Pre-hook fails — submission canceled
 // =====================================================================
 
 #[tokio::test]
@@ -227,7 +227,7 @@ async fn bundle_submit_pre_hook_failure_cancels() {
 }
 
 // =====================================================================
-// §58 #66: Post-hook runs after successful submission
+// Post-hook runs after successful submission
 // =====================================================================
 
 #[tokio::test]
@@ -247,7 +247,7 @@ async fn bundle_submit_post_hook_after_success() {
 }
 
 // =====================================================================
-// §58 #67: Hooks confirmation prompt shown (not --yes)
+// Hooks confirmation prompt shown (not --yes)
 // =====================================================================
 
 #[tokio::test]

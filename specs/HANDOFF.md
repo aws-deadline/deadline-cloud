@@ -7,8 +7,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 None — ready for next work item.
 
-## Recently Completed — #17 MCP Server Batch 1
+## Recently Completed — #17 MCP Server
 
-Server skeleton + 13 pass-through tools + CLI subcommand. 13 Level 2
-tests passing. Batches 2-3 remain: `submit_job`, `download_job_output`,
-`get_session_and_worker_logs`. Telemetry deferred.
+All 16 tools implemented across 3 batches. 28 Level 2 tests passing.
+Telemetry deferred. Section notation removed from all test files.

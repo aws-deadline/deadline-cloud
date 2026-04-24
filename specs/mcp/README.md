@@ -5,7 +5,8 @@ MCP (Model Context Protocol) server for AI agent integration. Lives in
 
 Consumers: `deadline-cli`.
 
-Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`.
+Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`,
+`deadline-job-bundle`, `deadline-job-attachments`.
 
 ## Document Index
 
@@ -15,6 +16,4 @@ Dependencies: `rmcp` (MCP SDK), `deadline-config`, `deadline-api`.
 
 ## Status
 
-Batch 1 complete: server skeleton, 13 pass-through tools, CLI subcommand.
-13 Level 2 tests passing. Batches 2-3 (submit_job, download_job_output,
-get_session_and_worker_logs) not yet implemented.
+All 16 tools implemented. 28 Level 2 tests passing. Telemetry deferred.

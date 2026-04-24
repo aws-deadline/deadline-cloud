@@ -130,6 +130,7 @@ struct SubmitJobParams {
     priority: Option<i32>, max_failed_tasks_count: Option<i32>, max_retries_per_task: Option<i32>,
     max_worker_count: Option<i32>, job_attachments_file_system: Option<String>,
     require_paths_exist: Option<bool>, submitter_name: Option<String>,
+    known_asset_paths: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -299,20 +300,265 @@ impl DeadlineServer {
 
     /// Submit an Open Job Description job bundle to AWS Deadline Cloud.
     #[tool(name = "deadline_submit_job")]
-    async fn submit_job(&self, Parameters(_p): Parameters<SubmitJobParams>) -> String {
-        error_json("NotImplementedError", "submit_job not yet implemented")
+    async fn submit_job(&self, Parameters(p): Parameters<SubmitJobParams>) -> String {
+        let start = std::time::Instant::now();
+
+        // Validate directory
+        let path = std::path::Path::new(&p.job_bundle_dir);
+        if !path.exists() {
+            return error_json("ValueError", &format!("Job bundle directory does not exist: {}", p.job_bundle_dir));
+        }
+        if !path.is_dir() {
+            return error_json("ValueError", &format!("Path is not a directory: {}", p.job_bundle_dir));
+        }
+
+        // Parse job_parameters
+        let parsed_params: Vec<Value> = if let Some(ref params_str) = p.job_parameters {
+            match serde_json::from_str::<Value>(params_str) {
+                Ok(Value::Array(arr)) => arr,
+                Ok(_) => return error_json("ValueError", "job_parameters must be a JSON array"),
+                Err(e) => return error_json("ValueError", &format!("job_parameters is not valid JSON: {e}")),
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Parse known_asset_paths
+        let parsed_known_asset_paths: Vec<String> = if let Some(ref paths_str) = p.known_asset_paths {
+            match serde_json::from_str::<Value>(paths_str) {
+                Ok(Value::Array(arr)) => arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+                Ok(_) => return error_json("ValueError", "known_asset_paths must be a JSON array of strings"),
+                Err(e) => return error_json("ValueError", &format!("known_asset_paths is not valid JSON: {e}")),
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Resolve farm_id / queue_id from params or config
+        let farm_id = p.farm_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.farm_id").unwrap_or_default());
+        if farm_id.is_empty() {
+            return error_json("ValueError", "farm_id is required");
+        }
+        let queue_id = p.queue_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.queue_id").unwrap_or_default());
+        if queue_id.is_empty() {
+            return error_json("ValueError", "queue_id is required");
+        }
+
+        // Build config with overrides
+        let mut config = deadline_config::config_file::read_config().unwrap_or_default();
+        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config);
+        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config);
+        if let Some(ref sp) = p.storage_profile_id {
+            deadline_config::config_file::set_setting("defaults.storage_profile_id", sp, &mut config);
+        }
+
+        let bundle_dir = p.job_bundle_dir.clone();
+        let job_params = parsed_params;
+        let name = p.name;
+        let priority = p.priority;
+        let max_failed = p.max_failed_tasks_count;
+        let max_retries = p.max_retries_per_task;
+        let max_workers = p.max_worker_count;
+        let fs_type = p.job_attachments_file_system;
+        let require_paths = p.require_paths_exist.unwrap_or(false);
+        let submitter = p.submitter_name.unwrap_or_else(|| "MCP".to_string());
+
+        let handle = tokio::runtime::Handle::current();
+        let result = std::thread::spawn(move || {
+            handle.block_on(async {
+                let submit_params = deadline_job_bundle::submission::SubmitJobParams {
+                    job_bundle_dir: bundle_dir.clone(),
+                    job_parameters: job_params,
+                    name,
+                    priority,
+                    max_failed_tasks_count: max_failed,
+                    max_retries_per_task: max_retries,
+                    max_worker_count: max_workers,
+                    target_task_run_status: None,
+                    job_attachments_file_system: fs_type,
+                    require_paths_exist: require_paths,
+                    submitter_name: Some(submitter),
+                    known_asset_paths: parsed_known_asset_paths,
+                    auto_accept: true,
+                    force_s3_check: None,
+                    debug_snapshot_dir: None,
+                    config: Some(&config),
+                    print_callback: Box::new(|_| {}),
+                    hashing_progress_callback: None,
+                    upload_progress_callback: None,
+                    continue_callback: None,
+                    interactive_confirmation_callback: None,
+                    telemetry: None,
+                };
+                deadline_job_bundle::submission::create_job_from_job_bundle(submit_params).await
+            })
+        }).join();
+
+        match result {
+            Ok(Ok(Some(job_id))) => {
+                let elapsed = start.elapsed().as_secs_f64();
+                ok_result(json!({
+                    "status": "success",
+                    "job_id": job_id,
+                    "message": format!("Successfully submitted job bundle from {}", p.job_bundle_dir),
+                    "total_time_seconds": (elapsed * 10.0).round() / 10.0,
+                }))
+            }
+            Ok(Ok(None)) => error_json("SubmissionError", "Job submission returned no job ID"),
+            Ok(Err(e)) => error_json("DeadlineError", &e.to_string()),
+            Err(_) => error_json("DeadlineError", "Job submission task panicked"),
+        }
     }
 
     /// Download job output files from AWS Deadline Cloud.
     #[tool(name = "deadline_download_job_output")]
-    async fn download_job_output(&self, Parameters(_p): Parameters<DownloadJobOutputParams>) -> String {
-        error_json("NotImplementedError", "download_job_output not yet implemented")
+    async fn download_job_output(&self, Parameters(p): Parameters<DownloadJobOutputParams>) -> String {
+        let start = std::time::Instant::now();
+
+        // Validation
+        if p.task_id.is_some() && p.step_id.is_none() {
+            return error_json("ValueError", "step_id is required when task_id is provided");
+        }
+        let job_id = match p.job_id {
+            Some(ref id) if !id.is_empty() => id.clone(),
+            _ => return error_json("ValueError", "job_id is required"),
+        };
+        if let Some(ref cr) = p.conflict_resolution {
+            let upper = cr.to_uppercase();
+            if !["SKIP", "OVERWRITE", "CREATE_COPY"].contains(&upper.as_str()) {
+                return error_json("ValueError",
+                    &format!("Invalid conflict_resolution: {cr}. Must be SKIP, OVERWRITE, or CREATE_COPY"));
+            }
+        }
+
+        // Resolve farm/queue from params or config
+        let farm_id = p.farm_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.farm_id").unwrap_or_default());
+        let queue_id = p.queue_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.queue_id").unwrap_or_default());
+
+        if farm_id.is_empty() {
+            return error_json("ValueError", "farm_id is required");
+        }
+        if queue_id.is_empty() {
+            return error_json("ValueError", "queue_id is required");
+        }
+
+        let mut config = deadline_config::config_file::read_config().unwrap_or_default();
+        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config);
+        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config);
+        deadline_config::config_file::set_setting("settings.auto_accept", "true", &mut config);
+        if let Some(ref cr) = p.conflict_resolution {
+            deadline_config::config_file::set_setting("settings.conflict_resolution", &cr.to_uppercase(), &mut config);
+        }
+
+        let conflict = p.conflict_resolution.as_deref().and_then(|cr| {
+            match cr.to_uppercase().as_str() {
+                "SKIP" => Some(deadline_job_attachments::models::FileConflictResolution::Skip),
+                "OVERWRITE" => Some(deadline_job_attachments::models::FileConflictResolution::Overwrite),
+                "CREATE_COPY" => Some(deadline_job_attachments::models::FileConflictResolution::CreateCopy),
+                _ => None,
+            }
+        });
+
+        let step_id = p.step_id;
+        let task_id = p.task_id;
+        let job_id_for_result = job_id.clone();
+        let step_id_for_result = step_id.clone();
+        let task_id_for_result = task_id.clone();
+        let handle = tokio::runtime::Handle::current();
+        let result = std::thread::spawn(move || {
+            handle.block_on(async {
+                super::job::download_output_impl(
+                    &config, &farm_id, &queue_id, &job_id,
+                    step_id.as_deref(), task_id.as_deref(),
+                    conflict, false, true,
+                ).await
+            })
+        }).join();
+
+        match result {
+            Ok(Ok(())) => {
+                let elapsed = start.elapsed().as_secs_f64();
+                ok_result(json!({
+                    "status": "success",
+                    "job_id": job_id_for_result,
+                    "step_id": step_id_for_result,
+                    "task_id": task_id_for_result,
+                    "total_time_seconds": (elapsed * 10.0).round() / 10.0,
+                }))
+            }
+            Ok(Err(e)) => error_json("DeadlineError", &e.to_string()),
+            Err(_) => error_json("DeadlineError", "Download task panicked"),
+        }
     }
 
     /// Get both session logs AND worker logs for a session in one call.
     #[tool(name = "deadline_get_session_and_worker_logs")]
-    async fn get_session_and_worker_logs(&self, Parameters(_p): Parameters<GetSessionAndWorkerLogsParams>) -> String {
-        error_json("NotImplementedError", "get_session_and_worker_logs not yet implemented")
+    async fn get_session_and_worker_logs(&self, Parameters(p): Parameters<GetSessionAndWorkerLogsParams>) -> String {
+        let limit = p.limit.unwrap_or(100);
+
+        // Get session details
+        let session = match deadline_api::api::get_session(
+            &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None, None,
+        ).await {
+            Ok(v) => v,
+            Err(e) => return error_json("DeadlineError", &e.to_string()),
+        };
+
+        let worker_id = session.get("workerId").and_then(|v| v.as_str()).map(String::from);
+        let fleet_id = session.get("fleetId").and_then(|v| v.as_str()).map(String::from);
+
+        let mut result = json!({
+            "session_id": p.session_id,
+            "worker_id": worker_id,
+            "fleet_id": fleet_id,
+            "lifecycle_status": session.get("lifecycleStatus"),
+            "host_properties": session.get("hostProperties"),
+        });
+
+        // Get session logs
+        match deadline_api::log_retrieval::get_session_logs(
+            &p.farm_id, &p.queue_id, Some(&p.session_id), None,
+            limit, None, None, None, None,
+        ).await {
+            Ok((r, _)) => {
+                result["session_logs"] = json!({
+                    "log_group": r.log_group,
+                    "events": r.events.iter().map(|e| json!({
+                        "timestamp": e.timestamp.to_string(),
+                        "message": e.message,
+                    })).collect::<Vec<_>>(),
+                    "count": r.count,
+                });
+            }
+            Err(e) => {
+                result["session_logs"] = json!({"events": [], "count": 0, "error": e.to_string()});
+            }
+        }
+
+        // Get worker logs if worker_id and fleet_id are present
+        if let (Some(wid), Some(fid)) = (&worker_id, &fleet_id) {
+            match deadline_api::log_retrieval::get_worker_logs(
+                &p.farm_id, fid, wid, limit, None, None, None, None,
+            ).await {
+                Ok(r) => {
+                    result["worker_logs"] = json!({
+                        "log_group": r.log_group,
+                        "events": r.events.iter().map(|e| json!({
+                            "timestamp": e.timestamp.to_string(),
+                            "message": e.message,
+                        })).collect::<Vec<_>>(),
+                        "count": r.count,
+                    });
+                }
+                Err(e) => {
+                    result["worker_logs"] = json!({"events": [], "count": 0, "error": e.to_string()});
+                }
+            }
+        } else {
+            result["worker_logs"] = json!({"events": [], "count": 0});
+        }
+
+        ok_result(result)
     }
 }
 
