@@ -17,6 +17,7 @@ Dependencies: `deadline-config`.
 | [credential-scoping.md](credential-scoping.md) | Queue/fleet role assumption for DCM users, scoped SdkConfig construction |
 | [log-retrieval.md](log-retrieval.md) | CloudWatch Logs integration, session auto-selection, fleet-scoped credentials |
 | [job-monitoring.md](job-monitoring.md) | wait_for_job_completion polling loop, failed task collection, backoff curve |
+| [update-checker.md](update-checker.md) | Remote manifest fetch, version comparison, config opt-out |
 
 ## Status
 

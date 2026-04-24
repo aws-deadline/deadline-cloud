@@ -979,6 +979,7 @@ dependencies = [
  "deadline-config",
  "indexmap",
  "log",
+ "semver",
  "serde_json",
  "serde_yaml",
  "serial_test",

@@ -18,7 +18,8 @@ service crates for Deadline, STS, or CloudWatch. Exception:
 src/
 ├── lib.rs              # Re-exports: session, auth, api, job_monitoring,
 │                       #   log_retrieval, queue_parameters, raw_response,
-│                       #   errors, submitter_info, path_utils, telemetry
+│                       #   errors, submitter_info, path_utils, telemetry,
+│                       #   update_checker
 ├── session.rs          # SessionCache (LazyLock<Mutex>), SessionContext (user-agent),
 │                       #   SdkConfig caching per profile, queue credential provider,
 │                       #   get_queue_scoped_config, get_queue_user_config
@@ -41,8 +42,10 @@ src/
 ├── submitter_info.rs   # SubmitterInfo struct, YamlValue enum, formerly in deadline-models
 ├── path_utils.rs       # human_readable_file_size, summarize_paths, sanitize_path_for_filename,
 │                       #   formerly in deadline-common
-└── telemetry.rs        # TelemetryClient: background thread + mpsc channel + ureq HTTP,
-                        #   formerly in deadline-common
+├── telemetry.rs        # TelemetryClient: background thread + mpsc channel + ureq HTTP,
+│                       #   formerly in deadline-common
+└── update_checker.rs   # safe_check_for_updates: fetch remote manifest, compare versions,
+                        #   config opt-out, never panics. Used by GUI FFI / DCC submitters.
 ```
 
 ## Key Design Decisions

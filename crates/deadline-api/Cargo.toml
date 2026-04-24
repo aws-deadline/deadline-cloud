@@ -21,6 +21,7 @@ tokio = { workspace = true }
 log = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 ureq = "3"
+semver = "1"
 
 [dev-dependencies]
 test-case = { workspace = true }

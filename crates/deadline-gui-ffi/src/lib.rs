@@ -634,6 +634,9 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let harness = rt.block_on(TestHarness::new());
         mocks(&rt, &harness);
+        // setup_stub_env calls invalidate_session_cache which needs a
+        // tokio runtime context (block_in_place + Handle::current).
+        let _guard = rt.enter();
         setup_stub_env(&harness);
         (rt, harness)
     }

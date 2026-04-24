@@ -197,6 +197,15 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             description: "Allow execution of hooks from DEADLINE_HOOKS_DIR environment variable. When 'true', hooks from the directory specified by DEADLINE_HOOKS_DIR will run. When 'false', environment hooks are ignored.",
         },
     ),
+    (
+        "settings.submitter_update_notification",
+        SettingDef {
+            default: "true",
+            depend: None,
+            section_format: None,
+            description: "Enable update notification checks for DCC submitter integrations. When 'true', the submitter checks for newer versions at startup. When 'false', update checks are skipped.",
+        },
+    ),
 ];
 
 /// Look up a setting definition by name. Returns `None` if unknown.

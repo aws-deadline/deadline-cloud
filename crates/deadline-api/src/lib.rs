@@ -8,4 +8,5 @@ pub mod queue_parameters;
 pub mod raw_response;
 pub mod submitter_info;
 pub mod telemetry;
+pub mod update_checker;
 pub mod path_utils;
