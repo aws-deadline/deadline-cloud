@@ -1,3 +1,7 @@
+## 0.56.1 (2026-04-24)
+
+### Bug Fixes
+* Updated minimum boto3 version requirement to support batch APIs for trace-schedule functionality. (#1136)
 ## 0.56.0 (2026-04-20)
 
 ### Features
