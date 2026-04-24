@@ -104,6 +104,9 @@ enum Commands {
     /// Handle deadline:// protocol URLs from web applications
     #[command(name = "handle-web-url")]
     HandleWebUrl(commands::handle_web_url::HandleWebUrlArgs),
+    /// EXPERIMENTAL - Start the MCP (Model Context Protocol) server
+    #[command(name = "mcp-server")]
+    McpServer,
 }
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
@@ -206,6 +209,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::bundle::BundleAction::Submit { .. } => "submit",
         }),
         Commands::HandleWebUrl(_) => ("handle-web-url", ""),
+        Commands::McpServer => ("mcp-server", ""),
     };
     if action.is_empty() {
         format!("deadline.{group}")
@@ -326,6 +330,7 @@ fn main() {
             Commands::Manifest { action } => commands::manifest::run(action),
             Commands::Bundle { action } => commands::bundle::run(action),
             Commands::HandleWebUrl(args) => commands::handle_web_url::run(args),
+            Commands::McpServer => commands::mcp::run(),
         };
         if let Err(e) = result {
             match e {

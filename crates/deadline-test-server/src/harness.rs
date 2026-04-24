@@ -42,7 +42,7 @@ impl TestHarness {
         harness
     }
 
-    fn endpoint_url(&self) -> String {
+    pub fn endpoint_url(&self) -> String {
         let port = self.server.address().port();
         format!("http://localhost:{port}")
     }

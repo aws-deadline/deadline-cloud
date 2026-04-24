@@ -24,5 +24,11 @@ Process:
 6. Fix any output differences. If a difference is accepted, document
    the rationale.
 
+### Long-lived processes (MCP server, etc.)
+
+`diff` doesn't work for processes that never exit. Instead, compare
+Python and Rust source code directly: tool names, parameter names/types,
+required vs optional, instructions text, and error handling shape.
+
 ⛔ GATE: Present comparison results and any accepted differences. Stop and wait for
 review. Update `specs/HANDOFF.md` with step status once review is complete.

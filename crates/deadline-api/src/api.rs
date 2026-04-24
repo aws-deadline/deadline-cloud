@@ -11,10 +11,12 @@ use std::future::Future;
 /// so this works for errors from any AWS SDK crate (Deadline, CloudWatch,
 /// STS, S3, etc.). For `ServiceError`, extracts the error code and message
 /// from the response. For transport-level errors (timeout, dispatch failure),
-/// falls back to the SDK's Display impl.
+/// uses `DisplayErrorContext` to show the full causal chain instead of just
+/// "dispatch failure".
 pub fn format_sdk_error<E, R>(err: &aws_sdk_deadline::error::SdkError<E, R>) -> String
 where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
+    R: std::fmt::Debug,
 {
     match err {
         aws_sdk_deadline::error::SdkError::ServiceError(e) => {
@@ -23,11 +25,11 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{other}"),
+        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
     }
 }
 
-fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata>(
+fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static>(
     e: aws_sdk_deadline::error::SdkError<E>,
 ) -> DeadlineError {
     DeadlineError::OperationError(format_sdk_error(&e))
@@ -72,7 +74,7 @@ async fn capture_send<F, R, E>(build: F) -> Result<Value, DeadlineError>
 where
     F: FnOnce(ResponseBodyCapture) -> R,
     R: Future<Output = Result<(), aws_sdk_deadline::error::SdkError<E>>>,
-    E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata,
+    E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata + std::error::Error + 'static,
 {
     let capture = ResponseBodyCapture::new();
     build(capture.clone()).await.map_err(sdk_err)?;

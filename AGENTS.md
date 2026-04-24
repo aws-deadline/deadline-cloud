@@ -37,6 +37,5 @@ cargo test                               # full test suite
 cargo test -p deadline-config            # single crate
 cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
 cargo test -p deadline-gui-ffi           # GUI FFI tests
-cargo test -p deadline-mcp               # MCP server tests
 cargo insta review                       # review new/changed CLI output snapshots
 ```

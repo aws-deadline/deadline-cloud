@@ -13,21 +13,21 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:55902"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:55902"
-    AWS_ENDPOINT_URL_S3: "http://localhost:55902"
-    AWS_ENDPOINT_URL_STS: "http://localhost:55902"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61430"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61430"
+    AWS_ENDPOINT_URL_S3: "http://localhost:61430"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61430"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpuSL2PZ/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpuSL2PZ
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYm1jMT/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYm1jMT
 ---
 success: false
 exit_code: 1
 ----- stdout -----
-failed to construct request
+failed to construct request: farm_id was missing: cannot be empty or unset (ConstructionFailure(ConstructionFailure { source: BuildError { kind: MissingField { field: "farm_id", details: "cannot be empty or unset" } } }))
 
 ----- stderr -----

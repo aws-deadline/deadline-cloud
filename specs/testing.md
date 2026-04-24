@@ -105,6 +105,14 @@ A workspace member (`crates/deadline-test-server/`) used only as a
 - `harness.cli(&["config", "set", ...])` → `assert_cmd::Command` for
   `.assert().success()` and file side-effect checks
 - `harness.server` → the `wiremock::MockServer` to mount stubs on
+- `harness.endpoint_url()` → `http://localhost:{port}` for env vars
+
+**⚠️ Do not use `harness.server.uri()` or `harness.server_uri()` for
+endpoint env vars.** Wiremock's `.uri()` returns `http://127.0.0.1:{port}`.
+The AWS SDK's endpoint resolver treats bare IP addresses differently from
+hostnames in some code paths (notably `.customize().interceptor().send()`),
+causing DNS resolution failures. Always use `harness.endpoint_url()` which
+returns `http://localhost:{port}`.
 
 ---
 

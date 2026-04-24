@@ -19,7 +19,6 @@ deadline-cloud-rs/
 │   ├── deadline-api/                # AWS API calls, auth, telemetry
 │   ├── deadline-job-bundle/         # Job bundle parsing, submission
 │   ├── deadline-job-attachments/    # S3 transfer, hashing, manifests
-│   ├── deadline-mcp/                # MCP server
 │   └── deadline-test-server/        # Test infrastructure
 ├── gui/                             # Python Qt GUI package (planned)
 │   └── deadline/
@@ -51,7 +50,7 @@ deadline-cli (binary)
 │   └── deadline-config
 ├── deadline-job-attachments
 │   └── deadline-config
-└── deadline-mcp
+└── rmcp (MCP server, built into CLI)
 
 deadline-gui-ffi (shared library, C ABI)
 ├── deadline-config
@@ -65,12 +64,6 @@ gui/ (Python package) ──ctypes──► deadline-gui-ffi.{dylib,so,dll}
 ├── _ffi.py (ctypes wrapper — loads shared library)
 └── Data classes & utilities (pure Python, no Rust dependency)
 
-deadline-mcp (library, used by deadline-cli)
-├── deadline-config
-├── deadline-api
-├── deadline-job-bundle
-└── deadline-job-attachments
-
 deadline-test-server (dev-dependency of deadline-cli)
 ├── wiremock
 ├── tempfile
@@ -81,7 +74,7 @@ deadline-test-server (dev-dependency of deadline-cli)
 
 | Crate | Role |
 |-------|------|
-| `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting. No business logic. For GUI commands, spawns a Python process that loads the GUI widgets + `deadline-gui-ffi`. |
+| `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting, MCP server (`mcp-server` subcommand via rmcp SDK). No business logic beyond presentation. For GUI commands, spawns a Python process that loads the GUI widgets + `deadline-gui-ffi`. |
 | `deadline-gui-ffi` | Shared library with C ABI. Exposes config, auth, API listing, submission, and telemetry to external callers (Python GUI, DCC plugins, Unreal). |
 | `gui/` | Python package. Qt widgets (presentation), controllers (call FFI), data classes (pure Python). Shipped alongside the Rust artifacts. DCC submitters import from this package. |
 | `deadline-config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
@@ -89,7 +82,6 @@ deadline-test-server (dev-dependency of deadline-cli)
 | `deadline-job-bundle` | Job bundle parsing, parameter validation, and submission orchestration. Owns the full lifecycle: load bundle → validate → merge parameters → upload attachments → CreateJob → poll for completion. |
 | `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. Owns its error types (`JobAttachmentsError`), `PathFormat`, and file conflict resolution. Independent S3/STS clients. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
-| `deadline-mcp` | Library. MCP server logic invoked by `deadline-cli` via `deadline mcp-server`. Uses rmcp SDK. |
 
 ## Data Flows
 

@@ -100,7 +100,7 @@ async fn get_fleet_scoped_config(
 /// Format a CloudWatch SDK error using the common smithy trait.
 fn cw_sdk_err<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> String
 where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
 {
     match err {
         aws_sdk_cloudwatchlogs::error::SdkError::ServiceError(e) => {
@@ -109,7 +109,7 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{other}"),
+        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
     }
 }
 

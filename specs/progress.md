@@ -68,7 +68,7 @@ pick and execute work items.
 | 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
-| 17 | MCP server | ⚠️ Gaps | `mcp.md` | 1-14 |
+| 17 | MCP server | In progress | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | Not started | `new_features.md` | 0g |
 | 20 | Batch get API helper | Not started | `new_features.md` | — |
@@ -77,9 +77,9 @@ pick and execute work items.
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
 **Dependency status:** All core feature dependencies are resolved. Only
-3 items remain as ⚠️ Gaps: #9 (parallel/multipart S3 transfer), #11
-(`bundle submit --output json`), and #17 (MCP server — empty crate).
-#16 (GUI FFI) is in progress. New features #18-21 are not started.
+2 items remain as ⚠️ Gaps: #9 (parallel/multipart S3 transfer) and #11
+(`bundle submit --output json`). #16 (GUI FFI) and #17 (MCP server)
+are in progress. New features #19-21 are not started.
 
 **Next action item:** Pick next work item from the table.
 
@@ -103,12 +103,11 @@ after the core CLI commands are complete.
   `queue sync-output` CLI commands. All three batches complete:
   Batch A (`job download-output` ✅), Batch B (path mapping ✅),
   Batch C (`queue sync-output` + incremental downloads ✅).
-- **#17**: Corrected from ✅ Done to ⚠️ Gaps. The `deadline-mcp` crate
-  exists but contains only a doc comment — no tool definitions, no
-  `mcp-server` CLI subcommand. The spec says "Placeholder —
-  implementation deferred." Python MCP has 13 tools including
-  `submit_job`, `download_job_output`, `get_session_and_worker_logs`,
-  and diagnostic APIs.
+- **#17**: Batch 1 complete (server skeleton, 13 pass-through tools,
+  `deadline mcp-server` subcommand, 13 Level 2 tests). The `deadline-mcp`
+  crate was removed — MCP server lives in `deadline-cli` at
+  `commands/mcp.rs`. Batches 2-3 remain: `submit_job`,
+  `download_job_output`, `get_session_and_worker_logs`.
 
 **New work items (discovered 2026-04-20 from Python repo sync):**
 - **#18 — Submission hooks**: Pre/post-submission hook framework. Python

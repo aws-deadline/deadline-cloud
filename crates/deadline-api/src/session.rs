@@ -6,7 +6,8 @@ use aws_sdk_sts::Client as StsClient;
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
+use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // Global session cache
@@ -246,7 +247,7 @@ impl QueueUserCredentialProvider {
                         format!("{inner}"),
                     )
                 }
-                other => ("Unknown".to_string(), format!("{other}")),
+                other => ("Unknown".to_string(), format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other))),
             };
 
             let display = &self.queue_display_name_or_id;
@@ -319,36 +320,50 @@ impl ProvideCredentials for QueueUserCredentialProvider {
 /// Set the CLI command name for user-agent tracking.
 /// Called by the CLI before dispatching to a subcommand.
 pub fn set_cli_command_name(name: &str) {
-    SESSION.lock().unwrap().context.cli_command_name = Some(name.to_string());
+    SESSION.blocking_lock().context.cli_command_name = Some(name.to_string());
 }
 
 /// Set submitter info for user-agent tracking.
 /// Called by GUI/DCC plugins before making API calls.
-pub fn set_submitter_info(name: &str, version: Option<&str>) {
-    let mut cache = SESSION.lock().unwrap();
+pub async fn set_submitter_info(name: &str, version: Option<&str>) {
+    let mut cache = SESSION.lock().await;
     cache.context.submitter_name = Some(name.to_string());
     cache.context.submitter_version = version.map(|v| v.to_string());
 }
 
 /// Clear the cached SDK config. Next call re-resolves credentials.
 /// Python equivalent: `invalidate_boto3_session_cache()`.
+/// Use from sync contexts (main, logout). For async contexts use
+/// `invalidate_session_cache_async`.
 pub fn invalidate_session_cache() {
-    SESSION.lock().unwrap().invalidate();
+    // Use block_in_place to safely acquire the async Mutex from a sync context
+    // running inside a tokio runtime (e.g., CLI logout). Plain blocking_lock()
+    // panics in this situation.
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            SESSION.lock().await.invalidate();
+        });
+    });
+}
+
+/// Async version of `invalidate_session_cache` for use inside async functions.
+pub async fn invalidate_session_cache_async() {
+    SESSION.lock().await.invalidate();
 }
 
 /// Build a Deadline Cloud client using the cached SDK config.
 pub async fn deadline_client(config: Option<&IniConfig>) -> DeadlineClient {
-    SESSION.lock().unwrap().build_deadline_client(config).await
+    SESSION.lock().await.build_deadline_client(config).await
 }
 
 /// Get the cached SdkConfig (for building non-Deadline AWS clients like CloudWatch Logs).
 pub async fn get_sdk_config(config: Option<&IniConfig>) -> aws_config::SdkConfig {
-    SESSION.lock().unwrap().get_config(config).await.clone()
+    SESSION.lock().await.get_config(config).await.clone()
 }
 
 /// Build an STS client using the cached SDK config.
 pub async fn sts_client(config: Option<&IniConfig>) -> StsClient {
-    SESSION.lock().unwrap().build_sts_client(config).await
+    SESSION.lock().await.build_sts_client(config).await
 }
 
 /// Get an SdkConfig with queue user credentials.
@@ -362,11 +377,11 @@ pub async fn get_queue_user_config(
     config: Option<&IniConfig>,
 ) -> Result<SdkConfig, crate::errors::DeadlineError> {
     if force_refresh {
-        invalidate_session_cache();
+        invalidate_session_cache_async().await;
     }
     let farm = farm_id.map(String::from).unwrap_or_else(|| get_setting("defaults.farm_id", config));
     let queue = queue_id.map(String::from).unwrap_or_else(|| get_setting("defaults.queue_id", config));
-    SESSION.lock().unwrap().get_queue_user_config(&farm, &queue, queue_display_name, config).await
+    SESSION.lock().await.get_queue_user_config(&farm, &queue, queue_display_name, config).await
 }
 
 /// Get an SdkConfig appropriate for non-Deadline AWS services (CloudWatch, S3)
@@ -547,7 +562,7 @@ mod tests {
     #[test]
     fn set_cli_command_name_updates_global_context() {
         set_cli_command_name("deadline.farm.list");
-        let ua = SESSION.lock().unwrap().context.build_user_agent();
+        let ua = SESSION.blocking_lock().context.build_user_agent();
         assert!(ua.contains("cli-command/deadline.farm.list"));
     }
 

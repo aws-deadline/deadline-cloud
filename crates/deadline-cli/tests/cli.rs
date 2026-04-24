@@ -52,3 +52,5 @@ mod smoke;
 mod job_download;
 #[path = "cli/handle_web_url.rs"]
 mod handle_web_url;
+#[path = "cli/mcp.rs"]
+mod mcp;

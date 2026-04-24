@@ -28,6 +28,9 @@ serde_yaml = { workspace = true }
 tokio = { workspace = true }
 aws-config = { workspace = true }
 serial_test = { workspace = true }
+rmcp = { version = "1.5", features = ["server", "transport-io", "macros"] }
+schemars = "1"
+serde = { workspace = true }
 
 [dev-dependencies]
 deadline-test-server = { workspace = true }
@@ -38,3 +41,4 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 insta = { workspace = true }
 insta-cmd = { workspace = true }
+rmcp = { version = "1.5", features = ["client", "transport-child-process"] }

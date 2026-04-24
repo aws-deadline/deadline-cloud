@@ -154,7 +154,7 @@ pub fn compute_upload_config(
 /// Format an STS SDK error using the common smithy trait.
 fn format_sts_sdk_err<E>(err: &aws_sdk_sts::error::SdkError<E>) -> String
 where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata,
+    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
 {
     match err {
         aws_sdk_sts::error::SdkError::ServiceError(e) => {
@@ -163,7 +163,7 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{other}"),
+        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
     }
 }
 
