@@ -267,9 +267,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-deadline"
-version = "1.94.0"
+version = "1.98.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13814d6f9d72ba8c92d254835e2671bdf3441be6e63d55832bc5dbba6c4ae0d2"
+checksum = "97ed2632b3061eb3681e6f80f4ecffe56d336a8ab419ab9882ba511734624310"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -1263,7 +1263,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2603,7 +2603,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3056,7 +3056,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

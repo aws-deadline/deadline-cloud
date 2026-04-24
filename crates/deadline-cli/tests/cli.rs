@@ -54,3 +54,5 @@ mod job_download;
 mod handle_web_url;
 #[path = "cli/mcp.rs"]
 mod mcp;
+#[path = "cli/trace_schedule.rs"]
+mod trace_schedule;

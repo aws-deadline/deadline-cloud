@@ -14,12 +14,11 @@
 | Critical | 4     | 4     | 0                   | 0         |
 | High     | 10    | 10    | 1                   | 0         |
 | Medium   | 22    | 16    | 3                   | 3         |
-| Low      | 20    | 14    | 4                   | 2         |
+| Low      | 20    | 15    | 4                   | 1         |
 
-**Remaining open findings (5):**
+**Remaining open findings (4):**
 - Performance: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
   AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
-- Deferred: AUDIT-041 (`job trace-schedule` — EXPERIMENTAL in Python)
 
 **Investigated and dropped (not bugs):**
 - AUDIT-034 (`--submitter-info` — GUI-only, not CLI scope)
@@ -458,15 +457,15 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### 🔴 AUDIT-041: `job trace-schedule` command missing
+### ✅ AUDIT-041: `job trace-schedule` command missing
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline job trace-schedule`
-- **Python behavior:** Full command for Chrome trace format data and summary statistics. (`job_group.py:730-1020`)
-- **Rust behavior:** No `trace-schedule` subcommand. (`job.rs`)
-- **Impact:** Cannot generate performance trace data. Marked EXPERIMENTAL in Python.
-- **Resolution:** Pending — noted as deferred in progress.md
+- **Python behavior:** Full command for Chrome trace format data and summary statistics. (`_trace_schedule.py`)
+- **Rust behavior:** ~~No `trace-schedule` subcommand. (`job.rs`)~~ Full implementation: GetJob → ListSessions → ListSessionActions → BatchGetStep/Task (with chunking + retry) → Chrome trace events → summary statistics → optional trace file. Uses `batch_get_steps_page`/`batch_get_tasks_page` API functions.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### ✅ AUDIT-042: Windows stdin handling for login subprocess
 
@@ -632,7 +631,6 @@ findings above.
 | 🔴 | AUDIT-011 | Upload sequential (no parallelism) | High | Performance |
 | 🔴 | AUDIT-012 | Download sequential (no parallelism) | High | Performance |
 | 🔴 | AUDIT-014 | No multipart upload (5GB limit) | High | Performance |
-| 🔴 | AUDIT-041 | `job trace-schedule` missing | Low | Deferred (EXPERIMENTAL in Python) |
 | 🔴 | AUDIT-049 | No multipart download | Low | Performance |
 
 ### Investigated and Dropped (2)
@@ -642,6 +640,6 @@ findings above.
 | ⊘ | AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
 | ⊘ | AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
 
-### Resolved (49)
+### Resolved (50)
 
-✅ Fixed: 42 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2
+✅ Fixed: 43 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2

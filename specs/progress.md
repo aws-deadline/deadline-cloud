@@ -71,7 +71,7 @@ pick and execute work items.
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
-| 20 | Batch get API helper | Not started | `new_features.md` | — |
+| 20 | Batch get API helper | ✅ Done | `new_features.md` | — |
 | 21 | Python bug-fix parity sweep | Not started | `new_features.md` | — |
 | 22 | Fuzz testing | Not started | — | — |
 

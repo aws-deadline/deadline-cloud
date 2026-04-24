@@ -20,7 +20,7 @@ Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
 | [queue.md](queue.md) | `deadline queue` commands: list, get, export-credentials |
 | [fleet.md](fleet.md) | `deadline fleet` commands: list, get |
 | [worker.md](worker.md) | `deadline worker` commands: list, get |
-| [job.md](job.md) | `deadline job` commands: list, get, search, wait, logs, cancel, requeue-tasks |
+| [job.md](job.md) | `deadline job` commands: list, get, search, wait, logs, cancel, requeue-tasks, trace-schedule |
 | [bundle.md](bundle.md) | `deadline bundle` commands: submit, gui-submit |
 | [attachment.md](attachment.md) | `deadline attachment` commands: download, upload (BETA) |
 | [manifest.md](manifest.md) | `deadline manifest` commands: snapshot, diff, download, upload (BETA) |
@@ -34,10 +34,9 @@ Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
 Implemented: config, auth (login/logout/status), farm list/get, queue
 list/get/export-credentials/get-storage-profile/paramdefs/sync-output,
 fleet list/get, worker list/get, job
-list/get/search/wait/logs/cancel/requeue-tasks/download-output, attachment
-download/upload, manifest snapshot/diff/download/upload, bundle
+list/get/search/wait/logs/cancel/requeue-tasks/download-output/trace-schedule,
+attachment download/upload, manifest snapshot/diff/download/upload, bundle
 submit/gui-submit, handle-web-url.
 
 Gaps:
 - `bundle submit --output json` output format
-- `job trace-schedule` — experimental, deferred

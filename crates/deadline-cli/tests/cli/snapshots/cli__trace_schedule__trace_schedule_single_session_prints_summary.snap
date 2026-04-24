@@ -1,0 +1,55 @@
+---
+source: crates/deadline-cli/tests/cli/trace_schedule.rs
+info:
+  program: deadline
+  args:
+    - job
+    - trace-schedule
+    - "--job-id"
+    - job-aaf4cdf8aae242f58fb84c5bb19f199b
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:49854"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:49854"
+    AWS_ENDPOINT_URL_S3: "http://localhost:49854"
+    AWS_ENDPOINT_URL_STS: "http://localhost:49854"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmptIf3u9/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmptIf3u9
+---
+success: true
+exit_code: 0
+----- stdout -----
+Getting the job...
+Getting all the session actions for the job...
+Getting 1 step(s) via BatchGetStep...
+Getting 1 task(s) via BatchGetTask...
+Processing the trace data...
+
+ ==== SUMMARY ====
+
+Session Count: 1
+Session Total Duration: 0:01:00
+Session Action Count: 1
+Session Action Total Duration: 0:01:00
+Task Run Count: 1
+Task Run Total Duration: 0:01:00 (100.0%)
+Non-Task Run Count: 0
+Non-Task Run Total Duration: 0:00:00 (0.0%)
+Sync Job Attachments Count: 0
+Sync Job Attachments Total Duration: 0:00:00 (0.0%)
+Env Action Count: 0
+Env Action Total Duration: 0:00:00 (0.0%)
+
+Within-session Overhead Duration: 0:00:00 (0.0%)
+Within-session Overhead Duration Per Action: 0:00:00
+
+----- stderr -----

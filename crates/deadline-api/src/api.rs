@@ -662,6 +662,55 @@ pub async fn list_tasks(
     }).await
 }
 
+/// Send a single BatchGetStep request for up to 100 step identifiers.
+/// Returns raw JSON with `steps` and `errors` arrays.
+pub async fn batch_get_steps_page(
+    identifiers: &[Value],
+    config: Option<&IniConfig>,
+) -> Result<Value, DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let mut ids = Vec::new();
+    for id in identifiers {
+        let builder = aws_sdk_deadline::types::BatchGetStepIdentifier::builder()
+            .farm_id(id["farmId"].as_str().unwrap_or(""))
+            .queue_id(id["queueId"].as_str().unwrap_or(""))
+            .job_id(id["jobId"].as_str().unwrap_or(""))
+            .step_id(id["stepId"].as_str().unwrap_or(""))
+            .build()
+            .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
+        ids.push(builder);
+    }
+    capture_send(|cap| async move {
+        client.batch_get_step().set_identifiers(Some(ids))
+            .customize().interceptor(cap).send().await.map(|_| ())
+    }).await
+}
+
+/// Send a single BatchGetTask request for up to 100 task identifiers.
+/// Returns raw JSON with `tasks` and `errors` arrays.
+pub async fn batch_get_tasks_page(
+    identifiers: &[Value],
+    config: Option<&IniConfig>,
+) -> Result<Value, DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let mut ids = Vec::new();
+    for id in identifiers {
+        let builder = aws_sdk_deadline::types::BatchGetTaskIdentifier::builder()
+            .farm_id(id["farmId"].as_str().unwrap_or(""))
+            .queue_id(id["queueId"].as_str().unwrap_or(""))
+            .job_id(id["jobId"].as_str().unwrap_or(""))
+            .step_id(id["stepId"].as_str().unwrap_or(""))
+            .task_id(id["taskId"].as_str().unwrap_or(""))
+            .build()
+            .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
+        ids.push(builder);
+    }
+    capture_send(|cap| async move {
+        client.batch_get_task().set_identifiers(Some(ids))
+            .customize().interceptor(cap).send().await.map(|_| ())
+    }).await
+}
+
 // ---------------------------------------------------------------------------
 // Queue credentials
 // ---------------------------------------------------------------------------

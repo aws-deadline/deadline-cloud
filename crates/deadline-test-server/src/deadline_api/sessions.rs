@@ -151,3 +151,39 @@ pub async fn mock_list_session_actions(
         .mount(server)
         .await;
 }
+
+/// Mount a BatchGetStep response (POST). Returns steps and errors arrays.
+pub async fn mock_batch_get_steps(
+    server: &MockServer,
+    steps: &[Value],
+    errors: &[Value],
+) {
+    Mock::given(method("POST"))
+        .and(path("/2023-10-12/batch-get-step"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "steps": steps,
+                "errors": errors,
+            })),
+        )
+        .mount(server)
+        .await;
+}
+
+/// Mount a BatchGetTask response (POST). Returns tasks and errors arrays.
+pub async fn mock_batch_get_tasks(
+    server: &MockServer,
+    tasks: &[Value],
+    errors: &[Value],
+) {
+    Mock::given(method("POST"))
+        .and(path("/2023-10-12/batch-get-task"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "tasks": tasks,
+                "errors": errors,
+            })),
+        )
+        .mount(server)
+        .await;
+}

@@ -24,6 +24,13 @@ fn parse_session_action_id(session_action_id: &str) -> Result<String, CliError> 
     Ok(format!("session-{}", &caps[1]))
 }
 
+fn parse_trace_format(s: &str) -> Result<String, String> {
+    match s.to_lowercase().as_str() {
+        "chrome" => Ok("chrome".to_string()),
+        other => Err(format!("Invalid value '{other}' for --trace-format. Valid values: chrome")),
+    }
+}
+
 fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
     match s.to_uppercase().as_str() {
         "SKIP" => Ok(deadline_job_attachments::models::FileConflictResolution::Skip),
@@ -175,6 +182,22 @@ pub enum JobAction {
         page_size: i32,
         #[arg(long, default_value = "0")]
         item_offset: i32,
+    },
+    /// EXPERIMENTAL - Generate statistics from a job with a trace
+    TraceSchedule {
+        #[arg(long)] profile: Option<String>,
+        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)] job_id: Option<String>,
+        /// Output verbose trace details
+        #[arg(short, long)]
+        verbose: bool,
+        /// The tracing format to write (only "chrome" supported)
+        #[arg(long, value_parser = parse_trace_format)]
+        trace_format: Option<String>,
+        /// The tracing file to write
+        #[arg(long)]
+        trace_file: Option<String>,
     },
     /// Download the output of a job saved as job attachments
     DownloadOutput {
@@ -825,6 +848,12 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             };
             print_job_list(&resp, item_offset);
             Ok(())
+        }
+        JobAction::TraceSchedule {
+            profile, farm_id, queue_id, job_id,
+            verbose, trace_format, trace_file,
+        } => {
+            run_trace_schedule(profile, farm_id, queue_id, job_id, verbose, trace_format, trace_file).await
         }
         JobAction::DownloadOutput {
             profile, farm_id, queue_id, job_id, step_id, task_id,
@@ -1527,6 +1556,482 @@ pub(crate) async fn download_output_impl(
         );
     }
     println!();
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// trace-schedule
+// ---------------------------------------------------------------------------
+
+/// Per-item error codes that are transient and worth retrying.
+const TRANSIENT_CODES: &[&str] = &["InternalServerErrorException", "ThrottlingException"];
+const MAX_BATCH_SIZE: usize = 100;
+
+/// Generic batch-get with chunking and retry. Calls `send_batch` for each
+/// chunk of up to 100 identifiers, retries transient per-item errors with
+/// exponential backoff, and collects terminal errors.
+async fn batch_get<F, Fut>(
+    send_batch: F,
+    identifiers: Vec<serde_json::Value>,
+    key_fn: fn(&serde_json::Value) -> Option<String>,
+    items_field: &str,
+    id_fields: &[&str],
+    max_attempts: usize,
+) -> Result<(std::collections::HashMap<String, serde_json::Value>, Vec<serde_json::Value>), CliError>
+where
+    F: Fn(Vec<serde_json::Value>) -> Fut,
+    Fut: std::future::Future<Output = Result<serde_json::Value, deadline_api::errors::DeadlineError>>,
+{
+    let mut remaining = identifiers;
+    let mut results = std::collections::HashMap::new();
+    let mut terminal = Vec::new();
+
+    for attempt in 0..max_attempts {
+        let mut next_round = Vec::new();
+        for chunk in remaining.chunks(MAX_BATCH_SIZE) {
+            let response = send_batch(chunk.to_vec()).await
+                .map_err(|e| CliError::Operation(e.to_string()))?;
+            if let Some(items) = response[items_field].as_array() {
+                for item in items {
+                    if let Some(key) = key_fn(item) {
+                        results.insert(key, item.clone());
+                    }
+                }
+            }
+            if let Some(errors) = response["errors"].as_array() {
+                for err in errors {
+                    let code = err.get("code").and_then(|c| c.as_str()).unwrap_or("");
+                    if TRANSIENT_CODES.contains(&code) {
+                        let mut retry_id = serde_json::Map::new();
+                        for &field in id_fields {
+                            if let Some(v) = err.get(field) {
+                                retry_id.insert(field.to_string(), v.clone());
+                            }
+                        }
+                        next_round.push(serde_json::Value::Object(retry_id));
+                    } else {
+                        terminal.push(err.clone());
+                    }
+                }
+            }
+        }
+        remaining = next_round;
+        if remaining.is_empty() {
+            break;
+        }
+        if attempt + 1 < max_attempts {
+            let secs = 0.5 * (2.0_f64).powi(attempt as i32);
+            tokio::time::sleep(std::time::Duration::from_secs_f64(secs)).await;
+        }
+    }
+    for ident in &remaining {
+        let mut err = ident.as_object().cloned().unwrap_or_default();
+        err.insert("code".to_string(), serde_json::Value::String("ExhaustedRetries".to_string()));
+        terminal.push(serde_json::Value::Object(err));
+    }
+    Ok((results, terminal))
+}
+
+fn warn_on_errors(resource_type: &str, errors: &[serde_json::Value]) {
+    if errors.is_empty() {
+        return;
+    }
+    eprintln!(
+        "Warning: could not retrieve {} {}(s); the trace will exclude their details.",
+        errors.len(), resource_type,
+    );
+    for err in errors.iter().take(5) {
+        eprintln!("  {}: {}", err.get("code").and_then(|c| c.as_str()).unwrap_or("Unknown"),
+            err.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+    }
+    if errors.len() > 5 {
+        eprintln!("  ... and {} more.", errors.len() - 5);
+    }
+}
+
+/// Format microseconds as Python's `str(timedelta)`: `H:MM:SS` or `H:MM:SS.ffffff`.
+fn format_timedelta(us: i64) -> String {
+    let total_secs = us / 1_000_000;
+    let frac_us = us % 1_000_000;
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    if frac_us == 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{h}:{m:02}:{s:02}.{frac_us:06}")
+    }
+}
+
+fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    // Handle: "2025-01-27T07:37:53Z", "2025-01-27 07:37:53+00:00",
+    // "2025-01-27 07:37:53.238+00:00" (fractional seconds from ResponseBodyCapture)
+    chrono::DateTime::parse_from_rfc3339(s).ok()
+        .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%:z").ok())
+        .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%:z").ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+}
+
+async fn run_trace_schedule(
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    verbose: bool,
+    trace_format: Option<String>,
+    trace_file: Option<String>,
+) -> Result<(), CliError> {
+    use serde_json::json;
+
+    let config = setup_config(profile, farm_id, queue_id, job_id, false,
+        &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let job = get(&config, "defaults.job_id");
+
+    if trace_file.is_some() && trace_format.is_none() {
+        return Err(CliError::Operation(
+            "Error: Must provide --trace-format with --trace-file.".to_string()
+        ));
+    }
+
+    println!("Getting the job...");
+    let job_data = api::get_job(&farm, &queue, &job, Some(&config), None).await
+        .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+
+    let started_at_str = job_data.get("startedAt").and_then(|v| v.as_str());
+    let started_at = match started_at_str {
+        Some(s) => parse_datetime(s).ok_or_else(|| {
+            CliError::Operation(format!("Failed to parse job startedAt: {s}"))
+        })?,
+        None => return Err(CliError::Operation(
+            "No trace available - Job hasn't started yet, exiting".to_string()
+        )),
+    };
+    let trace_end_utc = chrono::Utc::now();
+
+    // Fetch all sessions
+    let sessions_resp = api::list_sessions(&farm, &queue, &job, Some(&config), None).await
+        .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
+    let mut sessions: Vec<serde_json::Value> = sessions_resp["sessions"]
+        .as_array().cloned().unwrap_or_default();
+    // Sort by startedAt
+    sessions.sort_by(|a, b| {
+        let a_t = a["startedAt"].as_str().unwrap_or("");
+        let b_t = b["startedAt"].as_str().unwrap_or("");
+        a_t.cmp(b_t)
+    });
+
+    // Fetch session actions for each session
+    println!("Getting all the session actions for the job...");
+    for i in 0..sessions.len() {
+        let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_string();
+        let actions_resp = api::list_session_actions(&farm, &queue, &job, &sid, Some(&config), None).await
+            .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
+        let actions = actions_resp["sessionActions"].as_array().cloned().unwrap_or_default();
+        sessions[i]["actions"] = json!(actions);
+    }
+
+    // Collect unique step IDs and (stepId, taskId) pairs from taskRun definitions
+    let mut step_ids = std::collections::HashSet::new();
+    let mut task_refs = std::collections::HashSet::new();
+    for session in &sessions {
+        for action in session["actions"].as_array().unwrap_or(&vec![]) {
+            if let Some(task_run) = action.get("definition").and_then(|d| d.get("taskRun")) {
+                if let (Some(sid), Some(tid)) = (
+                    task_run.get("stepId").and_then(|v| v.as_str()),
+                    task_run.get("taskId").and_then(|v| v.as_str()),
+                ) {
+                    step_ids.insert(sid.to_string());
+                    task_refs.insert((sid.to_string(), tid.to_string()));
+                }
+            }
+        }
+    }
+
+    // BatchGetStep
+    println!("Getting {} step(s) via BatchGetStep...", step_ids.len());
+    let step_identifiers: Vec<serde_json::Value> = step_ids.iter().map(|s| {
+        json!({"farmId": farm, "queueId": queue, "jobId": job, "stepId": s})
+    }).collect();
+    let config_ref = &config;
+    let (steps, step_errors) = batch_get(
+        |chunk| async move { api::batch_get_steps_page(&chunk, Some(config_ref)).await },
+        step_identifiers,
+        |item| item.get("stepId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        "steps",
+        &["farmId", "queueId", "jobId", "stepId"],
+        3,
+    ).await?;
+    warn_on_errors("step", &step_errors);
+
+    // BatchGetTask
+    println!("Getting {} task(s) via BatchGetTask...", task_refs.len());
+    let task_identifiers: Vec<serde_json::Value> = task_refs.iter().map(|(sid, tid)| {
+        json!({"farmId": farm, "queueId": queue, "jobId": job, "stepId": sid, "taskId": tid})
+    }).collect();
+    let (tasks, task_errors) = batch_get(
+        |chunk| async move { api::batch_get_tasks_page(&chunk, Some(config_ref)).await },
+        task_identifiers,
+        |item| item.get("taskId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        "tasks",
+        &["farmId", "queueId", "jobId", "stepId", "taskId"],
+        3,
+    ).await?;
+    warn_on_errors("task", &task_errors);
+
+    // Attach step/task records to sessions and actions
+    for (i, session) in sessions.iter_mut().enumerate() {
+        session["index"] = json!(i);
+        let actions = session["actions"].as_array().cloned().unwrap_or_default();
+        let mut new_actions = Vec::new();
+        for mut action in actions {
+            if let Some(task_run) = action.get("definition").and_then(|d| d.get("taskRun")) {
+                let step_id = task_run.get("stepId").and_then(|v| v.as_str()).unwrap_or("");
+                let task_id = task_run.get("taskId").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(step) = steps.get(step_id) {
+                    if session.get("step").is_none() {
+                        session["step"] = step.clone();
+                    } else if session["step"]["stepId"].as_str() != Some(step_id) {
+                        let sid = session.get("sessionId").and_then(|v| v.as_str()).unwrap_or("");
+                        return Err(CliError::Operation(format!(
+                            "Session {sid} ran more than one step! When this code was written that wasn't possible."
+                        )));
+                    }
+                }
+                if let Some(task) = tasks.get(task_id) {
+                    action["task"] = task.clone();
+                }
+            }
+            new_actions.push(action);
+        }
+        session["actions"] = json!(new_actions);
+    }
+
+    // Build worker index map (sorted for deterministic pid assignment)
+    let mut worker_list: Vec<String> = sessions.iter()
+        .filter_map(|s| s.get("workerId").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect::<std::collections::HashSet<_>>().into_iter().collect();
+    worker_list.sort();
+    let workers: std::collections::HashMap<String, usize> = worker_list.iter()
+        .enumerate().map(|(i, w)| (w.clone(), i)).collect();
+
+    println!("Processing the trace data...");
+
+    // Build trace events and accumulators
+    let time_int = |ts: &str| -> i64 {
+        parse_datetime(ts).map(|dt| (dt - started_at).num_microseconds().unwrap_or(0)).unwrap_or(0)
+    };
+    let trace_end_str = trace_end_utc.to_rfc3339();
+    let duration_of = |resource: &serde_json::Value| -> i64 {
+        let end = resource.get("endedAt").and_then(|v| v.as_str()).unwrap_or(&trace_end_str);
+        match resource.get("startedAt").and_then(|v| v.as_str()) {
+            Some(start) => time_int(end) - time_int(start),
+            None => 0,
+        }
+    };
+
+    let mut trace_events: Vec<serde_json::Value> = Vec::new();
+    let mut acc = std::collections::HashMap::from([
+        ("sessionCount", 0i64), ("sessionActionCount", 0), ("taskRunCount", 0),
+        ("envActionCount", 0), ("syncJobAttachmentsCount", 0),
+        ("sessionDuration", 0), ("sessionActionDuration", 0), ("taskRunDuration", 0),
+        ("envActionDuration", 0), ("syncJobAttachmentsDuration", 0),
+    ]);
+
+    for session in &sessions {
+        *acc.get_mut("sessionCount").unwrap() += 1;
+        *acc.get_mut("sessionDuration").unwrap() += duration_of(session);
+
+        let worker_id = session.get("workerId").and_then(|v| v.as_str()).unwrap_or("");
+        let pid = workers.get(worker_id).copied().unwrap_or(0);
+        let step_name = session.get("step").and_then(|s| s.get("name")).and_then(|n| n.as_str()).unwrap_or("Unknown");
+        let index = session.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+        let mut session_event_name = format!("{step_name} - {index}");
+        if session.get("endedAt").is_none() {
+            session_event_name = format!("{session_event_name} - In Progress");
+        }
+
+        trace_events.push(json!({
+            "name": session_event_name,
+            "cat": "SESSION",
+            "ph": "B",
+            "ts": time_int(session.get("startedAt").and_then(|v| v.as_str()).unwrap_or("")),
+            "pid": pid,
+            "tid": 0,
+            "args": {
+                "sessionId": session.get("sessionId").and_then(|v| v.as_str()).unwrap_or(""),
+                "workerId": worker_id,
+                "fleetId": session.get("fleetId").and_then(|v| v.as_str()).unwrap_or(""),
+                "lifecycleStatus": session.get("lifecycleStatus").and_then(|v| v.as_str()).unwrap_or(""),
+            }
+        }));
+
+        for action in session["actions"].as_array().unwrap_or(&vec![]) {
+            *acc.get_mut("sessionActionCount").unwrap() += 1;
+            *acc.get_mut("sessionActionDuration").unwrap() += duration_of(action);
+
+            let empty_obj = json!({});
+            let definition = action.get("definition").unwrap_or(&empty_obj);
+            let action_type = definition.as_object()
+                .and_then(|m| m.keys().next()).map(|s| s.as_str()).unwrap_or("");
+
+            let mut name = action.get("sessionActionId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+            match action_type {
+                "taskRun" => {
+                    *acc.get_mut("taskRunCount").unwrap() += 1;
+                    *acc.get_mut("taskRunDuration").unwrap() += duration_of(action);
+
+                    let empty_task = json!({});
+                    let task = action.get("task").unwrap_or(&empty_task);
+                    let parameters = task.get("parameters").and_then(|p| p.as_object());
+                    name = match parameters {
+                        Some(params) if !params.is_empty() => {
+                            params.iter().map(|(k, v)| {
+                                let val = v.as_object()
+                                    .and_then(|m| m.values().next())
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                format!("{k}={val}")
+                            }).collect::<Vec<_>>().join(",")
+                        }
+                        _ => "<No Task Params>".to_string(),
+                    };
+                }
+                "envEnter" | "envExit" => {
+                    *acc.get_mut("envActionCount").unwrap() += 1;
+                    *acc.get_mut("envActionDuration").unwrap() += duration_of(action);
+
+                    let env_id = definition.get(action_type)
+                        .and_then(|e| e.get("environmentId"))
+                        .and_then(|v| v.as_str()).unwrap_or("");
+                    name = env_id.rsplit(':').next().unwrap_or(env_id).to_string();
+                }
+                "syncInputJobAttachments" => {
+                    *acc.get_mut("syncJobAttachmentsCount").unwrap() += 1;
+                    *acc.get_mut("syncJobAttachmentsDuration").unwrap() += duration_of(action);
+
+                    let empty_sync = json!({});
+                    let sync_def = definition.get(action_type).unwrap_or(&empty_sync);
+                    name = if sync_def.get("stepId").is_some() {
+                        "Sync Job Attchmnt (Dependencies)".to_string()
+                    } else {
+                        "Sync Job Attchmnt (Submitted)".to_string()
+                    };
+                }
+                _ => {}
+            }
+
+            if action.get("endedAt").is_none() {
+                name = format!("{name} - In Progress");
+            }
+
+            if action.get("startedAt").is_some() {
+                trace_events.push(json!({
+                    "name": name,
+                    "cat": action_type,
+                    "ph": "X",
+                    "ts": time_int(action.get("startedAt").and_then(|v| v.as_str()).unwrap_or("")),
+                    "dur": duration_of(action),
+                    "pid": pid,
+                    "tid": 0,
+                    "args": {
+                        "sessionActionId": action.get("sessionActionId").and_then(|v| v.as_str()).unwrap_or(""),
+                        "status": action.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+                        "stepName": step_name,
+                    }
+                }));
+            }
+        }
+
+        let session_end = session.get("endedAt").and_then(|v| v.as_str()).unwrap_or(&trace_end_str);
+        trace_events.push(json!({
+            "name": session_event_name,
+            "cat": "SESSION",
+            "ph": "E",
+            "ts": time_int(session_end),
+            "pid": pid,
+            "tid": 0,
+        }));
+    }
+
+    if verbose {
+        println!(" ==== TRACE DATA ====");
+        println!("{}", crate::common::cli_object_repr(&job_data));
+        println!("{}", crate::common::cli_object_repr(&json!(sessions)));
+    }
+
+    // Print summary
+    let session_duration = acc["sessionDuration"];
+    let session_action_duration = acc["sessionActionDuration"];
+    let task_run_duration = acc["taskRunDuration"];
+    let env_action_duration = acc["envActionDuration"];
+    let sync_duration = acc["syncJobAttachmentsDuration"];
+    let session_action_count = acc["sessionActionCount"];
+
+    let pct = |part: i64| -> String {
+        if session_duration == 0 { "0.0".to_string() }
+        else { format!("{:.1}", 100.0 * part as f64 / session_duration as f64) }
+    };
+
+    println!();
+    println!(" ==== SUMMARY ====");
+    println!();
+    println!("Session Count: {}", acc["sessionCount"]);
+    println!("Session Total Duration: {}", format_timedelta(session_duration));
+    println!("Session Action Count: {session_action_count}");
+    println!("Session Action Total Duration: {}", format_timedelta(session_action_duration));
+    println!("Task Run Count: {}", acc["taskRunCount"]);
+    println!("Task Run Total Duration: {} ({}%)", format_timedelta(task_run_duration), pct(task_run_duration));
+    let non_task_count = session_action_count - acc["taskRunCount"];
+    let non_task_duration = session_action_duration - task_run_duration;
+    println!("Non-Task Run Count: {non_task_count}");
+    println!("Non-Task Run Total Duration: {} ({}%)", format_timedelta(non_task_duration), pct(non_task_duration));
+    println!("Sync Job Attachments Count: {}", acc["syncJobAttachmentsCount"]);
+    println!("Sync Job Attachments Total Duration: {} ({}%)", format_timedelta(sync_duration), pct(sync_duration));
+    println!("Env Action Count: {}", acc["envActionCount"]);
+    println!("Env Action Total Duration: {} ({}%)", format_timedelta(env_action_duration), pct(env_action_duration));
+    println!();
+    let overhead = session_duration - session_action_duration;
+    println!("Within-session Overhead Duration: {} ({}%)", format_timedelta(overhead), pct(overhead));
+    if session_action_count > 0 {
+        println!("Within-session Overhead Duration Per Action: {}", format_timedelta((overhead as f64 / session_action_count as f64).round() as i64));
+    }
+
+    // Write trace file
+    if let Some(ref trace_path) = trace_file {
+        // Python uses datetime.isoformat(sep="T") for trace file timestamps
+        let to_iso = |s: &str| -> String {
+            parse_datetime(s).map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false))
+                .unwrap_or_else(|| s.to_string())
+        };
+        let job_started = job_data.get("startedAt").and_then(|v| v.as_str()).unwrap_or("");
+        let mut other_data = json!({
+            "farmId": farm,
+            "queueId": queue,
+            "jobId": job,
+            "jobName": job_data.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+            "startedAt": to_iso(job_started),
+        });
+        if let Some(ended) = job_data.get("endedAt").and_then(|v| v.as_str()) {
+            other_data["endedAt"] = json!(to_iso(ended));
+        }
+        // Add accumulators to otherData
+        for (k, v) in &acc {
+            other_data[k] = json!(v);
+        }
+
+        let tracing_data = json!({
+            "traceEvents": trace_events,
+            "otherData": other_data,
+        });
+
+        std::fs::write(trace_path, serde_json::to_string_pretty(&tracing_data)
+            .map_err(|e| CliError::Operation(e.to_string()))?)
+            .map_err(|e| CliError::Operation(format!("Failed to write trace file: {e}")))?;
+    }
 
     Ok(())
 }

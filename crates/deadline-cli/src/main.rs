@@ -189,6 +189,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::job::JobAction::Cancel { .. } => "cancel",
             commands::job::JobAction::RequeueTasks { .. } => "requeue-tasks",
             commands::job::JobAction::Search { .. } => "search",
+            commands::job::JobAction::TraceSchedule { .. } => "trace-schedule",
             commands::job::JobAction::DownloadOutput { .. } => "download-output",
         }),
         Commands::Worker { action } => ("worker", match action {

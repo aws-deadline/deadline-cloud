@@ -7,13 +7,11 @@ consulting the Work Items table in `specs/progress.md`.
 
 None — ready for next work item.
 
-## Recently Completed — #19 Update Checker
+## Recently Completed — #20 + AUDIT-041: Batch get API + trace-schedule
 
-New `update_checker` module in `deadline-api`. Fetches remote manifest,
-compares versions via `semver`, returns structured result. Never panics.
-Config opt-out via `settings.submitter_update_notification`. 23 Level 1
-tests. Also fixed pre-existing gui-ffi test failures (13 tests) caused
-by missing tokio runtime context in `make_stub`.
-
-#20 (Batch get API helper) deferred — only consumer is `trace-schedule`
-(AUDIT-041, EXPERIMENTAL) which doesn't exist in Rust.
+SDK upgrade (`aws-sdk-deadline` 1.94.0 → 1.98.0) to get `BatchGetStep`
+and `BatchGetTask` APIs. New `batch_get_steps_page` and
+`batch_get_tasks_page` functions in `api.rs`. New `deadline job
+trace-schedule` CLI command with batch-get chunking/retry, Chrome trace
+format output, and summary statistics. 12 Level 2 tests, zero-diff CLI
+comparison against Python on real API. Closes AUDIT-041.
