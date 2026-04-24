@@ -850,10 +850,10 @@ def test_cli_job_download_output_include_matches_full_workstation_path(deadline_
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_submission_path_flag(deadline_setup, tmp_path):
+def test_cli_job_download_output_match_paths_by_source_flag(deadline_setup, tmp_path):
     """
-    --submission-path causes --include to filter against the original submission
-    paths (asset roots from S3) rather than the workstation paths.
+    --match-paths-by SOURCE causes --include to filter against the original source
+    paths rather than the workstation paths.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
@@ -870,7 +870,7 @@ def test_cli_job_download_output_submission_path_flag(deadline_setup, tmp_path):
         backend, env["AWS_ENDPOINT_URL_S3"], farm_id, queue_id, job_id, asset_root, files
     )
 
-    # Pattern uses the submission root path (same as asset_root in this case)
+    # Pattern uses the source root path (same as asset_root in this case)
     r = _run(
         env,
         "job",
@@ -879,7 +879,8 @@ def test_cli_job_download_output_submission_path_flag(deadline_setup, tmp_path):
         job_id,
         "--include",
         "*subpath_outputs/renders/*",
-        "--submission-path",
+        "--match-paths-by",
+        "SOURCE",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",
@@ -930,10 +931,12 @@ def test_cli_job_download_output_relative_path_filter(deadline_setup, tmp_path):
     assert not (Path(asset_root) / "logs" / "render.log").exists()
 
 
-def test_cli_job_download_output_relative_paths_with_submission_path(deadline_setup, tmp_path):
+def test_cli_job_download_output_relative_paths_with_match_paths_by_source(
+    deadline_setup, tmp_path
+):
     """
-    --include with relative paths and --submission-path filters against
-    submission paths. This is the DCM integration path.
+    --include with relative paths and --match-paths-by SOURCE filters against
+    source paths. This is the DCM integration path.
     """
     backend, farm_id, queue_id, env = deadline_setup
     _configure_defaults(env, farm_id, queue_id)
@@ -961,7 +964,8 @@ def test_cli_job_download_output_relative_paths_with_submission_path(deadline_se
         "renders/frame_001.exr",
         "--include",
         "logs/render.log",
-        "--submission-path",
+        "--match-paths-by",
+        "SOURCE",
         "--conflict-resolution",
         "OVERWRITE",
         "--yes",

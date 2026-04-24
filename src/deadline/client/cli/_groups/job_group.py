@@ -502,7 +502,7 @@ def _download_job_output(
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
     include_patterns: Optional[list[str]] = None,
-    submission_path: bool = False,
+    match_paths_by: str = "WORKSTATION",
 ):
     """
     Starts the download of job output and handles the progress reporting callback.
@@ -552,7 +552,7 @@ def _download_job_output(
         for manifest in job_attachments_manifests:
             root_path_format_mapping[manifest["rootPath"]] = manifest["rootPathFormat"]
 
-    # When --submission-path is set, filter against the submission paths.
+    # When --match-paths-by SOURCE is set, filter against the source paths.
     # Otherwise, filtering happens later against workstation paths.
     job_output_downloader = OutputDownloader(
         s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
@@ -563,7 +563,7 @@ def _download_job_output(
         task_id=task_id,
         session_action_id=session_action_id,
         session=queue_role_session,
-        include_filters=include_patterns if submission_path else None,
+        include_filters=include_patterns if match_paths_by == "SOURCE" else None,
     )
 
     def _check_and_warn_long_output_paths(
@@ -610,12 +610,12 @@ def _download_job_output(
                 session_action_id=session_action_id,
                 session=queue_role_session,
             )
-            if include_patterns and submission_path:
+            if include_patterns and match_paths_by == "SOURCE":
                 manifests_by_root = _filter_manifests(manifests_by_root, include_patterns)
             mapped_manifests = _transform_manifests_to_absolute_paths(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
-            if include_patterns and not submission_path:
+            if include_patterns and match_paths_by != "SOURCE":
                 mapped_manifests = _filter_manifests(mapped_manifests, include_patterns)
             if mapped_manifests:
                 download_summary = _download_mapped_manifests(
@@ -725,8 +725,8 @@ def _download_job_output(
             _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Apply include filters against workstation paths (default behavior).
-    # When --submission-path is set, filtering was already applied at the S3/submission level.
-    if include_patterns and not submission_path:
+    # When --match-paths-by SOURCE is set, filtering was already applied at the source level.
+    if include_patterns and match_paths_by != "SOURCE":
         job_output_downloader.apply_include_filters(include_patterns)
         output_paths_by_root = job_output_downloader.get_output_paths_by_root()
         if output_paths_by_root == {}:
@@ -995,11 +995,12 @@ def _assert_valid_path(path: str) -> None:
     "files under that directory. Repeatable",
 )
 @click.option(
-    "--submission-path",
-    is_flag=True,
-    default=False,
-    help="Match include filters against the original submission paths instead of "
-    "the local workstation paths. By default, filters match against workstation paths.",
+    "--match-paths-by",
+    type=click.Choice(["SOURCE", "WORKSTATION"], case_sensitive=False),
+    default="WORKSTATION",
+    help="Control which paths --include filters are matched against. "
+    "SOURCE matches against the original paths from the submitting machine. "
+    "WORKSTATION matches against the local download paths (the default).",
 )
 @click.option(
     "--ignore-storage-profiles",
@@ -1048,7 +1049,7 @@ def job_download_output(
     output,
     ignore_storage_profiles,
     include,
-    submission_path,
+    match_paths_by,
     **args,
 ):
     """
@@ -1084,7 +1085,7 @@ def job_download_output(
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
             include_patterns=include_patterns,
-            submission_path=submission_path,
+            match_paths_by=match_paths_by,
         )
     except Exception as e:
         if is_json_format:
