@@ -11,3 +11,4 @@ pub mod manifest;
 pub mod bundle;
 pub mod handle_web_url;
 pub mod mcp;
+pub mod gui;

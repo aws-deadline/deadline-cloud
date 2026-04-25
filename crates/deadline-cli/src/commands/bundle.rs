@@ -91,6 +91,45 @@ pub enum BundleAction {
         #[arg(long)]
         json: bool,
     },
+
+    /// Open a GUI to submit an Open Job Description job bundle
+    #[command(name = "gui-submit")]
+    GuiSubmit {
+        /// Path to the job bundle directory
+        job_bundle_dir: Option<String>,
+
+        /// Initial parameter values for the GUI (repeatable)
+        #[arg(short = 'p', long = "parameter", num_args = 1)]
+        parameter: Vec<String>,
+
+        /// Open a folder browser to select a bundle
+        #[arg(long)]
+        browse: bool,
+
+        /// Install GUI dependencies if not already installed
+        #[arg(long)]
+        install_gui: bool,
+
+        /// [DEPRECATED] Use --submitter-info submitter_name=<name> instead
+        #[arg(long)]
+        submitter_name: Option<String>,
+
+        /// Output format: verbose or json
+        #[arg(long, default_value = "verbose", ignore_case = true, value_parser = ["verbose", "json"])]
+        output: String,
+
+        /// Paths that should not generate warnings (repeatable)
+        #[arg(long = "known-asset-path")]
+        known_asset_path: Vec<String>,
+
+        /// Submitter and environment information (key=value, JSON, or file://)
+        #[arg(long = "submitter-info", num_args = 1)]
+        submitter_info: Vec<String>,
+
+        /// Override the job name shown in the GUI
+        #[arg(long)]
+        name: Option<String>,
+    },
 }
 
 fn parse_parameters(raw: &[String]) -> Result<Vec<serde_json::Value>, CliError> {
@@ -291,7 +330,140 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
 
             Ok(())
         }
+        BundleAction::GuiSubmit {
+            job_bundle_dir,
+            parameter,
+            browse,
+            install_gui,
+            submitter_name,
+            output,
+            known_asset_path,
+            submitter_info,
+            name,
+        } => {
+            // Validate --submitter-info
+            let submitter_info_json = if !submitter_info.is_empty() {
+                Some(validate_submitter_info(&submitter_info, submitter_name.as_deref())?)
+            } else if let Some(ref name) = submitter_name {
+                eprintln!("DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead.");
+                Some(serde_json::json!({"submitter_name": name}))
+            } else {
+                None
+            };
+
+            // Validate parameters
+            let job_parameters = parse_parameters(&parameter)?;
+
+            // Build params JSON for the Python entry point
+            let params = serde_json::json!({
+                "job_bundle_dir": job_bundle_dir,
+                "browse": browse,
+                "output": output.to_lowercase(),
+                "known_asset_paths": known_asset_path,
+                "submitter_info": submitter_info_json,
+                "job_parameters": job_parameters,
+                "name": name,
+            });
+
+            let python = super::gui::find_python()?;
+            let stdout = super::gui::launch_gui(
+                &python,
+                "gui-submit",
+                &params.to_string(),
+                install_gui,
+            )?;
+
+            if !stdout.trim().is_empty() {
+                print!("{stdout}");
+            }
+            Ok(())
+        }
     }
+}
+
+const SUBMITTER_INFO_FIELDS: &[&str] = &[
+    "submitter_name",
+    "submitter_package_name",
+    "submitter_package_version",
+    "host_application_name",
+    "host_application_version",
+    "additional_info",
+];
+
+/// Validate `--submitter-info` values and merge into a single JSON object.
+fn validate_submitter_info(
+    values: &[String],
+    deprecated_name: Option<&str>,
+) -> Result<serde_json::Value, CliError> {
+    let mut merged = serde_json::Map::new();
+
+    for val in values {
+        let val = val.trim();
+        if val.starts_with('{') {
+            let obj: serde_json::Value = serde_json::from_str(val).map_err(|e| {
+                CliError::Operation(format!("Invalid JSON in --submitter-info '{val}': {e}"))
+            })?;
+            let map = obj.as_object().ok_or_else(|| {
+                CliError::Operation(format!("--submitter-info JSON must be an object, got: {val}"))
+            })?;
+            for (k, v) in map {
+                merged.insert(k.clone(), v.clone());
+            }
+        } else if let Some(path) = val.strip_prefix("file://") {
+            let content = std::fs::read_to_string(path).map_err(|e| {
+                CliError::Operation(format!("Cannot read --submitter-info file '{path}': {e}"))
+            })?;
+            let obj: serde_json::Value = if path.ends_with(".yaml") || path.ends_with(".yml") {
+                serde_yaml::from_str(&content).map_err(|e| {
+                    CliError::Operation(format!("Invalid YAML in '{path}': {e}"))
+                })?
+            } else {
+                serde_json::from_str(&content).map_err(|e| {
+                    CliError::Operation(format!("Invalid JSON in '{path}': {e}"))
+                })?
+            };
+            let map = obj.as_object().ok_or_else(|| {
+                CliError::Operation(format!("File '{path}' must contain a JSON object"))
+            })?;
+            for (k, v) in map {
+                merged.insert(k.clone(), v.clone());
+            }
+        } else if let Some((key, value)) = val.split_once('=') {
+            merged.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+        } else {
+            return Err(CliError::Operation(format!(
+                "--submitter-info '{val}' not formatted correctly. \
+                 Use key=value, inline JSON, or file://path."
+            )));
+        }
+    }
+
+    // Apply deprecated --submitter-name (takes precedence)
+    if let Some(name) = deprecated_name {
+        eprintln!("DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead.");
+        merged.insert("submitter_name".to_string(), serde_json::Value::String(name.to_string()));
+    }
+
+    // Validate field names
+    for key in merged.keys() {
+        if !SUBMITTER_INFO_FIELDS.contains(&key.as_str()) {
+            return Err(CliError::Operation(format!(
+                "Unknown field '{key}' in --submitter-info. Valid fields are: {}",
+                SUBMITTER_INFO_FIELDS.join(", ")
+            )));
+        }
+    }
+
+    // Require submitter_name
+    if !merged.contains_key("submitter_name") {
+        return Err(CliError::Operation(
+            "submitter_name is required when using --submitter-info. \
+             Example: --submitter-info submitter_name=MyApp"
+                .into(),
+        ));
+    }
+
+    Ok(serde_json::Value::Object(merged))
 }
 
 /// Create a zip file from a directory's contents.

@@ -13,14 +13,13 @@
 |----------|-------|-------|---------------------|-----------|
 | Critical | 4     | 4     | 0                   | 0         |
 | High     | 10    | 10    | 1                   | 0         |
-| Medium   | 22    | 16    | 3                   | 3         |
+| Medium   | 22    | 17    | 3                   | 2         |
 | Low      | 20    | 15    | 4                   | 0         |
 
 **Remaining open findings (0):**
 All findings resolved.
 
 **Investigated and dropped (not bugs):**
-- AUDIT-034 (`--submitter-info` — GUI-only, not CLI scope)
 - AUDIT-051 (download path collision — worker-agent scope, not CLI)
 
 ## Methodology
@@ -382,15 +381,19 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** Non-CLI callers (GUI FFI, MCP) won't have `defaults.job_id` auto-updated.
 - **Resolution:** No Issue — The Rust CLI sets `defaults.job_id` in `bundle.rs:207-213` with an equivalent condition: `profile.is_none() && farm_id.is_none() && queue_id.is_none() && storage_profile_id.is_none()`. This matches Python's `config is None` semantics (no CLI overrides applied). Placing this in the CLI layer rather than the library is an intentional architectural choice.
 
-### ⊘ AUDIT-034: `--submitter-info` not implemented
+### ✅ AUDIT-034: `--submitter-info` not implemented
 
-- **Category:** Behavioral gap
-- **Priority:** Medium
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Medium~~ N/A
 - **Command/Function:** `deadline bundle gui-submit`
 - **Python behavior:** Supports `--submitter-info` with multi-format input. (`bundle_group.py:131-145`)
-- **Rust behavior:** No `--submitter-info` option. Only `--submitter-name`. (`bundle.rs:62-63`)
-- **Impact:** Cannot pass structured submitter metadata.
-- **Resolution:** Pending
+- **Rust behavior:** `bundle gui-submit` command implemented with full
+  `--submitter-info` support: key=value pairs, inline JSON, file:// paths.
+  Validates against `SubmitterInfo` fields, requires `submitter_name`.
+  `--submitter-name` accepted with deprecation warning. Rust validates
+  args then spawns Python subprocess for the Qt GUI dialog.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed (2026-04-25)
 
 ### ✅ AUDIT-035: Download path traversal not validated
 
@@ -627,13 +630,12 @@ findings above.
 
 All findings resolved.
 
-### Investigated and Dropped (2)
+### Investigated and Dropped (1)
 
 | | ID | Title | Reason |
 |---|---|-------|--------|
-| ⊘ | AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
 | ⊘ | AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
 
-### Resolved (54)
+### Resolved (55)
 
-✅ Fixed: 47 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2
+✅ Fixed: 48 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 1

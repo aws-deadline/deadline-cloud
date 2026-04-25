@@ -5,7 +5,7 @@
 | Subcommand | Status | Description |
 |------------|--------|-------------|
 | `bundle submit` | ✅ | Submit a job bundle to a Deadline Cloud queue |
-| `bundle gui-submit` | 🔲 | Submit via the GUI dialog (not yet implemented) |
+| `bundle gui-submit` | ✅ | Submit via the GUI dialog (spawns Python subprocess) |
 
 ## `bundle submit`
 
@@ -127,6 +127,56 @@ This matches Python's behavior where `auto_accept=True` + unknown paths raises
 | Aspect | Python | Rust |
 |--------|--------|------|
 | Parameter format | `-p Name=Value` only | `-p Name=Value` only |
-| GUI submit | `bundle gui-submit` command | Not yet implemented |
 | `--json` output | Not supported on `bundle submit` | Supported (`--json` flag) |
 | Submitter name default | "deadline-cloud-cli" | "CLI" |
+
+## `bundle gui-submit`
+
+Opens a Qt GUI dialog for job bundle submission. The Rust CLI validates
+arguments, then spawns a Python subprocess to run the dialog.
+
+### Architecture
+
+```
+Rust CLI → validate args → find Python → spawn subprocess
+Python   → _gui_entry.py → QApplication → show_job_bundle_submitter → app.exec()
+         → print result JSON/text to stdout → exit
+```
+
+Python discovery order: `DEADLINE_PYTHON` env var → `_internal/Python`
+relative to binary → `python3` on PATH → `python` on PATH.
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `job_bundle_dir` (positional) | — | Path to the job bundle directory |
+| `-p, --parameter` | — | Initial parameter values for the GUI (repeatable) |
+| `--browse` | false | Open a folder browser to select a bundle |
+| `--install-gui` | false | Install PySide6 if not already installed |
+| `--submitter-name` | — | **DEPRECATED.** Use `--submitter-info submitter_name=<name>` |
+| `--output` | verbose | Output format: `verbose` or `json` (case-insensitive) |
+| `--known-asset-path` | — | Paths that should not generate warnings (repeatable) |
+| `--submitter-info` | — | Submitter metadata: key=value, inline JSON, or file:// (repeatable) |
+| `--name` | — | Override the job name shown in the GUI |
+
+### `--submitter-info` validation
+
+Validated in Rust before spawning Python. Supports three formats:
+- Key=value: `--submitter-info submitter_name=MyApp`
+- Inline JSON: `--submitter-info '{"submitter_name": "MyApp"}'`
+- File path: `--submitter-info file://path/to/info.json`
+
+Valid fields: `submitter_name` (required), `submitter_package_name`,
+`submitter_package_version`, `host_application_name`,
+`host_application_version`, `additional_info`.
+
+### Output
+
+JSON mode (`--output json`):
+- Submitted: `{"status": "SUBMITTED", "jobId": "...", "jobHistoryBundleDirectory": "..."}`
+- Canceled: `{"status": "CANCELED"}`
+
+Verbose mode (default):
+- Submitted: `Submitted job bundle:\n   <dir>\nJob ID: <id>`
+- Canceled: `Job submission canceled.`

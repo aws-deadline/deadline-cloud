@@ -56,3 +56,5 @@ mod handle_web_url;
 mod mcp;
 #[path = "cli/trace_schedule.rs"]
 mod trace_schedule;
+#[path = "cli/gui.rs"]
+mod gui;

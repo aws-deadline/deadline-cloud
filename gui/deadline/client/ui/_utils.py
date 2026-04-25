@@ -76,12 +76,10 @@ def gui_error_handler(message_title: str, parent: Any = None):
         show_cli_job_submitter()
 
     """
-    import click
-
     try:
         from qtpy.QtWidgets import QMessageBox
     except ImportError as e:
-        click.echo(f"Failed to import qtpy/PySide/Qt, which is required to show the GUI:\n{e}")
+        print(f"Failed to import qtpy/PySide/Qt, which is required to show the GUI:\n{e}")
         raise
 
     try:
@@ -121,16 +119,14 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
     import sys
     from pathlib import Path
 
-    import click
-
     has_pyside6 = importlib.util.find_spec("PySide6")
     has_pyside2 = importlib.util.find_spec("PySide2")
     if not (has_pyside6 or has_pyside2):
         if not automatically_install_dependencies:
-            message = "Optional GUI components for deadline are unavailable. Would you like to install PySide?"
-            will_install_gui = click.confirm(message, default=False)
-            if not will_install_gui:
-                click.echo("Unable to continue without GUI, exiting")
+            message = "Optional GUI components for deadline are unavailable. Would you like to install PySide? [y/N] "
+            response = input(message).strip().lower()
+            if response not in ("y", "yes"):
+                print("Unable to continue without GUI, exiting")
                 sys.exit(1)
 
         # this should match what's in the pyproject.toml
@@ -171,12 +167,12 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
 
                 subprocess.run([python_executable] + pip_command, env=env)
             else:
-                click.echo(
+                print(
                     "Unable to install GUI dependencies, if you have python available you can install it by running:"
                 )
-                click.echo()
-                click.echo(f"\t{' '.join(shlex.quote(v) for v in ['python'] + pip_command)}")
-                click.echo()
+                print()
+                print(f"\t{' '.join(shlex.quote(v) for v in ['python'] + pip_command)}")
+                print()
                 sys.exit(1)
         else:
             # standard python sys.executable
@@ -194,7 +190,7 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
         from qtpy.QtGui import QIcon
         from qtpy.QtWidgets import QApplication, QMessageBox
     except ImportError as e:
-        click.echo(f"Failed to import qtpy/PySide/Qt, which is required to show the GUI:\n{e}")
+        print(f"Failed to import qtpy/PySide/Qt, which is required to show the GUI:\n{e}")
         sys.exit(1)
 
     try:

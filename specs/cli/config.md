@@ -8,9 +8,15 @@
 | `config get <SETTING>` | ✅ | Print current value of a single setting |
 | `config set <SETTING> <VALUE>` | ✅ | Persist a value to the config file |
 | `config clear <SETTING>` | ✅ | Write the default value back (does not remove key) |
+| `config gui` | ✅ | Open the workstation configuration GUI (spawns Python subprocess) |
 
-Note: `config gui` exists in the Python CLI but is not yet implemented in the
-Rust CLI. It will spawn a Python process with the GUI config dialog when added.
+## `config gui`
+
+Opens the Qt workstation configuration dialog. Uses the same Python
+subprocess architecture as `bundle gui-submit` — see `specs/cli/bundle.md`
+for the Python discovery strategy.
+
+Options: `--install-gui` (install PySide6 if missing).
 
 ## `config show`
 

@@ -48,6 +48,12 @@ pub enum ConfigAction {
     Clear {
         setting_name: String,
     },
+    /// Open the workstation configuration settings GUI
+    Gui {
+        /// Install GUI dependencies if not already installed
+        #[arg(long)]
+        install_gui: bool,
+    },
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -62,6 +68,7 @@ pub fn run(action: ConfigAction) -> Result<(), CliError> {
         ConfigAction::Get { setting_name } => get(&setting_name),
         ConfigAction::Set { setting_name, value } => set(&setting_name, &value),
         ConfigAction::Clear { setting_name } => clear(&setting_name),
+        ConfigAction::Gui { install_gui } => run_config_gui(install_gui),
     }
 }
 
@@ -121,5 +128,12 @@ fn set(setting_name: &str, value: &str) -> Result<(), CliError> {
 
 fn clear(setting_name: &str) -> Result<(), CliError> {
     config_file::clear_setting_to_disk(setting_name)?;
+    Ok(())
+}
+
+fn run_config_gui(install_gui: bool) -> Result<(), CliError> {
+    let python = super::gui::find_python()?;
+    let params = serde_json::json!({});
+    super::gui::launch_gui(&python, "config-gui", &params.to_string(), install_gui)?;
     Ok(())
 }

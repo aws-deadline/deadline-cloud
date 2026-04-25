@@ -66,7 +66,9 @@ pick and execute work items.
 | 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
 | 16c | PyO3 Python bindings (`deadline._native`) | ✅ Done | — | 16b |
 | 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
-| 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
+| 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done | `cli.md` | 16d |
+| 16d3 | GUI widget rendering fixes (config shim types) | Not started | — | 16d2 |
+| 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d3 |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
@@ -84,7 +86,8 @@ pick and execute work items.
 **Dependency status:** All core feature dependencies are resolved.
 No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
 
-**Next action item:** Pick next work item from the table.
+**Next action item:** #16d3 (GUI widget rendering fixes), then #16e
+(Python packaging). See `HANDOFF.md` for context.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
@@ -98,9 +101,21 @@ All findings resolved (0 remaining).
 The Python Qt GUI code must ship from this repo, backed by the Rust shared
 library. Remaining sub-items:
 
-- **#16e — Python packaging** (Not started): Create `gui/pyproject.toml`
-  so the Python Qt code is installable as a package. The package must
-  bundle or locate the Rust shared library.
+- **#16d2 — GUI CLI commands** (Done): `bundle gui-submit` and `config gui`
+  implemented. Rust validates args, spawns Python subprocess via
+  `_gui_entry.py`. Python discovery: `DEADLINE_PYTHON` env var →
+  `_internal/Python` relative to binary → system PATH. AUDIT-034 resolved.
+- **#16d3 — GUI widget rendering fixes** (Not started): The config shim
+  (`gui/deadline/client/config/config_file.py`) routes through `_native`
+  but returns types incompatible with what the Qt widgets expect.
+  `read_config()` returns a string/dict but widgets need `ConfigParser`.
+  Causes: missing AWS profile/farm/queue buttons in config dialog, blank
+  job settings page, per-page UI issues. Root cause analysis needed to
+  determine whether to fix the shim or adapt the widgets.
+- **#16e — Python packaging** (Not started): Configure maturin to include
+  the CLI binary in `.data/scripts/` so `pip install deadline` puts it on
+  PATH. Verify `pip install deadline` works without PySide6, and
+  `pip install "deadline[gui]"` pulls in Qt deps.
 - **#16f — DCC submitter switchover** (Not started): Update each DCC
   submitter repo to depend on the new Python package from
   `deadline-cloud-rs` instead of `deadline-cloud-python`.
@@ -131,10 +146,49 @@ story. See `specs/HANDOFF.md` for detailed analysis.
 - **#26 — Installer pipeline update**: The internal installer pipeline
   currently expects a PyInstaller artifact as the "Deadline Client"
   component. Update it to accept the Rust binary + shared library +
-  Python GUI code instead. The InstallBuilder XML, wrapper components,
-  and CodeBuild steps all need changes. The installed layout
-  (`DeadlineCloudSubmitter/DeadlineClient/`) stays similar but
-  `_internal/` shrinks dramatically (no boto3, click, xxhash, psutil).
+  Python GUI code instead.
+
+  **Pipeline architecture (studied 2026-04-25):**
+  The pipeline is a two-level system: individual component installers
+  (built per-repo on GitHub CI, uploaded to S3) are merged into a
+  unified installer via InstallBuilder. The Deadline Client artifact
+  is sourced alongside DCC submitter artifacts, verified (signing),
+  then bundled into the unified installer. The unified installer runs
+  each individual installer in unattended mode during installation.
+
+  **What changes:**
+  - The Deadline Client individual installer artifact changes from a
+    PyInstaller bundle to a Rust binary + Python GUI assembly. The
+    artifact format (a platform-specific installer) stays the same —
+    only the contents change.
+  - The CI step that builds the Deadline Client artifact needs to:
+    (1) compile the Rust binary, (2) build `_native.abi3.so` via
+    maturin, (3) bundle a Python runtime + PySide6/qtpy/PyYAML + the
+    GUI Python code into `_internal/`. This replaces the PyInstaller
+    `make_exe.py` step.
+  - The pipeline already stores platform-specific Python distributions
+    in its dependency bucket (embeddable zip for Windows, tarball for
+    Linux, pkg for macOS). These are reused for the new `_internal/`
+    assembly.
+  - The installed layout (`DeadlineCloudSubmitter/DeadlineClient/`)
+    stays the same. The `deadline` binary path is unchanged. Installer
+    tests that check binary permissions and component evidence paths
+    should pass without modification.
+  - `_internal/` shrinks dramatically: no boto3, botocore, click,
+    xxhash, psutil, dateutil, or Python CLI code. Only Python runtime
+    + Qt deps + GUI code + `_native.abi3.so` remain.
+
+  **Risks:**
+  - Cross-compilation of the Rust binary for all three platforms needs
+    CI infrastructure with appropriate build images.
+  - Windows embeddable Python is minimal (no pip, no site-packages by
+    default). The `_internal/` assembly script must handle per-platform
+    Python distribution differences.
+  - The `_native.abi3.so` must be built per-platform (it's a native
+    extension). maturin handles this but needs the right build targets.
+  - The InstallBuilder XML and wrapper components may need minor
+    updates if the individual installer's internal structure changes
+    (e.g. different uninstall behavior).
 
 **Technical debt:**
 - **Spec docs audit**: Review `specs/` docs to ensure they reflect
@@ -147,6 +201,13 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   handling across all crates.
 - **GUI Python code smell audit**: Review ported `gui/` Python code for
   patterns that no longer make sense now that Rust handles business logic.
+- **GUI widget rendering fixes**: The config shim's `read_config()`
+  returns a string/dict from the Rust FFI, but several widgets expect a
+  `ConfigParser` object. Causes: missing AWS profile/farm/queue buttons
+  in config dialog, blank job settings page in submission dialog, and
+  per-page UI issues. Root cause is the `config_file.py` shim layer
+  returning incompatible types. Discovered during visual verification
+  of `bundle gui-submit` and `config gui` (2026-04-25).
 - **Pydantic boundary validation**: Explore using Pydantic to validate
   types crossing the Rust→Python boundary (e.g. `ProgressReportMetadata`,
   `IniConfig`, API response dicts). Would catch contract drift between

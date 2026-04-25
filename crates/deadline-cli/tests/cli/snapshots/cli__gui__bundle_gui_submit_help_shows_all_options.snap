@@ -1,0 +1,57 @@
+---
+source: crates/deadline-cli/tests/cli/gui.rs
+info:
+  program: deadline
+  args:
+    - bundle
+    - gui-submit
+    - "--help"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:51045"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51045"
+    AWS_ENDPOINT_URL_S3: "http://localhost:51045"
+    AWS_ENDPOINT_URL_STS: "http://localhost:51045"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpkl2wfo/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpkl2wfo
+---
+success: true
+exit_code: 0
+----- stdout -----
+Open a GUI to submit an Open Job Description job bundle
+
+Usage: deadline bundle gui-submit [OPTIONS] [JOB_BUNDLE_DIR]
+
+Arguments:
+  [JOB_BUNDLE_DIR]  Path to the job bundle directory
+
+Options:
+  -p, --parameter <PARAMETER>
+          Initial parameter values for the GUI (repeatable)
+      --browse
+          Open a folder browser to select a bundle
+      --install-gui
+          Install GUI dependencies if not already installed
+      --submitter-name <SUBMITTER_NAME>
+          [DEPRECATED] Use --submitter-info submitter_name=<name> instead
+      --output <OUTPUT>
+          Output format: verbose or json [default: verbose] [possible values: verbose, json]
+      --known-asset-path <KNOWN_ASSET_PATH>
+          Paths that should not generate warnings (repeatable)
+      --submitter-info <SUBMITTER_INFO>
+          Submitter and environment information (key=value, JSON, or file://)
+      --name <NAME>
+          Override the job name shown in the GUI
+  -h, --help
+          Print help
+
+----- stderr -----

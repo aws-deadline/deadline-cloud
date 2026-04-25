@@ -1,0 +1,44 @@
+---
+source: crates/deadline-cli/tests/cli/gui.rs
+info:
+  program: deadline
+  args:
+    - config
+    - "--help"
+  env:
+    AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+    AWS_CONFIG_FILE: ""
+    AWS_DEFAULT_PROFILE: ""
+    AWS_DEFAULT_REGION: us-west-2
+    AWS_ENDPOINT_URL: ""
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:51052"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:51052"
+    AWS_ENDPOINT_URL_S3: "http://localhost:51052"
+    AWS_ENDPOINT_URL_STS: "http://localhost:51052"
+    AWS_PROFILE: ""
+    AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AWS_SECURITY_TOKEN: ""
+    AWS_SESSION_TOKEN: ""
+    AWS_SHARED_CREDENTIALS_FILE: ""
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpzNn5jK/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpzNn5jK
+---
+success: true
+exit_code: 0
+----- stdout -----
+View and update workstation configuration
+
+Usage: deadline config <COMMAND>
+
+Commands:
+  show   Show all workstation configuration settings and current values
+  get    Print the value of a workstation configuration setting
+  set    Set a workstation configuration setting
+  clear  Clear a workstation configuration setting to restore its default
+  gui    Open the workstation configuration settings GUI
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+
+----- stderr -----

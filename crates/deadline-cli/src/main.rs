@@ -155,6 +155,7 @@ fn command_name(cmd: &Commands) -> String {
             commands::config::ConfigAction::Get { .. } => "get",
             commands::config::ConfigAction::Set { .. } => "set",
             commands::config::ConfigAction::Clear { .. } => "clear",
+            commands::config::ConfigAction::Gui { .. } => "gui",
         }),
         Commands::Auth { action } => ("auth", match action {
             commands::auth::AuthAction::Login => "login",
@@ -208,6 +209,7 @@ fn command_name(cmd: &Commands) -> String {
         }),
         Commands::Bundle { action } => ("bundle", match action {
             commands::bundle::BundleAction::Submit { .. } => "submit",
+            commands::bundle::BundleAction::GuiSubmit { .. } => "gui-submit",
         }),
         Commands::HandleWebUrl(_) => ("handle-web-url", ""),
         Commands::McpServer => ("mcp-server", ""),

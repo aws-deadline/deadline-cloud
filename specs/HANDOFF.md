@@ -3,42 +3,78 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## Completed — PyO3 + maturin migration
+## No active work item
 
-Replaced the C ABI FFI layer (`deadline-gui-ffi` + `_ffi.py`) with a
-PyO3 extension module (`deadline-python-bindings` → `deadline._native`).
-maturin packages the PyO3 module + Python GUI code into a `deadline`
-PyPI wheel.
+Last completed: GUI CLI commands (`bundle gui-submit` + `config gui`).
+
+## Next session: GUI fixes + packaging (#16d3 → #16e)
+
+The goal is to get a fully packaged output of everything needed for the
+Deadline CLI: Rust binary + Python GUI + `_native.abi3.so` in a single
+distributable artifact.
+
+### Recommended sequence
+
+1. **#16d3 — GUI widget rendering fixes.** The dialogs open but have
+   broken widgets. Root cause: `gui/deadline/client/config/config_file.py`
+   shim returns types incompatible with what Qt widgets expect.
+   `read_config()` returns a string from FFI but `DeadlineConfigDialog`
+   and `SharedJobSettingsWidget` expect a `ConfigParser` object.
+
+   **Approach options:**
+   - A: Make the shim return a `ConfigParser` populated from the FFI data
+   - B: Adapt the widgets to work with dict/string returns from `_native`
+   - C: Add a new FFI function that returns structured config data
+
+   Start by cataloging every call site that uses `read_config()` or
+   `get_setting_default()` in the `gui/` Python code, then pick the
+   approach that touches the fewest files.
+
+2. **#16e — Python packaging.** Configure maturin to include the CLI
+   binary in the wheel via `.data/scripts/`. Verify:
+   - `pip install deadline` → `deadline` binary on PATH, no PySide6
+   - `pip install "deadline[gui]"` → pulls in PySide6 + qtpy
+   - `deadline bundle gui-submit` works from pip install
+
+3. **#16f — DCC submitter switchover** (if time permits).
+
+### Key files for #16d3
+
+- `gui/deadline/client/config/config_file.py` — the shim (root cause)
+- `gui/deadline/client/ui/dialogs/deadline_config_dialog.py` — config dialog
+- `gui/deadline/client/ui/widgets/shared_job_settings_tab.py` — job settings
+- `gui/deadline/client/ui/deadline_authentication_status.py` — auth status
+- `gui/deadline/client/ui/controllers/_deadline_controller.py` — controller
+
+### Key files for #16e
+
+- `pyproject.toml` — maturin config (add `[tool.maturin] data` for CLI binary)
+- `crates/deadline-cli/Cargo.toml` — the CLI binary crate
+- `crates/deadline-python-bindings/Cargo.toml` — the PyO3 crate
+
+---
+
+## Recently Completed — GUI CLI commands (#16d2, AUDIT-034)
 
 **What was done:**
-- Created `crates/deadline-python-bindings/` (PyO3, abi3-py39)
-- Created root `pyproject.toml` (maturin build backend)
-- Ported all 18 FFI functions to PyO3 with 29 passing tests
-- Switched all Python GUI code from `_ffi.py` to `deadline._native`
-- Unified `DeadlineOperationError` (single class from PyO3, Python
-  subclasses inherit from it)
-- Fixed `ProgressReportMetadata` boundary: Rust passes dict, Python
-  converts via `from_dict()` at the worker boundary, GUI uses typed
-  attribute access
-- Deleted `crates/deadline-gui-ffi/` and `gui/deadline/client/_ffi.py`
-- Updated all specs to reflect new architecture
+- Added `bundle gui-submit` command with full `--submitter-info` support
+  (key=value, JSON, file://), `--submitter-name` deprecation, all Python
+  CLI options
+- Added `config gui` command with `--install-gui`
+- Created shared Python launcher (`commands/gui.rs`): `find_python()`
+  with 4-step discovery, `launch_gui()` subprocess spawning
+- Created Python entry point (`gui/deadline/client/ui/_gui_entry.py`):
+  PySide6 check, QApplication creation, dialog dispatch, JSON output
+- Removed all `click` imports from `gui/deadline/client/ui/_utils.py`
+- 14 Rust L2 tests + 3 pytest-qt tests + 10 snapshots
+- AUDIT-034 resolved (was "dropped — GUI-only", now fixed)
+- Visually verified: GUI dialogs open from Rust CLI on macOS
 
-## Next Steps
+## Previously Completed — PyO3 + maturin migration
 
-1. **Include CLI binary in wheel** — configure maturin `.data/scripts/`
-   so `pip install deadline` puts the `deadline` binary on PATH.
-2. **AUDIT-034: `bundle gui-submit` + `--submitter-info`** — add the
-   CLI command that spawns Python to launch the Qt submission dialog.
-   Study notes from earlier session are in git history.
-3. **`[gui]` extra verification** — verify `pip install deadline` works
-   without PySide6, `pip install "deadline[gui]"` pulls in Qt deps.
-4. **CI wheel building** — GitHub Actions matrix for linux-x64,
-   macos-arm64, windows-x64.
+Replaced the C ABI FFI layer with PyO3 extension module
+(`deadline._native`). See git history for details.
 
-## Recently Completed — #21: Python bug-fix parity sweep
+## Previously Completed — #21: Python bug-fix parity sweep
 
 All 5 Python bug fixes verified as already correct in Rust.
-
-## Previously Completed — #9 + #11: Parallel/multipart S3 transfer + bundle submit --json
-
-All audit findings resolved (0 remaining).
