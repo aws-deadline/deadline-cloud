@@ -1,6 +1,14 @@
 /target
 .kiro/settings/
 __pycache__/
+*.egg-info/
+.venv/
+
+# maturin develop places .so/.pyd in the source tree
+*.abi3.so
+*.pyd
+*.so
+*.dylib
 
 # Generated test fixture files (not committed)
 test_fixtures/job_bundles/large_attachments/inputs/

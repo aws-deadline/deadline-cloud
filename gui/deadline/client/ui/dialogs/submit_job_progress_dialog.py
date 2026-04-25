@@ -52,8 +52,8 @@ class SubmitJobProgressDialog(QDialog):
 
     # These signals are sent from the background thread
     submission_thread_print = Signal(str)
-    submission_thread_hashing_progress = Signal(ProgressReportMetadata)
-    submission_thread_upload_progress = Signal(ProgressReportMetadata)
+    submission_thread_hashing_progress = Signal(object)
+    submission_thread_upload_progress = Signal(object)
     submission_thread_request_warning_dialog = Signal(str, bool)
 
     # This signal is sent when the background thread succeeds.
@@ -220,7 +220,7 @@ class SubmitJobProgressDialog(QDialog):
         the callback progress data from job attachments.
         """
         self.hashing_progress.progress_bar.setValue(int(progress_metadata.progress))
-        self.hashing_progress.progress_message.setText(progress_metadata.progressMessage)
+        self.hashing_progress.progress_message.setText(progress_metadata.progress_message)
 
     def handle_upload_thread_progress_report(
         self, progress_metadata: ProgressReportMetadata
@@ -231,7 +231,7 @@ class SubmitJobProgressDialog(QDialog):
         the callback progress data from job attachments.
         """
         self.upload_progress.progress_bar.setValue(int(progress_metadata.progress))
-        self.upload_progress.progress_message.setText(progress_metadata.progressMessage)
+        self.upload_progress.progress_message.setText(progress_metadata.progress_message)
 
     def handle_create_job_thread_succeeded(self, job_id: str) -> None:
         """

@@ -31,7 +31,10 @@ from .submit_job_progress_dialog import SubmitJobProgressDialog
 
 from ..dataclasses import HostRequirements
 from ...dataclasses import SubmitterInfo
-from ..._ffi import DeadlineFFI
+from deadline._native import (
+    logout as _native_logout,
+    DeadlineOperationError,
+)
 from ...api import session_context as _session_context
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
@@ -49,16 +52,6 @@ from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
 
 logger = logging.getLogger(__name__)
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
-
 
 # initialize early so once the UI opens, things are already initialized
 DeadlineAuthenticationStatus.getInstance()
@@ -407,7 +400,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.refresh_status()
 
     def on_logout(self):
-        _get_ffi().logout()
+        _native_logout()
         self.refresh_deadline_settings()
         # This widget watches the auth files, but that does
         # not always catch a change so force a refresh here.
@@ -632,8 +625,11 @@ class SubmitJobToDeadlineDialog(QDialog):
         except Exception as exc:
             logger.exception("error submitting job")
             try:
-                _get_ffi().record_telemetry_event(
-                    {"event_type": "error", "exception_scope": "on_submit", "exception_type": str(type(exc))}
+                from deadline._native import TelemetryClient
+                tc = TelemetryClient()
+                tc.record_event(
+                    "com.amazon.rum.deadline.error",
+                    {"exception_scope": "on_submit", "exception_type": str(type(exc))},
                 )
             except Exception:
                 logger.debug("Failed to record telemetry event", exc_info=True)

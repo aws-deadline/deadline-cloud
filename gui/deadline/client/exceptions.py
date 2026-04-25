@@ -2,9 +2,8 @@
 
 """Exceptions for the AWS Deadline Cloud Client Library."""
 
-
-class DeadlineOperationError(Exception):
-    """Error whose message gets printed verbatim by the cli handler"""
+# Use the native PyO3 exception as the base — single class everywhere.
+from deadline._native import DeadlineOperationError
 
 
 class DeadlineOperationCanceled(DeadlineOperationError):

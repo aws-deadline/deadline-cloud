@@ -79,4 +79,4 @@
 
 | # | Section | Status | Phase |
 |---|---------|--------|-------|
-| TBD | GUI FFI: C ABI contract, JSON exchange, callbacks | Not started | Phase 3 |
+| TBD | Python bindings: PyO3 boundary, type conversion, callbacks | Not started | Phase 3 |

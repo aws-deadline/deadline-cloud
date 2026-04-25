@@ -14,17 +14,8 @@ from typing import Any as _Any, Optional as _Optional
 
 from qtpy.QtCore import QThread as _QThread, Signal as _Signal, QObject
 
-from ..._ffi import DeadlineFFI
+from deadline._native import create_job_from_job_bundle as _native_create_job
 from ..._compat import ProgressReportMetadata as _ProgressReportMetadata
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
 
 __all__ = ["JobSubmissionWorker"]
 
@@ -59,8 +50,8 @@ class JobSubmissionWorker(_QThread):
 
     # Progress signals
     print_message = _Signal(str)
-    hashing_progress = _Signal(_ProgressReportMetadata)
-    upload_progress = _Signal(_ProgressReportMetadata)
+    hashing_progress = _Signal(object)
+    upload_progress = _Signal(object)
 
     # Interaction signals
     confirmation_requested = _Signal(str, bool)  # message, default_response
@@ -123,13 +114,13 @@ class JobSubmissionWorker(_QThread):
         It sets up the callbacks and calls api.create_job_from_job_bundle.
         """
         try:
-            job_id_result = _get_ffi().create_job_from_job_bundle(
+            job_id_result = _native_create_job(
                 self._kwargs,
-                print_cb=self._print_callback,
-                hashing_cb=self._hashing_callback,
-                upload_cb=self._upload_callback,
-                confirm_cb=self._confirmation_callback,
-                continue_cb=self._check_canceled_callback,
+                on_print=self._print_callback,
+                on_hashing_progress=self._hashing_callback,
+                on_upload_progress=self._upload_callback,
+                on_confirm=self._confirmation_callback,
+                on_continue=self._check_canceled_callback,
             )
 
             if not self._canceled:
@@ -169,16 +160,16 @@ class JobSubmissionWorker(_QThread):
 
         return self._confirmation_result if self._confirmation_result is not None else False
 
-    def _hashing_callback(self, progress_metadata: _ProgressReportMetadata) -> bool:
-        """Callback for hashing progress updates."""
+    def _hashing_callback(self, raw_metadata: dict) -> bool:
+        """Callback for hashing progress updates. Converts dict from Rust to ProgressReportMetadata."""
         if not self._canceled:
-            self.hashing_progress.emit(progress_metadata)
+            self.hashing_progress.emit(_ProgressReportMetadata.from_dict(raw_metadata))
         return not self._canceled
 
-    def _upload_callback(self, progress_metadata: _ProgressReportMetadata) -> bool:
-        """Callback for upload progress updates."""
+    def _upload_callback(self, raw_metadata: dict) -> bool:
+        """Callback for upload progress updates. Converts dict from Rust to ProgressReportMetadata."""
         if not self._canceled:
-            self.upload_progress.emit(progress_metadata)
+            self.upload_progress.emit(_ProgressReportMetadata.from_dict(raw_metadata))
         return not self._canceled
 
     def _check_canceled_callback(self) -> bool:

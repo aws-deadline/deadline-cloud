@@ -4,7 +4,7 @@
 
 ```
 deadline-cli ──► deadline-api    ← this crate
-deadline-gui-ffi ──► deadline-api
+deadline-python-bindings ──► deadline-api
 deadline-mcp ──► deadline-api
 ```
 

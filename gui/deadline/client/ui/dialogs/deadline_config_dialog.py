@@ -15,7 +15,10 @@ from logging import getLogger, root
 from typing import Callable, Dict, List, Optional
 
 from ..._compat import FileConflictResolution, JobAttachmentsFileSystem, str2bool
-from ..._ffi import DeadlineFFI
+from deadline._native import (
+    logout as _native_logout,
+    set_setting as _native_set_setting,
+)
 from qtpy.QtCore import QSize, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -54,16 +57,6 @@ from ..widgets import (
 from .deadline_login_dialog import DeadlineLoginDialog
 
 logger = getLogger(__name__)
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
-
 
 NOT_VALID_MARKER = "[NOT VALID]"
 
@@ -182,7 +175,7 @@ class DeadlineConfigDialog(QDialog):
         self.config_box.refresh()
 
     def on_logout(self):
-        _get_ffi().logout()
+        _native_logout()
         self.deadline_authentication_status.refresh_status()
         self.config_box.refresh()
 
@@ -845,7 +838,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         root.setLevel(config_file.get_setting("settings.log_level"))
         try:
             opt_out = config_file.get_setting("telemetry.opt_out", config=self.config)
-            _get_ffi().set_setting("settings.telemetry_opt_out", opt_out)
+            _native_set_setting("settings.telemetry_opt_out", opt_out)
         except Exception:
             logger.debug("Failed to set telemetry opt-out via FFI", exc_info=True)
 

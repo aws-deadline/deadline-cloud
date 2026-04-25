@@ -31,18 +31,13 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 from .._compat import AwsCredentialsSource, AwsAuthenticationStatus
-from .._ffi import DeadlineFFI
+from deadline._native import (
+    get_credentials_source as _native_get_credentials_source,
+    check_auth_status as _native_check_auth_status,
+    check_api_available as _native_check_api_available,
+)
 from ..config import config_file
 from .controllers import AsyncTaskRunner
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
 
 logger = getLogger(__name__)
 
@@ -181,7 +176,7 @@ class DeadlineAuthenticationStatus(QObject):
 
     def _refresh_creds_source(self) -> AwsCredentialsSource:
         """Background task to get credentials source."""
-        return _get_ffi().get_credentials_source()
+        return _native_get_credentials_source()
 
     def _on_creds_source_success(self, result: AwsCredentialsSource) -> None:
         """Handle successful credentials source fetch."""
@@ -196,7 +191,7 @@ class DeadlineAuthenticationStatus(QObject):
 
     def _refresh_auth_status(self) -> AwsAuthenticationStatus:
         """Background task to check authentication status."""
-        result = _get_ffi().check_auth_status()
+        result = _native_check_auth_status()
         return result.get("auth_status", AwsAuthenticationStatus.CONFIGURATION_ERROR) if isinstance(result, dict) else result
 
     def _on_auth_status_success(self, result: AwsAuthenticationStatus) -> None:
@@ -212,7 +207,7 @@ class DeadlineAuthenticationStatus(QObject):
 
     def _refresh_api_availability(self) -> bool:
         """Background task to check API availability."""
-        return _get_ffi().check_api_available()
+        return _native_check_api_available()
 
     def _on_api_availability_success(self, result: bool) -> None:
         """Handle successful API availability check."""

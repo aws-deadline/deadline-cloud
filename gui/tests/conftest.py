@@ -101,13 +101,6 @@ def test_server():
             os.environ[key] = val
 
 
-@pytest.fixture(scope="session")
-def ffi(test_server):
-    """Create a DeadlineFFI instance backed by the stub server."""
-    from deadline.client._ffi import DeadlineFFI
-    return DeadlineFFI()
-
-
 @pytest.fixture
 def tmp_config(tmp_path):
     """Create a temp config file with a known setting and return its path."""

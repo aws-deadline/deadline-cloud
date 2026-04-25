@@ -45,6 +45,17 @@ class ProgressReportMetadata:
     progress_message: str = ""
     processed_files: int = 0
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "ProgressReportMetadata":
+        """Convert a dict from the Rust PyO3 boundary."""
+        return cls(
+            status=data.get("status", ""),
+            progress=data.get("progress", 0.0),
+            transfer_rate=data.get("transfer_rate", 0.0),
+            progress_message=data.get("progress_message", ""),
+            processed_files=data.get("processed_files", 0),
+        )
+
 
 def str2bool(val: str) -> bool:
     """Convert a string to a boolean, matching Python's ConfigParser conventions."""

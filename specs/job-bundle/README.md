@@ -7,7 +7,7 @@ attachments → CreateJob → poll for completion.
 The single entry point for job submission. Consumers hand it a bundle
 directory and parameters; it gives back a job ID.
 
-Consumers: `deadline-cli` (bundle submit), `deadline-gui-ffi` (submission
+Consumers: `deadline-cli` (bundle submit), `deadline-python-bindings` (submission
 dialog), `deadline-mcp` (submit_job tool).
 
 Dependencies: `deadline-api` (API calls), `deadline-job-attachments`

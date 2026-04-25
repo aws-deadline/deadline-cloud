@@ -3,22 +3,17 @@
 """Config shim that routes through FFI to Rust.
 
 Replaces Python's ConfigParser-based implementation. All reads/writes
-go through the Rust deadline-config crate via _ffi.py.
+go through the Rust deadline-config crate via deadline._native.
 """
 
-from .._ffi import DeadlineFFI, DeadlineOperationError
+from deadline._native import (
+    get_setting as _native_get_setting,
+    set_setting as _native_set_setting,
+    read_config as _native_read_config,
+)
 
 _TRUE_VALUES = {"yes", "on", "true", "1"}
 _FALSE_VALUES = {"no", "off", "false", "0"}
-
-_ffi = None
-
-
-def _get_ffi() -> DeadlineFFI:
-    global _ffi
-    if _ffi is None:
-        _ffi = DeadlineFFI()
-    return _ffi
 
 
 def get_setting(setting_name: str, config=None) -> str:
@@ -29,13 +24,7 @@ def get_setting(setting_name: str, config=None) -> str:
     """
     if config is not None:
         return _get_setting_from_config(setting_name, config)
-    try:
-        return _get_ffi().get_setting(setting_name)
-    except DeadlineOperationError:
-        from ..exceptions import DeadlineOperationError as DOE
-        raise DOE(
-            f"AWS Deadline Cloud configuration has no setting named {setting_name!r}."
-        )
+    return _native_get_setting(setting_name)
 
 
 def _get_setting_from_config(setting_name: str, config) -> str:
@@ -73,7 +62,7 @@ def _get_setting_from_config(setting_name: str, config) -> str:
 
 def set_setting(setting_name: str, value: str, config=None) -> None:
     """Set a setting value. Always writes to disk."""
-    _get_ffi().set_setting(setting_name, value)
+    _native_set_setting(setting_name, value)
 
 
 def get_setting_default(setting_name: str, config=None) -> str:
@@ -84,12 +73,12 @@ def get_setting_default(setting_name: str, config=None) -> str:
     unset. Batch 3 (config dialog) will need a proper implementation —
     either a new FFI endpoint or reading from a temp empty config.
     """
-    return _get_ffi().get_setting(setting_name)
+    return _native_get_setting(setting_name)
 
 
 def read_config():
     """Read the config file. Returns the raw config dict from FFI."""
-    return _get_ffi().read_config()
+    return _native_read_config()
 
 
 def write_config(config) -> None:

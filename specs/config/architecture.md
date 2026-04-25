@@ -5,7 +5,7 @@
 ```
 deadline-cli ──► deadline-config    ← this crate
 deadline-api ──► deadline-config
-deadline-gui-ffi ──► deadline-config
+deadline-python-bindings ──► deadline-config
 deadline-job-attachments ──► (indirect via deadline-api)
 ```
 

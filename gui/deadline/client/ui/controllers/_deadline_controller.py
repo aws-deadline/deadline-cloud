@@ -14,19 +14,14 @@ import sys
 
 from qtpy.QtCore import QObject, Qt, Signal
 
-from ..._ffi import DeadlineFFI
+from deadline._native import (
+    list_farms as _native_list_farms,
+    list_queues as _native_list_queues,
+    list_storage_profiles_for_queue as _native_list_storage_profiles,
+    get_queue_parameter_definitions as _native_get_queue_params,
+)
 from ...job_bundle.parameters import JobParameter
 from ._async_runner import AsyncTaskRunner
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
-
 
 logger = getLogger(__name__)
 
@@ -182,7 +177,7 @@ class DeadlineUIController(QObject):
 
     def _fetch_farms(self) -> ResourceList:
         """Fetch farms from API. Runs in background thread."""
-        response = _get_ffi().list_farms()
+        response = _native_list_farms()
         return sorted(
             [(item["displayName"], item["farmId"]) for item in response["farms"]],
             key=lambda item: (item[0].casefold(), item[1]),
@@ -234,7 +229,7 @@ class DeadlineUIController(QObject):
 
     def _fetch_queues(self, farm_id: str) -> ResourceList:
         """Fetch queues from API. Runs in background thread."""
-        response = _get_ffi().list_queues(farm_id=farm_id)
+        response = _native_list_queues(farm_id=farm_id)
         return sorted(
             [(item["displayName"], item["queueId"]) for item in response["queues"]],
             key=lambda item: (item[0].casefold(), item[1]),
@@ -304,7 +299,7 @@ class DeadlineUIController(QObject):
         else:
             current_os = "unknown"
 
-        response = _get_ffi().list_storage_profiles_for_queue(
+        response = _native_list_storage_profiles(
             farm_id=farm_id, queue_id=queue_id
         )
 
@@ -372,7 +367,7 @@ class DeadlineUIController(QObject):
 
     def _fetch_queue_parameters(self, farm_id: str, queue_id: str) -> List[JobParameter]:
         """Fetch queue parameters from API. Runs in background thread."""
-        return _get_ffi().get_queue_parameter_definitions(
+        return _native_get_queue_params(
             farm_id=farm_id, queue_id=queue_id
         )
 

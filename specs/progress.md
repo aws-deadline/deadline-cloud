@@ -19,7 +19,7 @@ All passed. See `migration_strategy.md` for details.
 
 | Spike | Status | Proves |
 |-------|--------|--------|
-| GUI FFI round-trip (Python ↔ Rust ↔ Qt) | ✅ Passed | Core architecture works: ctypes loading, C ABI calls, callbacks, thread safety |
+| GUI FFI round-trip (Python ↔ Rust ↔ Qt) | ✅ Passed | Core architecture works: PyO3 loading, function calls, callbacks, thread safety |
 | GUI FFI inside DCC (Blender) | ✅ Passed | Shared library loads in real DCC Python environment without conflicts |
 | S3 transfer performance | ✅ Passed | Rust S3 throughput ≥ Python boto3 transfer manager (see `specs/job-attachments/architecture.md`) |
 | Job attachment hashing | ✅ Passed | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
@@ -64,7 +64,7 @@ pick and execute work items.
 | 16 | GUI FFI remaining | In progress | — | 1-14 |
 | 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
 | 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
-| 16c | Python FFI wrapper (`gui/_ffi.py`) | ✅ Done | — | 16b |
+| 16c | PyO3 Python bindings (`deadline._native`) | ✅ Done | — | 16b |
 | 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
@@ -75,6 +75,9 @@ pick and execute work items.
 | 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
+| 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
+| 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
+| 26 | Installer pipeline update | Not started | — | 24 |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
 
@@ -102,6 +105,37 @@ library. Remaining sub-items:
   submitter repo to depend on the new Python package from
   `deadline-cloud-rs` instead of `deadline-cloud-python`.
 
+**Production distribution plan (#24-26):**
+
+The Rust rewrite changes how the `deadline` package is built and
+distributed to customers. These items address the end-to-end packaging
+story. See `specs/HANDOFF.md` for detailed analysis.
+
+- **#24 — Production distribution (maturin + PyPI)**: Use maturin to
+  build a unified `deadline` PyPI package containing the Rust CLI binary,
+  the Rust shared library (`deadline._native`), and the Python GUI
+  code in a single wheel per platform. Preserves `pip install deadline`
+  and `pip install "deadline[gui]"` customer experience. Requires CI
+  pipeline to build platform-specific wheels (linux-x64, macos-arm64,
+  windows-x64). Must also implement the auto-install-PySide6 flow in
+  the Rust CLI (equivalent to Python's `gui_context_for_cli`) and the
+  `deadlinew` windowless launcher.
+- **#25 — `deadline.client.api` backwards-compat shim**: The original
+  `deadline` Python package exposes a public library API
+  (`from deadline.client import api; api.list_farms()`). This API is
+  documented in the public README and used by customers for pipeline
+  automation. Decide on approach: subprocess-based shim that calls the
+  Rust CLI, deprecation errors with migration guidance, or a lightweight
+  `deadline-auth` helper package for `get_boto3_session`. Must not
+  silently break existing users.
+- **#26 — Installer pipeline update**: The internal installer pipeline
+  currently expects a PyInstaller artifact as the "Deadline Client"
+  component. Update it to accept the Rust binary + shared library +
+  Python GUI code instead. The InstallBuilder XML, wrapper components,
+  and CodeBuild steps all need changes. The installed layout
+  (`DeadlineCloudSubmitter/DeadlineClient/`) stays similar but
+  `_internal/` shrinks dramatically (no boto3, click, xxhash, psutil).
+
 **Technical debt:**
 - **Spec docs audit**: Review `specs/` docs to ensure they reflect
   current implementation.
@@ -113,3 +147,7 @@ library. Remaining sub-items:
   handling across all crates.
 - **GUI Python code smell audit**: Review ported `gui/` Python code for
   patterns that no longer make sense now that Rust handles business logic.
+- **Pydantic boundary validation**: Explore using Pydantic to validate
+  types crossing the Rust→Python boundary (e.g. `ProgressReportMetadata`,
+  `IniConfig`, API response dicts). Would catch contract drift between
+  the Rust structs and Python dataclasses at the PyO3 boundary.

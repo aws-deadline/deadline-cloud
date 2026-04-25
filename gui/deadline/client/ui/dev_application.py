@@ -12,17 +12,8 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor, QIcon, QPalette
 from qtpy.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory, QWidget
 
-from .._ffi import DeadlineFFI
+from deadline._native import logout as _native_logout
 from .cli_job_submitter import show_cli_job_submitter
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
 from .dialogs import DeadlineConfigDialog, DeadlineLoginDialog
 from .job_bundle_submitter import show_job_bundle_submitter
 
@@ -92,7 +83,7 @@ class DevMainWindow(QMainWindow):
             logger.info("Failed to log in")
 
     def logout(self):
-        _get_ffi().logout()
+        _native_logout()
 
     def signal_handler(self, signal, frame):
         self.close()

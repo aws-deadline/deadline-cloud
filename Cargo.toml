@@ -5,7 +5,7 @@ members = [
     "crates/deadline-job-bundle",
     "crates/deadline-api",
     "crates/deadline-cli",
-    "crates/deadline-gui-ffi",
+    "crates/deadline-python-bindings",
     "crates/deadline-test-server",
 ]
 resolver = "3"
@@ -21,7 +21,6 @@ deadline-config = { path = "crates/deadline-config" }
 deadline-job-attachments = { path = "crates/deadline-job-attachments" }
 deadline-job-bundle = { path = "crates/deadline-job-bundle" }
 deadline-api = { path = "crates/deadline-api" }
-deadline-gui-ffi = { path = "crates/deadline-gui-ffi" }
 deadline-test-server = { path = "crates/deadline-test-server" }
 
 # Shared dependencies

@@ -34,7 +34,7 @@ vs Level 2, snapshot workflow).
 | Crate | What it does |
 |-------|-------------|
 | `deadline-cli` | CLI binary — argument parsing, subcommand dispatch, output formatting |
-| `deadline-gui-ffi` | C ABI shared library for Python GUI and DCC plugins |
+| `deadline-python-bindings` | PyO3 extension module (`deadline._native`) for Python GUI and DCC plugins |
 | `deadline-mcp` | MCP server for AI agent integration |
 | `deadline-config` | INI config file read/write, setting resolution |
 | `deadline-api` | AWS Deadline Cloud API, session, auth, telemetry |

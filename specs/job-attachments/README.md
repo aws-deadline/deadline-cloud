@@ -8,7 +8,7 @@ Owns its own S3 and STS clients independently from `deadline-api` because
 the attachment subsystem has different credential lifecycles, timeout
 requirements, and caching semantics.
 
-Consumers: `deadline-cli` (attachment/manifest commands), `deadline-gui-ffi`
+Consumers: `deadline-cli` (attachment/manifest commands), `deadline-python-bindings`
 (submission flow), `deadline-job-bundle` (submission orchestration).
 
 ## Document Index

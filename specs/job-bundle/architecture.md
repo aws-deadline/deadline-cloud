@@ -4,7 +4,7 @@
 
 ```
 deadline-cli ──► deadline-job-bundle    ← this crate
-deadline-gui-ffi ──► deadline-job-bundle
+deadline-python-bindings ──► deadline-job-bundle
 deadline-mcp ──► deadline-job-bundle
 ```
 

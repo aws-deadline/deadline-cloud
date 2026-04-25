@@ -6,7 +6,7 @@ config shim (new, routes through FFI), _compat (new, enum types).
 All tests run against the ffi-test-server stub. No real AWS calls.
 No Qt/PySide required.
 
-Prerequisites: cargo build -p deadline-gui-ffi -p deadline-test-server
+Prerequisites: maturin develop
 """
 
 import os

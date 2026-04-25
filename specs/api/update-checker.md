@@ -36,7 +36,7 @@ result struct with an appropriate `UpdateCheckStatus`.
 
 ## Consumers
 
-- GUI FFI (`deadline-gui-ffi`) — DCC submitters call this at startup
+- GUI FFI (`deadline-python-bindings`) — DCC submitters call this at startup
 - Not exposed via CLI — no `deadline check-update` command
 
 ## Differences from Python

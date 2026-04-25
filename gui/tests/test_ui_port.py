@@ -11,7 +11,7 @@ Coverage strategy:
 - Section 8: Job submission worker rewiring (Qt)
 - Section 9: Top-level submitter import paths
 
-Prerequisites: cargo build -p deadline-gui-ffi -p deadline-test-server
+Prerequisites: maturin develop
 """
 
 import os

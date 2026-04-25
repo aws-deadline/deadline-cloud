@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "deadline"
+version = "0.1.0"
+description = "AWS Deadline Cloud client — CLI, GUI, and Python library"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+gui = [
+    "PySide6-essentials>=6.6,<6.11",
+    "QtPy==2.4.*",
+]
+
+[tool.maturin]
+manifest-path = "crates/deadline-python-bindings/Cargo.toml"
+module-name = "deadline._native"
+python-source = "gui"
+
+[tool.pytest.ini_options]
+testpaths = ["gui/tests"]

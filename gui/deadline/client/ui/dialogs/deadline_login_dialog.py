@@ -25,17 +25,8 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from ..._ffi import DeadlineFFI
+from deadline._native import login as _native_login, DeadlineOperationError
 from ..._compat import AwsCredentialsSource
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
 
 
 class DeadlineLoginDialog(QMessageBox):
@@ -120,7 +111,7 @@ class DeadlineLoginDialog(QMessageBox):
         This function runs in a background thread to perform the login handshake.
         It polls the `self.canceled` flag for cancellation.
         """
-        return _get_ffi().login()
+        return _native_login()
 
     def _on_login_success(self, success_message: str) -> None:
         """Handle successful login."""

@@ -5,7 +5,7 @@ infrastructure as the Rust CLI tests.
 
 ## Problem
 
-The `gui/deadline/client/_ffi.py` wrapper calls Rust FFI functions that
+The `deadline._native` PyO3 module calls Rust functions that
 make real AWS API calls (STS, Deadline, S3). Without isolation:
 
 - Tests hit real AWS endpoints (slow, flaky, requires credentials)
@@ -41,15 +41,15 @@ tests need the same isolation.
                     │     AWS_ENDPOINT_URL_STS          │
                     │     AWS_ACCESS_KEY_ID             │
                     │     DEADLINE_CONFIG_FILE_PATH     │
-                    │  4. Yields DeadlineFFI instance   │
+                    │  4. Yields deadline._native instance   │
                     │  5. Kills binary on teardown      │
                     └──────────┬──────────────────────┘
                                │
                     ┌──────────▼──────────────────────┐
-                    │  test_ffi.py (pytest tests)       │
+                    │  testdeadline._native (pytest tests)       │
                     │                                  │
                     │  ffi.list_farms()                 │
-                    │    → ctypes → Rust FFI            │
+                    │    → PyO3 → Rust FFI            │
                     │      → AWS SDK reads env vars     │
                     │        → HTTP to localhost:PORT   │
                     │          → wiremock returns canned │
@@ -129,7 +129,7 @@ def test_list_farms(self, ffi):
 
 ## Rust gui-ffi Tests
 
-The existing Rust unit tests in `crates/deadline-gui-ffi/src/lib.rs`
+The existing Rust unit tests in `crates/deadline-python-bindings/src/lib.rs`
 have the same problem — they call `extern "C"` functions that hit real
 AWS. These should also be upgraded to use `TestHarness` in-process:
 
@@ -186,6 +186,6 @@ set for CLI subprocess tests.
 
 1. Add `[[bin]]` target `ffi-test-server` to `deadline-test-server`
 2. Rewrite `gui/tests/conftest.py` to start the server binary
-3. Rewrite `gui/tests/test_ffi.py` to assert on canned data
+3. Rewrite `gui/tests/testdeadline._native` to assert on canned data
 4. Upgrade Rust gui-ffi tests to use `TestHarness`
 5. Add `make test` or equivalent to run both suites

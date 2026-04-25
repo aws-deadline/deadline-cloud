@@ -23,20 +23,15 @@ from qtpy.QtWidgets import (  # type: ignore
     QWidget,
 )
 
-from ..._ffi import DeadlineFFI
+from deadline._native import (
+    get_farm as _native_get_farm,
+    get_queue as _native_get_queue,
+    list_storage_profiles_for_queue as _native_list_storage_profiles,
+)
 from ...config import get_setting
 from .._utils import tr
 from ..controllers import AsyncTaskRunner, DeadlineUIController
 from .openjd_parameters_widget import OpenJDParametersWidget
-
-_ffi_instance = None
-
-
-def _get_ffi():
-    global _ffi_instance
-    if _ffi_instance is None:
-        _ffi_instance = DeadlineFFI()
-    return _ffi_instance
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
@@ -592,7 +587,7 @@ class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
     def get_item(self):
         farm_id = get_setting(self.setting_name)
         if farm_id:
-            response = _get_ffi().get_farm(farm_id)
+            response = _native_get_farm(farm_id=farm_id)
             return (response["farmId"], response["displayName"], response["description"])
         else:
             return ("", "", "")
@@ -606,7 +601,7 @@ class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
         farm_id = get_setting("defaults.farm_id")
         queue_id = get_setting(self.setting_name)
         if farm_id and queue_id:
-            response = _get_ffi().get_queue(farm_id, queue_id)
+            response = _native_get_queue(farm_id=farm_id, queue_id=queue_id)
             return (response["queueId"], response["displayName"], response["description"])
         else:
             return ("", "", "")
@@ -630,7 +625,7 @@ class DeadlineStorageProfileNameDisplay(_DeadlineNamedResourceDisplay):
         storage_profile_id = get_setting(self.setting_name)
 
         if farm_id and queue_id and storage_profile_id:
-            response = _get_ffi().list_storage_profiles_for_queue(farm_id=farm_id, queue_id=queue_id)
+            response = _native_list_storage_profiles(farm_id=farm_id, queue_id=queue_id)
             farm_storage_profiles = response.get("storageProfiles", {})
 
             if farm_storage_profiles:

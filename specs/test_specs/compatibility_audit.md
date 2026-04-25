@@ -20,7 +20,7 @@ where no crate exists.
 | `deadline-job-bundle` | §15–18 (loading, parameters, submission, history) | Has `loader.rs`, `parameters.rs`, `submission.rs` stubs |
 | `deadline-job-attachments` | §20–24 (hashing, upload, download, sync, caches), §26–32 (path mapping, glob, VFS, progress, permissions), §35 (incremental downloads) | Has `asset_manifests.rs`, `caches.rs`, `download.rs`, `upload.rs`, `models.rs`, `progress_tracker.rs`, `vfs.rs` stubs |
 | `deadline-cli` | §37–49 (all CLI commands) | Has `main.rs` stub only |
-| `deadline-gui-ffi` | New sections TBD (Phase 3) | Not yet scaffolded |
+| `deadline-python-bindings` | New sections TBD (Phase 3) | Not yet scaffolded |
 | **⚠️ No crate** | §30–31 (public API: attachment/manifest download/upload) | See Finding #1. |
 | **⚠️ Deferred** | §50 (MCP server) | See Finding #2. |
 
@@ -198,7 +198,7 @@ Some sections are split too finely for the Rust crate structure:
 
 GUI commands (`deadline config gui`, `deadline bundle gui-submit`) are in
 scope. The Rust CLI spawns a Python process that loads the GUI widget package
-and the `deadline-gui-ffi` shared library. Test cases §38.9–10 and §45.14
+and the `deadline-python-bindings` shared library. Test cases §38.9–10 and §45.14
 should be implemented as Level 2 tests that verify the CLI spawns the correct
 process and handles errors (e.g., Python not installed, shared library not
 found).
@@ -208,7 +208,7 @@ found).
 The following crates are not covered by the existing 52 test spec sections
 and will need new sections as they are implemented:
 
-- `deadline-gui-ffi` — C ABI contract, JSON data exchange, error translation,
+- `deadline-python-bindings` — PyO3 boundary, type conversion, error translation,
   callback handling (Phase 3)
 
 ---
@@ -252,6 +252,6 @@ and will need new sections as they are implemented:
 | `deadline-job-bundle` | §15–18 | 174 |
 | `deadline-job-attachments` | §20–24, §26–32, §35 | 556 |
 | `deadline-cli` | §37–49 | 224 |
-| `deadline-gui-ffi` | TBD (Phase 3) | TBD |
+| `deadline-python-bindings` | TBD (Phase 3) | TBD |
 | `deadline-mcp` (deferred) | §50 | 39 |
 | **Total (existing specs)** | **52 sections** | **1,369** |

@@ -4,7 +4,7 @@ Manages the `~/.deadline/config` INI file — reading, writing, and resolving
 settings through a hierarchical section naming scheme. The foundational crate
 that nearly every other crate depends on. No AWS dependencies.
 
-Consumers: `deadline-cli`, `deadline-api`, `deadline-gui-ffi`,
+Consumers: `deadline-cli`, `deadline-api`, `deadline-python-bindings`,
 `deadline-job-attachments`.
 
 ## Document Index

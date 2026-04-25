@@ -175,8 +175,8 @@
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
-| 9 | Happy path | GUI dependencies installed | Config dialog opens | CLI spawns Python process with GUI widgets + deadline-gui-ffi |
-| 10 | Happy path | `--install-gui` flag | GUI dependencies installed before opening dialog | CLI spawns Python process with GUI widgets + deadline-gui-ffi |
+| 9 | Happy path | GUI dependencies installed | Config dialog opens | CLI spawns Python process with GUI widgets + deadline._native |
+| 10 | Happy path | `--install-gui` flag | GUI dependencies installed before opening dialog | CLI spawns Python process with GUI widgets + deadline._native |
 
 > ✅ Complete (10 cases)
 
@@ -492,7 +492,7 @@
 
 | # | Category | Test Case | Expected Behavior | Notes |
 |---|----------|-----------|-------------------|-------|
-| 14 | Happy path | GUI dependencies installed | Opens submission dialog | CLI spawns Python process with GUI widgets + deadline-gui-ffi |
+| 14 | Happy path | GUI dependencies installed | Opens submission dialog | CLI spawns Python process with GUI widgets + deadline._native |
 
 > ✅ Complete (14 cases)
 
