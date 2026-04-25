@@ -291,3 +291,46 @@ The schema is under our control so there's no SDK compatibility concern.
 
 **Use for:** checkpoint files, incremental download state, any
 persistent data format owned by this codebase.
+
+## GUI Commands: Rust → Python Subprocess
+
+GUI commands (`bundle gui-submit`, `config gui`) spawn a Python
+subprocess because the Qt GUI code (PySide6/qtpy) must run in Python.
+All business logic stays in Rust — Python only handles widget rendering
+and calls back into Rust via `deadline._native` (PyO3).
+
+### Pattern: launch a GUI command
+
+```rust
+// 1. Validate args in Rust (submitter-info fields, parameter format, etc.)
+let params = serde_json::json!({ "job_bundle_dir": dir, "output": "json" });
+
+// 2. Find Python
+let python = gui::find_python()?;  // DEADLINE_PYTHON → _internal/Python → PATH
+
+// 3. Spawn and capture output
+let stdout = gui::launch_gui(&python, "gui-submit", &params.to_string(), install_gui)?;
+```
+
+### Rules
+
+- **Rust validates, Python renders.** Arg parsing and validation
+  (submitter-info fields, parameter format) happen in Rust before
+  Python is spawned. Python receives pre-validated JSON.
+- **JSON is the contract.** Rust sends params as `--params-json '{...}'`.
+  Python prints result JSON to stdout. No other IPC mechanism.
+- **Single entry point.** All GUI commands go through
+  `python -m deadline.client.ui._gui_entry <command>`. Don't add
+  separate Python scripts per command.
+- **No `click` in `gui/`.** The Python GUI code must not depend on
+  `click`. Use stdlib (`print`, `input`, `argparse`) only.
+- **Python discovery is deterministic.** `DEADLINE_PYTHON` env var →
+  `_internal/Python` relative to binary → `python3` on PATH → `python`
+  on PATH. This order supports installer, pip install, and dev workflows.
+
+### What's NOT yet patterned
+
+The Rust→Python data boundary for widget state (how `read_config()`
+returns should look, how widgets consume API responses from `_native`)
+is still being resolved. Patterns for that will be added after the
+GUI widget rendering fixes (#16d3).
