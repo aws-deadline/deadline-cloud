@@ -152,15 +152,15 @@ fn s3_download_error(
 // Helper: S3 GetObject with error handling
 // ---------------------------------------------------------------------------
 
-/// Downloads bytes from S3 via GetObject. Returns the body bytes.
-/// On 404, returns `Err` with status 404 so the caller can retry.
-async fn s3_get_object_bytes(
+/// Downloads from S3 and streams directly to a file. Avoids buffering
+/// the entire file in memory.
+async fn s3_stream_to_file(
     s3_client: &S3Client,
     s3_bucket: &str,
     s3_key: &str,
     account_id: &str,
     local_path: &Path,
-) -> Result<Vec<u8>, JobAttachmentsError> {
+) -> Result<(), JobAttachmentsError> {
     let result = s3_client
         .get_object()
         .bucket(s3_bucket)
@@ -171,14 +171,18 @@ async fn s3_get_object_bytes(
 
     match result {
         Ok(output) => {
-            let bytes = output
-                .body
-                .collect()
-                .await
-                .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read S3 body: {e}")))?
-                .into_bytes()
-                .to_vec();
-            Ok(bytes)
+            let mut file = tokio::fs::File::create(local_path).await.map_err(|e| {
+                JobAttachmentsError::AssetSync(format!(
+                    "Failed to create {}: {e}", local_path.display()
+                ))
+            })?;
+            let mut body = output.body.into_async_read();
+            tokio::io::copy(&mut body, &mut file).await.map_err(|e| {
+                JobAttachmentsError::AssetSync(format!(
+                    "Failed to write {}: {e}", local_path.display()
+                ))
+            })?;
+            Ok(())
         }
         Err(sdk_err) => {
             let status = sdk_err
@@ -187,7 +191,6 @@ async fn s3_get_object_bytes(
                 .unwrap_or(0);
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
-            // Check message() for KMS content (SDK Display may not include it)
             use aws_sdk_s3::error::ProvideErrorMetadata;
             let msg = service_err.message().unwrap_or_default();
             let full_text = format!("{raw} {msg}");
@@ -376,41 +379,27 @@ pub async fn download_file(
         })?;
     }
 
-    // Download from S3 — try with algorithm suffix first
-    let bytes_result = s3_get_object_bytes(
+    // Download from S3 — stream directly to file, retry on 404 without suffix
+    let stream_result = s3_stream_to_file(
         s3_client, s3_bucket, &s3_key, account_id, &local_file_path,
     )
     .await;
 
-    let content = match bytes_result {
-        Ok(b) => b,
+    match stream_result {
+        Ok(()) => {}
         Err(JobAttachmentsError::S3Client { status_code: 404, .. }) => {
             // Retry without algorithm suffix (backward compatibility)
             let fallback_key = match cas_prefix {
                 Some(prefix) => format!("{}/{}", prefix, file.hash),
                 None => file.hash.clone(),
             };
-            s3_get_object_bytes(
+            s3_stream_to_file(
                 s3_client, s3_bucket, &fallback_key, account_id, &local_file_path,
             )
-            .await?
+            .await?;
         }
         Err(e) => return Err(e),
-    };
-
-    // Write to file
-    let mut f = fs::File::create(&local_file_path).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!(
-            "Failed to create {}: {e}",
-            local_file_path.display()
-        ))
-    })?;
-    f.write_all(&content).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!(
-            "Failed to write {}: {e}",
-            local_file_path.display()
-        ))
-    })?;
+    }
 
     // Set mtime from manifest (microseconds → seconds)
     let mtime_secs = file.mtime as f64 / 1_000_000.0;
@@ -460,27 +449,61 @@ pub async fn download_files_from_manifests(
     let collision_state: CollisionState = Arc::new(Mutex::new(HashMap::new()));
     let mut downloaded_files_by_root: HashMap<String, Vec<String>> = HashMap::new();
 
+    // Validate all paths before downloading
     for (local_root, manifest) in manifests_by_root {
-        // Validate paths are within the download directory
         ensure_paths_within_directory(local_root, &manifest.paths)?;
+    }
+
+    // Compute download worker count from config
+    let num_workers = crate::s3::compute_download_workers(
+        crate::s3::get_s3_max_pool_connections(None).unwrap_or(50),
+    );
+
+    // Download files in parallel across all manifests
+    use futures::stream::{self, StreamExt, TryStreamExt};
+
+    for (local_root, manifest) in manifests_by_root {
+        let results: Vec<(i64, Option<PathBuf>)> = stream::iter(
+            manifest.paths.iter().map(|file| {
+                let collision = &collision_state;
+                let tracker = &progress_tracker;
+                async move {
+                    let result = download_file(
+                        file,
+                        manifest.hash_alg,
+                        local_root,
+                        s3_client,
+                        s3_bucket,
+                        cas_prefix,
+                        account_id,
+                        Some(tracker),
+                        conflict_resolution,
+                        collision,
+                    )
+                    .await?;
+
+                    // Check cancellation after each file
+                    if !tracker.report_progress() {
+                        let processed = tracker.processed_files();
+                        return Err(JobAttachmentsError::Cancelled {
+                            message: format!(
+                                "Download cancelled. (Downloaded {} file{} before cancellation.)",
+                                processed,
+                                if processed == 1 { "" } else { "s" }
+                            ),
+                        });
+                    }
+
+                    Ok(result)
+                }
+            })
+        )
+        .buffer_unordered(num_workers)
+        .try_collect()
+        .await?;
 
         let mut downloaded = Vec::new();
-
-        for file in &manifest.paths {
-            let (_file_bytes, local_path) = download_file(
-                file,
-                manifest.hash_alg,
-                local_root,
-                s3_client,
-                s3_bucket,
-                cas_prefix,
-                account_id,
-                Some(&progress_tracker),
-                conflict_resolution,
-                &collision_state,
-            )
-            .await?;
-
+        for (_file_bytes, local_path) in results {
             if let Some(path) = local_path {
                 downloaded.push(
                     path.canonicalize()
@@ -488,18 +511,6 @@ pub async fn download_files_from_manifests(
                         .to_string_lossy()
                         .to_string(),
                 );
-            }
-
-            // Check cancellation
-            if !progress_tracker.report_progress() {
-                let processed = progress_tracker.processed_files();
-                return Err(JobAttachmentsError::Cancelled {
-                    message: format!(
-                        "Download cancelled. (Downloaded {} file{} before cancellation.)",
-                        processed,
-                        if processed == 1 { "" } else { "s" }
-                    ),
-                });
             }
         }
 

@@ -149,6 +149,12 @@ pub fn compute_upload_config(
     Ok((threshold, workers))
 }
 
+/// Computes the number of download workers from pool connections.
+/// Matches Python's `_get_num_download_workers`: `pool / MAX_CONCURRENCY`, min 1.
+pub fn compute_download_workers(s3_max_pool_connections: i32) -> usize {
+    ((s3_max_pool_connections as usize) / S3_DOWNLOAD_MAX_CONCURRENCY).max(1)
+}
+
 // --- Account identity ---
 
 /// Format an STS SDK error using the common smithy trait.

@@ -14,11 +14,10 @@
 | Critical | 4     | 4     | 0                   | 0         |
 | High     | 10    | 10    | 1                   | 0         |
 | Medium   | 22    | 16    | 3                   | 3         |
-| Low      | 20    | 15    | 4                   | 1         |
+| Low      | 20    | 15    | 4                   | 0         |
 
-**Remaining open findings (4):**
-- Performance: AUDIT-011 (parallel upload), AUDIT-012 (parallel download),
-  AUDIT-014 (multipart upload), AUDIT-049 (multipart download)
+**Remaining open findings (0):**
+All findings resolved.
 
 **Investigated and dropped (not bugs):**
 - AUDIT-034 (`--submitter-info` — GUI-only, not CLI scope)
@@ -144,25 +143,25 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — core telemetry achieved.
 - **Resolution:** Fixed
 
-### 🔴 AUDIT-011: Upload is sequential (no parallelism)
+### ✅ AUDIT-011: Upload is parallel for small files
 
-- **Category:** Behavioral gap
-- **Priority:** High
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~High~~ N/A
 - **Command/Function:** `deadline-job-attachments` upload
 - **Python behavior:** Uploads small files in parallel via `ThreadPoolExecutor(max_workers=num_upload_workers)`. (`upload.py:258-290`)
-- **Rust behavior:** Uploads ALL files sequentially in a single loop. (`upload.rs:395-440`)
-- **Impact:** Significantly slower uploads for jobs with many small files.
-- **Resolution:** Pending
+- **Rust behavior:** Uploads small files in parallel via `futures::stream::buffer_unordered(num_upload_workers)`. Large files uploaded serially with internal multipart parallelism.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
-### 🔴 AUDIT-012: Download is sequential (no parallelism)
+### ✅ AUDIT-012: Download is parallel
 
-- **Category:** Behavioral gap
-- **Priority:** High
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~High~~ N/A
 - **Command/Function:** `deadline-job-attachments` download
 - **Python behavior:** Downloads files in parallel via `ThreadPoolExecutor(max_workers=num_download_workers)`. (`download.py:350-380`)
-- **Rust behavior:** Downloads ALL files sequentially. (`download.rs:244-280`)
-- **Impact:** Significantly slower downloads for jobs with many files.
-- **Resolution:** Pending
+- **Rust behavior:** Downloads files in parallel via `futures::stream::buffer_unordered(num_download_workers)`. Streams directly to file (no full-memory buffering).
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### ✅ AUDIT-013: Hash cache schema incompatible between Python and Rust
 
@@ -174,15 +173,15 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — full interop achieved. Both CLIs share one cache.
 - **Resolution:** Fixed
 
-### 🔴 AUDIT-014: No multipart upload (5GB PutObject limit)
+### ✅ AUDIT-014: Multipart upload for large files
 
-- **Category:** Behavioral gap
-- **Priority:** High
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~High~~ N/A
 - **Command/Function:** `deadline-job-attachments` upload
 - **Python behavior:** Uses boto3 TransferManager with automatic multipart for files >8MB threshold. (`upload.py:340`)
-- **Rust behavior:** Uses single `PutObject` regardless of file size. (`upload.rs:310-330`)
-- **Impact:** Files >5GB will fail to upload (S3 PutObject limit). Critical for large file workflows.
-- **Resolution:** Pending
+- **Rust behavior:** Files above `small_file_threshold` use `CreateMultipartUpload` / `UploadPart` (concurrent) / `CompleteMultipartUpload`. Aborts on error via `AbortMultipartUpload`.
+- **Impact:** None — parity achieved. Files >5GB can now be uploaded.
+- **Resolution:** Fixed
 
 ---
 
@@ -537,15 +536,15 @@ Findings already documented in `specs/python-observations.md` (observations
 - **Impact:** None — parity achieved.
 - **Resolution:** Fixed
 
-### 🔴 AUDIT-049: No multipart download for large files
+### ✅ AUDIT-049: Download streams to file
 
-- **Category:** Behavioral gap
-- **Priority:** Low
+- **Category:** ~~Behavioral gap~~ Fixed
+- **Priority:** ~~Low~~ N/A
 - **Command/Function:** `deadline-job-attachments` download
 - **Python behavior:** Uses boto3 TransferManager with multipart downloads. (`download.py:280-290`)
-- **Rust behavior:** Single `GetObject` — entire file in memory. (`download.rs:170-210`)
-- **Impact:** Slower for large files; potential OOM for very large files.
-- **Resolution:** Pending
+- **Rust behavior:** Streams `GetObject` body directly to file via `tokio::io::copy(body.into_async_read(), file)`. No full-memory buffering.
+- **Impact:** None — parity achieved.
+- **Resolution:** Fixed
 
 ### ✅ AUDIT-050: `force_s3_check` skips cache update
 
@@ -624,14 +623,9 @@ Findings already documented in `specs/python-observations.md` (observations
 Only remaining open findings listed. For full history, see individual
 findings above.
 
-### Remaining Open (5)
+### Remaining Open (0)
 
-| | ID | Title | Priority | Category |
-|---|---|-------|----------|----------|
-| 🔴 | AUDIT-011 | Upload sequential (no parallelism) | High | Performance |
-| 🔴 | AUDIT-012 | Download sequential (no parallelism) | High | Performance |
-| 🔴 | AUDIT-014 | No multipart upload (5GB limit) | High | Performance |
-| 🔴 | AUDIT-049 | No multipart download | Low | Performance |
+All findings resolved.
 
 ### Investigated and Dropped (2)
 
@@ -640,6 +634,6 @@ findings above.
 | ⊘ | AUDIT-034 | `--submitter-info` missing | GUI-only (`bundle gui-submit`). CLI `bundle submit` correctly has `--submitter-name`. |
 | ⊘ | AUDIT-051 | Download path collision | Worker-agent scope, not CLI. Deferred. |
 
-### Resolved (50)
+### Resolved (54)
 
-✅ Fixed: 43 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2
+✅ Fixed: 47 · ✅ No Issue: 5 · ✅ Accepted: 3 · ⊘ False finding: 1 · ⊘ Out of scope: 2

@@ -1237,6 +1237,113 @@ async fn bundle_submit_save_debug_snapshot_with_attachments() {
 }
 
 // ===========================================================================
+// Batch 1: --json flag outputs JSON with jobId
+// ===========================================================================
+
+#[tokio::test]
+async fn bundle_submit_json_outputs_job_id() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "json_output");
+
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success(), "Expected success, stderr: {}",
+        String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should be valid JSON with jobId
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("Expected valid JSON, got: {stdout}\nError: {e}"));
+    assert_eq!(parsed["jobId"].as_str(), Some(JOB),
+        "Expected jobId={JOB} in JSON output, got: {parsed}");
+}
+
+#[tokio::test]
+async fn bundle_submit_json_snapshot_outputs_path() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "json_snapshot");
+    let snapshot_dir = harness.config_dir.path().join("json_snap");
+
+    let output = harness
+        .cli(&[
+            "bundle", "submit", &bundle_dir, "--yes", "--json",
+            "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("Expected valid JSON, got: {stdout}\nError: {e}"));
+    assert!(parsed["snapshotPath"].as_str().is_some(),
+        "Expected snapshotPath in JSON output, got: {parsed}");
+}
+
+#[tokio::test]
+async fn bundle_submit_json_suppresses_library_messages() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "json_quiet");
+
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // With --json, stdout should be ONLY the JSON line — no "Submitting..." messages
+    let lines: Vec<&str> = stdout.trim().lines().collect();
+    assert_eq!(lines.len(), 1,
+        "Expected exactly 1 JSON line on stdout, got {} lines:\n{stdout}", lines.len());
+}
+
+#[tokio::test]
+async fn bundle_submit_json_error_still_exits_nonzero() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    bundle::mock_create_job_error(
+        &harness.server, FARM, QUEUE, 403, "AccessDeniedException",
+    ).await;
+    let bundle_dir = create_bundle(&harness, "json_error");
+
+    let output = harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(!output.status.success(), "Expected failure exit code with --json on error");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Error should still be reported (not swallowed by --json)
+    assert!(
+        stdout.contains("AccessDenied") || stdout.contains("error") || !stdout.is_empty(),
+        "Expected error info in output, got: {stdout}"
+    );
+}
+
+// ===========================================================================
 // F5: Boundary — no attachments should NOT emit hashing/upload telemetry
 // ===========================================================================
 

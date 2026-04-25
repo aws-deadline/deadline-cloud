@@ -39,4 +39,4 @@ attachment download/upload, manifest snapshot/diff/download/upload, bundle
 submit/gui-submit, handle-web-url.
 
 Gaps:
-- `bundle submit --output json` output format
+- None — all CLI features implemented

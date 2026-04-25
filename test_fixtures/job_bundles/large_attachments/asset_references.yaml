@@ -1,0 +1,8 @@
+assetReferences:
+  inputs:
+    directories:
+      - /Users/viknith/Documents/Github/deadline-py-to-rust-workspace/deadline-cloud-rs/test_fixtures/job_bundles/large_attachments/inputs
+    filenames: []
+  outputs:
+    directories: []
+  referencedPaths: []

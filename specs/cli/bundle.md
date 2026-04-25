@@ -42,6 +42,7 @@
 | `--force-s3-check` | config | Force S3 existence verification for every file |
 | `--no-force-s3-check` | — | Skip S3 existence verification |
 | `--save-debug-snapshot` | — | EXPERIMENTAL: save snapshot dir (or .zip) instead of submitting |
+| `--json` | false | Output as JSON (`{"jobId": "..."}` or `{"snapshotPath": "..."}`) |
 
 ### Parameter Validation
 
@@ -127,5 +128,5 @@ This matches Python's behavior where `auto_accept=True` + unknown paths raises
 |--------|--------|------|
 | Parameter format | `-p Name=Value` only | `-p Name=Value` only |
 | GUI submit | `bundle gui-submit` command | Not yet implemented |
-| `--json` output | Supported | Not yet implemented |
+| `--json` output | Not supported on `bundle submit` | Supported (`--json` flag) |
 | Submitter name default | "deadline-cloud-cli" | "CLI" |

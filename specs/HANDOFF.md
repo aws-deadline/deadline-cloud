@@ -7,11 +7,13 @@ consulting the Work Items table in `specs/progress.md`.
 
 None — ready for next work item.
 
-## Recently Completed — #20 + AUDIT-041: Batch get API + trace-schedule
+## Recently Completed — #9 + #11: Parallel/multipart S3 transfer + bundle submit --json
 
-SDK upgrade (`aws-sdk-deadline` 1.94.0 → 1.98.0) to get `BatchGetStep`
-and `BatchGetTask` APIs. New `batch_get_steps_page` and
-`batch_get_tasks_page` functions in `api.rs`. New `deadline job
-trace-schedule` CLI command with batch-get chunking/retry, Chrome trace
-format output, and summary statistics. 12 Level 2 tests, zero-diff CLI
-comparison against Python on real API. Closes AUDIT-041.
+Parallel upload for small files via `buffer_unordered(num_upload_workers)`.
+Multipart upload for large files (>threshold) via
+`CreateMultipartUpload`/`UploadPart`/`CompleteMultipartUpload` with abort
+on error. Parallel download via `buffer_unordered(num_download_workers)`.
+Streaming download to file via `tokio::io::copy(body.into_async_read())`.
+`bundle submit --json` flag for machine-readable output. Closes
+AUDIT-011, AUDIT-012, AUDIT-014, AUDIT-049. All audit findings resolved
+(0 remaining).

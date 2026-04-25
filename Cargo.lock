@@ -1061,6 +1061,7 @@ dependencies = [
  "chrono",
  "deadline-config",
  "filetime",
+ "futures",
  "glob",
  "log",
  "regex",

@@ -513,7 +513,6 @@ fn s3_upload_error(
 /// Context for performing S3 uploads: holds a configured S3 client,
 /// the caller's account ID (for ExpectedBucketOwner), and computed
 /// config values (file size threshold, worker count).
-#[allow(dead_code)] // small_file_threshold and num_upload_workers used in future parallel upload
 pub struct S3UploadContext {
     s3_client: aws_sdk_s3::Client,
     account_id: String,
@@ -583,7 +582,8 @@ impl S3UploadContext {
     }
 
     /// Upload a single file to S3. Silently skips directories, non-existent
-    /// files, and symlinks. Reports progress via the tracker.
+    /// files, and symlinks. Files larger than `small_file_threshold` use
+    /// multipart upload; smaller files use single PutObject.
     pub async fn upload_file_to_s3(
         &self,
         local_path: &Path,
@@ -609,7 +609,13 @@ impl S3UploadContext {
                 log::warn!("Failed to stat {}. Skipping: {e}", local_path.display());
                 return Ok(());
             }
-            _ => {}
+            Ok(meta) => {
+                if meta.len() as usize > self.small_file_threshold {
+                    return self.multipart_upload_file(
+                        local_path, s3_bucket, s3_upload_key, progress_tracker,
+                    ).await;
+                }
+            }
         }
 
         let body = ByteStream::from_path(local_path).await.map_err(|e| {
@@ -639,7 +645,6 @@ impl S3UploadContext {
                     .unwrap_or(0);
                 let service_err = sdk_err.into_service_error();
                 let raw = format!("{service_err}");
-                // Check message() for KMS-related content (SDK Display may not include it)
                 let msg = service_err.message().unwrap_or_default();
                 let full_text = format!("{raw} {msg}");
 
@@ -650,6 +655,135 @@ impl S3UploadContext {
                     s3_bucket,
                     s3_upload_key,
                 ))
+            }
+        }
+    }
+
+    /// Upload a large file using S3 multipart upload.
+    /// Chunks the file into `S3_MULTIPART_UPLOAD_CHUNK_SIZE` parts,
+    /// uploads parts concurrently, then completes. Aborts on error or cancellation.
+    async fn multipart_upload_file(
+        &self,
+        local_path: &Path,
+        s3_bucket: &str,
+        s3_upload_key: &str,
+        progress_tracker: Option<&ProgressTracker>,
+    ) -> Result<(), JobAttachmentsError> {
+        use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
+        use crate::s3::S3_MULTIPART_UPLOAD_CHUNK_SIZE;
+
+        // Initiate multipart upload
+        let create_resp = self.s3_client
+            .create_multipart_upload()
+            .bucket(s3_bucket)
+            .key(s3_upload_key)
+            .expected_bucket_owner(&self.account_id)
+            .send()
+            .await
+            .map_err(|sdk_err| {
+                let status_code = sdk_err.raw_response()
+                    .map(|r| r.status().as_u16()).unwrap_or(0);
+                let service_err = sdk_err.into_service_error();
+                let msg = service_err.message().unwrap_or_default();
+                s3_upload_error(status_code, &format!("{service_err} {msg}"),
+                    "initiating multipart upload", s3_bucket, s3_upload_key)
+            })?;
+
+        let upload_id = create_resp.upload_id().unwrap_or_default().to_string();
+
+        // Read file and split into chunks
+        let file_bytes = std::fs::read(local_path).map_err(|e| {
+            JobAttachmentsError::AssetSync(format!("Failed to read {}: {e}", local_path.display()))
+        })?;
+
+        let chunks: Vec<(usize, &[u8])> = file_bytes
+            .chunks(S3_MULTIPART_UPLOAD_CHUNK_SIZE)
+            .enumerate()
+            .collect();
+
+        // Upload parts concurrently using buffer_unordered
+        use futures::stream::{self, StreamExt, TryStreamExt};
+
+        let part_results: Result<Vec<CompletedPart>, JobAttachmentsError> = stream::iter(
+            chunks.into_iter().map(|(idx, chunk)| {
+                let part_number = (idx + 1) as i32;
+                let body = ByteStream::from(chunk.to_vec());
+                let client = &self.s3_client;
+                let account = &self.account_id;
+                let uid = &upload_id;
+                async move {
+                    let resp = client
+                        .upload_part()
+                        .bucket(s3_bucket)
+                        .key(s3_upload_key)
+                        .upload_id(uid)
+                        .part_number(part_number)
+                        .expected_bucket_owner(account)
+                        .body(body)
+                        .send()
+                        .await
+                        .map_err(|sdk_err| {
+                            let status_code = sdk_err.raw_response()
+                                .map(|r| r.status().as_u16()).unwrap_or(0);
+                            let service_err = sdk_err.into_service_error();
+                            let msg = service_err.message().unwrap_or_default();
+                            s3_upload_error(status_code, &format!("{service_err} {msg}"),
+                                "uploading part", s3_bucket, s3_upload_key)
+                        })?;
+                    Ok(CompletedPart::builder()
+                        .part_number(part_number)
+                        .e_tag(resp.e_tag().unwrap_or_default())
+                        .build())
+                }
+            })
+        )
+        .buffer_unordered(crate::s3::S3_UPLOAD_MAX_CONCURRENCY)
+        .try_collect()
+        .await;
+
+        match part_results {
+            Ok(mut parts) => {
+                // Parts must be sorted by part number for CompleteMultipartUpload
+                parts.sort_by_key(|p| p.part_number());
+
+                self.s3_client
+                    .complete_multipart_upload()
+                    .bucket(s3_bucket)
+                    .key(s3_upload_key)
+                    .upload_id(&upload_id)
+                    .expected_bucket_owner(&self.account_id)
+                    .multipart_upload(
+                        CompletedMultipartUpload::builder()
+                            .set_parts(Some(parts))
+                            .build(),
+                    )
+                    .send()
+                    .await
+                    .map_err(|sdk_err| {
+                        let status_code = sdk_err.raw_response()
+                            .map(|r| r.status().as_u16()).unwrap_or(0);
+                        let service_err = sdk_err.into_service_error();
+                        let msg = service_err.message().unwrap_or_default();
+                        s3_upload_error(status_code, &format!("{service_err} {msg}"),
+                            "completing multipart upload", s3_bucket, s3_upload_key)
+                    })?;
+
+                if let Some(tracker) = progress_tracker {
+                    tracker.increase_processed(1, 0);
+                }
+                Ok(())
+            }
+            Err(e) => {
+                // Abort the multipart upload on failure
+                let _ = self.s3_client
+                    .abort_multipart_upload()
+                    .bucket(s3_bucket)
+                    .key(s3_upload_key)
+                    .upload_id(&upload_id)
+                    .expected_bucket_owner(&self.account_id)
+                    .send()
+                    .await;
+                Err(e)
             }
         }
     }
@@ -782,49 +916,40 @@ impl S3UploadContext {
 
         let force = force_s3_check.unwrap_or(false);
 
+        // Separate files into small and large queues (matching Python's
+        // _separate_files_by_size). Small files upload in parallel; large
+        // files upload serially with internal multipart parallelism.
+        let mut small_files = Vec::new();
+        let mut large_files = Vec::new();
         for file in &manifest.paths {
-            let local_path = source_root.join(&file.path);
-            let s3_key = format!("{}/{}.{}", s3_cas_prefix, file.hash, "xxh128");
-            let cache_key = format!("{}/{}", s3_bucket, s3_key);
-
-            // Check cache unless force
-            if !force {
-                if let Some(ref c) = cache {
-                    if c.get_entry(&cache_key).is_some() {
-                        if let Some(tracker) = progress_tracker {
-                            tracker.increase_skipped(1, file.size as u64);
-                        }
-                        continue;
-                    }
-                }
+            if (file.size as usize) > self.small_file_threshold {
+                large_files.push(file);
+            } else {
+                small_files.push(file);
             }
+        }
 
-            // HeadObject check
-            if self.file_already_uploaded(s3_bucket, &s3_key).await? {
-                // Update cache and skip
-                if let Some(ref c) = cache {
-                    c.put_entry(&S3CheckCacheEntry {
-                        s3_key: cache_key,
-                        last_seen_time: current_timestamp(),
-                    });
-                }
-                if let Some(tracker) = progress_tracker {
-                    tracker.increase_skipped(1, file.size as u64);
-                }
-                continue;
+        // Upload small files in parallel
+        use futures::stream::{self, StreamExt, TryStreamExt};
+        stream::iter(small_files.into_iter().map(|file| {
+            let cache = &cache;
+            async move {
+                self.upload_one_file(
+                    file, s3_bucket, source_root, s3_cas_prefix,
+                    progress_tracker, cache, force,
+                ).await
             }
+        }))
+        .buffer_unordered(self.num_upload_workers)
+        .try_collect::<Vec<()>>()
+        .await?;
 
-            // Upload
-            self.upload_file_to_s3(&local_path, s3_bucket, &s3_key, progress_tracker)
-                .await?;
-
-            // Update cache
-            if let Some(ref c) = cache {
-                c.put_entry(&S3CheckCacheEntry {
-                    s3_key: cache_key,
-                    last_seen_time: current_timestamp(),
-                });
-            }
+        // Upload large files serially
+        for file in large_files {
+            self.upload_one_file(
+                file, s3_bucket, source_root, s3_cas_prefix,
+                progress_tracker, &cache, force,
+            ).await?;
         }
 
         // Final progress report + cancellation check
@@ -835,6 +960,62 @@ impl S3UploadContext {
                     message: "File upload cancelled.".into(),
                 });
             }
+        }
+
+        Ok(())
+    }
+
+    /// Upload a single file: check cache, check S3, upload if needed, update cache.
+    async fn upload_one_file(
+        &self,
+        file: &ManifestPath,
+        s3_bucket: &str,
+        source_root: &Path,
+        s3_cas_prefix: &str,
+        progress_tracker: Option<&ProgressTracker>,
+        cache: &Option<S3CheckCache>,
+        force: bool,
+    ) -> Result<(), JobAttachmentsError> {
+        let local_path = source_root.join(&file.path);
+        let s3_key = format!("{}/{}.{}", s3_cas_prefix, file.hash, "xxh128");
+        let cache_key = format!("{}/{}", s3_bucket, s3_key);
+
+        // Check cache unless force
+        if !force {
+            if let Some(c) = cache {
+                if c.get_entry(&cache_key).is_some() {
+                    if let Some(tracker) = progress_tracker {
+                        tracker.increase_skipped(1, file.size as u64);
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        // HeadObject check
+        if self.file_already_uploaded(s3_bucket, &s3_key).await? {
+            if let Some(c) = cache {
+                c.put_entry(&S3CheckCacheEntry {
+                    s3_key: cache_key,
+                    last_seen_time: current_timestamp(),
+                });
+            }
+            if let Some(tracker) = progress_tracker {
+                tracker.increase_skipped(1, file.size as u64);
+            }
+            return Ok(());
+        }
+
+        // Upload
+        self.upload_file_to_s3(&local_path, s3_bucket, &s3_key, progress_tracker)
+            .await?;
+
+        // Update cache
+        if let Some(c) = cache {
+            c.put_entry(&S3CheckCacheEntry {
+                s3_key: cache_key,
+                last_seen_time: current_timestamp(),
+            });
         }
 
         Ok(())
