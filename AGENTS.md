@@ -5,7 +5,8 @@ CLI, GUI FFI layer, and shared library crates.
 
 ## Documentation
 
-Start with `README.md` for the repo overview and documentation layout.
+Start with `README.md` for the repo overview, build instructions, and
+Python GUI development setup.
 
 Key top-level docs:
 - `specs/architecture.md` — crate dependency graph, data flows, shared conventions
@@ -15,8 +16,27 @@ Key top-level docs:
 Deeper docs:
 - `specs/` — per-crate subdirectories with architecture and topic-scoped specs
 - `specs/cli/` — per-command CLI feature documentation
+- `specs/python-bindings/` — PyO3 module architecture, DCC integration profiles
 - `specs/workflow.md` — development loop: study Python → write tests → implement → write spec → audit → fix → commit
 - `test_fixtures/` — job bundles for manual CLI comparison testing (see `test_fixtures/README.md`)
+
+## Architecture: Rust + Python
+
+All business logic is in Rust. Python is only used for the Qt GUI:
+
+```
+deadline (Rust binary)
+├── CLI commands, API calls, job attachments, config — all Rust
+├── deadline._native (PyO3) — Rust library exposed to Python
+└── GUI commands (bundle gui-submit, config gui):
+      Rust validates args → finds Python → spawns subprocess
+      → gui/_gui_entry.py → QApplication → Qt dialog → result
+```
+
+Key directories:
+- `crates/` — Rust crates (CLI, API, config, job-bundle, job-attachments, PyO3 bindings)
+- `gui/` — Python GUI code (Qt widgets, dialogs, config shim, entry point)
+- `pyproject.toml` — maturin config for building the `deadline` Python package
 
 ## Keeping docs in sync with code
 
@@ -36,6 +56,19 @@ cargo build                              # full workspace
 cargo test                               # full test suite
 cargo test -p deadline-config            # single crate
 cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
-cargo test -p deadline-python-bindings   # Python bindings tests (via maturin develop + pytest)
 cargo insta review                       # review new/changed CLI output snapshots
 ```
+
+### Python GUI development
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
+maturin develop                          # build PyO3 module + install gui/ package
+pytest gui/tests/ -v                     # run Python tests
+```
+
+GUI commands need Python with PySide6. The Rust CLI finds Python via:
+1. `DEADLINE_PYTHON` env var
+2. `_internal/Python` relative to binary (installer layout)
+3. `python3` / `python` on PATH
