@@ -7,7 +7,13 @@ consulting the Work Items table in `specs/progress.md`.
 
 None — ready for next work item.
 
-## Recently Completed — #9 + #11: Parallel/multipart S3 transfer + bundle submit --json
+## Recently Completed — #21: Python bug-fix parity sweep
+
+All 5 Python bug fixes (#1098, #1005, #1013, #1032, #1008) verified as
+already correct in Rust. Implemented from fixed Python source — no code
+changes needed.
+
+## Previously Completed — #9 + #11: Parallel/multipart S3 transfer + bundle submit --json
 
 Parallel upload for small files via `buffer_unordered(num_upload_workers)`.
 Multipart upload for large files (>threshold) via

@@ -72,7 +72,7 @@ pick and execute work items.
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
 | 20 | Batch get API helper | ✅ Done | `new_features.md` | — |
-| 21 | Python bug-fix parity sweep | Not started | `new_features.md` | — |
+| 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
 
