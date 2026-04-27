@@ -12,7 +12,6 @@ twine == 6.*
 mypy == 1.13.*; python_version <= '3.8'
 mypy == 1.*; python_version > '3.8'
 ruff == 0.15.*
-import-linter == 2.*
 moto[server] == 5.*
 jsondiff == 2.*
 pyinstrument == 5.*

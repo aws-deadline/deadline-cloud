@@ -157,6 +157,11 @@ $ deadline config gui
 
 By default, configuration of AWS Deadline Cloud is provided at `~/.deadline/config`, however this can be overridden by the `DEADLINE_CONFIG_FILE_PATH` environment variable.
 
+Submitter integrations check for newer versions on startup. To deactivate these notifications:
+```sh
+$ deadline config set settings.submitter_update_notification false
+```
+
 ## Authentication
 
 In addition to the standard AWS credential mechanisms (AWS Profiles, instance profiles, and environment variables), AWS Deadline Cloud monitor credentials are also supported.

@@ -77,7 +77,7 @@ jobs:
       tag: ${{ needs.TagRelease.outputs.tag }}
 
   PreRelease:
-    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests]
+    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests, MacOSIntegrationTests]
     uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
     permissions:
       id-token: write

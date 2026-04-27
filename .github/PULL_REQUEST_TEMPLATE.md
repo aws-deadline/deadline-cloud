@@ -12,8 +12,6 @@ See [DEVELOPMENT.md](https://github.com/aws-deadline/deadline-cloud/blob/mainlin
 
 - Have you run the unit tests?
 - Have you run the integration tests?
-- Have you made changes to the `download` or `asset_sync` modules? If so, then it is highly recommended
-  that you ensure that the docker-based unit tests pass.
 
 ### Was this change documented?
 
