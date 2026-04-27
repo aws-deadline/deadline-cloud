@@ -42,7 +42,7 @@ dependencies = [
   "pyyaml >= 6.0",
   # Job Attachments
   "typing_extensions >= 4.8",
-  "xxhash >= 3.4,< 3.7",
+  "xxhash >= 3.4,< 3.8",
   "pywin32 >= 307; sys_platform == 'win32'",
   "QtPy == 2.4.*",
   "psutil >= 7.0.0"
