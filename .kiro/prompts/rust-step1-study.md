@@ -12,8 +12,7 @@ If no active work item, present candidate items and wait for human to choose.
 
 Then study the feature deeply:
 - `specs/{crate}/README.md` and topic files for the target crate
-- `specs/test_specs/` — find the section for this work item's test cases
-- `specs/cli/{command}.md` — if the work item involves CLI commands
+- `specs/deadline-cli/{command}.md` — if the work item involves CLI commands
 - `specs/python-observations.md` — known behavioral notes
 - Python source at `../deadline-cloud-python` for the feature being ported
 - Python tests for the feature being ported

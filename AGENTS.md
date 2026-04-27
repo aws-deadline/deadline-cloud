@@ -15,9 +15,9 @@ Key top-level docs:
 
 Deeper docs:
 - `specs/` — per-crate subdirectories with architecture and topic-scoped specs
-- `specs/cli/` — per-command CLI feature documentation
-- `specs/python-bindings/` — PyO3 module architecture, DCC integration profiles
-- `specs/workflow.md` — development loop: study Python → write tests → implement → write spec → audit → fix → commit
+- `specs/deadline-cli/` — per-command CLI feature documentation
+- `specs/deadline-python-bindings/` — PyO3 module architecture, DCC integration profiles
+- `specs/rust-port-workflow.md` — development loop: study Python → write tests → implement → write spec → audit → fix → commit
 - `test_fixtures/` — job bundles for manual CLI comparison testing (see `test_fixtures/README.md`)
 
 ## Architecture: Rust + Python

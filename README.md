@@ -113,9 +113,9 @@ data flows.
 | [specs/architecture.md](specs/architecture.md) | Crate dependency graph, data flows |
 | [specs/testing.md](specs/testing.md) | Test philosophy, no-mocking policy |
 | [specs/patterns.md](specs/patterns.md) | AWS SDK usage patterns, coding conventions |
-| [specs/cli/](specs/cli/) | Per-command CLI feature documentation |
-| [specs/cli/reference.md](specs/cli/reference.md) | Complete CLI command reference |
-| [specs/python-bindings/](specs/python-bindings/) | PyO3 module architecture, DCC profiles |
+| [specs/deadline-cli/](specs/deadline-cli/) | Per-command CLI feature documentation |
+| [specs/deadline-cli/reference.md](specs/deadline-cli/reference.md) | Complete CLI command reference |
+| [specs/deadline-python-bindings/](specs/deadline-python-bindings/) | PyO3 module architecture, DCC profiles |
 | [specs/progress.md](specs/progress.md) | Work item tracking |
 | [specs/HANDOFF.md](specs/HANDOFF.md) | Current/next work item for session continuity |
 

@@ -1,0 +1,216 @@
+# Development
+
+Developer guide for the AWS Deadline Cloud Rust client.
+
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Common Commands](#common-commands)
+- [Workspace Structure](#workspace-structure)
+- [How To...](#how-to)
+  - [Add a new CLI command](#add-a-new-cli-command)
+  - [Add a new API call](#add-a-new-api-call)
+  - [Work on the Python GUI](#work-on-the-python-gui)
+- [Coding Conventions](#coding-conventions)
+- [Further Reading](#further-reading)
+
+## Getting Started
+
+Install prerequisites and build:
+
+```bash
+# Rust toolchain (stable channel, edition 2024)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Snapshot test reviewer
+cargo install cargo-insta
+
+# Build the workspace
+cargo build
+```
+
+For GUI development, also set up a Python environment:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
+maturin develop
+```
+
+## Common Commands
+
+| Task | Command |
+|------|---------|
+| Build all crates | `cargo build` |
+| Build CLI only | `cargo build -p deadline-cli` |
+| Run all tests | `cargo test` |
+| Run single crate tests | `cargo test -p deadline-config` |
+| Run CLI subprocess tests | `cargo test -p deadline-cli` |
+| Review snapshot changes | `cargo insta review` |
+| Build PyO3 module + GUI | `maturin develop` |
+| Run Python GUI tests | `pytest gui/tests/ -v` |
+
+The CLI binary is at `target/debug/deadline`.
+
+## Workspace Structure
+
+```
+deadline-cloud-rs/
+├── crates/
+│   ├── deadline-cli/                # Binary — CLI commands, output formatting
+│   ├── deadline-api/                # AWS API calls, auth, session, telemetry
+│   ├── deadline-config/             # INI config read/write, setting resolution
+│   ├── deadline-job-bundle/         # Job bundle parsing, validation, submission
+│   ├── deadline-job-attachments/    # S3 transfer, hashing, manifests
+│   ├── deadline-python-bindings/    # PyO3 module (deadline._native)
+│   └── deadline-test-server/        # Test-only wiremock stub server
+├── gui/                             # Python Qt GUI (PySide6/qtpy)
+├── specs/                           # Design specifications
+├── test_fixtures/                   # Sample job bundles for testing
+├── AGENTS.md                        # AI agent instructions
+├── CONTRIBUTING.md                  # Contribution guidelines
+└── DEVELOPMENT.md                   # This file
+```
+
+### Crate responsibilities
+
+| Crate | What it does |
+|-------|-------------|
+| `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting. No business logic. |
+| `deadline-api` | All AWS Deadline Cloud API calls, session/credential management, auth, telemetry. |
+| `deadline-config` | INI config file I/O, hierarchical setting resolution. No AWS dependencies. |
+| `deadline-job-bundle` | Job bundle parsing, parameter validation, submission orchestration. |
+| `deadline-job-attachments` | Asset manifests, S3 upload/download, hash cache. Independent S3/STS clients. |
+| `deadline-python-bindings` | PyO3 extension module exposing Rust functions to Python for the GUI. |
+| `deadline-test-server` | Test-only. Wiremock stub server and `TestHarness` for CLI subprocess tests. |
+
+### Dependency graph
+
+```
+deadline-cli
+├── deadline-api → deadline-config
+├── deadline-job-bundle → deadline-api, deadline-job-attachments
+├── deadline-job-attachments → deadline-config
+└── deadline-test-server (dev-dependency)
+
+deadline-python-bindings
+├── deadline-api, deadline-config
+├── deadline-job-bundle, deadline-job-attachments
+└── pyo3, pythonize
+```
+
+## How To...
+
+### Add a new CLI command
+
+1. Create a new file in `crates/deadline-cli/src/commands/` (or add to
+   an existing command group).
+2. Define the clap structs for arguments and subcommands.
+3. Implement the handler by calling functions from the library crates
+   (`deadline-api`, `deadline-job-bundle`, etc.). The CLI crate contains
+   no business logic — only argument parsing and output formatting.
+4. Register the command in `crates/deadline-cli/src/main.rs`.
+5. Write Level 2 tests in `crates/deadline-cli/tests/cli/`. Use
+   `TestHarness` to start a stub server and run the binary as a
+   subprocess. Use `assert_cmd_snapshot!` for output assertions.
+6. Run tests and review snapshots.
+
+Look at `crates/deadline-cli/src/commands/farm.rs` for the pattern.
+
+### Add a new API call
+
+All API calls live in `crates/deadline-api/src/api.rs` and use the
+`ResponseBodyCapture` interceptor to capture raw JSON responses. This is
+necessary because the AWS SDK for Rust output types don't implement
+`serde::Serialize`.
+
+Pattern:
+
+```rust
+let capture = ResponseBodyCapture::new();
+client.get_farm().farm_id(id)
+    .customize().interceptor(capture.clone()).send().await?;
+let json = capture.json()?;
+```
+
+For paginated list operations, use manual `nextToken` loops (SDK
+paginators don't support interceptors). See the `paginated_list` helper
+in `api.rs`.
+
+For error handling, always use `format_sdk_error` or `sdk_err` — never
+`format!("{e}")` on an `SdkError`, which produces the useless string
+`"service error"`.
+
+Add mock responses in `crates/deadline-test-server/src/deadline_api/`.
+
+### Work on the Python GUI
+
+The architecture is: Rust binary → spawns Python subprocess → Python
+shows Qt dialog → Python calls back into Rust via `deadline._native`
+(PyO3).
+
+Key directories:
+
+- `gui/deadline/client/ui/` — Qt widgets and dialogs
+- `gui/deadline/client/config/` — config shim routing through `_native`
+- `crates/deadline-python-bindings/` — the PyO3 module source
+
+Python discovery order: `DEADLINE_PYTHON` env var → `_internal/Python`
+relative to binary → `python3` on PATH → `python` on PATH.
+
+## Testing
+
+### Philosophy
+
+Tests follow three rules:
+
+1. **If the CLI can exercise it, test it through the CLI.** Level 2
+   tests run the compiled binary as a subprocess against a local
+   wiremock stub server and assert on stdout/stderr/exit code.
+2. **If the CLI can't reach it, test the public function directly.**
+   Level 1 unit tests for library code or precision edge cases.
+3. **No traditional mocking.** No `mockall` or hand-rolled mocks. Use
+   wiremock for API calls, real temp directories for filesystem
+   operations, and real config files for config tests.
+
+### Snapshots
+
+CLI output tests use `insta` snapshots. When you change CLI output, new
+snapshots appear as `.snap.new` files after running tests. Use
+`cargo insta review` to inspect each change, then accept or fix.
+
+### Test naming
+
+```
+{command_or_function}_{scenario}_{expected_outcome}
+```
+
+See [specs/testing.md](specs/testing.md) for the full testing guide.
+
+## Coding Conventions
+
+- **Comments explain *what* and *why***, not Rust language concepts.
+- **Error formatting:** Always use `format_sdk_error` / `sdk_err` for
+  AWS SDK errors. Never `format!("{e}")` on `SdkError`.
+- **API responses are `serde_json::Value`**, not typed SDK structs.
+  The `ResponseBodyCapture` interceptor captures raw HTTP JSON.
+- **Config is threaded, not global.** Functions take `&IniConfig` for
+  reads or `&mut IniConfig` for writes.
+- **No mocking.** Use wiremock, real temp dirs, real config files.
+- **Snapshot tests for CLI output.** Use `assert_cmd_snapshot!` for
+  happy-path CLI tests. Use `assert_eq!` for JSON, config side effects,
+  and unit test return values.
+- **Credential scoping:** Non-Deadline AWS clients (CloudWatch, S3)
+  must use queue-scoped or fleet-scoped credentials when the user is
+  logged in via Deadline Cloud Monitor. See
+  [specs/patterns.md](specs/patterns.md) § "Credential Scoping".
+
+## Further Reading
+
+| Document | What it covers |
+|----------|---------------|
+| [specs/architecture.md](specs/architecture.md) | Crate dependency graph, data flows, packaging |
+| [specs/patterns.md](specs/patterns.md) | AWS SDK patterns, error formatting, serialization conventions |
+| [specs/testing.md](specs/testing.md) | Full testing guide: levels, snapshots, mock response rules |
+| [specs/deadline-cli/reference.md](specs/deadline-cli/reference.md) | Complete CLI command reference |
+| [specs/progress.md](specs/progress.md) | Work item tracking |

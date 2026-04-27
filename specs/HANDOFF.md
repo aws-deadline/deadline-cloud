@@ -3,7 +3,23 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## No active work item
+## Active work: Documentation reorganization
+
+One-time cleanup of the spec layer and repo docs. Not a progress.md
+work item — just a reorg.
+
+### Checklist
+
+- [x] 1. Create CONTRIBUTING.md (adapt from openjd-rs)
+- [x] 2. Create DEVELOPMENT.md (human-oriented dev guide, no agent workflow)
+- [x] 3. Rename `specs/workflow.md` → `specs/rust-port-workflow.md`, update all references
+- [x] 4. Move per-crate specs into `specs/{crate}/` matching crate names, merge `mcp/` into `deadline-cli/`
+- [x] 5. Enrich per-crate READMEs with design context sections (openjd-rs pattern)
+- [x] 6. Consolidate small CLI spec files (farm+fleet+worker → resource-commands.md, etc.)
+- [x] 7. Deduplicate cross-cutting concepts (explain once, reference everywhere)
+- [x] 8. Delete `specs/test_specs/` (features implemented, tests are self-documenting)
+- [x] 9. Delete or move `specs/archive/` (historical, served its purpose)
+- [x] 10. Revise specs to remove any code-heavy file/function references that are not human-readable
 
 Last completed: GUI CLI commands (`bundle gui-submit` + `config gui`).
 
@@ -51,30 +67,3 @@ distributable artifact.
 - `pyproject.toml` — maturin config (add `[tool.maturin] data` for CLI binary)
 - `crates/deadline-cli/Cargo.toml` — the CLI binary crate
 - `crates/deadline-python-bindings/Cargo.toml` — the PyO3 crate
-
----
-
-## Recently Completed — GUI CLI commands (#16d2, AUDIT-034)
-
-**What was done:**
-- Added `bundle gui-submit` command with full `--submitter-info` support
-  (key=value, JSON, file://), `--submitter-name` deprecation, all Python
-  CLI options
-- Added `config gui` command with `--install-gui`
-- Created shared Python launcher (`commands/gui.rs`): `find_python()`
-  with 4-step discovery, `launch_gui()` subprocess spawning
-- Created Python entry point (`gui/deadline/client/ui/_gui_entry.py`):
-  PySide6 check, QApplication creation, dialog dispatch, JSON output
-- Removed all `click` imports from `gui/deadline/client/ui/_utils.py`
-- 14 Rust L2 tests + 3 pytest-qt tests + 10 snapshots
-- AUDIT-034 resolved (was "dropped — GUI-only", now fixed)
-- Visually verified: GUI dialogs open from Rust CLI on macOS
-
-## Previously Completed — PyO3 + maturin migration
-
-Replaced the C ABI FFI layer with PyO3 extension module
-(`deadline._native`). See git history for details.
-
-## Previously Completed — #21: Python bug-fix parity sweep
-
-All 5 Python bug fixes verified as already correct in Rust.

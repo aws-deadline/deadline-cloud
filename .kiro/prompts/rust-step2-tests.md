@@ -3,7 +3,6 @@ You are doing Step 2 (Write Tests) of the development workflow.
 Read these files first and abide by them:
 - `specs/HANDOFF.md` — current work item, plan, and test case mapping
 - `specs/testing.md` — test philosophy, levels, no-mocking policy, snapshot workflow
-- `specs/test_specs/` — the section for this work item's prescribed test cases
 
 Write tests that define the behavioral contract before any implementation.
 This may mean new tests or updating existing tests with gaps. Derive from:

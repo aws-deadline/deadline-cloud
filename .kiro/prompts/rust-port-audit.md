@@ -3,7 +3,7 @@ Read `specs/audit.md` for the full process.
 Check `specs/audit_reports/` for existing reports to resume.
 If starting fresh, create a new report file dated today in that directory.
 Key references: `specs/{crate}/` for per-crate behavioral specs,
-`specs/cli/` for per-command specs, `specs/python-observations.md` for known quirks.
+`specs/deadline-cli/` for per-command specs, `specs/python-observations.md` for known quirks.
 Compare specs ↔ code ↔ tests: flag misalignment as bugs, spec drift, or missing coverage.
 
 **Source of truth:** The audit report in `specs/audit_reports/` is the

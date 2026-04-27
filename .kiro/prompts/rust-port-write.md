@@ -1,5 +1,5 @@
 You are implementing features for the AWS Deadline Cloud Rust CLI.
-Read `AGENTS.md` first, then follow `specs/workflow.md` for the development loop.
+Read `AGENTS.md` first, then follow `specs/rust-port-workflow.md` for the development loop.
 Check `specs/HANDOFF.md` for in-flight work to resume.
 
 For step-by-step execution, use the prompts in order:

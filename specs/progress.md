@@ -4,12 +4,12 @@ AWS Deadline Cloud Rust CLI — work item tracking.
 
 ## Getting started
 
-Read `workflow.md` and follow it. The Session Start section contains the
+Read `rust-port-workflow.md` and follow it. The Session Start section contains the
 full reading checklist and gates all planning and implementation work.
 
 ## Reference Material
 
-Historical migration documents are in `specs/archive/`.
+Historical migration documents have been removed (served their purpose).
 
 ## Progress
 
@@ -21,12 +21,12 @@ All passed. See `migration_strategy.md` for details.
 |-------|--------|--------|
 | GUI FFI round-trip (Python ↔ Rust ↔ Qt) | ✅ Passed | Core architecture works: PyO3 loading, function calls, callbacks, thread safety |
 | GUI FFI inside DCC (Blender) | ✅ Passed | Shared library loads in real DCC Python environment without conflicts |
-| S3 transfer performance | ✅ Passed | Rust S3 throughput ≥ Python boto3 transfer manager (see `specs/job-attachments/architecture.md`) |
+| S3 transfer performance | ✅ Passed | Rust S3 throughput ≥ Python boto3 transfer manager (see `specs/deadline-job-attachments/architecture.md`) |
 | Job attachment hashing | ✅ Passed | Parallel xxh128 hashing is faster than Python, hashes match byte-for-byte |
 
 ### Work Items
 
-Each row is a self-contained unit of work. See `workflow.md` for how to
+Each row is a self-contained unit of work. See `rust-port-workflow.md` for how to
 pick and execute work items.
 
 | # | Work Item | Status | Test Spec Files | Depends On |
@@ -75,6 +75,8 @@ pick and execute work items.
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
 | 20 | Batch get API helper | ✅ Done | `new_features.md` | — |
 | 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
+| 21b | Spec drift detection | Not started | — | — |
+| 21c | Python GUI boundary contract | Not started | — | 16c |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
