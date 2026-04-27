@@ -2,24 +2,13 @@
 
 ## Overview
 
-`session.rs` manages a global `SessionCache` that holds cached `SdkConfig`
-instances and queue credential configurations.
+The session cache is a process-wide store that avoids re-creating AWS SDK
+clients on every API call. It holds a base SDK config (built from the
+user's AWS profile) and a map of queue-scoped configs (for DCM users
+accessing S3 or CloudWatch via queue role assumption).
 
-## Cache Structure
-
-```
-static SESSION: LazyLock<Mutex<SessionCache>>
-
-SessionCache {
-    cached_config: Option<SdkConfig>,       // base SDK config
-    cached_profile: Option<Option<String>>,  // which profile it was built for
-    cached_queue_configs: HashMap<(String, String), SdkConfig>,  // (farm, queue) → scoped config
-    context: SessionContext,                 // user-agent metadata
-}
-```
-
-One `SdkConfig` cached per profile. If the profile changes (different `--profile`
-flag), the cache is invalidated and rebuilt. Queue configs are cached by
+The base config is keyed by profile name — if the user switches profiles,
+the cache is invalidated and rebuilt. Queue configs are keyed by
 `(farm_id, queue_id)` and invalidated alongside the base session.
 
 ## SessionContext
@@ -30,11 +19,11 @@ Tracks caller identity for User-Agent enrichment:
 
 Format: `app/deadline-api#<version> submitter/<name>#<ver> cli-command/<cmd>`
 
-## QueueUserCredentialProvider
+## Queue Credential Provider
 
-Implements the SDK's `ProvideCredentials` trait. Calls `AssumeQueueRoleForUser`
-to get temporary credentials. The SDK automatically refreshes when credentials
-expire.
+The queue credential provider implements the SDK's `ProvideCredentials`
+trait. It calls `AssumeQueueRoleForUser` to get temporary credentials,
+and the SDK automatically refreshes when they expire.
 
 Error messages include actionable guidance:
 - Throttling → "Please retry"
@@ -43,9 +32,8 @@ Error messages include actionable guidance:
 
 ## Profile Resolution
 
-`resolve_profile()` reads `defaults.aws_profile_name` from config.
-`"(default)"`, `"default"`, and `""` all map to `None` (default credential chain).
-Any other value becomes `Some(profile_name)`.
+`"(default)"`, `"default"`, and `""` all map to the default credential
+chain (no named profile). Any other value becomes a named profile.
 
 ## Endpoint Override
 
@@ -60,6 +48,5 @@ per RFC 6761.
 
 ## Invalidation
 
-`invalidate_session_cache()` clears all cached configs and queue configs.
-Called by `auth::logout()` after successful logout. Next API call triggers
-a full credential re-resolution.
+The cache is cleared on logout and on explicit refresh. The next API call
+triggers a full credential re-resolution.
