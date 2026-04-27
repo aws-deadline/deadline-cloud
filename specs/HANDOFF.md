@@ -3,25 +3,11 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## Active work: Documentation reorganization
+## No active work item
 
-One-time cleanup of the spec layer and repo docs. Not a progress.md
-work item — just a reorg.
-
-### Checklist
-
-- [x] 1. Create CONTRIBUTING.md (adapt from openjd-rs)
-- [x] 2. Create DEVELOPMENT.md (human-oriented dev guide, no agent workflow)
-- [x] 3. Rename `specs/workflow.md` → `specs/rust-port-workflow.md`, update all references
-- [x] 4. Move per-crate specs into `specs/{crate}/` matching crate names, merge `mcp/` into `deadline-cli/`
-- [x] 5. Enrich per-crate READMEs with design context sections (openjd-rs pattern)
-- [x] 6. Consolidate small CLI spec files (farm+fleet+worker → resource-commands.md, etc.)
-- [x] 7. Deduplicate cross-cutting concepts (explain once, reference everywhere)
-- [x] 8. Delete `specs/test_specs/` (features implemented, tests are self-documenting)
-- [x] 9. Delete or move `specs/archive/` (historical, served its purpose)
-- [x] 10. Revise specs to remove any code-heavy file/function references that are not human-readable
-
-Last completed: GUI CLI commands (`bundle gui-submit` + `config gui`).
+Last completed: Documentation reorganization (spec layer cleanup,
+CONTRIBUTING.md, DEVELOPMENT.md, crate folder renames, consolidation,
+deduplication, readability pass).
 
 ## Next session: GUI fixes + packaging (#16d3 → #16e)
 
