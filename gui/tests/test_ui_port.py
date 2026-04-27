@@ -167,7 +167,7 @@ class TestCompatAdditions:
 
 class TestFFINewMethods:
     @pytest.fixture(autouse=True)
-    def _use_server(self, ffi):
+    def _use_server(self, test_server):
         self.ffi = ffi
 
     def test_get_farm_returns_display_name(self):

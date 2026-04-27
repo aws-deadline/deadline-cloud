@@ -21,33 +21,37 @@ def get_setting(setting_name: str, config=None) -> str:
 
     If config (a ConfigParser) is provided, reads from it directly
     using the Python-side section/key layout. Otherwise routes through FFI.
+    Falls back to FFI default when config has no explicit value.
     """
     if config is not None:
-        return _get_setting_from_config(setting_name, config)
+        val = _get_setting_from_config(setting_name, config)
+        if val is not None:
+            return val
+        # Setting not present in config — fall back to FFI for computed defaults
+        return _native_get_setting(setting_name)
     return _native_get_setting(setting_name)
 
 
-def _get_setting_from_config(setting_name: str, config) -> str:
+def _get_setting_from_config(setting_name: str, config) -> str | None:
     """Read a setting from a ConfigParser object.
 
-    Matches Python's get_setting behavior: settings in the 'defaults'
-    section are profile-scoped, so 'defaults.farm_id' looks for
-    'profile-<name> defaults' section. The profile name comes from
-    'defaults.aws_profile_name' or falls back to '(default)'.
+    Returns the value if found (may be empty string ""), or None if the
+    key is not present in the config at all.
     """
     parts = setting_name.split(".", 1)
     if len(parts) != 2:
-        return ""
+        return None
     section, key = parts
+
+    # aws_profile_name is the one setting that lives directly in [defaults]
+    if setting_name == "defaults.aws_profile_name":
+        return config.get("defaults", "aws_profile_name", fallback=None)
 
     # Resolve profile name for profile-scoped sections
     if section == "defaults":
         profile = config.get("defaults", "aws_profile_name", fallback="(default)")
         scoped = f"profile-{profile} defaults"
-        val = config.get(scoped, key, fallback=None)
-        if val is not None:
-            return val
-        return ""
+        return config.get(scoped, key, fallback=None)
     elif section == "settings":
         profile = config.get("defaults", "aws_profile_name", fallback="(default)")
         scoped = f"profile-{profile} settings"
@@ -55,14 +59,50 @@ def _get_setting_from_config(setting_name: str, config) -> str:
         if val is not None:
             return val
         # Fall back to global settings section
-        return config.get("settings", key, fallback="")
+        return config.get("settings", key, fallback=None)
 
-    return config.get(section, key, fallback="")
+    return config.get(section, key, fallback=None)
 
 
 def set_setting(setting_name: str, value: str, config=None) -> None:
-    """Set a setting value. Always writes to disk."""
-    _native_set_setting(setting_name, value)
+    """Set a setting value.
+
+    If config is provided, mutates it in-memory only (no disk write).
+    If config is None, writes to disk via FFI.
+    """
+    if config is not None:
+        _set_setting_in_config(setting_name, value, config)
+    else:
+        _native_set_setting(setting_name, value)
+
+
+def _set_setting_in_config(setting_name: str, value: str, config) -> None:
+    """Write a setting into a ConfigParser object in-memory.
+
+    Mirrors the section resolution logic of _get_setting_from_config.
+    """
+    parts = setting_name.split(".", 1)
+    if len(parts) != 2:
+        return
+    section, key = parts
+
+    # aws_profile_name lives directly in [defaults]
+    if setting_name == "defaults.aws_profile_name":
+        if not config.has_section("defaults"):
+            config.add_section("defaults")
+        config.set("defaults", "aws_profile_name", value)
+        return
+
+    if section in ("defaults", "settings"):
+        profile = config.get("defaults", "aws_profile_name", fallback="(default)")
+        scoped = f"profile-{profile} {section}"
+        if not config.has_section(scoped):
+            config.add_section(scoped)
+        config.set(scoped, key, value)
+    else:
+        if not config.has_section(section):
+            config.add_section(section)
+        config.set(section, key, value)
 
 
 def get_setting_default(setting_name: str, config=None) -> str:
@@ -77,12 +117,17 @@ def get_setting_default(setting_name: str, config=None) -> str:
 
 
 def read_config():
-    """Read the config file. Returns the raw config dict from FFI."""
-    return _native_read_config()
+    """Read the config file. Returns a ConfigParser populated from FFI data."""
+    from configparser import ConfigParser
+    config = ConfigParser()
+    data = _native_read_config()
+    if data:
+        config.read_dict(data)
+    return config
 
 
 def write_config(config) -> None:
-    """Write config to disk. No-op in FFI shim — set_setting writes immediately."""
+    """Write config to disk. No-op — apply() writes changes via set_setting(name, val)."""
     pass
 
 

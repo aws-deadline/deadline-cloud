@@ -40,11 +40,52 @@ from deadline._native import (
 
 
 class TestConfig:
-    def test_read_config(self, tmp_config):
-        """read_config returns a dict with a 'config' key."""
+    def test_read_config_returns_nested_dict(self, tmp_config):
+        """read_config returns {section: {key: val}} nested dict."""
         result = read_config(config_path=tmp_config)
         assert isinstance(result, dict)
-        assert "config" in result
+        assert "profile-(default) defaults" in result
+        section = result["profile-(default) defaults"]
+        assert isinstance(section, dict)
+        assert section["farm_id"] == "farm-test123"
+
+    def test_read_config_multiple_sections(self, tmp_path):
+        """read_config returns all sections with their keys."""
+        config = tmp_path / "config"
+        config.write_text(
+            "[defaults]\naws_profile_name = myprofile\n\n"
+            "[profile-myprofile defaults]\nfarm_id = farm-abc\nqueue_id = queue-xyz\n\n"
+            "[settings]\nlog_level = WARNING\n"
+        )
+        result = read_config(config_path=str(config))
+        assert "defaults" in result
+        assert result["defaults"]["aws_profile_name"] == "myprofile"
+        assert "profile-myprofile defaults" in result
+        assert result["profile-myprofile defaults"]["farm_id"] == "farm-abc"
+        assert result["profile-myprofile defaults"]["queue_id"] == "queue-xyz"
+        assert "settings" in result
+        assert result["settings"]["log_level"] == "WARNING"
+
+    def test_read_config_empty_file(self, empty_config):
+        """read_config on empty file returns empty dict."""
+        result = read_config(config_path=empty_config)
+        assert isinstance(result, dict)
+        assert len(result) == 0
+
+    def test_read_config_compatible_with_configparser(self, tmp_path):
+        """read_config result can be passed to ConfigParser.read_dict()."""
+        from configparser import ConfigParser
+
+        config = tmp_path / "config"
+        config.write_text(
+            "[defaults]\naws_profile_name = (default)\n\n"
+            "[profile-(default) defaults]\nfarm_id = farm-123\n"
+        )
+        result = read_config(config_path=str(config))
+        cp = ConfigParser()
+        cp.read_dict(result)
+        assert cp.get("defaults", "aws_profile_name") == "(default)"
+        assert cp.get("profile-(default) defaults", "farm_id") == "farm-123"
 
     def test_get_setting_known_key(self, tmp_config):
         """get_setting returns the value for a known key."""

@@ -819,11 +819,11 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         # We need to retrieve here as changing Queue's won't update.
         self.changes["settings.storage_profile_id"] = (
-            self.default_storage_profile_box.box.currentData()
+            self.default_storage_profile_box.box.currentData() or ""
         )
 
         for setting_name, value in self.changes.items():
-            if value.startswith(NOT_VALID_MARKER):
+            if value and value.startswith(NOT_VALID_MARKER):
                 QMessageBox.warning(  # type: ignore[call-arg]
                     self,
                     "Apply changes",
@@ -835,6 +835,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         for setting_name, value in self.changes.items():
             config_file.set_setting(setting_name, value, self.config)
+            config_file.set_setting(setting_name, value)  # persist to disk
         root.setLevel(config_file.get_setting("settings.log_level"))
         try:
             opt_out = config_file.get_setting("telemetry.opt_out", config=self.config)

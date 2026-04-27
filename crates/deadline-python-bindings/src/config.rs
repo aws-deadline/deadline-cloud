@@ -29,7 +29,13 @@ pub fn set_setting(name: &str, value: &str, config_path: Option<&str>) -> PyResu
 #[pyo3(signature = (config_path=None))]
 pub fn read_config(py: Python<'_>, config_path: Option<&str>) -> PyResult<PyObject> {
     let config = crate::load_config(config_path)?;
-    let dict = pyo3::types::PyDict::new(py);
-    dict.set_item("config", config.to_string())?;
-    Ok(dict.into_any().unbind())
+    let outer = pyo3::types::PyDict::new(py);
+    for (section, keys) in config.iter_sections() {
+        let inner = pyo3::types::PyDict::new(py);
+        for (key, value) in keys {
+            inner.set_item(key, value)?;
+        }
+        outer.set_item(section, inner)?;
+    }
+    Ok(outer.into_any().unbind())
 }

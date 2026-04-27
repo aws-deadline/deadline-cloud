@@ -90,6 +90,7 @@ class DeadlineAuthenticationStatus(QObject):
         # Load the default config — in FFI mode, config is a simple dict
         # used only for tracking which profile is active.
         self.config = ConfigParser()
+        self.config.read_dict(config_file.read_config())
 
         # Watch the ~/.aws path for any changes to config or credentials, and
         # the ~/.deadline path for any changes to the AWS Deadline Cloud config.

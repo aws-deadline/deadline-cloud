@@ -123,6 +123,11 @@ impl IniConfig {
     pub fn sections(&self) -> impl Iterator<Item = &str> {
         self.sections.keys().map(|s| s.as_str())
     }
+
+    /// Iterate over all sections with their key-value maps.
+    pub fn iter_sections(&self) -> &IndexMap<String, IndexMap<String, String>> {
+        &self.sections
+    }
 }
 
 /// Serialize the config back to INI format.

@@ -167,7 +167,7 @@ class TestSubmitterInfo:
 
 class TestConfigShim:
     @pytest.fixture(autouse=True)
-    def _use_empty_config(self, ffi, tmp_path):
+    def _use_empty_config(self, test_server, tmp_path):
         """Each test gets a fresh empty config file via env var."""
         config = tmp_path / "config"
         config.write_text("")

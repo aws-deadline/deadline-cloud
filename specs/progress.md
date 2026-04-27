@@ -67,7 +67,7 @@ pick and execute work items.
 | 16c | PyO3 Python bindings (`deadline._native`) | ✅ Done | — | 16b |
 | 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
 | 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done | `cli.md` | 16d |
-| 16d3 | GUI widget rendering fixes (config shim types) | Not started | — | 16d2 |
+| 16d3 | GUI widget rendering fixes (config shim types) | ✅ Done | — | 16d2 |
 | 16e | Python packaging (`gui/pyproject.toml`) | Not started | — | 16d3 |
 | 16f | DCC submitter dependency switchover | Not started | — | 16e |
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
@@ -88,8 +88,7 @@ pick and execute work items.
 **Dependency status:** All core feature dependencies are resolved.
 No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
 
-**Next action item:** #16d3 (GUI widget rendering fixes), then #16e
-(Python packaging). See `HANDOFF.md` for context.
+**Next action item:** #16e (Python packaging). See `HANDOFF.md` for context.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
