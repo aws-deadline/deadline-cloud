@@ -286,6 +286,9 @@ fn redirect_std_to_file(file: &std::fs::File) {
 fn main() {
     let cli = Cli::parse();
 
+    // Install SIGINT handler for graceful cancellation of long-running operations
+    common::install_sigint_handler();
+
     // Set up output redirection before anything prints
     if let Some(ref path) = cli.redirect_output {
         let file = OpenOptions::new()

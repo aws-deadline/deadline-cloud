@@ -12,16 +12,25 @@ client software: CLI, GUI FFI layer, and shared library crates.
 ## Build
 
 ```bash
-cargo build                    # full workspace
+# Full build + install into venv (recommended)
+make
+
+# Or individual steps:
+cargo build                    # full workspace (Rust only)
 cargo build -p deadline-cli    # just the CLI binary
+make wheel                     # build distributable .whl
 ```
 
-The CLI binary is at `target/debug/deadline`.
+After `make`, the `deadline` CLI is on PATH (in the active venv) and
+`deadline._native` is importable from Python.
+
+The CLI binary is also at `target/debug/deadline`.
 
 ## Test
 
 ```bash
-cargo test                     # full test suite
+make test                      # Rust + Python tests
+cargo test                     # Rust tests only
 cargo test -p deadline-cli     # CLI subprocess tests
 cargo test -p deadline-config  # single crate
 cargo insta review             # review new/changed output snapshots
@@ -42,7 +51,7 @@ via the `deadline._native` PyO3 module.
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
-maturin develop                # builds _native.abi3.so + installs gui/ as editable
+make                           # builds everything + installs into venv
 ```
 
 ### Running GUI commands

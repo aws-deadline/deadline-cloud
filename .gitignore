@@ -10,5 +10,8 @@ __pycache__/
 *.so
 *.dylib
 
+# Build artifact: CLI binary placed here before maturin packages the wheel
+deadline.data/
+
 # Generated test fixture files (not committed)
 test_fixtures/job_bundles/large_attachments/inputs/

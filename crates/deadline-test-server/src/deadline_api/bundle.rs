@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

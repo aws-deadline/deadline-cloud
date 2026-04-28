@@ -20,6 +20,8 @@ gui = [
 manifest-path = "crates/deadline-python-bindings/Cargo.toml"
 module-name = "deadline._native"
 python-source = "gui"
+data = "deadline.data"
+features = ["extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["gui/tests"]

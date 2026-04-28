@@ -109,8 +109,10 @@ impl PathFormat {
 // --- Windows long path handling ---
 
 /// Extra characters that temp download files may add (suffix like `.tmp`).
+#[cfg(windows)]
 const TEMP_DOWNLOAD_ADDED_CHARS: usize = 20;
 /// Windows MAX_PATH limit.
+#[cfg(windows)]
 const WINDOWS_MAX_PATH_LENGTH: usize = 260;
 
 /// Returns a long-path-compatible version of the given path.

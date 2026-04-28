@@ -1135,7 +1135,7 @@ async fn incremental_output_download(
 
     // Update checkpoint
     let mut updated_jobs: Vec<deadline_job_attachments::incremental_download::IncrementalDownloadJob> = Vec::new();
-    for (job_id, job) in &download_candidates {
+    for (_job_id, job) in &download_candidates {
         updated_jobs.push(
             deadline_job_attachments::incremental_download::IncrementalDownloadJob::new(
                 job.clone(), None, None,

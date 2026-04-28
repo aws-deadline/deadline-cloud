@@ -78,19 +78,19 @@ fn error_json(error_type: &str, message: &str) -> String {
 // --- Parameter structs ---
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListFarmsParams { next_token: Option<String> }
+struct ListFarmsParams {}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListQueuesParams { farm_id: String, next_token: Option<String> }
+struct ListQueuesParams { farm_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListJobsParams { farm_id: String, queue_id: String, next_token: Option<String> }
+struct ListJobsParams { farm_id: String, queue_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListFleetsParams { farm_id: String, next_token: Option<String> }
+struct ListFleetsParams { farm_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListStorageProfilesParams { farm_id: String, queue_id: String, next_token: Option<String> }
+struct ListStorageProfilesParams { farm_id: String, queue_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct GetJobParams { farm_id: String, queue_id: String, job_id: String }
@@ -346,10 +346,13 @@ impl DeadlineServer {
 
         // Build config with overrides
         let mut config = deadline_config::config_file::read_config().unwrap_or_default();
-        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config);
-        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config);
+        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config)
+            .expect("known valid setting");
+        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config)
+            .expect("known valid setting");
         if let Some(ref sp) = p.storage_profile_id {
-            deadline_config::config_file::set_setting("defaults.storage_profile_id", sp, &mut config);
+            deadline_config::config_file::set_setting("defaults.storage_profile_id", sp, &mut config)
+                .expect("known valid setting");
         }
 
         let bundle_dir = p.job_bundle_dir.clone();
@@ -443,11 +446,15 @@ impl DeadlineServer {
         }
 
         let mut config = deadline_config::config_file::read_config().unwrap_or_default();
-        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config);
-        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config);
-        deadline_config::config_file::set_setting("settings.auto_accept", "true", &mut config);
+        deadline_config::config_file::set_setting("defaults.farm_id", &farm_id, &mut config)
+            .expect("known valid setting");
+        deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config)
+            .expect("known valid setting");
+        deadline_config::config_file::set_setting("settings.auto_accept", "true", &mut config)
+            .expect("known valid setting");
         if let Some(ref cr) = p.conflict_resolution {
-            deadline_config::config_file::set_setting("settings.conflict_resolution", &cr.to_uppercase(), &mut config);
+            deadline_config::config_file::set_setting("settings.conflict_resolution", &cr.to_uppercase(), &mut config)
+                .expect("known valid setting");
         }
 
         let conflict = p.conflict_resolution.as_deref().and_then(|cr| {

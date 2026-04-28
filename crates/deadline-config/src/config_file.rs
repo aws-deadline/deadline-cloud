@@ -11,7 +11,7 @@
 // read from / write to the default config file path.
 
 use crate::ini::{IniConfig, IniParseError};
-use crate::settings::{self, SettingDef, SETTINGS, find_setting};
+use crate::settings::{self, SettingDef, find_setting};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

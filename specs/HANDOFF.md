@@ -3,14 +3,7 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## No active work item
+## Active work item: None
 
-Last completed: #16d3 — GUI widget rendering fixes (config shim types).
-
-## Next session: #16e — Python packaging
-
-Configure maturin to include the CLI binary in the wheel via
-`.data/scripts/`. Verify:
-- `pip install deadline` → `deadline` binary on PATH, no PySide6
-- `pip install "deadline[gui]"` → pulls in PySide6 + qtpy
-- `deadline bundle gui-submit` works from pip install
+No work currently in progress. Consult `specs/progress.md` for the next
+action item (#16f — DCC submitter dependency switchover).

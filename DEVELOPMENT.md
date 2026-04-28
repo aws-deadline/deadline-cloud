@@ -25,32 +25,36 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Snapshot test reviewer
 cargo install cargo-insta
 
-# Build the workspace
-cargo build
-```
-
-For GUI development, also set up a Python environment:
-
-```bash
+# Python venv (needed for GUI and wheel builds)
 python3 -m venv .venv && source .venv/bin/activate
 pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
-maturin develop
+
+# Build everything and install into venv
+make
 ```
+
+After `make`, the `deadline` CLI is on PATH (in the venv) and
+`deadline._native` is importable from Python.
+
+For Rust-only work (no GUI), you can skip the venv and use
+`cargo build` / `cargo test` directly.
 
 ## Common Commands
 
 | Task | Command |
 |------|---------|
-| Build all crates | `cargo build` |
-| Build CLI only | `cargo build -p deadline-cli` |
-| Run all tests | `cargo test` |
+| Build all + install into venv | `make` |
+| Build Rust only | `cargo build` |
+| Build release wheel | `make wheel` |
+| Run all tests (Rust + Python) | `make test` |
+| Run Rust tests only | `make test-rust` |
+| Run Python GUI tests only | `make test-python` |
 | Run single crate tests | `cargo test -p deadline-config` |
-| Run CLI subprocess tests | `cargo test -p deadline-cli` |
 | Review snapshot changes | `cargo insta review` |
-| Build PyO3 module + GUI | `maturin develop` |
-| Run Python GUI tests | `pytest gui/tests/ -v` |
+| Lint | `make lint` |
+| Clean all artifacts | `make clean` |
 
-The CLI binary is at `target/debug/deadline`.
+The CLI binary is at `target/debug/deadline` (or on PATH after `make`).
 
 ## Workspace Structure
 
@@ -65,8 +69,11 @@ deadline-cloud-rs/
 │   ├── deadline-python-bindings/    # PyO3 module (deadline._native)
 │   └── deadline-test-server/        # Test-only wiremock stub server
 ├── gui/                             # Python Qt GUI (PySide6/qtpy)
+├── deadline.data/                   # Build artifact: CLI binary for wheel (gitignored)
 ├── specs/                           # Design specifications
 ├── test_fixtures/                   # Sample job bundles for testing
+├── Makefile                         # Build orchestration (make, make wheel, make test)
+├── pyproject.toml                   # Maturin config for Python wheel builds
 ├── AGENTS.md                        # AI agent instructions
 ├── CONTRIBUTING.md                  # Contribution guidelines
 └── DEVELOPMENT.md                   # This file

@@ -239,7 +239,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let print = &params.print_callback;
     let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
 
-    session::set_submitter_info(submitter_name, None);
+    session::set_submitter_info(submitter_name, None).await;
 
     // 1. Validate symlink containment
     validate_directory_symlink_containment(&params.job_bundle_dir)?;

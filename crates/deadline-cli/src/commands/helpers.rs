@@ -1,20 +1,5 @@
-use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use deadline_api::api;
-
-use super::config::CliError;
-
-/// Apply --profile option to config, returning Some(config) if profile was set.
-pub fn apply_profile(profile: Option<String>) -> Result<Option<IniConfig>, CliError> {
-    match profile {
-        Some(p) => {
-            let mut config = config_file::read_config()?;
-            config_file::set_setting("defaults.aws_profile_name", &p, &mut config)?;
-            Ok(Some(config))
-        }
-        None => Ok(None),
-    }
-}
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.

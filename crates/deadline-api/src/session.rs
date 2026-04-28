@@ -566,6 +566,21 @@ mod tests {
         assert!(ua.contains("cli-command/deadline.farm.list"));
     }
 
+    #[tokio::test]
+    async fn set_submitter_info_updates_global_context() {
+        set_submitter_info("Blender", Some("4.1")).await;
+        let cache = SESSION.lock().await;
+        assert_eq!(cache.context.submitter_name.as_deref(), Some("Blender"));
+        assert_eq!(cache.context.submitter_version.as_deref(), Some("4.1"));
+        drop(cache);
+
+        // Calling again without version clears the version field
+        set_submitter_info("Custom", None).await;
+        let cache = SESSION.lock().await;
+        assert_eq!(cache.context.submitter_name.as_deref(), Some("Custom"));
+        assert_eq!(cache.context.submitter_version, None);
+    }
+
     // ── Queue user credential provider tests ──────────────
 
     use wiremock::matchers::{method, path};
