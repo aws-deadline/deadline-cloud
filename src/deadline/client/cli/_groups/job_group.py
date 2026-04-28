@@ -69,7 +69,7 @@ from ._job_download_helpers import (
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
     OutputDownloader,
-    _filter_manifests,
+    filter_manifests,
     get_output_manifests_by_asset_root,
 )
 
@@ -612,12 +612,12 @@ def _download_job_output(
                 session=queue_role_session,
             )
             if include_patterns and match_paths_by == MatchPathsBy.JOB:
-                manifests_by_root = _filter_manifests(manifests_by_root, include_patterns)
+                manifests_by_root = filter_manifests(manifests_by_root, include_patterns)
             mapped_manifests = _transform_manifests_to_absolute_paths(
                 manifests_by_root, rules, resolved.job_profile.osFamily
             )
             if include_patterns and match_paths_by != MatchPathsBy.JOB:
-                mapped_manifests = _filter_manifests(mapped_manifests, include_patterns)
+                mapped_manifests = filter_manifests(mapped_manifests, include_patterns)
             if mapped_manifests:
                 download_summary = _download_mapped_manifests(
                     mapped_manifests=mapped_manifests,
