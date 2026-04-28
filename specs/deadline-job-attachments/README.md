@@ -41,15 +41,13 @@ for files already known to exist in S3.
 ## Status
 
 Implemented: hashing, manifest encode/decode, hash cache, S3 check cache,
-progress tracking, path grouping, manifest creation, S3 upload/download,
-manifest merging, output manifest retrieval, attachment download/upload API,
-manifest snapshot/diff/merge/upload/download, OutputDownloader (job output
-download orchestration), path mapping from storage profiles, incremental
-download state and checkpoint persistence.
+progress tracking, path grouping, manifest creation, parallel S3
+upload/download, manifest merging, output manifest retrieval, attachment
+download/upload API, manifest snapshot/diff/merge/upload/download,
+OutputDownloader (job output download orchestration), path mapping from
+storage profiles, incremental download state and checkpoint persistence.
 
 Gaps:
-- Parallel S3 transfer — proven in spike, not yet in production paths
-  (AUDIT-011, AUDIT-012, AUDIT-014, AUDIT-049)
 - VFS (virtual filesystem) — deferred (worker-agent scope)
 - File permission management on download — deferred (worker-agent scope)
 
@@ -82,7 +80,8 @@ Gaps:
 
 Mirrors the Python `deadline.job_attachments` package. Key differences:
 - Python uses `boto3.s3.transfer.TransferManager` for parallel uploads;
-  Rust is currently sequential (parallel proven in spike, not yet wired)
+  Rust uses `futures::stream::buffer_unordered` for parallel small-file
+  upload/download and concurrent `UploadPart` for large-file multipart
 - Python uses `hashlib` for xxh128; Rust uses the `xxhash-rust` crate
 - Python uses `concurrent.futures.ThreadPoolExecutor` for parallel hashing;
   Rust hashes sequentially (fast enough due to xxh128 speed)

@@ -41,13 +41,15 @@ The dependency chain:
 
 ```
 defaults.aws_profile_name  (section_format: "profile-{}")
+  ├── settings.job_history_dir
   └── defaults.farm_id     (section_format: "{}")
         ├── defaults.queue_id  (section_format: "{}")
         │     └── defaults.job_id
-        └── settings.storage_profile_id
+        ├── settings.storage_profile_id
+        └── defaults.job_attachments_file_system
 ```
 
-### All 18 Settings
+### All 21 Settings
 
 | Setting | Default | Depends On | Description |
 |---------|---------|------------|-------------|
@@ -69,6 +71,9 @@ defaults.aws_profile_name  (section_format: "profile-{}")
 | `settings.known_asset_paths` | `""` | — | Paths that skip upload warnings |
 | `settings.locale` | `""` | — | UI locale override |
 | `settings.force_s3_check` | `"false"` | — | Always verify files in S3 via HEAD |
+| `settings.allow_bundle_hooks` | `"false"` | — | Allow execution of hooks from job bundle hooks files |
+| `settings.allow_environment_hooks` | `"false"` | — | Allow execution of hooks from DEADLINE_HOOKS_DIR |
+| `settings.submitter_update_notification` | `"true"` | — | Enable DCC submitter update notification checks |
 
 ## Key Design Decisions
 

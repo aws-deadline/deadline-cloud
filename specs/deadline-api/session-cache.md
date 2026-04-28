@@ -17,7 +17,7 @@ Tracks caller identity for User-Agent enrichment:
 - `submitter_name`, `submitter_version` — set by GUI/DCC plugins via FFI
 - `cli_command_name` — set before each CLI command dispatch
 
-Format: `app/deadline-api#<version> submitter/<name>#<ver> cli-command/<cmd>`
+Format: `app/deadline-client#<version> submitter/<name>#<ver> cli-command/<cmd>`
 
 ## Queue Credential Provider
 
@@ -26,8 +26,8 @@ trait. It calls `AssumeQueueRoleForUser` to get temporary credentials,
 and the SDK automatically refreshes when they expire.
 
 Error messages include actionable guidance:
-- Throttling → "Please retry"
-- Internal error → "Please wait and retry"
+- Throttling → "Please retry the operation later"
+- Internal error → error message from service (no retry guidance)
 - Other → "Contact your administrator"
 
 ## Profile Resolution

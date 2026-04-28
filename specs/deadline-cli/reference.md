@@ -4,6 +4,23 @@ Complete command reference for the `deadline` CLI. Commands marked ✅ are
 implemented in Rust. Commands marked 🔲 are not yet implemented (exist in
 the legacy CLI only).
 
+## See Also — Per-Command Spec Files
+
+Several command groups have dedicated spec files with full behavioral
+documentation. This reference covers commands that don't have their own
+file.
+
+| Command Group | Spec File |
+|---------------|-----------|
+| `deadline config`, `deadline auth` | [config-and-auth.md](config-and-auth.md) |
+| `deadline farm`, `deadline fleet`, `deadline worker` | [resource-commands.md](resource-commands.md) |
+| `deadline queue` | [queue.md](queue.md) |
+| `deadline job` | [job.md](job.md) |
+| `deadline bundle` | [bundle.md](bundle.md) |
+| `deadline attachment`, `deadline manifest` | [attachments-and-manifests.md](attachments-and-manifests.md) |
+| `deadline handle-web-url` | [handle-web-url.md](handle-web-url.md) |
+| `deadline mcp-server` | [mcp.md](mcp.md) |
+
 ## Global Options
 
 All commands accept these options before the subcommand:

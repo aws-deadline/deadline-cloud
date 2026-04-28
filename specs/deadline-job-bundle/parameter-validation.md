@@ -44,7 +44,7 @@ are made absolute relative to CWD.
 
 ## Queue Environment Merge
 
-`merge_queue_parameters` combines queue environment parameters with job template
+`merge_queue_job_parameters` combines queue environment parameters with job template
 parameters:
 - Same-name parameters must agree on type (different types → error)
 - Different defaults are silently accepted (queue environment wins)
@@ -53,8 +53,8 @@ parameters:
 
 ## Asset Reference Extraction
 
-`extract_asset_references` maps PATH parameter `dataFlow` and `objectType` to
-asset reference sets:
+`apply_job_parameters` extracts asset references inline by mapping PATH
+parameter `dataFlow` and `objectType` to asset reference sets:
 - `IN` + `FILE` → `input_filenames`
 - `IN` + `DIRECTORY` → `input_directories`
 - `OUT` + `DIRECTORY` → `output_directories`

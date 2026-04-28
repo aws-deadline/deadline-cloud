@@ -43,10 +43,11 @@ Implemented: session management, auth, login/logout, all list/get/search
 operations for farms/queues/fleets/jobs/workers/sessions/steps/tasks,
 queue credentials, queue parameters, job monitoring, log retrieval,
 telemetry integration, CreateJob API call and creation polling,
-queue/fleet credential scoping for CloudWatch and S3.
+queue/fleet credential scoping for CloudWatch and S3, batch get
+steps/tasks (for trace-schedule), update job/task.
 
 Gaps:
-- `job trace-schedule` support APIs — experimental, deferred
+- None — all API functions implemented
 
 ## Gotchas & Constraints
 

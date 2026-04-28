@@ -40,6 +40,7 @@ src/
 ├── diff.rs                 # Manifest diffing (new, modified, deleted)
 ├── progress_tracker.rs     # Time-based progress reporting, cancellation
 ├── path_mapping.rs         # Path mapping rules from storage profiles, trie-based transform
+├── errors.rs               # JobAttachmentsError enum (S3Client, S3Transport, etc.)
 ├── incremental_download.rs # Checkpoint persistence for resumable downloads
 └── vfs.rs                  # Placeholder — virtual filesystem, deferred
 ```
@@ -67,9 +68,12 @@ by UTF-16 BE byte ordering, keys sorted lexicographically, compact
 format, and non-ASCII escaped to `\uXXXX`. This ensures byte-identical
 output regardless of platform.
 
-**Sequential S3 operations (for now).** Upload and download are
-currently sequential per file. Parallel transfer was proven in a spike
-but is not yet wired into production paths.
+**Parallel S3 operations.** Small files are uploaded and downloaded in
+parallel via `futures::stream::buffer_unordered(num_workers)`. Large
+files (above `small_file_threshold`) are uploaded serially with internal
+multipart parallelism (concurrent `UploadPart` calls). Download streams
+`GetObject` bodies directly to files via `tokio::io::copy` — no
+full-memory buffering.
 
 **Symlinks rejected on upload.** Files are checked before upload and
 symlinks are skipped with a warning — a security measure to prevent

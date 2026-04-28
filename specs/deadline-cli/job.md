@@ -19,6 +19,7 @@ monitoring, log retrieval, cancellation, and task requeuing.
 | `job cancel` | ✅ | Cancel a running job |
 | `job requeue-tasks` | ✅ | Requeue failed/canceled/suspended tasks |
 | `job download-output` | ✅ | Download job output attachments from S3 |
+| `job trace-schedule` | ✅ | Generate scheduling trace and statistics |
 
 All accept `--profile`, `--farm-id`, `--queue-id`. Most also accept `--job-id`.
 
@@ -351,6 +352,80 @@ Uses `get_queue_scoped_config` for the S3 client. DCM users get queue
 role credentials via `AssumeQueueRoleForUser`. Non-DCM users use their
 base AWS credentials. Same pattern as `attachment download`.
 
+## `job trace-schedule`
+
+Options: `-v/--verbose`, `--trace-format <FORMAT>`, `--trace-file <PATH>`.
+
+Requires: farm_id, queue_id, job_id. `--trace-file` requires `--trace-format`.
+
+Generates scheduling statistics and optionally writes a Chrome trace file
+for visualizing job execution in `chrome://tracing`.
+
+### Execution Flow
+
+1. GetJob — retrieve job metadata, extract `startedAt`
+2. ListSessions — fetch all sessions, sort by `startedAt`
+3. For each session: ListSessionActions — fetch all actions
+4. Collect unique step IDs and (stepId, taskId) pairs from `taskRun` definitions
+5. BatchGetStep — fetch step details (chunked, max 100 per request, 3 retries)
+6. BatchGetTask — fetch task details (same chunking/retry)
+7. Attach step/task records to sessions and actions
+8. Build Chrome trace events and accumulate statistics
+9. Print summary
+10. If `--trace-file`: write Chrome trace JSON
+
+### Batch Get with Retry
+
+Steps and tasks are fetched via `BatchGetJobEntity`-style APIs with:
+- Chunking: max 100 identifiers per request
+- Retry: transient errors (`InternalServerErrorException`, `ThrottlingException`)
+  retried up to 3 times with exponential backoff (0.5s, 1s, 2s)
+- Terminal errors and exhausted retries are collected and warned about
+
+### Summary Output
+
+```
+ ==== SUMMARY ====
+
+Session Count: 4
+Session Total Duration: 1:23:45
+Session Action Count: 120
+Session Action Total Duration: 1:20:00
+Task Run Count: 100
+Task Run Total Duration: 1:10:00 (84.8%)
+Non-Task Run Count: 20
+Non-Task Run Total Duration: 0:10:00 (12.1%)
+Sync Job Attachments Count: 4
+Sync Job Attachments Total Duration: 0:05:00 (6.1%)
+Env Action Count: 16
+Env Action Total Duration: 0:05:00 (6.1%)
+
+Within-session Overhead Duration: 0:03:45 (4.5%)
+Within-session Overhead Duration Per Action: 0:00:01.875000
+```
+
+Durations formatted as `H:MM:SS` or `H:MM:SS.ffffff`. Percentages are
+relative to total session duration.
+
+### Chrome Trace Format (`--trace-format chrome`)
+
+Writes a JSON file with `traceEvents` and `otherData`. Events use:
+- `ph: "B"/"E"` (begin/end) for sessions
+- `ph: "X"` (complete) for session actions
+- `pid` = worker index (deterministic, sorted by workerId)
+- `cat` = `SESSION`, `taskRun`, `envEnter`, `envExit`, `syncInputJobAttachments`
+
+Action names:
+- taskRun → task parameter values (e.g. `Frame=1`)
+- envEnter/envExit → environment ID suffix
+- syncInputJobAttachments → "Sync Job Attchmnt (Submitted)" or "(Dependencies)"
+- In-progress actions append " - In Progress"
+
+### Verbose Mode (`-v`)
+
+Prints full job data and session data (with actions) as YAML before the
+summary.
+
 ## Differences from Python CLI
 
 | Aspect | Python | Rust |
@@ -360,4 +435,4 @@ base AWS credentials. Same pattern as `attachment download`.
 | Estimated time | Separate helper function | Inline in `print_job_details` |
 | `job wait` progress | Callback-based | Closure passed to `wait_for_job_completion` |
 | `job requeue-tasks` | `--step-id`, `--task-ids` filters | `--run-status` filter only |
-| `job download-output` conflict | Interactive Skip/Overwrite/CreateCopy menu | Defaults to CreateCopy with file detection warning |
+| `job download-output` conflict | Interactive Skip/Overwrite/CreateCopy menu | Interactive root path editing + conflict detection with file list warning |

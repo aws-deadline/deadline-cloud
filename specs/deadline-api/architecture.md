@@ -90,6 +90,58 @@ let farm = deadline_api::get_farm("farm-abc", Some(&config), None).await?;
 The returned `Value` is the raw API response with datetimes converted
 and nulls stripped. The CLI formats and prints it directly.
 
+### API functions (`api.rs`)
+
+| Function | Description |
+|----------|-------------|
+| `format_sdk_error` | Extract error code + message from any `SdkError` |
+| `list_farms` | List all farms |
+| `get_farm` | Get farm by ID |
+| `list_queues` | List queues in a farm |
+| `get_queue` | Get queue by ID |
+| `list_fleets` | List fleets in a farm |
+| `get_fleet` | Get fleet by ID |
+| `list_jobs` | List jobs in a queue |
+| `search_jobs` | Search jobs with filter/sort expressions |
+| `search_jobs_with_filters` | Search jobs with pre-built filter structs |
+| `list_jobs_by_filter_expression` | Paginate all jobs matching a filter (createdAt thresholding) |
+| `get_job` | Get job by ID |
+| `get_step` | Get step by ID |
+| `get_task` | Get task by ID |
+| `search_workers` | Search workers in a fleet |
+| `get_worker` | Get worker by ID |
+| `get_session` | Get session by ID |
+| `list_sessions` | List sessions for a job |
+| `list_steps` | List steps for a job |
+| `list_tasks` | List tasks for a step |
+| `batch_get_steps_page` | Batch get steps (for trace-schedule) |
+| `batch_get_tasks_page` | Batch get tasks (for trace-schedule) |
+| `assume_queue_role_for_user` | Assume queue role for user (DCM) |
+| `assume_queue_role_for_read` | Assume queue role for read-only access |
+| `get_storage_profile_for_queue` | Get storage profile for a queue |
+| `list_storage_profiles_for_queue` | List storage profiles for a queue |
+| `assume_fleet_role_for_read` | Assume fleet role for read-only access |
+| `list_session_actions` | List session actions for a session |
+| `get_session_action` | Get session action by ID |
+| `list_queue_environments` | List queue environments |
+| `get_queue_environment` | Get queue environment by ID |
+| `update_job` | Update job (cancel, suspend, etc.) |
+| `update_task` | Update task (requeue) |
+| `create_job` | Create a new job |
+| `wait_for_create_job_to_complete` | Poll until CreateJob completes |
+
+### Auth functions (`auth.rs`)
+
+| Function | Description |
+|----------|-------------|
+| `get_credentials_source` | Detect credential source (DCM, host, not valid) |
+| `check_authentication_status` | Check if credentials are valid |
+| `check_deadline_api_available` | Probe API reachability via `list_farms(max_results=1)` |
+| `get_user_and_identity_store_id` | Get DCM user ID and identity store ID |
+| `get_monitor_id` | Get DCM monitor ID from AWS config |
+| `login` | Spawn DCM login subprocess |
+| `logout` | Spawn DCM logout subprocess, invalidate cache |
+
 ### Getting a session / SDK config
 
 ```rust

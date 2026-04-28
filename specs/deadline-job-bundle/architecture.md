@@ -89,7 +89,7 @@ operation. The `continue_callback` is checked between stages.
 | Function | Purpose |
 |----------|---------|
 | `validate_job_parameter()` | Validate a single parameter against its definition |
-| `merge_queue_parameters()` | Merge queue environment parameters with job template parameters |
-| `extract_asset_references()` | Extract input/output file references from PATH parameters |
+| `merge_queue_job_parameters()` | Merge queue environment parameters with job template parameters |
+| `apply_job_parameters()` | Apply parameter values to template; extracts asset references from PATH parameters inline |
 | `parse_frame_range()` | Parse frame range strings like `"1-10:2"` |
 | `create_job_history_bundle_dir()` | Create a timestamped history directory for a submission |
