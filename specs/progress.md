@@ -75,10 +75,15 @@ pick and execute work items.
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
 | 20 | Batch get API helper | ✅ Done | `new_features.md` | — |
 | 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
-| 21b | Spec drift detection | Not started | — | — |
+| 21b | Spec drift detection | ✅ Done | — | — |
 | 21c | Python GUI boundary contract | Not started | — | 16c |
+| 21d | CLI backward-compat flags | Not started | — | — |
+| 21e | `deadlinew` windowless launcher | Not started | — | — |
+| 21f | Windows config path normalization | Not started | — | — |
+| 21g | Telemetry parity (success/fail events) | Not started | — | — |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
+| 27 | Typed SDK API layer | Not started | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
