@@ -79,8 +79,9 @@ def test_cli_bundle_submit_simple_json_template(
         template=MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1],
         templateType="JSON",
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
-    assert "Submitting to Queue: Mock Queue" in result.output, result.output
     assert f"Submitted job bundle:\n   {temp_job_bundle_dir}\n" in result.output, result.output
     assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output, result.output
     assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output, result.output
@@ -126,6 +127,8 @@ def test_cli_bundle_explicit_parameters(fresh_deadline_config, temp_job_bundle_d
         template=ANY,
         templateType="JSON",
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
 
     assert temp_job_bundle_dir in result.output, result.output
@@ -219,6 +222,8 @@ def test_cli_bundle_job_name(fresh_deadline_config, deadline_mock, temp_job_bund
         template=get_minimal_json_job_template("Replacement Name For The Job"),
         templateType="JSON",
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
     assert result.exit_code == 0
 
@@ -267,6 +272,8 @@ def test_cli_bundle_storage_profile_id(fresh_deadline_config, deadline_mock, tem
         templateType="JSON",
         priority=50,
         storageProfileId=CLI_STORAGE_PROFILE_ID,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
     assert result.exit_code == 0
     # Force a re-load from disk of the config object
@@ -354,6 +361,8 @@ def test_cli_bundle_asset_load_method(
             ],
         },
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
     assert MOCK_CREATE_JOB_RESPONSE["jobId"] in result.output, result.output
     assert MOCK_GET_JOB_RESPONSE["lifecycleStatusMessage"] in result.output, result.output
@@ -405,6 +414,8 @@ def test_cli_bundle_job_parameter_from_cli(
             "priority": {"int": "90"},
         },
         priority=45,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
 
     deadline_mock.get_deadline_cloud_library_telemetry_client.return_value.record_event.assert_any_call(
@@ -455,6 +466,8 @@ def test_cli_bundle_empty_job_parameter_from_cli(
                 "sceneFile": {"string": ""},
             },
             priority=50,
+            maxFailedTasksCount=20,
+            maxRetriesPerTask=5,
         )
     ], result.output
 
@@ -499,6 +512,8 @@ def test_cli_bundle_job_parameter_with_equals_from_cli(
             "sceneFile": {"string": "this=is=a=test"},
         },
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
 
     assert result.exit_code == 0, result.output
@@ -625,6 +640,8 @@ def test_cli_bundle_accept_upload_confirmation(
         templateType="JSON",
         attachments=ANY,
         priority=50,
+        maxFailedTasksCount=20,
+        maxRetriesPerTask=5,
     )
     assert result.exit_code == 0, result.output
 

@@ -339,6 +339,8 @@ def test_create_job_from_job_bundle(
     expected_create_job_parameters_dict["priority"] = expected_create_job_parameters_dict.get(
         "priority", 50
     )
+    expected_create_job_parameters_dict.setdefault("maxFailedTasksCount", 20)
+    expected_create_job_parameters_dict.setdefault("maxRetriesPerTask", 5)
     mock.get_boto3_client().create_job.assert_called_once_with(
         farmId=MOCK_FARM_ID,
         queueId=MOCK_QUEUE_ID,
@@ -511,6 +513,8 @@ def test_create_job_from_job_bundle_job_attachments(
             template=ANY,
             templateType="JSON",
             priority=50,
+            maxFailedTasksCount=20,
+            maxRetriesPerTask=5,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             attachments=ANY,
         )
@@ -616,6 +620,8 @@ def test_create_job_from_job_bundle_empty_job_attachments(
             template=ANY,
             templateType=ANY,
             priority=50,
+            maxFailedTasksCount=20,
+            maxRetriesPerTask=5,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
         )
 
@@ -669,6 +675,8 @@ def test_create_job_from_job_bundle_with_empty_asset_references(
             templateType=job_template_type,
             storageProfileId=MOCK_STORAGE_PROFILE_ID,
             priority=50,
+            maxFailedTasksCount=20,
+            maxRetriesPerTask=5,
         )
 
 
@@ -899,6 +907,8 @@ def test_create_job_from_job_bundle_with_single_asset_file(
                 template=ANY,
                 templateType=ANY,
                 priority=50,
+                maxFailedTasksCount=20,
+                maxRetriesPerTask=5,
                 storageProfileId=MOCK_STORAGE_PROFILE_ID,
                 attachments={
                     "manifests": [
