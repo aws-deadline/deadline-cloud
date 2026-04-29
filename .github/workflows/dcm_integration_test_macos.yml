@@ -2,7 +2,7 @@ name: DCM Integration Test (macOS)
 
 on:
   workflow_dispatch:
-  pull_request:
+  workflow_call:
 
 jobs:
   test:

@@ -1,0 +1,22 @@
+name: DCM Integration Tests
+
+# Fans out to the per-OS DCM integration tests so a single status check
+# (and a single README badge) reflects the combined Linux/macOS/Windows
+# result. The individual per-OS workflows can still be dispatched on
+# their own via workflow_dispatch for debugging.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mainline]
+
+jobs:
+  linux:
+    uses: ./.github/workflows/dcm_integration_test_linux.yml
+    secrets: inherit
+  macos:
+    uses: ./.github/workflows/dcm_integration_test_macos.yml
+    secrets: inherit
+  windows:
+    uses: ./.github/workflows/dcm_integration_test_windows.yml
+    secrets: inherit

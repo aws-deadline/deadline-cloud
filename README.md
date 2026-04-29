@@ -6,6 +6,8 @@
 [![python](https://img.shields.io/pypi/pyversions/deadline.svg?style=flat)](https://pypi.python.org/pypi/deadline)
 [![license](https://img.shields.io/pypi/l/deadline.svg?style=flat)](https://github.com/aws-deadline/deadline/blob/mainline/LICENSE)
 
+[![DCM integ tests](https://github.com/aws-deadline/deadline-cloud/actions/workflows/dcm_integration_tests.yml/badge.svg?branch=mainline)](https://github.com/aws-deadline/deadline-cloud/actions/workflows/dcm_integration_tests.yml?query=branch%3Amainline)
+
 AWS Deadline Cloud client is a multi-purpose python library and command line tool for interacting with and submitting
 [Open Job Description (OpenJD)][openjd] jobs to [AWS Deadline Cloud][deadline-cloud].
 
