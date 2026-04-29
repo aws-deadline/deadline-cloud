@@ -68,9 +68,14 @@ from ._job_download_helpers import (
 )
 from ....job_attachments._path_mapping import _generate_path_mapping_rules
 from ....job_attachments.download import (
+    InputDownloader,
     OutputDownloader,
     filter_manifests,
     get_output_manifests_by_asset_root,
+)
+from ....job_attachments.models import (
+    Attachments as JA_Attachments,
+    ManifestProperties,
 )
 
 logger = logging.getLogger("deadline.client.cli")
@@ -1097,6 +1102,349 @@ def job_download_output(
             if logging.DEBUG >= logger.getEffectiveLevel():
                 logger.exception("Exception details:")
             raise DeadlineOperationError(f"Failed to download output:\n{e}") from e
+
+
+def _normalize_filters(include: tuple[str, ...]) -> Optional[list[str]]:
+    """Normalize CLI --include values into a filter list, or None if empty."""
+    filters = list(include)
+    return [f.replace("\\", "/") for f in filters] if filters else None
+
+
+def _build_attachments(job: dict) -> Optional[JA_Attachments]:
+    """Build an Attachments object from a job's attachments dict, or None if absent."""
+    job_attachments = job.get("attachments")
+    if not job_attachments:
+        return None
+    return JA_Attachments(
+        manifests=[ManifestProperties.from_dict(m) for m in job_attachments["manifests"]],
+        fileSystem=job_attachments.get("fileSystem", "COPIED"),
+    )
+
+
+def _download_job_input(
+    config: Optional[ConfigParser],
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    is_json_format: bool = False,
+    ignore_storage_profiles: bool = False,
+    include_patterns: Optional[list[str]] = None,
+    match_paths_by: str = "LOCAL",
+):
+    """
+    Starts the download of job input and handles the progress reporting callback.
+    """
+    deadline = api.get_boto3_client("deadline", config=config)
+
+    auto_accept = config_file.str2bool(
+        config_file.get_setting("settings.auto_accept", config=config)
+    )
+    conflict_resolution = config_file.get_setting("settings.conflict_resolution", config=config)
+
+    job = deadline.get_job(farmId=farm_id, queueId=queue_id, jobId=job_id)
+
+    if is_json_format:
+        click.echo(_get_json_line(JSON_MSG_TYPE_TITLE, job["name"]))
+    else:
+        click.echo(f"Downloading input for Job {job['name']!r}")
+
+    attachments = _build_attachments(job)
+    if not attachments:
+        click.echo(
+            _get_json_line(JSON_MSG_TYPE_SUMMARY, "No input attachments found for this job.")
+            if is_json_format
+            else "No input attachments found for this job."
+        )
+        return
+
+    queue = deadline.get_queue(farmId=farm_id, queueId=queue_id)
+
+    queue_role_session = api.get_queue_user_boto3_session(
+        deadline=deadline,
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        queue_display_name=queue["displayName"],
+    )
+
+    s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+
+    # When match_paths_by is JOB, apply filters before root mapping (against submission paths).
+    job_input_downloader = InputDownloader(
+        s3_settings=s3_settings,
+        attachments=attachments,
+        session=queue_role_session,
+        include_filters=include_patterns if match_paths_by == "JOB" else None,
+    )
+
+    input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+    if not input_paths_by_root:
+        msg = "No input files available for download."
+        click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
+        return
+
+    # Get root path format mapping for OS mismatch detection
+    root_path_format_mapping: dict[str, str] = {}
+    for manifest in attachments.manifests:
+        root_path_format_mapping[manifest.rootPath] = manifest.rootPathFormat.value
+
+    # Storage profile path mapping
+    resolved = _resolve_storage_profiles(
+        config, deadline, farm_id, queue_id, job, ignore_storage_profiles
+    )
+
+    if resolved:
+        rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
+        click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
+        if rules:
+            # For inputs with storage profiles, apply path mapping via set_root_path
+            from ....job_attachments._path_mapping import _PathMappingRuleApplier
+
+            applier = _PathMappingRuleApplier(rules)
+            for root in list(input_paths_by_root.keys()):
+                try:
+                    new_root = str(applier.strict_transform(root))
+                    if new_root != root:
+                        job_input_downloader.set_root_path(root, new_root)
+                except ValueError:
+                    pass  # No rule matches this root
+            input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+    else:
+        # No storage profiles — fall back to manual prompt on OS mismatch
+        asset_roots = list(input_paths_by_root.keys())
+        for asset_root in asset_roots:
+            root_path_format = root_path_format_mapping.get(asset_root, "")
+            if root_path_format and PathFormat.get_host_path_format_string() != root_path_format:
+                click.echo(
+                    _get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format)
+                )
+                if not is_json_format:
+                    new_root = click.prompt(
+                        "> Please enter a new root path",
+                        type=click.Path(exists=False),
+                    )
+                else:
+                    json_string = click.prompt("", prompt_suffix="", type=str)
+                    new_root = _get_value_from_json_line(
+                        json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
+                    )[0]
+                    _assert_valid_path(new_root)
+
+                job_input_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
+
+        input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+
+    # When match_paths_by is LOCAL (default), apply filters after root mapping.
+    if include_patterns and match_paths_by == "LOCAL":
+        job_input_downloader.apply_include_filters(include_patterns)
+        input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+        if not input_paths_by_root:
+            msg = "No input files match the provided filters."
+            click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
+            return
+
+    # Prompt to confirm root paths (unless auto-accept)
+    if not auto_accept:
+        if not is_json_format:
+            user_choice = ""
+            while user_choice != ("y" or "n"):
+                click.echo(
+                    _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
+                )
+                asset_roots = list(input_paths_by_root.keys())
+                click.echo(_get_roots_list_message(asset_roots, is_json_format))
+                user_choice = click.prompt(
+                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
+                    type=click.Choice([*[str(num) for num in range(len(asset_roots))], "y", "n"]),
+                    default="y",
+                )
+                if user_choice == "n":
+                    click.echo("Input download canceled.")
+                    return
+                elif user_choice != "y":
+                    index_to_change = int(user_choice)
+                    new_root = click.prompt(
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
+                        type=click.Path(exists=False),
+                        default=asset_roots[index_to_change],
+                    )
+                    job_input_downloader.set_root_path(
+                        asset_roots[index_to_change], str(Path(new_root))
+                    )
+                    input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+        else:
+            click.echo(
+                _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
+            )
+            asset_roots = list(input_paths_by_root.keys())
+            click.echo(_get_roots_list_message(asset_roots, is_json_format))
+            json_string = click.prompt("", prompt_suffix="", type=str)
+            confirmed_asset_roots = _get_value_from_json_line(
+                json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
+            )
+            for index, confirmed_root in enumerate(confirmed_asset_roots):
+                _assert_valid_path(confirmed_root)
+                job_input_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
+            input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+
+    if not is_json_format:
+        all_input_paths: set[str] = set()
+        for asset_root, paths in input_paths_by_root.items():
+            all_input_paths.update(
+                os.path.normpath(os.path.join(asset_root, path)) for path in paths
+            )
+        click.echo("\nSummary of file paths to download:")
+        click.echo(textwrap.indent(summarize_path_list(all_input_paths), "  "))
+
+    file_conflict_resolution = _resolve_conflict_resolution(
+        conflict_resolution, auto_accept, _get_conflicting_filenames(input_paths_by_root)
+    )
+    if file_conflict_resolution is None:
+        return
+
+    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+
+        @api.record_success_fail_telemetry_event(metric_name="download_job_input")
+        def _do_download_input(
+            file_conflict_resolution: Optional[
+                FileConflictResolution
+            ] = FileConflictResolution.CREATE_COPY,
+            on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+        ) -> DownloadSummaryStatistics:
+            return job_input_downloader.download_job_input(
+                file_conflict_resolution=file_conflict_resolution,
+                on_downloading_files=on_downloading_files,
+            )
+
+        if not is_json_format:
+            with click.progressbar(length=100, label="Downloading Inputs") as download_progress:  # type: ignore[var-annotated]
+
+                def _update_download_progress(
+                    download_metadata: ProgressReportMetadata,
+                ) -> bool:
+                    new_progress = int(download_metadata.progress) - download_progress.pos
+                    if new_progress > 0:
+                        download_progress.update(new_progress)
+                    return sigint_handler.continue_operation
+
+                download_summary: DownloadSummaryStatistics = _do_download_input(
+                    file_conflict_resolution=file_conflict_resolution,
+                    on_downloading_files=_update_download_progress,
+                )
+        else:
+
+            def _update_download_progress(
+                download_metadata: ProgressReportMetadata,
+            ) -> bool:
+                click.echo(
+                    _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
+                )
+                return True
+
+            download_summary = _do_download_input(
+                file_conflict_resolution=file_conflict_resolution,
+                on_downloading_files=_update_download_progress,
+            )
+
+    click.echo(_get_download_summary_message(download_summary, is_json_format))
+    click.echo()
+
+
+@cli_job.command(name="download-input")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option("--job-id", help="The job to use.")
+@click.option(
+    "-i",
+    "--include",
+    multiple=True,
+    help="Glob pattern or relative path to include. Repeatable; multiple values are OR'd. "
+    "Without --include, all input files are downloaded",
+)
+@click.option(
+    "--match-paths-by",
+    type=click.Choice(["JOB", "LOCAL"], case_sensitive=False),
+    default="LOCAL",
+    help="Which paths to match --include filters against.\n"
+    "LOCAL (default): match against local download paths.\n"
+    "JOB: match against the paths recorded at job submission",
+)
+@click.option(
+    "--ignore-storage-profiles",
+    is_flag=True,
+    help="Ignore storage profile configuration. Only use if the job was "
+    "submitted and downloaded from the same machine",
+    default=False,
+)
+@click.option(
+    "--conflict-resolution",
+    type=click.Choice(
+        [
+            FileConflictResolution.SKIP.name,
+            FileConflictResolution.OVERWRITE.name,
+            FileConflictResolution.CREATE_COPY.name,
+        ],
+        case_sensitive=False,
+    ),
+    help="How to handle downloads if a file already exists:\n"
+    "CREATE_COPY (default): Download with a new name, appending '(1)'\n"
+    "SKIP: Do not download the file\n"
+    "OVERWRITE: Download and replace the existing file",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Automatically accept any confirmation prompts",
+)
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    help="Output format: verbose (human-readable) or json (JSON lines)",
+)
+@_handle_error
+def job_download_input(include, match_paths_by, output, ignore_storage_profiles, **args):
+    """
+    Download the input files of a Deadline Cloud job that were saved as
+    job attachments.
+
+    Use `--include` to selectively download specific files using glob
+    patterns or relative paths. Without `--include`, all input files
+    are downloaded.
+
+    \b
+    Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
+    """
+    config = _apply_cli_options_to_config(
+        required_options={"farm_id", "queue_id", "job_id"}, **args
+    )
+
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    job_id = config_file.get_setting("defaults.job_id", config=config)
+    is_json_format = output == "json"
+    include_patterns = _normalize_filters(include)
+
+    try:
+        _download_job_input(
+            config=config,
+            farm_id=farm_id,
+            queue_id=queue_id,
+            job_id=job_id,
+            is_json_format=is_json_format,
+            ignore_storage_profiles=ignore_storage_profiles,
+            include_patterns=include_patterns,
+            match_paths_by=match_paths_by.upper() if match_paths_by else "LOCAL",
+        )
+    except Exception as e:
+        if is_json_format:
+            error_one_liner = str(e).replace("\n", ". ")
+            click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
+            sys.exit(1)
+        else:
+            if logging.DEBUG >= logger.getEffectiveLevel():
+                logger.exception("Exception details:")
+            raise DeadlineOperationError(f"Failed to download input:\n{e}") from e
 
 
 @cli_job.command(name="wait")
