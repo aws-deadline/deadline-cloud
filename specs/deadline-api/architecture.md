@@ -7,29 +7,45 @@ deadline-cli ──► deadline-api    ← this crate
 deadline-python-bindings ──► deadline-api
 ```
 
-All AWS API calls go through this crate — no other crate imports AWS SDK
-service crates for Deadline, STS, or CloudWatch. Exception:
-`deadline-job-attachments` owns its own S3 and STS clients independently.
+All Deadline Cloud API calls are constructed and sent through this
+crate — it owns the session cache, credential resolution, telemetry
+interceptor, and error mapping. Consumer crates (`deadline-cli`,
+`deadline-python-bindings`) import SDK types (`FarmSummary`,
+`GetJobInput`, etc.) directly from `aws-sdk-deadline` and use the SDK's
+fluent builders at callsite. The helpers in `deadline-api::client`
+observe the call (pagination, telemetry via interceptor, error
+mapping) — they do not re-declare SDK inputs.
+
+Exception: `deadline-job-attachments` owns its own S3 and STS clients
+independently (different service, different credential scoping needs).
 
 ## Module Layout
 
 The crate is organized around three main concerns: session management,
-authentication, and API calls. Supporting modules handle job monitoring,
-log retrieval, queue parameters, telemetry, and version checking.
+authentication, and API call helpers. Supporting modules handle job
+monitoring, log retrieval, queue parameters, telemetry, and version
+checking.
 
-All API calls flow through `api.rs` using the ResponseBodyCapture
-interceptor from `raw_response.rs`. Session and credential state is
-managed by `session.rs`, which caches SDK configs per profile and
-queue-scoped credentials per farm+queue pair. Authentication detection
-and DCM login/logout live in `auth.rs`.
+Callers use the SDK fluent builder directly. A `TelemetryInterceptor`
+installed on the client at construction time reads the SDK's own
+`Metadata` config-bag entry to emit latency events — no hand-maintained
+operation-name table. Session and credential state is managed by
+`session.rs`. Authentication detection and DCM login/logout live in
+`auth.rs`.
 
 ```
 src/
 ├── lib.rs              # Re-exports all public modules
+├── client.rs           # collect_paginated, collect_paginated_raw,
+│                       #   apply_dcm_principal, format_sdk_error,
+│                       #   sdk_err, WithPrincipalId, pascal_to_snake
+├── telemetry_interceptor.rs  # TelemetryInterceptor + pagination grouping
+├── job_api.rs          # Domain logic: list_jobs_by_filter_expression,
+│                       #   wait_for_create_job_to_complete, filter/sort builders,
+│                       #   build_sdk_attachments
+├── response_capture.rs # ResponseBodyCapture interceptor
 ├── session.rs          # Session caching, credential resolution, queue-scoped configs
 ├── auth.rs             # DCM detection, login/logout, auth status checks
-├── api.rs              # All Deadline Cloud API calls, pagination helper, error formatting
-├── raw_response.rs     # ResponseBodyCapture interceptor
 ├── job_monitoring.rs   # Poll job until terminal state, collect failed task details
 ├── log_retrieval.rs    # CloudWatch Logs, session auto-selection, fleet credentials
 ├── queue_parameters.rs # Queue environment parameter extraction
@@ -42,23 +58,35 @@ src/
 
 ## Key Design Decisions
 
-**Raw JSON response capture.** All API calls use the ResponseBodyCapture
-interceptor to grab the raw HTTP response as `serde_json::Value`. The
-AWS SDK output types don't implement `Serialize`, so this is the only
-way to get JSON without manually extracting every field. The interceptor
-also converts datetimes to Python display format and strips null values.
-New API fields appear automatically without code changes. See
-[response-capture.md](response-capture.md) for the full pattern.
+**Client-level telemetry interceptor.** The `TelemetryInterceptor` is
+installed on every `DeadlineClient` at construction time. It reads
+`cfg.load::<Metadata>()` in `read_after_execution` to get the SDK's own
+operation name (e.g. "GetFarm"), converts to snake_case ("get_farm"),
+and records latency. Zero plaintext operation names in our code.
+
+**Callers drive the SDK fluent builder.** No wrapper functions that
+re-declare `&str` parameters. Callers write
+`client.get_farm().farm_id(id).send()` directly. The helpers
+(`collect_paginated`, `collect_paginated_raw`) handle pagination and
+error mapping only.
+
+**Raw JSON response capture for print paths only.** CLI `get` commands
+that print the full API response use `ResponseBodyCapture` per-call via
+`.customize().interceptor(cap).send()`. The interceptor converts
+datetimes to Python display format and strips null values. New API fields
+appear automatically without code changes. All other paths use typed SDK
+output accessors. See [response-capture.md](response-capture.md).
 
 **Global session cache.** A process-wide cache holds SDK configs keyed
 by profile name, and queue credential configs keyed by farm+queue pair.
 This avoids re-creating SDK clients on every API call. The cache is
 invalidated on logout or when the profile changes.
 
-**Manual pagination.** SDK paginators don't support the
-`.customize().interceptor()` chain needed for response capture, so all
-paginated operations use explicit `nextToken` loops. A shared helper
-keeps this DRY.
+**Native SDK paginators for typed list.** Every `list_*` operation in
+`aws-sdk-deadline` has `.into_paginator()`. `collect_paginated` drains
+the paginator into `Vec<PageOutput>` with one telemetry event covering
+all pages (matches Python's one-event-per-outer-call model via a
+pagination group flag in the ConfigBag).
 
 **DCM detection by config file parsing.** Rather than making an API call
 to determine the credential source, the crate reads `~/.aws/config`
@@ -70,65 +98,50 @@ process. Login spawns it with `login` args and polls auth status every
 0.5 seconds. Logout spawns with `logout` args and invalidates the
 session cache.
 
-**Telemetry on every API call.** All public API functions optionally
-accept a telemetry client and record latency. If none is provided, an
-ephemeral client is created internally. Telemetry never affects the API
-call result.
-
 ## Public API Surface
 
-### Making an API call
+### Making an API call (new pattern)
 
-All API functions follow the same pattern — pass optional config and
-telemetry, get back `serde_json::Value`:
+Callers use the SDK fluent builder directly. Helpers handle pagination
+and error mapping:
 
 ```rust
-let farms = deadline_api::list_farms(Some(&config), Some(&telemetry)).await?;
-let farm = deadline_api::get_farm("farm-abc", Some(&config), None).await?;
+// Typed paginated
+use aws_sdk_deadline::operation::list_farms::ListFarmsOutput;
+let client = session::deadline_client(Some(&config)).await;
+let pages: Vec<ListFarmsOutput> = client::collect_paginated(
+    client.list_farms().into_paginator().send()
+).await?;
+
+// Raw for print
+use deadline_api::response_capture::ResponseBodyCapture;
+let cap = ResponseBodyCapture::new();
+client.get_farm().farm_id(&farm)
+    .customize().interceptor(cap.clone())
+    .send().await.map_err(client::sdk_err)?;
+let resp = cap.json()?;
 ```
 
-The returned `Value` is the raw API response with datetimes converted
-and nulls stripped. The CLI formats and prints it directly.
-
-### API functions (`api.rs`)
+### Client helpers (`client.rs`)
 
 | Function | Description |
 |----------|-------------|
+| `collect_paginated` | Drain SDK paginator into Vec, one telemetry event |
+| `collect_paginated_raw` | Manual nextToken loop, aggregate items under key |
+| `apply_dcm_principal` | Set principal_id on list builders for DCM users |
 | `format_sdk_error` | Extract error code + message from any `SdkError` |
-| `list_farms` | List all farms |
-| `get_farm` | Get farm by ID |
-| `list_queues` | List queues in a farm |
-| `get_queue` | Get queue by ID |
-| `list_fleets` | List fleets in a farm |
-| `get_fleet` | Get fleet by ID |
-| `list_jobs` | List jobs in a queue |
-| `search_jobs` | Search jobs with filter/sort expressions |
-| `search_jobs_with_filters` | Search jobs with pre-built filter structs |
-| `list_jobs_by_filter_expression` | Paginate all jobs matching a filter (createdAt thresholding) |
-| `get_job` | Get job by ID |
-| `get_step` | Get step by ID |
-| `get_task` | Get task by ID |
-| `search_workers` | Search workers in a fleet |
-| `get_worker` | Get worker by ID |
-| `get_session` | Get session by ID |
-| `list_sessions` | List sessions for a job |
-| `list_steps` | List steps for a job |
-| `list_tasks` | List tasks for a step |
-| `batch_get_steps_page` | Batch get steps (for trace-schedule) |
-| `batch_get_tasks_page` | Batch get tasks (for trace-schedule) |
-| `assume_queue_role_for_user` | Assume queue role for user (DCM) |
-| `assume_queue_role_for_read` | Assume queue role for read-only access |
-| `get_storage_profile_for_queue` | Get storage profile for a queue |
-| `list_storage_profiles_for_queue` | List storage profiles for a queue |
-| `assume_fleet_role_for_read` | Assume fleet role for read-only access |
-| `list_session_actions` | List session actions for a session |
-| `get_session_action` | Get session action by ID |
-| `list_queue_environments` | List queue environments |
-| `get_queue_environment` | Get queue environment by ID |
-| `update_job` | Update job (cancel, suspend, etc.) |
-| `update_task` | Update task (requeue) |
-| `create_job` | Create a new job |
-| `wait_for_create_job_to_complete` | Poll until CreateJob completes |
+| `sdk_err` | Map `SdkError` → `DeadlineError::OperationError` |
+| `pascal_to_snake` | Convert "GetFarm" → "get_farm" for telemetry |
+
+### Domain functions (`job_api.rs`)
+
+| Function | Description |
+|----------|-------------|
+| `list_jobs_by_filter_expression` | Paginate all jobs matching a filter (createdAt thresholding, dedup) |
+| `wait_for_create_job_to_complete` | Poll until CreateJob completes (backoff, timeout, cancellation) |
+| `build_filter_expressions` | JSON → SDK typed filter struct converters |
+| `build_sort_expressions` | JSON → SDK typed sort struct converters |
+| `build_sdk_attachments` | Build attachments from `Map<String, Value>` |
 
 ### Auth functions (`auth.rs`)
 
@@ -145,25 +158,25 @@ and nulls stripped. The CLI formats and prints it directly.
 ### Getting a session / SDK config
 
 ```rust
-let sdk_config = deadline_api::get_sdk_config(Some(&config)).await;
+let client = deadline_api::session::deadline_client(Some(&config)).await;
 ```
 
-This returns a cached `SdkConfig` for the active profile. Changing
-profiles invalidates the cache.
+This returns a cached `DeadlineClient` for the active profile with the
+`TelemetryInterceptor` installed. Changing profiles invalidates the cache.
 
 ### Queue-scoped credentials
 
 For operations that access S3 or CloudWatch on behalf of a queue:
 
 ```rust
-let scoped_config = deadline_api::get_queue_scoped_config(
+let scoped_config = deadline_api::session::get_queue_scoped_config(
     farm_id, queue_id, Some(&config)
 ).await?;
 ```
 
 This checks whether the user is logged in via DCM. If so, it assumes
 the queue role and returns a scoped `SdkConfig`. If not, it returns the
-base config. See [credential-scoping.md](credential-scoping.md).
+base config.
 
 ### Core types
 
@@ -173,4 +186,5 @@ base config. See [credential-scoping.md](credential-scoping.md).
 | `TelemetryClient` | Background telemetry — pass to API functions for latency tracking |
 | `AwsCredentialsSource` | Enum: `NotValid`, `HostProvided`, `DeadlineCloudMonitorLogin` |
 | `AwsAuthenticationStatus` | Enum: `ConfigurationError`, `Authenticated`, `NeedsLogin` |
-| `ResponseBodyCapture` | SDK interceptor — not used directly by consumers, but good to know about |
+| `ResponseBodyCapture` | SDK interceptor for raw JSON capture (print paths only) |
+| `TelemetryInterceptor` | SDK interceptor for automatic latency recording |

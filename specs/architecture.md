@@ -214,11 +214,14 @@ replaced by the Rust code compiled into the PyO3 module.
   Rust errors to `DeadlineOperationError` Python exceptions.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
   See [`testing.md`](testing.md).
-- **API responses:** All API functions in `deadline-api` use the
-  `ResponseBodyCapture` interceptor to return raw `serde_json::Value`.
-  The CLI layer never sees SDK types. The PyO3 layer converts `Value` to
-  Python dicts via `pythonize`. See `specs/patterns.md` § "AWS SDK for
-  Rust Usage".
+- **API responses:** `deadline-api` owns session management, credential
+  scoping, telemetry (via a client-level interceptor), and error mapping
+  for all Deadline Cloud API calls. Consumer crates import SDK types
+  directly from `aws-sdk-deadline` and use the SDK's fluent builders at
+  callsite. For CLI commands that print the full API response verbatim,
+  the `ResponseBodyCapture` interceptor captures raw JSON (with datetime
+  conversion and null stripping). For all other paths, callers use typed
+  SDK output accessors. See `specs/patterns.md` § "AWS SDK for Rust Usage".
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
   are not the primary API.

@@ -1,6 +1,6 @@
 use crate::errors::DeadlineError;
 use crate::telemetry::{TelemetryClient, with_telemetry_latency_async};
-use crate::{auth, raw_response::ResponseBodyCapture, session};
+use crate::{auth, response_capture::ResponseBodyCapture, session};
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 use std::future::Future;

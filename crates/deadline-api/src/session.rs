@@ -225,7 +225,7 @@ impl QueueUserCredentialProvider {
     }
 
     async fn load_credentials(&self) -> provider::Result {
-        use crate::raw_response::ResponseBodyCapture;
+        use crate::response_capture::ResponseBodyCapture;
 
         let capture = ResponseBodyCapture::new();
         let result = self.client
