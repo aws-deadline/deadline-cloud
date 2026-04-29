@@ -921,8 +921,16 @@ def create_job_from_job_bundle(
         create_job_args["maxWorkerCount"] = max_worker_count
     if max_failed_tasks_count is not None:
         create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
+    elif "maxFailedTasksCount" not in create_job_args:
+        create_job_args["maxFailedTasksCount"] = int(
+            config_file.get_setting("settings.max_failed_tasks_count", config=config)
+        )
     if max_retries_per_task is not None:
         create_job_args["maxRetriesPerTask"] = max_retries_per_task
+    elif "maxRetriesPerTask" not in create_job_args:
+        create_job_args["maxRetriesPerTask"] = int(
+            config_file.get_setting("settings.max_retries_per_task", config=config)
+        )
     if target_task_run_status is not None:
         create_job_args["targetTaskRunStatus"] = target_task_run_status
 

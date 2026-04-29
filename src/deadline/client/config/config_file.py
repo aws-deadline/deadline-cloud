@@ -180,6 +180,14 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "Set to 'false' to suppress the update notification."
         ),
     },
+    "settings.max_retries_per_task": {
+        "default": "5",
+        "description": "The default maximum number of times a task will retry before it is marked as failed.",
+    },
+    "settings.max_failed_tasks_count": {
+        "default": "20",
+        "description": "The default maximum number of tasks that can fail before the job is marked as failed.",
+    },
 }
 
 

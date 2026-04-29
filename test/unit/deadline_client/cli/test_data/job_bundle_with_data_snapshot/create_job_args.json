@@ -29,5 +29,7 @@
   "InputOutputDir": {
    "path": "ROOT_PATH_0/input_output"
   }
- }
+ },
+ "maxFailedTasksCount": 20,
+ "maxRetriesPerTask": 5
 }
