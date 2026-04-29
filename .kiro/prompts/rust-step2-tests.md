@@ -6,13 +6,17 @@ Read these files first and abide by them:
 
 Write tests that define the behavioral contract before any implementation.
 This may mean new tests or updating existing tests with gaps. Derive from:
-1. Test spec section for this work item
+1. Python implementation code to determine testable behavior
 2. Python unit tests (port to Rust equivalents)
 3. Python CLI output (run it, capture it — this is the reference)
 4. Edge cases from Step 1
 5. Error paths — every error the Python code can produce
 
 Rules:
+- Evaluate existing tests to see if there are tests worth removing OR updating
+to assert this new behavior to minimize redundancy
+- Consider adding new tests if no existing tests are worth updating if the new
+behavior being added is too unique to do so
 - Prefer Level 2 (CLI subprocess + stub server) when CLI-reachable
 - Use Level 1 (library unit) for precision or non-CLI-reachable behavior
 - CLI output tests use `insta-cmd` snapshots

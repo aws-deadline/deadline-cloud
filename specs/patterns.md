@@ -48,6 +48,20 @@ The goal is identical observable behavior, not identical internal structure.
    Python to understand the behavioral contract, then implement that
    contract in idiomatic Rust.
 
+## Type Annotations
+
+Use explicit type annotations in tests to document the expected return
+type — they serve as an extra compile-time assertion:
+
+```rust
+let output: GetFarmOutput = get_farm("farm-abc", None, None).await.unwrap();
+let value: Value = get_farm_raw("farm-abc", None, None).await.unwrap();
+```
+
+In production code, let inference handle local bindings. Function
+signatures already declare types at the API boundary; annotating every
+`let` inside a function body is noise.
+
 ## AWS SDK for Rust Usage
 
 The Rust SDK (`aws-sdk-deadline`) differs from Python's boto3 in ways
@@ -57,18 +71,76 @@ that affect how we build API functions. Know these before writing code.
 
 The SDK output types don't implement `serde::Serialize`
 ([awslabs/aws-sdk-rust#269](https://github.com/awslabs/aws-sdk-rust/issues/269)).
-This drives the `ResponseBodyCapture` pattern used for all API calls.
+This means you cannot `serde_json::to_value(&output)` on an SDK response.
 
-### `ResponseBodyCapture` pattern
+### Dual API pattern: typed + raw
 
-All API functions capture the raw HTTP response body as
-`serde_json::Value` via an SDK interceptor. This is the single approach
-for every API call — `get_*`, `list_*`, and `search_*` alike. The
-interceptor also converts datetimes to Python format and strips nulls.
+API functions come in two variants:
+
+1. **Typed (default name, e.g. `get_farm`):** Returns the SDK's native
+   output type (`GetFarmOutput`). Callers access fields via typed
+   accessors (`.farm_id()`, `.lifecycle_status()`). Use for business
+   logic, FFI, and list commands that cherry-pick fields.
+
+2. **Raw (`_raw` suffix, e.g. `get_farm_raw`):** Returns
+   `serde_json::Value` via the `ResponseBodyCapture` interceptor.
+   Includes all fields the API sends, even those the SDK doesn't model
+   yet. Use ONLY for CLI commands that dump the entire response to the
+   user (e.g. `deadline farm get`).
+
+```rust
+// Typed — compile-time safe field access, use by default
+pub async fn get_farm(...) -> Result<GetFarmOutput, DeadlineError>
+
+// Raw — full wire JSON for print paths only
+pub async fn get_farm_raw(...) -> Result<Value, DeadlineError>
+```
+
+**When to use which:**
+- Accessing specific fields for logic → typed
+- Passing a subset to FFI/Python → typed, then build a serializable struct
+- Printing the full API response verbatim → raw
+
+### `ResponseBodyCapture` pattern (raw variant only)
+
+The `_raw` functions use an SDK interceptor that captures the raw HTTP
+response body as `serde_json::Value`. The interceptor also converts
+datetimes to Python format and strips nulls. New API fields appear
+automatically without code changes.
 
 For the full pattern including pagination, search APIs, datetime
 handling, and known differences from boto3, see
 [`deadline-api/response-capture.md`](deadline-api/response-capture.md).
+
+### Typed variant pattern
+
+The typed functions call the SDK directly without the interceptor:
+
+```rust
+pub async fn get_farm(farm_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>)
+    -> Result<GetFarmOutput, DeadlineError>
+{
+    let client = session::deadline_client(config).await;
+    client.get_farm().farm_id(farm_id).send().await.map_err(sdk_err)
+}
+```
+
+For list functions, the typed variant uses the SDK's built-in paginator:
+
+```rust
+pub async fn list_farms(config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>)
+    -> Result<Vec<FarmSummary>, DeadlineError>
+{
+    let client = session::deadline_client(config).await;
+    let mut farms = Vec::new();
+    let mut paginator = client.list_farms().into_paginator().send();
+    while let Some(page) = paginator.next().await {
+        let page = page.map_err(sdk_err)?;
+        farms.extend(page.farms());
+    }
+    Ok(farms)
+}
+```
 
 ### Error formatting
 
@@ -108,15 +180,17 @@ credentials, caching, and endpoint propagation, see
 Two distinct patterns exist for JSON serialization in this codebase.
 Choose based on who controls the schema.
 
-### API responses → `serde_json::Value`
+### API responses → typed SDK output OR `serde_json::Value`
 
-API responses use `ResponseBodyCapture` to capture raw JSON as
-`serde_json::Value`. This is necessary because AWS SDK output types
-don't implement `serde::Serialize` (see above). The CLI layer formats
-and prints `Value` directly. Model types that parse API responses use
-manual `from_json(&Value)` methods (e.g. `StorageProfile::from_json`).
+- **Typed (default):** Use the SDK output type directly. Access fields
+  via typed accessors. Use for business logic and FFI.
+- **Raw (`_raw` suffix):** Use `ResponseBodyCapture` to capture raw
+  JSON as `serde_json::Value`. Use for CLI print paths that must show
+  all fields. Model types that parse API responses use manual
+  `from_json(&Value)` methods (e.g. `StorageProfile::from_json`).
 
-**Use for:** anything that comes from or goes to an AWS API.
+**Use typed for:** anything that accesses specific fields for logic or FFI.
+**Use raw for:** CLI commands that dump the full response to the user.
 
 ### Owned file formats → `#[derive(Serialize, Deserialize)]`
 

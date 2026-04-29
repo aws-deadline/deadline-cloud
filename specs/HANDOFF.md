@@ -7,86 +7,61 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** Not started
-
-### Problem Statement
-
-All `deadline-api` functions currently return `serde_json::Value` via the
-`ResponseBodyCapture` interceptor. This provides zero compile-time safety
-for code that accesses response fields — typos in string keys
-(`job["lifecycleStatus"]`) are only caught at runtime. The interceptor is
-necessary for CLI `get` commands that must print every field (including
-fields the SDK doesn't know about yet), but most callers only need a few
-typed fields for business logic or FFI.
+**Status:** In progress — starting Batch A
 
 ### Design
 
-Split API functions into two variants:
+Every API function gets two variants:
 
-1. **Typed (default):** Returns the SDK's native output type (e.g.
-   `GetFarmOutput`, `GetJobOutput`). Callers access fields via typed
-   accessors (`.farm_id()`, `.lifecycle_status()`). Compile-time safe.
-   Use for business logic, FFI, and list commands that cherry-pick fields.
-
-2. **Raw (`_raw` suffix):** Returns `serde_json::Value` via the
-   interceptor. Forward-compatible — includes all fields the API sends,
-   even those the SDK doesn't model yet. Use ONLY for CLI `get` commands
-   that dump the entire response to the user.
+- **Typed (default name):** Typed request + typed response (SDK output type).
+  Use for all business logic, FFI, and anywhere specific fields are needed.
+- **Raw (`_raw` suffix):** Typed request + raw `Value` response via interceptor.
+  Use ONLY for CLI `get` commands that print the full API response verbatim.
 
 ```rust
-// Typed — compile-time safe field access
-pub async fn get_farm(...) -> Result<GetFarmOutput, DeadlineError>
-
-// Raw — full wire JSON for print paths
-pub async fn get_farm_raw(...) -> Result<Value, DeadlineError>
+pub async fn get_farm(...) -> Result<GetFarmOutput, DeadlineError>      // typed
+pub async fn get_farm_raw(...) -> Result<Value, DeadlineError>          // raw
 ```
 
-Both use typed requests (the SDK builder pattern with typed input params).
+**Rule:** No function returns `Value` without the `_raw` suffix.
 
-### Caller migration
+### Module split
 
-| Caller pattern | Before | After |
-|----------------|--------|-------|
-| `deadline farm get` (print all) | `get_farm()` → `Value` | `get_farm_raw()` → `Value` |
-| `deadline farm list` (print subset) | `list_farms()` → `Value`, index `["farmId"]` | `list_farms()` → `Vec<FarmSummary>`, `.farm_id()` |
-| `job download-output` (logic) | `get_job()` → `Value`, index `["storageProfileId"]` | `get_job()` → `GetJobOutput`, `.storage_profile_id()` |
-| GUI FFI (dropdown data) | `list_farms()` → `Value` → pythonize all | `list_farms()` → typed → build `#[derive(Serialize)]` subset → pythonize |
+`api.rs` (1,258 lines, 35 functions) is split into resource modules:
 
-### Pagination
+```
+src/api/
+├── mod.rs       — re-exports, shared helpers (format_sdk_error, sdk_err, capture_send, paginated_list)
+├── farm.rs      — get_farm, list_farms
+├── queue.rs     — get_queue, list_queues, assume_queue_role_*, storage profiles, queue envs, queue-fleet associations
+├── fleet.rs     — get_fleet, list_fleets, assume_fleet_role_for_read
+├── job.rs       — get_job, list_jobs, search_jobs*, create_job, update_job, wait_for_create_job_to_complete
+├── step.rs      — get_step, list_steps, batch_get_steps_page
+├── task.rs      — get_task, list_tasks, batch_get_tasks_page, update_task
+├── worker.rs    — get_worker, search_workers
+└── session.rs   — get_session, list_sessions, list_session_actions, get_session_action
+```
 
-Typed list functions can use the SDK's built-in paginator (`.into_paginator()`)
-since they don't need the interceptor. This simplifies pagination code.
+### Batches
 
-### FFI implications
+| Batch | Scope | Changes |
+|-------|-------|---------|
+| A | Split `api.rs` into modules + create all typed/raw pairs | No caller changes. Purely additive. Existing callers use `_raw` names. |
+| B | Migrate callers: Farm + Fleet + Queue | Switch logic callers to typed, print callers to `_raw` |
+| C | Migrate callers: Job + Step + Task + Worker + Session | Switch remaining callers |
+| D | FFI migration | Serializable structs for Python bindings |
 
-- GUI FFI uses typed variants → extracts needed fields → builds small
-  `#[derive(Serialize)]` structs → pythonize to Python dict
-- Python receives a dict with known fields; adding a new field requires
-  updating the Rust struct (compile error on typo)
-- Python side never breaks from new fields — it just gets a dict
+**Batch A** is the foundation — one large batch that establishes the
+complete API surface. All 35 existing functions become `_raw`, and 35
+new typed functions are added alongside them. Tests prove both variants
+work. No existing behavior changes.
 
-### What this does NOT change
+**Batches B-C** are mechanical caller migrations. Each caller is
+switched from `_raw` (Value indexing) to typed (accessor methods) where
+appropriate. Print paths stay `_raw`.
 
-- `_raw` functions keep the interceptor — zero maintenance for print paths
-- No DTOs or wrapper crates needed — uses SDK types directly
-- No build scripts or proc macros
-- DateTime formatting in `_raw` paths unchanged
-
-### Migration strategy
-
-Incremental — not a big-bang rewrite:
-1. Add typed variants alongside existing functions (rename current → `_raw`)
-2. Switch logic/FFI callers one at a time to typed variants
-3. Switch list command callers to typed + paginator
-4. `_raw` variants remain permanently for print paths
-
-### Scope estimate
-
-- ~35 API functions in `api.rs` to split into typed + raw pairs
-- ~15 call sites in `deadline-cli` to migrate from Value indexing to typed
-- ~5 call sites in `deadline-python-bindings` to migrate
-- Pagination simplification for list functions
-- New small `#[derive(Serialize)]` structs for FFI boundary (~5 structs)
+**Batch D** replaces `pythonize(Value)` in FFI with typed →
+`#[derive(Serialize)]` structs → pythonize.
 
 ---
 

@@ -2,7 +2,7 @@ You are doing Step 3 (Implement) of the development workflow.
 
 Read these files first and abide by them:
 - `specs/HANDOFF.md` — current work item, plan, approved test suite
-- `specs/patterns.md` — AWS SDK usage patterns, ResponseBodyCapture, error formatting
+- `specs/patterns.md` — AWS SDK usage patterns, dual API pattern, error formatting
 
 Write the minimum code to make the tests pass. Then:
 1. Run `cargo build` (full workspace)
@@ -11,8 +11,10 @@ Write the minimum code to make the tests pass. Then:
    Python implementation before accepting. Do not use `INSTA_UPDATE=always`.
 
 For CLI commands calling AWS APIs, follow patterns in `specs/patterns.md`:
-- All API functions use `ResponseBodyCapture` to capture raw JSON
-- List functions: manual `nextToken` loop with `ResponseBodyCapture`
+- Typed API functions return SDK output types directly (default)
+- Raw API functions (`_raw` suffix) use `ResponseBodyCapture` for full wire JSON
+- Use typed for business logic and FFI; use raw only for CLI print-all paths
+- List functions: typed uses SDK paginator; raw uses manual `nextToken` loop
 - Mock responses: include all fields the real API returns
 
 Refactor for clarity once green — but don't over-abstract.
