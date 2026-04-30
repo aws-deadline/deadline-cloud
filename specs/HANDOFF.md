@@ -7,60 +7,109 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** In progress — Batch D1–D4 complete. Remaining: migrate `get_queue` and search/list APIs to typed pattern.
+**Status:** In progress — D5 next. Eliminate `ResponseBodyCapture` entirely.
 
-### Design intent
+### Design intent (FINAL — no exceptions)
 
-Base API functions return the SDK output struct directly. Callers decide
-what to do with it:
+**No raw HTTP interception.** `ResponseBodyCapture` must be removed.
+Every API call uses SDK fluent builders (input) and returns SDK output
+structs. Callers extract the fields they need from the typed output.
 
-- **Internal business logic:** Use typed fields from the SDK output
-  (e.g. `output.name()`, `output.started_at()`). Access only what's needed.
-- **External print/display (full dump):** Build a response struct from
-  the SDK output that serializes ALL fields to JSON for display. Complex
-  nested SDK types that lack `Serialize` are extracted from raw HTTP body.
-- **External print/display (partial):** Access typed fields directly,
-  no response struct needed.
+Rules:
 
-**No `_raw` / `_typed` split.** One base function per API returns SDK output.
-A `_with_raw` variant exists only for resources with complex nested types
-that need full-dump display (returns `(SdkOutput, Value)`).
+1. **No wrapper functions** for simple API calls. Callers use the SDK
+   client directly: `dl.get_job().farm_id(f).queue_id(q).job_id(j).send().await`
 
-### What's done
+2. **Helper functions exist only for:** pagination logic, error handling
+   with telemetry, and cases where multiple callers share complex setup.
 
-- Batches A–C: `client.rs`, `telemetry_interceptor.rs`, telemetry wired
-- **Batch D1–D3:** `responses.rs` with `FarmResponse`, `QueueResponse`,
-  `FleetResponse` + `format_datetime`. All farm/queue/fleet callers
-  migrated (CLI list+get, helpers, mcp, FFI resources). Suggest on list
-  failure restored. Fleet get `--queue-id` suggest gap fixed.
-- **Batch D4:** `JobResponse`, `StepResponse`, `TaskResponse`,
-  `SessionResponse`, `WorkerResponse` added to `responses.rs`. API
-  functions return SDK output types. `_with_raw` variants for full-dump
-  paths. All callers in `job.rs`, `worker.rs`, `mcp.rs`, `queue.rs`,
-  `manifest.rs`, `job_monitoring.rs` migrated. Deterministic output
-  ordering for HashMap-derived fields.
+3. **Business logic callers** access typed fields directly:
+   `output.name()`, `output.started_at()`, `output.job_id()`
 
-### Pattern established in D1–D3
+4. **Full-dump display callers** (CLI `get` commands) manually extract
+   every field from the SDK output into a serializable response struct.
+   If a new field is added to the SDK, we add it to the struct — that's
+   fine.
 
-**List:** Typed paginator → field extraction inline → `json!({...})`.
+5. **Complex nested SDK types** (e.g. `Attachments`, `JobParameter`,
+   `LogConfiguration`, `HostPropertiesResponse`, `FleetConfiguration`)
+   don't implement `Serialize`. For display, manually convert them to
+   `serde_json::Value` by walking their typed accessors. No raw capture.
 
-**Get (simple types like Farm):** `dl.get_farm().send().await` →
-`FarmResponse::from(output)` → `serde_json::to_value(&resp)`. No raw capture.
+6. **Telemetry** is injected into API calls via the existing
+   `telemetry_interceptor` on the SDK client (already wired in D1–D3).
 
-**Get (complex nested types like Fleet/Queue):** Use `ResponseBodyCapture`
-alongside `.send()` to get both typed output AND raw JSON. Build response
-struct from typed fields + `raw.get("nestedField").cloned()` for SDK types
-that lack `Serialize` (FleetConfiguration, JobRunAsUser, etc.).
+7. **Error handling** uses `sdk_err()` to format SDK errors with code
+   and message (already established pattern).
 
-**Rule:** Response structs exist ONLY for the "print every field" display
-path. If a caller only needs a few fields, it uses the SDK output directly.
+### What's done (D1–D4)
+
+- `client.rs`, `telemetry_interceptor.rs` — SDK client with telemetry
+- `FarmResponse`, `QueueResponse`, `FleetResponse` — fully typed (no raw)
+- `JobResponse`, `StepResponse`, `TaskResponse`, `SessionResponse`,
+  `WorkerResponse` — currently use `from_output_and_raw` (D5 will fix)
+- `get_job`, `get_step`, `get_task`, `get_session`, `get_worker` return
+  SDK output types (typed variants done)
+
+### What D5 must do
+
+1. **Remove `ResponseBodyCapture`** — delete `response_capture.rs`,
+   remove all `_with_raw` variants, remove `capture_send` helper.
+
+2. **Fix response structs** — change `from_output_and_raw(output, &raw)`
+   to `from(output)`. Manually convert complex nested types by walking
+   SDK accessors (e.g. `output.attachments()` → build JSON from its
+   typed fields).
+
+3. **Convert remaining raw functions** — every function in `api.rs` that
+   still uses `capture_send` must return SDK output types or be inlined
+   at call sites:
+   - `get_queue` → `GetQueueOutput`
+   - `list_sessions` → `Vec<SessionSummary>` (paginated)
+   - `list_steps` → `Vec<StepSummary>` (paginated)
+   - `list_tasks` → `Vec<TaskSummary>` (paginated)
+   - `search_jobs` / `search_jobs_with_filters` → search output
+   - `search_workers` → search output
+   - `batch_get_steps_page` / `batch_get_tasks_page` → batch output
+   - `assume_queue_role_for_user/read` → credentials output
+   - `assume_fleet_role_for_read` → credentials output
+   - `get_session_action` → `GetSessionActionOutput`
+   - `get_storage_profile_for_queue` → output
+   - `list_storage_profiles_for_queue` → paginated output
+   - `list_queue_environments` → paginated output
+   - `get_queue_environment` → output
+   - `list_queue_fleet_associations` → paginated output
+   - `list_session_actions` → paginated output
+   - `update_job` → `()`
+   - `update_task` → `()`
+   - `create_job` → `CreateJobOutput`
+
+4. **Migrate all callers** to use typed SDK output fields instead of
+   `value["fieldName"]` access.
+
+### Batching strategy
+
+- **D5a:** Remove `_with_raw` from D4 structs. Convert `from_output_and_raw`
+  to `from(output)` with manual nested type conversion. Delete
+  `ResponseBodyCapture` usage from get_job/step/task/session/worker.
+- **D5b:** Convert `get_queue`, credential APIs (`assume_*`), and
+  `get_session_action`. These have few callers.
+- **D5c:** Convert list/search APIs (`list_sessions`, `list_steps`,
+  `list_tasks`, `search_jobs`, `search_workers`, `batch_get_*`).
+  These are paginated — keep helper functions for pagination logic.
+- **D5d:** Convert remaining (`list_queue_environments`,
+  `get_queue_environment`, `list_queue_fleet_associations`,
+  `list_storage_profiles_for_queue`, `get_storage_profile_for_queue`,
+  `list_session_actions`, `update_job`, `update_task`, `create_job`).
+- **D5e:** Delete `response_capture.rs`, `capture_send`, and any
+  remaining `ResponseBodyCapture` imports. Clean sweep.
 
 ---
 
-## Batch D4 — ✅ Complete
+## Batch D4 — ✅ Complete (will be revised in D5a)
 
 Job/Step/Task/Session/Worker response structs added, API functions return
-SDK output types, all callers migrated. See commit `deee43a`.
+SDK output types. Uses `_with_raw` pattern that D5a will eliminate.
 
 ---
 
