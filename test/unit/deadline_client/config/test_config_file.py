@@ -34,6 +34,7 @@ CONFIG_SETTING_ROUND_TRIP = [
     # native path form on read. Build the alternate value with the native
     # separator so it round-trips to itself on POSIX and Windows alike.
     ("settings.ca_bundle", "", os.path.join(os.sep, "etc", "ssl", "certs", "ca-bundle.pem")),
+    ("settings.job_bundle_default_directory", "", "/my/bundles"),
 ]
 
 

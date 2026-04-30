@@ -324,6 +324,13 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
             "given (profile, region) session."
         ),
     },
+    "settings.job_bundle_default_directory": {
+        "default": "",
+        "description": (
+            "The default local directory to open when browsing for job bundles. "
+            "If empty, defaults to the user's home directory."
+        ),
+    },
 }
 
 
