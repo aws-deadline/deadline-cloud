@@ -1,5 +1,6 @@
 use crate::api;
 use crate::errors::DeadlineError;
+use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 use std::time::Instant;
@@ -92,7 +93,7 @@ pub async fn wait_for_job_completion(
     timeout: u64,
     config: Option<&IniConfig>,
     status_callback: Option<&dyn Fn(&str, f64, u64)>,
-    job_callback: Option<&dyn Fn(&Value, f64, u64)>,
+    job_callback: Option<&dyn Fn(&GetJobOutput, f64, u64)>,
 ) -> Result<JobCompletionResult, DeadlineError> {
     let start = Instant::now();
     let mut interval_ms: u64 = 500;
@@ -107,7 +108,7 @@ pub async fn wait_for_job_completion(
         }
 
         let job = api::get_job(farm_id, queue_id, job_id, config).await?;
-        let status = job.get("taskRunStatus").and_then(|v| v.as_str()).unwrap_or("");
+        let status = job.task_run_status.as_ref().map(|s| s.as_str()).unwrap_or("");
 
         if let Some(cb) = status_callback {
             cb(status, elapsed, timeout);

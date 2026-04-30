@@ -59,7 +59,7 @@ async fn worker_get_prints_details() {
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     workers::mock_get_worker(
         &harness.server, "farm-abc", "fleet-abc",
-        json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING"}),
+        json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING", "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc"}),
     ).await;
 
     assert_cmd_snapshot!(harness.cmd(&[
@@ -149,7 +149,7 @@ async fn worker_get_sends_latency_telemetry() {
     harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
     workers::mock_get_worker(
         &harness.server, "farm-abc", "fleet-abc",
-        json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING"}),
+        json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING", "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc"}),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 

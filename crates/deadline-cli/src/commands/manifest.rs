@@ -224,9 +224,9 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings["rootPrefix"].as_str().unwrap_or("");
 
             // Get job to check for attachments
-            let job_resp = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config)).await
+            let (_, job_raw) = deadline_api::api::get_job_with_raw(&farm, &queue, &job_id, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
-            let attachments = job_resp.get("attachments")
+            let attachments = job_raw.get("attachments")
                 .ok_or_else(|| CliError::Operation(
                     "Job has no attachments — no manifests to download.".into()
                 ))?;

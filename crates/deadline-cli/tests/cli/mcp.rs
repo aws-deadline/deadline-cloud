@@ -606,6 +606,8 @@ async fn mcp_session_and_worker_logs_no_worker_id() {
         serde_json::json!({
             "sessionId": "session-ddd",
             "lifecycleStatus": "STARTED",
+            "fleetId": "", "workerId": "",
+            "startedAt": "2024-01-15T10:30:00Z",
         }),
     ).await;
 
@@ -772,6 +774,8 @@ async fn mcp_session_and_worker_logs_includes_session_details() {
         serde_json::json!({
             "sessionId": "session-ddd",
             "lifecycleStatus": "ENDED",
+            "fleetId": "fleet-aaa", "workerId": "worker-aaa",
+            "startedAt": "2024-01-15T10:30:00Z",
             "hostProperties": {"ipAddresses": {"ipV4Addresses": ["10.0.0.1"]}},
         }),
     ).await;

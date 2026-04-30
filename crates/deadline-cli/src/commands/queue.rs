@@ -748,12 +748,12 @@ async fn incremental_output_download(
 
     // For new jobs, call GetJob to get attachments
     for job_id in new_job_ids.clone() {
-        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config))
+        let (job_detail, job_raw) = api::get_job_with_raw(farm_id, queue_id, &job_id, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
-            dc_job["attachments"] = job_detail.get("attachments").cloned().unwrap_or(serde_json::Value::Null);
-            dc_job["storageProfileId"] = job_detail.get("storageProfileId").cloned().unwrap_or(serde_json::Value::Null);
+            dc_job["attachments"] = job_raw.get("attachments").cloned().unwrap_or(serde_json::Value::Null);
+            dc_job["storageProfileId"] = serde_json::json!(job_detail.storage_profile_id.as_deref());
         }
 
         let dc_job = &download_candidates[&job_id];

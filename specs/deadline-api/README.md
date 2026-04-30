@@ -9,40 +9,36 @@ Dependencies: `deadline-config`.
 
 ## How API Calls Work
 
-Three patterns coexist during the migration to fully typed SDK usage:
+Two patterns coexist:
 
-### Typed pattern (Farm, Queue, Fleet — Batch D1–D3 complete)
+### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — Batch D1–D4 complete)
 
-Callers use the SDK fluent builder directly. List operations use typed
-paginators with field extraction. Get operations use response structs
-(`FarmResponse`, `QueueResponse`, `FleetResponse`) that serialize to
-camelCase JSON. Complex nested SDK types that lack `Serialize` are
-extracted from the raw HTTP body alongside the typed output.
+Base API functions return SDK output types directly. Callers that need
+specific fields use typed accessors. Callers that print the full response
+use `_with_raw` variants + response structs for serialization.
 
 ```rust
+// Typed get — returns SDK output directly
+let output = api::get_job(farm_id, queue_id, job_id, config).await?;
+let name = output.name();  // typed field access
+
+// Full-dump display — response struct from typed output + raw JSON
+let (output, raw) = api::get_job_with_raw(farm_id, queue_id, job_id, config).await?;
+let resp = JobResponse::from_output_and_raw(output, &raw);
+println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
+
 // Typed list — paginator + field extraction
 let pages = client::collect_paginated(dl.list_farms().into_paginator().send()).await?;
 let items: Vec<_> = pages.iter().flat_map(|p| p.farms())
     .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
     .collect();
-
-// Typed get — response struct (no nested types)
-let output = dl.get_farm().farm_id(&farm).send().await?;
-let resp = FarmResponse::from(output);
-let val = serde_json::to_value(&resp)?;
-
-// Typed get — response struct (with nested types needing raw extraction)
-let cap = ResponseBodyCapture::new();
-let output = dl.get_fleet().farm_id(&farm).fleet_id(&fleet)
-    .customize().interceptor(cap.clone()).send().await?;
-let raw = cap.json()?;
-let resp = FleetResponse::from_output_and_raw(output, &raw);
 ```
 
-### Legacy wrapper pattern (Job, Step, Task, Worker, Session — api.rs)
+### Legacy wrapper pattern (Queue, search APIs)
 
-Wrapper functions in `api.rs` use `ResponseBodyCapture` for raw JSON
-capture. These will be migrated in Batch D4–D5.
+Some wrapper functions in `api.rs` still use `ResponseBodyCapture` for
+raw JSON capture (e.g. `get_queue`, `search_workers`, `list_sessions`).
+These return `Value` and will be migrated in future batches.
 
 ## Document Index
 
@@ -57,9 +53,11 @@ capture. These will be migrated in Batch D4–D5.
 | [update-checker.md](update-checker.md) | Remote manifest fetch, version comparison, config opt-out |
 
 `responses.rs` — Response structs (`FarmResponse`, `QueueResponse`,
-`FleetResponse`) and `format_datetime` helper. Each struct maps 1:1 to a
-Get API output with `#[serde(rename_all = "camelCase")]` and
-`skip_serializing_if` for optional fields.
+`FleetResponse`, `JobResponse`, `StepResponse`, `TaskResponse`,
+`SessionResponse`, `WorkerResponse`) and `format_datetime` helper. Each
+struct maps 1:1 to a Get API output with `#[serde(rename_all = "camelCase")]`
+and `skip_serializing_if` for optional fields. Complex nested SDK types
+that lack `Serialize` are stored as `serde_json::Value` from raw capture.
 
 ## Status
 

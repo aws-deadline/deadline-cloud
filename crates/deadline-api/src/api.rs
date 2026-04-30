@@ -1,5 +1,10 @@
 use crate::errors::DeadlineError;
 use crate::{auth, response_capture::ResponseBodyCapture, session};
+use aws_sdk_deadline::operation::get_job::GetJobOutput;
+use aws_sdk_deadline::operation::get_session::GetSessionOutput;
+use aws_sdk_deadline::operation::get_step::GetStepOutput;
+use aws_sdk_deadline::operation::get_task::GetTaskOutput;
+use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 use std::future::Future;
@@ -380,28 +385,49 @@ fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::types::S
     Ok(result)
 }
 
-pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
+pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>) -> Result<GetJobOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+        .send().await.map_err(sdk_err)
 }
 
-pub async fn get_step(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
+pub async fn get_job_with_raw(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>) -> Result<(GetJobOutput, Value), DeadlineError> {
     let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    let cap = ResponseBodyCapture::new();
+    let output = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+        .customize().interceptor(cap.clone()).send().await.map_err(sdk_err)?;
+    let raw = cap.json().map_err(capture_err)?;
+    Ok((output, raw))
 }
 
-pub async fn get_task(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
+pub async fn get_step(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, config: Option<&IniConfig>) -> Result<GetStepOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id).task_id(task_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    client.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
+        .send().await.map_err(sdk_err)
+}
+
+pub async fn get_step_with_raw(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, config: Option<&IniConfig>) -> Result<(GetStepOutput, Value), DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let cap = ResponseBodyCapture::new();
+    let output = client.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
+        .customize().interceptor(cap.clone()).send().await.map_err(sdk_err)?;
+    let raw = cap.json().map_err(capture_err)?;
+    Ok((output, raw))
+}
+
+pub async fn get_task(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task_id: &str, config: Option<&IniConfig>) -> Result<GetTaskOutput, DeadlineError> {
+    let client = session::deadline_client(config).await;
+    client.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id).task_id(task_id)
+        .send().await.map_err(sdk_err)
+}
+
+pub async fn get_task_with_raw(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task_id: &str, config: Option<&IniConfig>) -> Result<(GetTaskOutput, Value), DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let cap = ResponseBodyCapture::new();
+    let output = client.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id).task_id(task_id)
+        .customize().interceptor(cap.clone()).send().await.map_err(sdk_err)?;
+    let raw = cap.json().map_err(capture_err)?;
+    Ok((output, raw))
 }
 
 // ---------------------------------------------------------------------------
@@ -436,12 +462,24 @@ pub async fn get_worker(
     fleet_id: &str,
     worker_id: &str,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<GetWorkerOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_worker().farm_id(farm_id).fleet_id(fleet_id).worker_id(worker_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    client.get_worker().farm_id(farm_id).fleet_id(fleet_id).worker_id(worker_id)
+        .send().await.map_err(sdk_err)
+}
+
+pub async fn get_worker_with_raw(
+    farm_id: &str,
+    fleet_id: &str,
+    worker_id: &str,
+    config: Option<&IniConfig>,
+) -> Result<(GetWorkerOutput, Value), DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let cap = ResponseBodyCapture::new();
+    let output = client.get_worker().farm_id(farm_id).fleet_id(fleet_id).worker_id(worker_id)
+        .customize().interceptor(cap.clone()).send().await.map_err(sdk_err)?;
+    let raw = cap.json().map_err(capture_err)?;
+    Ok((output, raw))
 }
 
 // ---------------------------------------------------------------------------
@@ -454,12 +492,25 @@ pub async fn get_session(
     job_id: &str,
     session_id: &str,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<GetSessionOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_session().farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    client.get_session().farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
+        .send().await.map_err(sdk_err)
+}
+
+pub async fn get_session_with_raw(
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_id: &str,
+    config: Option<&IniConfig>,
+) -> Result<(GetSessionOutput, Value), DeadlineError> {
+    let client = session::deadline_client(config).await;
+    let cap = ResponseBodyCapture::new();
+    let output = client.get_session().farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
+        .customize().interceptor(cap.clone()).send().await.map_err(sdk_err)?;
+    let raw = cap.json().map_err(capture_err)?;
+    Ok((output, raw))
 }
 
 pub async fn list_sessions(
@@ -977,17 +1028,8 @@ pub async fn wait_for_create_job_to_complete(
 
         let job = get_job(farm_id, queue_id, job_id, config).await?;
 
-        let status = job
-            .get("lifecycleStatus")
-            .or_else(|| job.get("state"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-
-        let message = job
-            .get("lifecycleStatusMessage")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let status = job.lifecycle_status.as_str();
+        let message = job.lifecycle_status_message.clone();
 
         match status {
             "CREATE_IN_PROGRESS" => {

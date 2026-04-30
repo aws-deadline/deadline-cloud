@@ -25,7 +25,7 @@ async fn job_cancel_with_yes_prints_summary_and_cancels() {
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
-        "name": "Render Job",
+        "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "RUNNING",
         "taskRunStatusCounts": {
             "RUNNING": 3, "SUCCEEDED": 7, "FAILED": 0,
@@ -46,7 +46,7 @@ async fn job_cancel_mark_as_suspended_with_yes() {
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
-        "name": "Render Job",
+        "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "RUNNING",
         "taskRunStatusCounts": { "RUNNING": 3, "SUCCEEDED": 7 },
         "startedAt": "2025-01-27T07:37:53Z",
@@ -85,7 +85,7 @@ async fn job_requeue_tasks_with_yes_requeues_failed_tasks() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB, "name": "Render Job",
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
         "taskRunStatusCounts": { "FAILED": 2, "SUCCEEDED": 5, "CANCELED": 1 },
     })).await;
@@ -111,7 +111,7 @@ async fn job_requeue_tasks_no_matching_tasks_exits_zero() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB, "name": "Render Job",
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "SUCCEEDED",
         "taskRunStatusCounts": { "SUCCEEDED": 10, "FAILED": 0, "CANCELED": 0, "SUSPENDED": 0 },
     })).await;
@@ -124,7 +124,7 @@ async fn job_requeue_tasks_custom_run_status() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB, "name": "Render Job",
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
         "taskRunStatusCounts": { "FAILED": 2, "SUCCEEDED": 5, "CANCELED": 1 },
     })).await;
@@ -155,7 +155,7 @@ async fn job_requeue_tasks_with_parameters_shows_param_format() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB, "name": "Render Job",
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
         "taskRunStatusCounts": { "FAILED": 1 },
     })).await;
@@ -181,7 +181,7 @@ async fn job_requeue_tasks_step_with_no_matching_tasks() {
     let harness = TestHarness::new().await;
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB, "name": "Render Job",
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
         "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 5 },
     })).await;
@@ -214,7 +214,7 @@ async fn job_cancel_confirm_empty_input_reprompts() {
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
-        "name": "Render Job",
+        "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "RUNNING",
         "taskRunStatusCounts": { "RUNNING": 3, "SUCCEEDED": 7 },
         "startedAt": "2025-01-27T07:37:53Z",
@@ -243,7 +243,7 @@ async fn job_cancel_confirm_eof_exits_cleanly() {
     setup(&harness).await;
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
-        "name": "Render Job",
+        "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "RUNNING",
         "taskRunStatusCounts": { "RUNNING": 3, "SUCCEEDED": 7 },
         "startedAt": "2025-01-27T07:37:53Z",

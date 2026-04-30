@@ -60,6 +60,8 @@ async fn job_get_prints_details() {
     harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
         "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
     })).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
@@ -98,6 +100,8 @@ async fn job_get_prints_estimated_time_remaining() {
     harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
         "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
         "taskRunStatusCounts": {"SUCCEEDED": 5, "RUNNING": 2, "PENDING": 3},
     })).await;
 
@@ -214,6 +218,8 @@ async fn job_get_search_term_is_job_id() {
         "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
         "name": "Render Job",
         "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
     })).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "job-aaf4cdf8aae242f58fb84c5bb19f199b"]));
@@ -240,6 +246,8 @@ async fn job_get_search_term_single_match_shows_details() {
         "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
         "name": "Render Job",
         "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
     })).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
@@ -345,6 +353,8 @@ async fn job_get_job_id_flag_takes_precedence_over_search_term() {
         "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
         "name": "Specific Job",
         "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
     })).await;
 
     // --job-id should win; search term "render" should be ignored
@@ -364,6 +374,8 @@ async fn job_get_yaml_11_boolean_strings_are_quoted() {
         "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
         "name": "Render Job",
         "lifecycleStatus": "CREATE_COMPLETE",
+        "lifecycleStatusMessage": "", "priority": 50,
+        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
         "parameters": {
             "MultiFrameRendering": {"string": "OFF"},
             "IgnoreMissing": {"string": "ON"},

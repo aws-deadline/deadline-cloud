@@ -260,8 +260,11 @@ impl DeadlineServer {
     /// Get detailed information about a specific job.
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
-        match deadline_api::api::get_job(&p.farm_id, &p.queue_id, &p.job_id, None).await {
-            Ok(v) => ok_result(v),
+        match deadline_api::api::get_job_with_raw(&p.farm_id, &p.queue_id, &p.job_id, None).await {
+            Ok((output, raw)) => {
+                let resp = deadline_api::responses::JobResponse::from_output_and_raw(output, &raw);
+                ok_result(serde_json::to_value(&resp).unwrap_or_default())
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -269,8 +272,11 @@ impl DeadlineServer {
     /// Get detailed information about a specific session.
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
-        match deadline_api::api::get_session(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
-            Ok(v) => ok_result(v),
+        match deadline_api::api::get_session_with_raw(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
+            Ok((output, raw)) => {
+                let resp = deadline_api::responses::SessionResponse::from_output_and_raw(output, &raw);
+                ok_result(serde_json::to_value(&resp).unwrap_or_default())
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -534,22 +540,28 @@ impl DeadlineServer {
         let limit = p.limit.unwrap_or(100);
 
         // Get session details
-        let session = match deadline_api::api::get_session(
+        let (session, session_raw) = match deadline_api::api::get_session_with_raw(
             &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None,
         ).await {
             Ok(v) => v,
             Err(e) => return error_json("DeadlineError", &e.to_string()),
         };
 
-        let worker_id = session.get("workerId").and_then(|v| v.as_str()).map(String::from);
-        let fleet_id = session.get("fleetId").and_then(|v| v.as_str()).map(String::from);
+        let worker_id = {
+            let wid = session.worker_id();
+            if wid.is_empty() { None } else { Some(wid.to_string()) }
+        };
+        let fleet_id = {
+            let fid = session.fleet_id();
+            if fid.is_empty() { None } else { Some(fid.to_string()) }
+        };
 
         let mut result = json!({
             "session_id": p.session_id,
             "worker_id": worker_id,
             "fleet_id": fleet_id,
-            "lifecycle_status": session.get("lifecycleStatus"),
-            "host_properties": session.get("hostProperties"),
+            "lifecycle_status": session.lifecycle_status().as_str(),
+            "host_properties": session_raw.get("hostProperties"),
         });
 
         // Get session logs

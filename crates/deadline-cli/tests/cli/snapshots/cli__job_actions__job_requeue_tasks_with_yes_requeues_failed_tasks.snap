@@ -12,31 +12,32 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61424"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61424"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61424"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:55208"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:55208"
+    AWS_ENDPOINT_URL_S3: "http://localhost:55208"
+    AWS_ENDPOINT_URL_STS: "http://localhost:55208"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6CuzIV/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6CuzIV
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmm9tze/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmm9tze
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 Job: Render Job (job-aaf4cdf8aae242f58fb84c5bb19f199b)
 taskRunStatusCounts:
+  CANCELED: 1
   FAILED: 2
   SUCCEEDED: 5
-  CANCELED: 1
 
 Requeuing all tasks with run status among: CANCELED, FAILED, SUSPENDED
-Estimated 3 total tasks (2 FAILED tasks, 1 CANCELED tasks) to requeue.
+Estimated 3 total tasks (1 CANCELED tasks, 2 FAILED tasks) to requeue.
 
 Step: Render Step (step-aaaa)
-  Requeuing an estimated 3 total tasks (2 FAILED tasks, 1 CANCELED tasks)...
+  Requeuing an estimated 3 total tasks (1 CANCELED tasks, 2 FAILED tasks)...
     FAILED task-0001
     FAILED task-0003
     CANCELED task-0004

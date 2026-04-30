@@ -9,7 +9,12 @@
 
 use aws_sdk_deadline::operation::get_farm::GetFarmOutput;
 use aws_sdk_deadline::operation::get_fleet::GetFleetOutput;
+use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use aws_sdk_deadline::operation::get_queue::GetQueueOutput;
+use aws_sdk_deadline::operation::get_session::GetSessionOutput;
+use aws_sdk_deadline::operation::get_step::GetStepOutput;
+use aws_sdk_deadline::operation::get_task::GetTaskOutput;
+use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -195,6 +200,299 @@ impl FleetResponse {
     }
 }
 
+// ---------------------------------------------------------------------------
+// JobResponse
+// ---------------------------------------------------------------------------
+
+/// Response struct for GetJob API output.
+/// Complex nested fields (taskRunStatusCounts, parameters, attachments)
+/// are stored as raw JSON extracted from the HTTP response body.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobResponse {
+    pub job_id: String,
+    pub name: String,
+    pub lifecycle_status: String,
+    pub lifecycle_status_message: String,
+    pub priority: i32,
+    pub created_at: String,
+    pub created_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_run_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_task_run_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_run_status_counts: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_failure_retry_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_profile_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_failed_tasks_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_retries_per_task: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_worker_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_job_id: Option<String>,
+}
+
+impl JobResponse {
+    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
+    pub fn from_output_and_raw(o: GetJobOutput, raw: &Value) -> Self {
+        Self {
+            job_id: o.job_id,
+            name: o.name,
+            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            lifecycle_status_message: o.lifecycle_status_message,
+            priority: o.priority,
+            created_at: format_datetime(&o.created_at),
+            created_by: o.created_by,
+            updated_at: o.updated_at.as_ref().map(format_datetime),
+            updated_by: o.updated_by,
+            started_at: o.started_at.as_ref().map(format_datetime),
+            ended_at: o.ended_at.as_ref().map(format_datetime),
+            task_run_status: o.task_run_status.map(|s| s.as_str().to_string()),
+            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
+            task_run_status_counts: raw.get("taskRunStatusCounts").cloned(),
+            task_failure_retry_count: o.task_failure_retry_count,
+            storage_profile_id: o.storage_profile_id,
+            max_failed_tasks_count: o.max_failed_tasks_count,
+            max_retries_per_task: o.max_retries_per_task,
+            parameters: raw.get("parameters").cloned(),
+            attachments: raw.get("attachments").cloned(),
+            description: o.description,
+            max_worker_count: o.max_worker_count,
+            source_job_id: o.source_job_id,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// StepResponse
+// ---------------------------------------------------------------------------
+
+/// Response struct for GetStep API output.
+/// Complex nested fields (taskRunStatusCounts, dependencyCounts,
+/// requiredCapabilities, parameterSpace) are stored as raw JSON.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepResponse {
+    pub step_id: String,
+    pub name: String,
+    pub lifecycle_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle_status_message: Option<String>,
+    pub task_run_status: String,
+    pub task_run_status_counts: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_failure_retry_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_task_run_status: Option<String>,
+    pub created_at: String,
+    pub created_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependency_counts: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_capabilities: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_space: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+impl StepResponse {
+    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
+    pub fn from_output_and_raw(o: GetStepOutput, raw: &Value) -> Self {
+        Self {
+            step_id: o.step_id,
+            name: o.name,
+            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            lifecycle_status_message: o.lifecycle_status_message,
+            task_run_status: o.task_run_status.as_str().to_string(),
+            task_run_status_counts: raw.get("taskRunStatusCounts").cloned().unwrap_or(Value::Object(Default::default())),
+            task_failure_retry_count: o.task_failure_retry_count,
+            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
+            created_at: format_datetime(&o.created_at),
+            created_by: o.created_by,
+            updated_at: o.updated_at.as_ref().map(format_datetime),
+            updated_by: o.updated_by,
+            started_at: o.started_at.as_ref().map(format_datetime),
+            ended_at: o.ended_at.as_ref().map(format_datetime),
+            dependency_counts: raw.get("dependencyCounts").cloned(),
+            required_capabilities: raw.get("requiredCapabilities").cloned(),
+            parameter_space: raw.get("parameterSpace").cloned(),
+            description: o.description,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TaskResponse
+// ---------------------------------------------------------------------------
+
+/// Response struct for GetTask API output.
+/// Complex nested field (parameters) is stored as raw JSON.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskResponse {
+    pub task_id: String,
+    pub created_at: String,
+    pub created_by: String,
+    pub run_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_run_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_retry_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_session_action_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Value>,
+}
+
+impl TaskResponse {
+    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
+    pub fn from_output_and_raw(o: GetTaskOutput, raw: &Value) -> Self {
+        Self {
+            task_id: o.task_id,
+            created_at: format_datetime(&o.created_at),
+            created_by: o.created_by,
+            run_status: o.run_status.as_str().to_string(),
+            target_run_status: o.target_run_status.map(|s| s.as_str().to_string()),
+            failure_retry_count: o.failure_retry_count,
+            started_at: o.started_at.as_ref().map(format_datetime),
+            ended_at: o.ended_at.as_ref().map(format_datetime),
+            updated_at: o.updated_at.as_ref().map(format_datetime),
+            updated_by: o.updated_by,
+            latest_session_action_id: o.latest_session_action_id,
+            parameters: raw.get("parameters").cloned(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SessionResponse
+// ---------------------------------------------------------------------------
+
+/// Response struct for GetSession API output.
+/// Complex nested fields (log, hostProperties, workerLog) are stored as raw JSON.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionResponse {
+    pub session_id: String,
+    pub fleet_id: String,
+    pub worker_id: String,
+    pub started_at: String,
+    pub lifecycle_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_lifecycle_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_properties: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worker_log: Option<Value>,
+}
+
+impl SessionResponse {
+    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
+    pub fn from_output_and_raw(o: GetSessionOutput, raw: &Value) -> Self {
+        Self {
+            session_id: o.session_id,
+            fleet_id: o.fleet_id,
+            worker_id: o.worker_id,
+            started_at: format_datetime(&o.started_at),
+            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            ended_at: o.ended_at.as_ref().map(format_datetime),
+            target_lifecycle_status: o.target_lifecycle_status.map(|s| s.as_str().to_string()),
+            updated_at: o.updated_at.as_ref().map(format_datetime),
+            updated_by: o.updated_by,
+            log: raw.get("log").cloned(),
+            host_properties: raw.get("hostProperties").cloned(),
+            worker_log: raw.get("workerLog").cloned(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WorkerResponse
+// ---------------------------------------------------------------------------
+
+/// Response struct for GetWorker API output.
+/// Complex nested fields (hostProperties, log) are stored as raw JSON.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerResponse {
+    pub farm_id: String,
+    pub fleet_id: String,
+    pub worker_id: String,
+    pub status: String,
+    pub created_at: String,
+    pub created_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_properties: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<Value>,
+}
+
+impl WorkerResponse {
+    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
+    pub fn from_output_and_raw(o: GetWorkerOutput, raw: &Value) -> Self {
+        Self {
+            farm_id: o.farm_id,
+            fleet_id: o.fleet_id,
+            worker_id: o.worker_id,
+            status: o.status.as_str().to_string(),
+            created_at: format_datetime(&o.created_at),
+            created_by: o.created_by,
+            updated_at: o.updated_at.as_ref().map(format_datetime),
+            updated_by: o.updated_by,
+            host_properties: raw.get("hostProperties").cloned(),
+            log: raw.get("log").cloned(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,5 +637,266 @@ mod tests {
         assert_eq!(json["maxWorkerCount"], 10);
         assert_eq!(json["autoScalingStatus"], "STEADY");
         assert_eq!(json["targetWorkerCount"], 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // JobResponse
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn job_response_serializes_required_fields() {
+        let resp = JobResponse {
+            job_id: "job-aaa".into(),
+            name: "Render Job".into(),
+            lifecycle_status: "CREATE_COMPLETE".into(),
+            lifecycle_status_message: "Job created".into(),
+            priority: 50,
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            updated_at: None,
+            updated_by: None,
+            started_at: None,
+            ended_at: None,
+            task_run_status: None,
+            target_task_run_status: None,
+            task_run_status_counts: None,
+            task_failure_retry_count: None,
+            storage_profile_id: None,
+            max_failed_tasks_count: None,
+            max_retries_per_task: None,
+            parameters: None,
+            attachments: None,
+            description: None,
+            max_worker_count: None,
+            source_job_id: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["jobId"], "job-aaa");
+        assert_eq!(json["name"], "Render Job");
+        assert_eq!(json["lifecycleStatus"], "CREATE_COMPLETE");
+        assert_eq!(json["lifecycleStatusMessage"], "Job created");
+        assert_eq!(json["priority"], 50);
+        assert_eq!(json["createdAt"], "2024-01-01 00:00:00+00:00");
+        assert_eq!(json["createdBy"], "user");
+    }
+
+    #[test]
+    fn job_response_omits_none_fields() {
+        let resp = JobResponse {
+            job_id: "job-aaa".into(),
+            name: "Job".into(),
+            lifecycle_status: "CREATE_COMPLETE".into(),
+            lifecycle_status_message: "".into(),
+            priority: 50,
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            updated_at: None,
+            updated_by: None,
+            started_at: None,
+            ended_at: None,
+            task_run_status: None,
+            target_task_run_status: None,
+            task_run_status_counts: None,
+            task_failure_retry_count: None,
+            storage_profile_id: None,
+            max_failed_tasks_count: None,
+            max_retries_per_task: None,
+            parameters: None,
+            attachments: None,
+            description: None,
+            max_worker_count: None,
+            source_job_id: None,
+        };
+        let json_str = serde_json::to_string(&resp).unwrap();
+        assert!(!json_str.contains("updatedAt"));
+        assert!(!json_str.contains("startedAt"));
+        assert!(!json_str.contains("endedAt"));
+        assert!(!json_str.contains("taskRunStatus"));
+        assert!(!json_str.contains("parameters"));
+        assert!(!json_str.contains("attachments"));
+        assert!(!json_str.contains("description"));
+        assert!(!json_str.contains("maxWorkerCount"));
+        assert!(!json_str.contains("sourceJobId"));
+    }
+
+    #[test]
+    fn job_response_includes_nested_raw_json() {
+        let resp = JobResponse {
+            job_id: "job-aaa".into(),
+            name: "Job".into(),
+            lifecycle_status: "CREATE_COMPLETE".into(),
+            lifecycle_status_message: "".into(),
+            priority: 50,
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            updated_at: None,
+            updated_by: None,
+            started_at: Some("2024-01-01 01:00:00+00:00".into()),
+            ended_at: None,
+            task_run_status: Some("RUNNING".into()),
+            target_task_run_status: None,
+            task_run_status_counts: Some(serde_json::json!({
+                "RUNNING": 2, "SUCCEEDED": 5, "PENDING": 3
+            })),
+            task_failure_retry_count: Some(1),
+            storage_profile_id: None,
+            max_failed_tasks_count: Some(10),
+            max_retries_per_task: Some(3),
+            parameters: Some(serde_json::json!({
+                "Frames": {"int": "1-10"}
+            })),
+            attachments: Some(serde_json::json!({
+                "manifests": [{"rootPath": "/tmp"}]
+            })),
+            description: Some("A render job".into()),
+            max_worker_count: Some(5),
+            source_job_id: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["taskRunStatusCounts"]["RUNNING"], 2);
+        assert_eq!(json["parameters"]["Frames"]["int"], "1-10");
+        assert_eq!(json["attachments"]["manifests"][0]["rootPath"], "/tmp");
+        assert_eq!(json["taskRunStatus"], "RUNNING");
+        assert_eq!(json["maxFailedTasksCount"], 10);
+        assert_eq!(json["maxRetriesPerTask"], 3);
+        assert_eq!(json["maxWorkerCount"], 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // StepResponse
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn step_response_serializes_with_raw_counts() {
+        let resp = StepResponse {
+            step_id: "step-aaa".into(),
+            name: "Render".into(),
+            lifecycle_status: "UPDATE_COMPLETE".into(),
+            lifecycle_status_message: None,
+            task_run_status: "RUNNING".into(),
+            task_run_status_counts: serde_json::json!({"RUNNING": 3, "PENDING": 7}),
+            task_failure_retry_count: None,
+            target_task_run_status: None,
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            updated_at: None,
+            updated_by: None,
+            started_at: Some("2024-01-01 01:00:00+00:00".into()),
+            ended_at: None,
+            dependency_counts: None,
+            required_capabilities: None,
+            parameter_space: None,
+            description: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["stepId"], "step-aaa");
+        assert_eq!(json["name"], "Render");
+        assert_eq!(json["taskRunStatus"], "RUNNING");
+        assert_eq!(json["taskRunStatusCounts"]["RUNNING"], 3);
+        assert_eq!(json["taskRunStatusCounts"]["PENDING"], 7);
+        assert!(json.get("dependencyCounts").is_none());
+        assert!(json.get("parameterSpace").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // TaskResponse
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn task_response_serializes_with_raw_parameters() {
+        let resp = TaskResponse {
+            task_id: "task-aaa".into(),
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            run_status: "SUCCEEDED".into(),
+            target_run_status: None,
+            failure_retry_count: Some(0),
+            started_at: Some("2024-01-01 01:00:00+00:00".into()),
+            ended_at: Some("2024-01-01 02:00:00+00:00".into()),
+            updated_at: None,
+            updated_by: None,
+            latest_session_action_id: Some("sessionaction-aaa".into()),
+            parameters: Some(serde_json::json!({
+                "Frame": {"int": "5"}
+            })),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["taskId"], "task-aaa");
+        assert_eq!(json["runStatus"], "SUCCEEDED");
+        assert_eq!(json["parameters"]["Frame"]["int"], "5");
+        assert_eq!(json["latestSessionActionId"], "sessionaction-aaa");
+        assert_eq!(json["failureRetryCount"], 0);
+        assert!(json.get("targetRunStatus").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // SessionResponse
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn session_response_includes_nested_types() {
+        let resp = SessionResponse {
+            session_id: "session-aaa".into(),
+            fleet_id: "fleet-aaa".into(),
+            worker_id: "worker-aaa".into(),
+            started_at: "2024-01-01 00:00:00+00:00".into(),
+            lifecycle_status: "STARTED".into(),
+            ended_at: None,
+            target_lifecycle_status: None,
+            updated_at: None,
+            updated_by: None,
+            log: Some(serde_json::json!({
+                "logDriver": "awslogs",
+                "options": {"logGroupName": "/aws/deadline/queue-aaa"}
+            })),
+            host_properties: Some(serde_json::json!({
+                "ipAddresses": {"ipV4Addresses": ["10.0.0.1"]},
+                "hostName": "ip-10-0-0-1"
+            })),
+            worker_log: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["sessionId"], "session-aaa");
+        assert_eq!(json["fleetId"], "fleet-aaa");
+        assert_eq!(json["workerId"], "worker-aaa");
+        assert_eq!(json["lifecycleStatus"], "STARTED");
+        assert_eq!(json["log"]["logDriver"], "awslogs");
+        assert_eq!(json["hostProperties"]["hostName"], "ip-10-0-0-1");
+        assert!(json.get("endedAt").is_none());
+        assert!(json.get("workerLog").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // WorkerResponse
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn worker_response_includes_nested_types() {
+        let resp = WorkerResponse {
+            farm_id: "farm-abc".into(),
+            fleet_id: "fleet-aaa".into(),
+            worker_id: "worker-aaa".into(),
+            status: "RUNNING".into(),
+            created_at: "2024-01-01 00:00:00+00:00".into(),
+            created_by: "user".into(),
+            updated_at: None,
+            updated_by: None,
+            host_properties: Some(serde_json::json!({
+                "ipAddresses": {"ipV4Addresses": ["10.0.0.1"]},
+                "hostName": "ip-10-0-0-1"
+            })),
+            log: Some(serde_json::json!({
+                "logDriver": "awslogs",
+                "options": {"logGroupName": "/aws/deadline/fleet-aaa"}
+            })),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["farmId"], "farm-abc");
+        assert_eq!(json["fleetId"], "fleet-aaa");
+        assert_eq!(json["workerId"], "worker-aaa");
+        assert_eq!(json["status"], "RUNNING");
+        assert_eq!(json["hostProperties"]["hostName"], "ip-10-0-0-1");
+        assert_eq!(json["log"]["logDriver"], "awslogs");
+        assert!(json.get("updatedAt").is_none());
     }
 }

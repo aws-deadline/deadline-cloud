@@ -12,16 +12,17 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61357"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61357"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61357"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:49901"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:49901"
+    AWS_ENDPOINT_URL_S3: "http://localhost:49901"
+    AWS_ENDPOINT_URL_STS: "http://localhost:49901"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpxMFobG/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpxMFobG
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp4ivaWe/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp4ivaWe
 ---
 success: true
 exit_code: 0
@@ -29,6 +30,10 @@ exit_code: 0
 jobId: job-aaf4cdf8aae242f58fb84c5bb19f199b
 name: Render Job
 lifecycleStatus: CREATE_COMPLETE
+lifecycleStatusMessage: ''
+priority: 50
+createdAt: 2024-01-15 10:30:00+00:00
+createdBy: user-abc
 
 estimatedTimeRemaining: N/A
 
