@@ -38,7 +38,7 @@ src/
 ├── lib.rs              # Re-exports all public modules
 ├── client.rs           # collect_paginated, collect_paginated_raw,
 │                       #   apply_dcm_principal, format_sdk_error,
-│                       #   sdk_err, WithPrincipalId, pascal_to_snake
+│                       #   deadline_error, WithPrincipalId, pascal_to_snake
 ├── telemetry_interceptor.rs  # TelemetryInterceptor + pagination grouping
 ├── job_api.rs          # Domain logic: list_jobs_by_filter_expression,
 │                       #   wait_for_create_job_to_complete, filter/sort builders,
@@ -118,7 +118,7 @@ use deadline_api::response_capture::ResponseBodyCapture;
 let cap = ResponseBodyCapture::new();
 client.get_farm().farm_id(&farm)
     .customize().interceptor(cap.clone())
-    .send().await.map_err(client::sdk_err)?;
+    .send().await.map_err(client::deadline_error)?;
 let resp = cap.json()?;
 ```
 
@@ -130,7 +130,7 @@ let resp = cap.json()?;
 | `collect_paginated_raw` | Manual nextToken loop, aggregate items under key |
 | `apply_dcm_principal` | Set principal_id on list builders for DCM users |
 | `format_sdk_error` | Extract error code + message from any `SdkError` |
-| `sdk_err` | Map `SdkError` → `DeadlineError::OperationError` |
+| `deadline_error` | Map `SdkError` → `DeadlineError::OperationError` |
 | `pascal_to_snake` | Convert "GetFarm" → "get_farm" for telemetry |
 
 ### Domain functions (`job_api.rs`)

@@ -2,6 +2,8 @@ pub mod errors;
 pub mod session;
 pub mod auth;
 pub mod api;
+pub mod client;
+pub mod telemetry_interceptor;
 pub mod job_monitoring;
 pub mod log_retrieval;
 pub mod queue_parameters;

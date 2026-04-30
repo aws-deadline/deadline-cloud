@@ -12,6 +12,8 @@ aws-sdk-deadline = { workspace = true }
 aws-sdk-sts = { workspace = true }
 aws-sdk-cloudwatchlogs = { workspace = true }
 aws-smithy-types = { workspace = true }
+aws-smithy-runtime-api = "1"
+aws-smithy-async = "1"
 aws-credential-types = "1"
 chrono = { workspace = true }
 serde_json = { workspace = true }

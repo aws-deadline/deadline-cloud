@@ -48,7 +48,7 @@ credential scoping, telemetry, and error mapping** — not type re-exporting.
 
 /// Unchanged from today.
 pub fn format_sdk_error<E, R>(err: &SdkError<E, R>) -> String;
-pub fn sdk_err<E>(e: SdkError<E>) -> DeadlineError;
+pub fn deadline_error<E>(e: SdkError<E>) -> DeadlineError;
 
 /// Drain a native SDK paginator into Vec of page outputs. The client's
 /// telemetry interceptor emits ONE event covering the whole iteration
@@ -128,7 +128,7 @@ the same way (`cfg.load::<Metadata>()`).
 pub async fn collect_paginated<O, E>(
     stream: PaginationStream<Result<O, SdkError<E, HttpResponse>>>,
 ) -> Result<Vec<O>, DeadlineError> {
-    stream.try_collect().await.map_err(sdk_err)
+    stream.try_collect().await.map_err(deadline_error)
 }
 ```
 
@@ -152,7 +152,7 @@ crates/deadline-api/src/
 ├── lib.rs
 ├── client.rs                     # collect_paginated, collect_paginated_raw,
 │                                 #   apply_dcm_principal, format_sdk_error,
-│                                 #   sdk_err, WithPrincipalId, pascal_to_snake
+│                                 #   deadline_error, WithPrincipalId, pascal_to_snake
 ├── telemetry_interceptor.rs      # TelemetryInterceptor + pagination grouping
 ├── job_api.rs                    # Domain logic survivors (see below)
 ├── response_capture.rs           # ResponseBodyCapture interceptor (already renamed)
@@ -213,7 +213,7 @@ let client = session::deadline_client(Some(&config)).await;
 let cap = ResponseBodyCapture::new();
 client.get_farm().farm_id(&farm)
     .customize().interceptor(cap.clone())
-    .send().await.map_err(client::sdk_err)?;
+    .send().await.map_err(client::deadline_error)?;
 let resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
 println!("{}", common::cli_object_repr(&resp));
 // Telemetry: one "get_farm" event emitted automatically.
@@ -228,7 +228,7 @@ let client = session::deadline_client(Some(&config)).await;
 client.update_job()
     .farm_id(&farm).queue_id(&queue).job_id(&job)
     .target_task_run_status(JobTargetTaskRunStatus::Canceled)
-    .send().await.map_err(client::sdk_err)?;
+    .send().await.map_err(client::deadline_error)?;
 // Telemetry: one "update_job" event emitted automatically.
 ```
 
@@ -247,7 +247,7 @@ let all = client::collect_paginated_raw("jobs", |token| {
         let mut req = client.list_jobs().farm_id(&farm).queue_id(&queue);
         if let Some(t) = token { req = req.next_token(t); }
         req.customize().interceptor(cap.clone())
-            .send().await.map_err(client::sdk_err)?;
+            .send().await.map_err(client::deadline_error)?;
         cap.json().map_err(|e| DeadlineError::OperationError(e.to_string()))
     }
 }).await?;
@@ -257,7 +257,7 @@ let all = client::collect_paginated_raw("jobs", |token| {
 
 | Batch | Scope |
 |-------|-------|
-| **A** | Create `src/client.rs` with `collect_paginated`, `collect_paginated_raw`, `apply_dcm_principal`, `format_sdk_error`, `sdk_err`, `WithPrincipalId` trait, `pascal_to_snake`. Create `src/telemetry_interceptor.rs` with `TelemetryInterceptor` + pagination group support. Install interceptor on every client built by `session::deadline_client()`. Add `aws-sdk-deadline = { workspace = true }` to `deadline-cli/Cargo.toml` and `deadline-python-bindings/Cargo.toml`. Remove dead `aws-sdk-deadline` deps from `deadline-job-attachments/Cargo.toml` and `deadline-job-bundle/Cargo.toml`. Helper tests (wiremock). |
+| **A** | Create `src/client.rs` with `collect_paginated`, `collect_paginated_raw`, `apply_dcm_principal`, `format_sdk_error`, `deadline_error`, `WithPrincipalId` trait, `pascal_to_snake`. Create `src/telemetry_interceptor.rs` with `TelemetryInterceptor` + pagination group support. Install interceptor on every client built by `session::deadline_client()`. Add `aws-sdk-deadline = { workspace = true }` to `deadline-cli/Cargo.toml` and `deadline-python-bindings/Cargo.toml`. Remove dead `aws-sdk-deadline` deps from `deadline-job-attachments/Cargo.toml` and `deadline-job-bundle/Cargo.toml`. Helper tests (wiremock). |
 | **B** | Migrate Farm + Queue + Fleet callers (CLI + FFI) to use SDK fluent builders through the helpers. Delete corresponding wrappers from `api.rs`. |
 | **C** | Migrate Job + Step + Task + Worker + Session callers. Move surviving domain functions to `src/job_api.rs`. Delete rest of `api.rs`. Remove `pub mod api` from `lib.rs`. |
 | **D** | FFI DTO conversion: create `deadline-python-bindings/src/dtos.rs`, rewrite `resources.rs`, add DTO round-trip tests. |
@@ -358,10 +358,10 @@ tests. Must pass unchanged after each batch.
 ### Step status
 
 - [x] Step 1 — Study + design locked.
-- [ ] Step 2 — Write Batch A helper tests (red phase).
-- [ ] Step 3 — Implement Batch A.
-- [ ] Step 4 — Compare CLIs (Level-2 snapshots must pass).
-- [ ] Step 5 — Audit.
+- [x] Step 2 — Batch A helper tests written (13 tests).
+- [x] Step 3 — Batch A implemented (client.rs + telemetry_interceptor.rs).
+- [x] Step 5 — Audit clean (stale doc comment fixed, parameter name fixed).
+- [ ] **Next: Batch B** — Wire `TelemetryInterceptor` into `session::build_deadline_client()`, then migrate Farm + Queue + Fleet callers.
 - [ ] Step 6 — Spec updates (Batch E).
 - [ ] Step 7 — Commit per batch.
 
