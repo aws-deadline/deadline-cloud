@@ -9,17 +9,14 @@ pub fn list_farms<'py>(py: Python<'py>, config_path: Option<&str>) -> PyResult<B
     let rt = crate::make_runtime()?;
     let dl = rt.block_on(deadline_api::session::deadline_client(Some(&config)));
     let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), Some(&config));
-    let result = rt.block_on(deadline_api::client::collect_paginated_raw("farms", |token| {
-        let builder = builder.clone();
-        async move {
-            let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-            let mut req = builder;
-            if let Some(t) = token { req = req.next_token(t); }
-            req.customize().interceptor(cap.clone())
-                .send().await.map_err(deadline_api::client::deadline_error)?;
-            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-        }
-    })).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let pages = rt.block_on(deadline_api::client::collect_paginated(builder.into_paginator().send()))
+        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let farms: Vec<serde_json::Value> = pages
+        .iter()
+        .flat_map(|p| p.farms())
+        .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
+        .collect();
+    let result = serde_json::json!({"farms": farms});
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
@@ -30,12 +27,10 @@ pub fn get_farm<'py>(py: Python<'py>, farm_id: &str, config_path: Option<&str>) 
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
     let dl = rt.block_on(deadline_api::session::deadline_client(Some(&config)));
-    let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-    rt.block_on(dl.get_farm().farm_id(farm_id)
-        .customize().interceptor(cap.clone())
-        .send())
+    let output = rt.block_on(dl.get_farm().farm_id(farm_id).send())
         .map_err(|e| DeadlineOperationError::new_err(deadline_api::client::format_sdk_error(&e)))?;
-    let result = cap.json()
+    let resp = deadline_api::responses::FarmResponse::from(output);
+    let result = serde_json::to_value(&resp)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
@@ -48,17 +43,14 @@ pub fn list_queues<'py>(py: Python<'py>, farm_id: &str, config_path: Option<&str
     let rt = crate::make_runtime()?;
     let dl = rt.block_on(deadline_api::session::deadline_client(Some(&config)));
     let builder = deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), Some(&config));
-    let result = rt.block_on(deadline_api::client::collect_paginated_raw("queues", |token| {
-        let builder = builder.clone();
-        async move {
-            let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-            let mut req = builder;
-            if let Some(t) = token { req = req.next_token(t); }
-            req.customize().interceptor(cap.clone())
-                .send().await.map_err(deadline_api::client::deadline_error)?;
-            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-        }
-    })).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let pages = rt.block_on(deadline_api::client::collect_paginated(builder.into_paginator().send()))
+        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let queues: Vec<serde_json::Value> = pages
+        .iter()
+        .flat_map(|p| p.queues())
+        .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name(), "status": q.status().as_str(), "createdAt": q.created_at().to_string(), "createdBy": q.created_by()}))
+        .collect();
+    let result = serde_json::json!({"queues": queues});
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
@@ -70,11 +62,14 @@ pub fn get_queue<'py>(py: Python<'py>, farm_id: &str, queue_id: &str, config_pat
     let rt = crate::make_runtime()?;
     let dl = rt.block_on(deadline_api::session::deadline_client(Some(&config)));
     let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-    rt.block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id)
+    let output = rt.block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id)
         .customize().interceptor(cap.clone())
         .send())
         .map_err(|e| DeadlineOperationError::new_err(deadline_api::client::format_sdk_error(&e)))?;
-    let result = cap.json()
+    let raw = cap.json()
+        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let resp = deadline_api::responses::QueueResponse::from_output_and_raw(output, &raw);
+    let result = serde_json::to_value(&resp)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))

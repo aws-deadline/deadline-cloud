@@ -1042,6 +1042,7 @@ dependencies = [
  "indexmap",
  "log",
  "semver",
+ "serde",
  "serde_json",
  "serde_yaml",
  "serial_test",

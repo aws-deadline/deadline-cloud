@@ -207,24 +207,12 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
             let builder = client::apply_dcm_principal(dl.list_queues().farm_id(&farm), Some(&config));
-            let resp = client::collect_paginated_raw("queues", |token| {
-                let builder = builder.clone();
-                async move {
-                    let cap = ResponseBodyCapture::new();
-                    let mut req = builder;
-                    if let Some(t) = token { req = req.next_token(t); }
-                    req.customize().interceptor(cap.clone())
-                        .send().await.map_err(client::deadline_error)?;
-                    cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-                }
-            }).await;
-            match resp {
-                Ok(resp) => {
-                    let empty = vec![];
-                    let queues = resp["queues"].as_array().unwrap_or(&empty);
-                    let structured: Vec<serde_json::Value> = queues
+            match client::collect_paginated(builder.into_paginator().send()).await {
+                Ok(pages) => {
+                    let structured: Vec<serde_json::Value> = pages
                         .iter()
-                        .map(|q| serde_json::json!({"queueId": q["queueId"], "displayName": q["displayName"]}))
+                        .flat_map(|p| p.queues())
+                        .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}))
                         .collect();
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
                     Ok(())
@@ -249,9 +237,11 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 .customize().interceptor(cap.clone())
                 .send().await
             {
-                Ok(_) => {
-                    let resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                    println!("{}", crate::common::cli_object_repr(&resp));
+                Ok(output) => {
+                    let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
+                    let resp = deadline_api::responses::QueueResponse::from_output_and_raw(output, &raw);
+                    let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+                    println!("{}", crate::common::cli_object_repr(&val));
                     Ok(())
                 }
                 Err(e) => {

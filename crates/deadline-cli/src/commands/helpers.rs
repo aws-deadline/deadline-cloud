@@ -1,6 +1,6 @@
 use deadline_config::ini::IniConfig;
 use deadline_api::api;
-use deadline_api::{client, response_capture::ResponseBodyCapture, session};
+use deadline_api::{client, session};
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.
@@ -100,25 +100,22 @@ pub async fn suggest_resources_on_client_error(
 async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_farms(), config);
-    let resp = client::collect_paginated_raw("farms", |token| {
-        let builder = builder.clone();
-        async move {
-            let cap = ResponseBodyCapture::new();
-            let mut req = builder;
-            if let Some(t) = token { req = req.next_token(t); }
-            req.customize().interceptor(cap.clone())
-                .send().await.map_err(client::deadline_error)?;
-            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-        }
-    }).await;
+    let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
-        Ok(resp) => format_suggestions(
-            resp["farms"].as_array(),
-            "farmId",
-            "displayName",
-            "Available farms:",
-            out,
-        ),
+        Ok(pages) => {
+            let items: Vec<serde_json::Value> = pages
+                .iter()
+                .flat_map(|p| p.farms())
+                .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
+                .collect();
+            format_suggestions(
+                Some(&items),
+                "farmId",
+                "displayName",
+                "Available farms:",
+                out,
+            )
+        }
         Err(_) => false,
     }
 }
@@ -126,25 +123,22 @@ async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bo
 async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), config);
-    let resp = client::collect_paginated_raw("queues", |token| {
-        let builder = builder.clone();
-        async move {
-            let cap = ResponseBodyCapture::new();
-            let mut req = builder;
-            if let Some(t) = token { req = req.next_token(t); }
-            req.customize().interceptor(cap.clone())
-                .send().await.map_err(client::deadline_error)?;
-            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-        }
-    }).await;
+    let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
-        Ok(resp) => format_suggestions(
-            resp["queues"].as_array(),
-            "queueId",
-            "displayName",
-            &format!("Available queues in farm {farm_id}:"),
-            out,
-        ),
+        Ok(pages) => {
+            let items: Vec<serde_json::Value> = pages
+                .iter()
+                .flat_map(|p| p.queues())
+                .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}))
+                .collect();
+            format_suggestions(
+                Some(&items),
+                "queueId",
+                "displayName",
+                &format!("Available queues in farm {farm_id}:"),
+                out,
+            )
+        }
         Err(_) => false,
     }
 }
@@ -152,25 +146,22 @@ async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
 async fn try_list_fleets(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(farm_id), config);
-    let resp = client::collect_paginated_raw("fleets", |token| {
-        let builder = builder.clone();
-        async move {
-            let cap = ResponseBodyCapture::new();
-            let mut req = builder;
-            if let Some(t) = token { req = req.next_token(t); }
-            req.customize().interceptor(cap.clone())
-                .send().await.map_err(client::deadline_error)?;
-            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-        }
-    }).await;
+    let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
-        Ok(resp) => format_suggestions(
-            resp["fleets"].as_array(),
-            "fleetId",
-            "displayName",
-            &format!("Available fleets in farm {farm_id}:"),
-            out,
-        ),
+        Ok(pages) => {
+            let items: Vec<serde_json::Value> = pages
+                .iter()
+                .flat_map(|p| p.fleets())
+                .map(|f| serde_json::json!({"fleetId": f.fleet_id(), "displayName": f.display_name()}))
+                .collect();
+            format_suggestions(
+                Some(&items),
+                "fleetId",
+                "displayName",
+                &format!("Available fleets in farm {farm_id}:"),
+                out,
+            )
+        }
         Err(_) => false,
     }
 }

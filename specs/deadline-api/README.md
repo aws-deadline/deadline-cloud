@@ -9,37 +9,40 @@ Dependencies: `deadline-config`.
 
 ## How API Calls Work
 
-Two patterns coexist during the migration from wrapper functions to
-direct SDK usage:
+Three patterns coexist during the migration to fully typed SDK usage:
 
-### New pattern (Farm, Queue list, Fleet — Batch B complete)
+### Typed pattern (Farm, Queue, Fleet — Batch D1–D3 complete)
 
-Callers use the SDK fluent builder directly. A `TelemetryInterceptor`
-installed on the client at construction time automatically emits one
-latency event per operation (reading the operation name from the SDK's
-`Metadata` config-bag entry). For raw JSON output, callers attach a
-per-call `ResponseBodyCapture` interceptor via `.customize().interceptor(cap)`.
+Callers use the SDK fluent builder directly. List operations use typed
+paginators with field extraction. Get operations use response structs
+(`FarmResponse`, `QueueResponse`, `FleetResponse`) that serialize to
+camelCase JSON. Complex nested SDK types that lack `Serialize` are
+extracted from the raw HTTP body alongside the typed output.
 
 ```rust
-// Typed list with raw capture for full-response output
-let dl = session::deadline_client(config).await;
-let builder = client::apply_dcm_principal(dl.list_farms(), config);
-let resp = client::collect_paginated_raw("farms", |token| { ... }).await?;
+// Typed list — paginator + field extraction
+let pages = client::collect_paginated(dl.list_farms().into_paginator().send()).await?;
+let items: Vec<_> = pages.iter().flat_map(|p| p.farms())
+    .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
+    .collect();
 
-// Raw get for full-response print
+// Typed get — response struct (no nested types)
+let output = dl.get_farm().farm_id(&farm).send().await?;
+let resp = FarmResponse::from(output);
+let val = serde_json::to_value(&resp)?;
+
+// Typed get — response struct (with nested types needing raw extraction)
 let cap = ResponseBodyCapture::new();
-dl.get_farm().farm_id(&farm)
-    .customize().interceptor(cap.clone())
-    .send().await.map_err(client::deadline_error)?;
-let resp = cap.json()?;
+let output = dl.get_fleet().farm_id(&farm).fleet_id(&fleet)
+    .customize().interceptor(cap.clone()).send().await?;
+let raw = cap.json()?;
+let resp = FleetResponse::from_output_and_raw(output, &raw);
 ```
 
-### Legacy pattern (Job, Step, Task, Worker, Session — api.rs)
+### Legacy wrapper pattern (Job, Step, Task, Worker, Session — api.rs)
 
 Wrapper functions in `api.rs` use `ResponseBodyCapture` for raw JSON
-capture. Telemetry is handled by the client-level `TelemetryInterceptor`
-(same as the new pattern). These wrappers are thin convenience functions
-that may be inlined at callers or moved to `job_api.rs` in a future batch.
+capture. These will be migrated in Batch D4–D5.
 
 ## Document Index
 
@@ -52,6 +55,11 @@ that may be inlined at callers or moved to `job_api.rs` in a future batch.
 | [log-retrieval.md](log-retrieval.md) | CloudWatch Logs integration, session auto-selection, fleet-scoped credentials |
 | [job-monitoring.md](job-monitoring.md) | wait_for_job_completion polling loop, failed task collection, backoff curve |
 | [update-checker.md](update-checker.md) | Remote manifest fetch, version comparison, config opt-out |
+
+`responses.rs` — Response structs (`FarmResponse`, `QueueResponse`,
+`FleetResponse`) and `format_datetime` helper. Each struct maps 1:1 to a
+Get API output with `#[serde(rename_all = "camelCase")]` and
+`skip_serializing_if` for optional fields.
 
 ## Status
 

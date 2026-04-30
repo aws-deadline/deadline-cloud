@@ -13,22 +13,48 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61340"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61340"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61340"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:50897"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:50897"
+    AWS_ENDPOINT_URL_S3: "http://localhost:50897"
+    AWS_ENDPOINT_URL_STS: "http://localhost:50897"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmlVt7u/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpmlVt7u
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpfDKqV1/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpfDKqV1
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 fleetId: fleet-aaa
+farmId: farm-abc
 displayName: My Fleet
+status: ACTIVE
+autoScalingStatus: STEADY
+targetWorkerCount: 5
+workerCount: 5
+minWorkerCount: 1
+maxWorkerCount: 10
+configuration:
+  customerManaged:
+    mode: NO_SCALING
+    workerCapabilities:
+      vCpuCount:
+        min: 1
+        max: 4
+      memoryMiB:
+        min: 1024
+        max: 8192
+      osFamily: LINUX
+      cpuArchitectureType: x86_64
+createdAt: 2024-06-15 10:30:00+00:00
+createdBy: arn:aws:sts::123456789012:assumed-role/Admin/user
+updatedAt: 2024-07-01 12:00:00+00:00
+updatedBy: arn:aws:sts::123456789012:assumed-role/Admin/user
+description: A fleet for rendering jobs.
+roleArn: arn:aws:iam::123456789012:role/FleetRole
 
 
 ----- stderr -----

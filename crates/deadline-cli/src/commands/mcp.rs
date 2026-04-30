@@ -156,19 +156,16 @@ impl DeadlineServer {
     async fn list_farms(&self, Parameters(_p): Parameters<ListFarmsParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
         let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), None);
-        let resp = deadline_api::client::collect_paginated_raw("farms", |token| {
-            let builder = builder.clone();
-            async move {
-                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-                let mut req = builder;
-                if let Some(t) = token { req = req.next_token(t); }
-                req.customize().interceptor(cap.clone())
-                    .send().await.map_err(deadline_api::client::deadline_error)?;
-                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-            }
-        }).await;
+        let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let farms: Vec<serde_json::Value> = pages
+                    .iter()
+                    .flat_map(|p| p.farms())
+                    .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
+                    .collect();
+                ok_result(json!({"farms": farms}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -178,19 +175,16 @@ impl DeadlineServer {
     async fn list_queues(&self, Parameters(p): Parameters<ListQueuesParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
         let builder = deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(&p.farm_id), None);
-        let resp = deadline_api::client::collect_paginated_raw("queues", |token| {
-            let builder = builder.clone();
-            async move {
-                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-                let mut req = builder;
-                if let Some(t) = token { req = req.next_token(t); }
-                req.customize().interceptor(cap.clone())
-                    .send().await.map_err(deadline_api::client::deadline_error)?;
-                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-            }
-        }).await;
+        let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let queues: Vec<serde_json::Value> = pages
+                    .iter()
+                    .flat_map(|p| p.queues())
+                    .map(|q| json!({"queueId": q.queue_id(), "displayName": q.display_name(), "status": q.status().as_str(), "createdAt": q.created_at().to_string(), "createdBy": q.created_by()}))
+                    .collect();
+                ok_result(json!({"queues": queues}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -209,19 +203,16 @@ impl DeadlineServer {
     async fn list_fleets(&self, Parameters(p): Parameters<ListFleetsParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
         let builder = deadline_api::client::apply_dcm_principal(dl.list_fleets().farm_id(&p.farm_id), None);
-        let resp = deadline_api::client::collect_paginated_raw("fleets", |token| {
-            let builder = builder.clone();
-            async move {
-                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-                let mut req = builder;
-                if let Some(t) = token { req = req.next_token(t); }
-                req.customize().interceptor(cap.clone())
-                    .send().await.map_err(deadline_api::client::deadline_error)?;
-                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
-            }
-        }).await;
+        let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let fleets: Vec<serde_json::Value> = pages
+                    .iter()
+                    .flat_map(|p| p.fleets())
+                    .map(|f| json!({"fleetId": f.fleet_id(), "displayName": f.display_name(), "status": f.status().as_str(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
+                    .collect();
+                ok_result(json!({"fleets": fleets}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }

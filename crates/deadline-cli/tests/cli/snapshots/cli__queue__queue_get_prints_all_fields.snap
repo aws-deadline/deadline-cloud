@@ -11,26 +11,31 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61727"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61727"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61727"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:50891"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:50891"
+    AWS_ENDPOINT_URL_S3: "http://localhost:50891"
+    AWS_ENDPOINT_URL_STS: "http://localhost:50891"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYkgVRP/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpYkgVRP
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp3KdNNT/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp3KdNNT
 ---
 success: true
 exit_code: 0
 ----- stdout -----
+farmId: farm-abc
 queueId: queue-aaa
 displayName: Production Queue
-description: The production queue.
-farmId: farm-abc
 status: SCHEDULING
 defaultBudgetAction: NONE
+createdAt: 2024-06-15 10:30:00+00:00
+createdBy: arn:aws:sts::123456789012:assumed-role/Admin/user
+updatedAt: 2024-07-01 12:00:00+00:00
+updatedBy: arn:aws:sts::123456789012:assumed-role/Admin/user
+description: The production queue.
 jobAttachmentSettings:
   s3BucketName: my-bucket
   rootPrefix: DeadlineCloud
@@ -40,10 +45,6 @@ jobRunAsUser:
     user: job-user
     passwordArn: arn:aws:secretsmanager:us-west-2:123456789012:secret:pw
   runAs: QUEUE_CONFIGURED_USER
-createdAt: 2024-06-15 10:30:00+00:00
-createdBy: arn:aws:sts::123456789012:assumed-role/Admin/user
-updatedAt: 2024-07-01 12:00:00+00:00
-updatedBy: arn:aws:sts::123456789012:assumed-role/Admin/user
 
 
 ----- stderr -----

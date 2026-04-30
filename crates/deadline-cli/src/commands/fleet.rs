@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{api, client, response_capture::ResponseBodyCapture, session};
+use deadline_api::{api, client, response_capture::ResponseBodyCapture, responses::FleetResponse, session};
 use deadline_config::config_file;
 
 use super::config::CliError;
@@ -45,27 +45,25 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
             let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), Some(&config));
-            let resp = client::collect_paginated_raw("fleets", |token| {
-                let builder = builder.clone();
-                async move {
-                    let cap = ResponseBodyCapture::new();
-                    let mut req = builder;
-                    if let Some(t) = token { req = req.next_token(t); }
-                    req.customize().interceptor(cap.clone())
-                        .send().await.map_err(client::deadline_error)?;
-                    cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+            match client::collect_paginated(builder.into_paginator().send()).await {
+                Ok(pages) => {
+                    let structured: Vec<serde_json::Value> = pages
+                        .iter()
+                        .flat_map(|p| p.fleets())
+                        .map(|f| serde_json::json!({"fleetId": f.fleet_id(), "displayName": f.display_name()}))
+                        .collect();
+                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+                    Ok(())
                 }
-            }).await.map_err(|e| {
-                CliError::Operation(format!("Failed to get Fleets from Deadline:\n{e}"))
-            })?;
-            let empty = vec![];
-            let fleets = resp["fleets"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = fleets
-                .iter()
-                .map(|f| serde_json::json!({"fleetId": f["fleetId"], "displayName": f["displayName"]}))
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
-            Ok(())
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), "ListFleets", Some(&farm), None, None, Some(&config),
+                    ).await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Fleets from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
         FleetAction::Get { profile, farm_id, fleet_id, queue_id } => {
             if fleet_id.is_some() && queue_id.is_some() {
@@ -84,16 +82,18 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
 
             if let Some(fleet) = fleet_id {
-                // --fleet-id mode: raw get
+                // --fleet-id mode: typed get with raw for nested fields
                 let dl = session::deadline_client(Some(&config)).await;
                 let cap = ResponseBodyCapture::new();
                 match dl.get_fleet().farm_id(&farm).fleet_id(&fleet)
                     .customize().interceptor(cap.clone())
                     .send().await
                 {
-                    Ok(_) => {
-                        let resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                        println!("{}", crate::common::cli_object_repr(&resp));
+                    Ok(output) => {
+                        let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
+                        let resp = FleetResponse::from_output_and_raw(output, &raw);
+                        let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+                        println!("{}", crate::common::cli_object_repr(&val));
                         Ok(())
                     }
                     Err(e) => {
@@ -120,18 +120,25 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                         "Missing '--fleet-id', '--queue-id', or default Queue ID configuration".into()
                     ))?;
 
-                // Get queue display name (raw)
+                // Get queue display name
                 let dl = session::deadline_client(Some(&config)).await;
-                let cap = ResponseBodyCapture::new();
-                dl.get_queue().farm_id(&farm).queue_id(&queue)
-                    .customize().interceptor(cap.clone())
-                    .send().await.map_err(|e| {
-                        CliError::Operation(format!("Failed to get Queue from Deadline:\n{}", client::format_sdk_error(&e)))
-                    })?;
-                let queue_resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                let queue_name = queue_resp["displayName"].as_str().unwrap_or("");
+                let queue_output = match dl.get_queue().farm_id(&farm).queue_id(&queue)
+                    .send().await
+                {
+                    Ok(output) => output,
+                    Err(e) => {
+                        let err = client::format_sdk_error(&e);
+                        let suggestion = suggest_resources_on_client_error(
+                            &err, "GetQueue", Some(&farm), Some(&queue), None, Some(&config),
+                        ).await;
+                        return Err(CliError::Operation(format!(
+                            "Failed to get Queue from Deadline:\n{err}{suggestion}"
+                        )));
+                    }
+                };
+                let queue_name = queue_output.display_name();
 
-                // List queue-fleet associations (raw paginated)
+                // List queue-fleet associations
                 let assoc_resp = api::list_queue_fleet_associations(&farm, &queue, Some(&config)).await.map_err(|e| {
                     CliError::Operation(format!("Failed to list queue fleet associations:\n{e}"))
                 })?;
@@ -142,24 +149,26 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
 
                 // Get each fleet and print with association status
                 for assoc in associations {
-                    let fleet_id = assoc["fleetId"].as_str().unwrap_or("");
+                    let fleet_id_val = assoc["fleetId"].as_str().unwrap_or("");
                     let status = assoc["status"].as_str().unwrap_or("");
 
                     let cap = ResponseBodyCapture::new();
-                    dl.get_fleet().farm_id(&farm).fleet_id(fleet_id)
+                    let output = dl.get_fleet().farm_id(&farm).fleet_id(fleet_id_val)
                         .customize().interceptor(cap.clone())
                         .send().await.map_err(|e| {
                             CliError::Operation(format!("Failed to get Fleet from Deadline:\n{}", client::format_sdk_error(&e)))
                         })?;
-                    let mut fleet = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
+                    let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
+                    let resp = FleetResponse::from_output_and_raw(output, &raw);
+                    let mut val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
 
                     // Add queueFleetAssociationStatus to the fleet response
-                    if let Some(obj) = fleet.as_object_mut() {
+                    if let Some(obj) = val.as_object_mut() {
                         obj.insert("queueFleetAssociationStatus".into(), serde_json::Value::String(status.into()));
                     }
 
                     println!();
-                    println!("{}", crate::common::cli_object_repr(&fleet));
+                    println!("{}", crate::common::cli_object_repr(&val));
                 }
 
                 Ok(())

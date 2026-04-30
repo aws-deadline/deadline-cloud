@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{client, response_capture::ResponseBodyCapture, session};
+use deadline_api::{client, responses::FarmResponse, session};
 use deadline_config::config_file;
 
 use super::config::CliError;
@@ -41,40 +41,35 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
             let config = setup(profile, None, &[])?;
             let dl = session::deadline_client(Some(&config)).await;
             let builder = client::apply_dcm_principal(dl.list_farms(), Some(&config));
-            let resp = client::collect_paginated_raw("farms", |token| {
-                let builder = builder.clone();
-                async move {
-                    let cap = ResponseBodyCapture::new();
-                    let mut req = builder;
-                    if let Some(t) = token { req = req.next_token(t); }
-                    req.customize().interceptor(cap.clone())
-                        .send().await.map_err(client::deadline_error)?;
-                    cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+            match client::collect_paginated(builder.into_paginator().send()).await {
+                Ok(pages) => {
+                    let structured: Vec<serde_json::Value> = pages
+                        .iter()
+                        .flat_map(|p| p.farms())
+                        .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
+                        .collect();
+                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+                    Ok(())
                 }
-            }).await.map_err(|e| {
-                CliError::Operation(format!("Failed to get Farms from Deadline:\n{e}"))
-            })?;
-            let empty = vec![];
-            let farms = resp["farms"].as_array().unwrap_or(&empty);
-            let structured: Vec<serde_json::Value> = farms
-                .iter()
-                .map(|f| serde_json::json!({"farmId": f["farmId"], "displayName": f["displayName"]}))
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
-            Ok(())
+                Err(e) => {
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(), "ListFarms", None, None, None, Some(&config),
+                    ).await;
+                    Err(CliError::Operation(format!(
+                        "Failed to get Farms from Deadline:\n{e}{suggestion}"
+                    )))
+                }
+            }
         }
         FarmAction::Get { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
-            let cap = ResponseBodyCapture::new();
-            match dl.get_farm().farm_id(&farm)
-                .customize().interceptor(cap.clone())
-                .send().await
-            {
-                Ok(_) => {
-                    let resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                    println!("{}", crate::common::cli_object_repr(&resp));
+            match dl.get_farm().farm_id(&farm).send().await {
+                Ok(output) => {
+                    let resp = FarmResponse::from(output);
+                    let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+                    println!("{}", crate::common::cli_object_repr(&val));
                     Ok(())
                 }
                 Err(e) => {

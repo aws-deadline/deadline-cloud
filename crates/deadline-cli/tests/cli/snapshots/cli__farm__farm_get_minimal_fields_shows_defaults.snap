@@ -5,29 +5,31 @@ info:
   args:
     - farm
     - get
+    - "--farm-id"
+    - farm-minimal
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
     AWS_CONFIG_FILE: ""
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:50901"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:50901"
-    AWS_ENDPOINT_URL_S3: "http://localhost:50901"
-    AWS_ENDPOINT_URL_STS: "http://localhost:50901"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:50897"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:50897"
+    AWS_ENDPOINT_URL_S3: "http://localhost:50897"
+    AWS_ENDPOINT_URL_STS: "http://localhost:50897"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQcZ0FC/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpQcZ0FC
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpsD7jeG/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpsD7jeG
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-farmId: farm-from-config
-displayName: Config Farm
+farmId: farm-minimal
+displayName: Minimal Farm
 createdAt: 2024-01-01 00:00:00+00:00
 createdBy: arn:aws:sts::123456789012:user/test
 costScaleFactor: 0.0

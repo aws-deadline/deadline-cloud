@@ -64,12 +64,31 @@ async fn farm_get_with_farm_id_prints_details() {
             "createdAt": "2024-06-15T10:30:00Z",
             "createdBy": "arn:aws:sts::123456789012:assumed-role/Admin/user",
             "updatedAt": "2024-07-01T12:00:00Z",
-            "updatedBy": "arn:aws:sts::123456789012:assumed-role/Admin/user"
+            "updatedBy": "arn:aws:sts::123456789012:assumed-role/Admin/user",
+            "costScaleFactor": 1.5
         }),
     )
     .await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-abc"]));
+}
+
+#[tokio::test]
+async fn farm_get_minimal_fields_shows_defaults() {
+    let harness = TestHarness::new().await;
+    // Only required fields — costScaleFactor defaults to 1.0, optional fields omitted
+    farms::mock_get_farm(
+        &harness.server,
+        json!({
+            "farmId": "farm-minimal",
+            "displayName": "Minimal Farm",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "createdBy": "arn:aws:sts::123456789012:user/test"
+        }),
+    )
+    .await;
+
+    assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-minimal"]));
 }
 
 #[tokio::test]

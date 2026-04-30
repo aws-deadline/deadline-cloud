@@ -3,6 +3,7 @@ pub mod session;
 pub mod auth;
 pub mod api;
 pub mod client;
+pub mod responses;
 pub mod telemetry_interceptor;
 pub mod job_monitoring;
 pub mod log_retrieval;

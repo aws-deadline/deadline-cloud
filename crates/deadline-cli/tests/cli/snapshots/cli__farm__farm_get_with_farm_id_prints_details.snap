@@ -13,28 +13,30 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61289"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61289"
-    AWS_ENDPOINT_URL_STS: "http://localhost:61289"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:50894"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:50894"
+    AWS_ENDPOINT_URL_S3: "http://localhost:50894"
+    AWS_ENDPOINT_URL_STS: "http://localhost:50894"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpH1Ypup/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpH1Ypup
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpgjHgbN/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpgjHgbN
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 farmId: farm-abc
 displayName: My Farm
-description: A test farm for rendering.
 kmsKeyArn: arn:aws:kms:us-west-2:123456789012:key/abc
 createdAt: 2024-06-15 10:30:00+00:00
 createdBy: arn:aws:sts::123456789012:assumed-role/Admin/user
 updatedAt: 2024-07-01 12:00:00+00:00
 updatedBy: arn:aws:sts::123456789012:assumed-role/Admin/user
+description: A test farm for rendering.
+costScaleFactor: 1.5
 
 
 ----- stderr -----
