@@ -363,10 +363,185 @@ tests. Must pass unchanged after each batch.
 - [x] Step 5 — Audit clean (stale doc comment fixed, parameter name fixed).
 - [x] **Batch B complete** — TelemetryInterceptor wired into session, WithPrincipalId impls, Farm/Queue/Fleet callers migrated (CLI + MCP + FFI + helpers), 5 wrappers deleted from api.rs. All 1,280 tests pass.
 - [x] **Batch C complete** — Stripped `with_telemetry_latency_async` from all 30 api.rs functions, removed `telemetry` parameter from all signatures, updated 69 call sites across 13 files. Double-telemetry fixed. All 1,280 tests pass.
-- [ ] **Next: Batch D** — FFI DTO conversion (optional, low priority).
-- [ ] **Next: Batch E** — Final spec updates.
-- [ ] Step 6 — Spec updates (Batch E).
+- [ ] **Next: Batch D** — Eliminate raw HTTP extraction. Typed SDK output everywhere.
+- [ ] Step 6 — Spec updates.
 - [ ] Step 7 — Commit per batch.
+
+---
+
+## Batch D — Typed SDK Output (eliminate ResponseBodyCapture)
+
+**Status:** Not started — Step 1 (Study) complete, ready for implementation.
+
+### Design intent
+
+Remove all raw HTTP body extraction (`ResponseBodyCapture`). Every API
+call uses typed SDK output. The SDK controls which fields are visible to
+customers — unreleased fields (e.g. `arn`) never surface. This provides:
+- Compile-time safety on both input AND output
+- No accidental exposure of pre-GA fields
+- Clear contract: response structs define exactly what we show
+
+### Architecture
+
+```
+SDK fluent builder (typed input)
+    → .send().await
+    → typed output (GetFarmOutput, ListFarmsOutput, etc.)
+    → response struct (Serialize, camelCase)
+    → CLI: print via cli_object_repr
+    → FFI: pythonize → Python dict
+```
+
+### Two patterns
+
+**List operations (CLI):** Typed paginator → select specific fields
+inline (matching Python: `farmId` + `displayName` only). No response
+struct needed — just `json!({...})` from typed accessors.
+
+**Get operations (CLI + FFI):** Typed output → response struct with ALL
+GA fields → serialize. One struct per resource type.
+
+### Response structs — `crates/deadline-api/src/responses.rs`
+
+Each struct maps 1:1 to a Get API output. Uses `#[serde(rename_all = "camelCase")]`
+for Python/JSON compatibility. DateTime fields formatted as
+`"2024-12-18 00:37:38+00:00"` (matching Python display format).
+
+```rust
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmResponse {
+    pub farm_id: String,
+    pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kms_key_arn: Option<String>,
+    pub created_at: String,
+    pub created_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub cost_scale_factor: f32,
+}
+
+impl From<GetFarmOutput> for FarmResponse { ... }
+```
+
+### Fields per Get operation (from SDK typed output)
+
+**GetFarm:** farmId, displayName, kmsKeyArn?, createdAt, createdBy,
+updatedAt?, updatedBy?, description?, costScaleFactor
+
+**GetQueue:** farmId, queueId, displayName, status, defaultBudgetAction,
+blockedReason?, createdAt, createdBy, updatedAt?, updatedBy?,
+description?, jobAttachmentSettings?, roleArn?,
+requiredFileSystemLocationNames?, allowedStorageProfileIds?,
+jobRunAsUser?, schedulingConfiguration?
+
+**GetFleet:** farmId, fleetId, displayName, status, createdAt, createdBy,
+updatedAt?, updatedBy?, description?, configuration, roleArn?,
+autoScalingStatus?, targetWorkerCount?, workerCount, maxWorkerCount,
+minWorkerCount
+
+**GetJob:** jobId, name, lifecycleStatus, lifecycleStatusMessage,
+priority, createdAt, createdBy, updatedAt?, updatedBy?, startedAt?,
+endedAt?, taskRunStatus?, targetTaskRunStatus?, taskRunStatusCounts?,
+taskFailureRetryCount?, storageProfileId?, maxFailedTasksCount?,
+maxRetriesPerTask?, parameters?, attachments?, description?,
+maxWorkerCount?, sourceJobId?
+
+**GetStep:** stepId, name, lifecycleStatus, taskRunStatus,
+taskRunStatusCounts, createdAt, createdBy, updatedAt?, updatedBy?,
+startedAt?, endedAt?, dependencyCounts?, parameterSpace?, description?
+
+**GetTask:** taskId, runStatus, createdAt, createdBy, updatedAt?,
+updatedBy?, startedAt?, endedAt?, parameters?, failureRetryCount?,
+latestSessionActionId?
+
+**GetSession:** sessionId, fleetId, workerId, lifecycleStatus,
+startedAt, endedAt?, log?, updatedAt?, updatedBy?, targetLifecycleStatus?,
+workerLog?
+
+**GetWorker:** farmId, fleetId, workerId, status, createdAt, createdBy,
+updatedAt?, updatedBy?, hostProperties?, log?
+
+**SearchJobs (list):** name/displayName, jobId, taskRunStatus, startedAt?,
+endedAt?, createdBy, createdAt (+ computed estimatedTimeRemaining)
+
+**SearchWorkers (list):** workerId, fleetId, status, createdAt, createdBy,
+updatedAt?, updatedBy?, hostProperties?
+
+### Fields per List operation (subset for display)
+
+| Operation | Fields shown |
+|-----------|-------------|
+| `farm list` | farmId, displayName |
+| `queue list` | queueId, displayName |
+| `fleet list` | fleetId, displayName |
+| `job list` | name, jobId, taskRunStatus, startedAt, endedAt, createdBy, createdAt, estimatedTimeRemaining |
+| `worker list` | workerId, status, hostName, ipAddresses, createdAt |
+
+### DateTime formatting
+
+`aws_smithy_types::DateTime` → `"2024-12-18 00:37:38+00:00"` format.
+Helper function in `responses.rs`:
+
+```rust
+pub fn format_datetime(dt: &aws_smithy_types::DateTime) -> String {
+    // Format as "YYYY-MM-DD HH:MM:SS+00:00" (Python display format)
+    dt.fmt(DateTimeFormat::DateTimeWithOffset)
+        .unwrap_or_default()
+        .replace('T', " ")
+        .replace('Z', "+00:00")
+}
+```
+
+### What gets deleted
+
+- `crates/deadline-api/src/response_capture.rs` — entire file
+- `client::collect_paginated_raw` — helper function
+- `api.rs` `capture_send` / `paginated_list` — internal helpers
+- All `.customize().interceptor(cap).send()` patterns
+- `pub mod response_capture` from `lib.rs`
+
+### What stays
+
+- `TelemetryInterceptor` — reads `Metadata` from config bag, unaffected
+- `client::collect_paginated` — typed paginator drain
+- `client::apply_dcm_principal` / `WithPrincipalId`
+- `client::format_sdk_error` / `deadline_error`
+- `api.rs` domain functions (`search_jobs_with_filters`,
+  `list_jobs_by_filter_expression`, `create_job`,
+  `wait_for_create_job_to_complete`) — rewritten to use typed output
+
+### Sub-batches
+
+| Batch | Scope |
+|-------|-------|
+| **D1** | Create `responses.rs` with `FarmResponse` + `format_datetime`. Migrate `farm.rs` (list+get), `helpers.rs` `try_list_farms`, `mcp.rs` `list_farms`, `resources.rs` `list_farms`/`get_farm`. Prove the pattern end-to-end. |
+| **D2** | Add `QueueResponse`. Migrate `queue.rs` (list+get), helpers, mcp, resources. |
+| **D3** | Add `FleetResponse`. Migrate `fleet.rs` (list+get), helpers, mcp. |
+| **D4** | Add `JobResponse`, `StepResponse`, `TaskResponse`, `SessionResponse`, `WorkerResponse`. Migrate `job.rs`, `worker.rs`, `mcp.rs` remaining. |
+| **D5** | Migrate `api.rs` domain functions to return typed output. Migrate internal callers (`job_monitoring.rs`, `log_retrieval.rs`, `queue_parameters.rs`). |
+| **D6** | Delete `ResponseBodyCapture`, `collect_paginated_raw`, `capture_send`, `paginated_list`. Remove `response_capture.rs`. Final cleanup. |
+
+### Key decisions
+
+1. **SDK is the field gate.** Only fields in the typed SDK output are
+   visible. No raw HTTP = no unreleased field leakage.
+2. **One response struct per Get operation.** Includes ALL GA fields.
+   Future API additions require a code change to surface.
+3. **List operations select fields inline.** No struct needed — just
+   pick 2-3 fields from typed accessors (matching Python behavior).
+4. **`#[serde(skip_serializing_if = "Option::is_none")]`** on optional
+   fields — matches Python's behavior of not printing null fields.
+5. **DateTime as String in response structs.** Pre-formatted at
+   conversion time, not at serialization time.
+6. **FFI reuses the same response structs.** GUI gets the same contract
+   as CLI — all GA fields, properly formatted.
 
 ---
 
