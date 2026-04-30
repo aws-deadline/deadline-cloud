@@ -1,5 +1,6 @@
 use deadline_config::ini::IniConfig;
 use deadline_api::api;
+use deadline_api::{client, response_capture::ResponseBodyCapture, session};
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.
@@ -97,7 +98,20 @@ pub async fn suggest_resources_on_client_error(
 }
 
 async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
-    match api::list_farms(config, None).await {
+    let dl = session::deadline_client(config).await;
+    let builder = client::apply_dcm_principal(dl.list_farms(), config);
+    let resp = client::collect_paginated_raw("farms", |token| {
+        let builder = builder.clone();
+        async move {
+            let cap = ResponseBodyCapture::new();
+            let mut req = builder;
+            if let Some(t) = token { req = req.next_token(t); }
+            req.customize().interceptor(cap.clone())
+                .send().await.map_err(client::deadline_error)?;
+            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+        }
+    }).await;
+    match resp {
         Ok(resp) => format_suggestions(
             resp["farms"].as_array(),
             "farmId",
@@ -110,7 +124,20 @@ async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bo
 }
 
 async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
-    match api::list_queues(farm_id, config, None).await {
+    let dl = session::deadline_client(config).await;
+    let builder = client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), config);
+    let resp = client::collect_paginated_raw("queues", |token| {
+        let builder = builder.clone();
+        async move {
+            let cap = ResponseBodyCapture::new();
+            let mut req = builder;
+            if let Some(t) = token { req = req.next_token(t); }
+            req.customize().interceptor(cap.clone())
+                .send().await.map_err(client::deadline_error)?;
+            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+        }
+    }).await;
+    match resp {
         Ok(resp) => format_suggestions(
             resp["queues"].as_array(),
             "queueId",
@@ -123,7 +150,20 @@ async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
 }
 
 async fn try_list_fleets(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
-    match api::list_fleets(farm_id, config, None).await {
+    let dl = session::deadline_client(config).await;
+    let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(farm_id), config);
+    let resp = client::collect_paginated_raw("fleets", |token| {
+        let builder = builder.clone();
+        async move {
+            let cap = ResponseBodyCapture::new();
+            let mut req = builder;
+            if let Some(t) = token { req = req.next_token(t); }
+            req.customize().interceptor(cap.clone())
+                .send().await.map_err(client::deadline_error)?;
+            cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+        }
+    }).await;
+    match resp {
         Ok(resp) => format_suggestions(
             resp["fleets"].as_array(),
             "fleetId",

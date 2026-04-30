@@ -84,6 +84,30 @@ pub trait WithPrincipalId {
     fn principal_id(self, id: impl Into<String>) -> Self;
 }
 
+impl WithPrincipalId for aws_sdk_deadline::operation::list_farms::builders::ListFarmsFluentBuilder {
+    fn principal_id(self, id: impl Into<String>) -> Self {
+        self.principal_id(id)
+    }
+}
+
+impl WithPrincipalId for aws_sdk_deadline::operation::list_queues::builders::ListQueuesFluentBuilder {
+    fn principal_id(self, id: impl Into<String>) -> Self {
+        self.principal_id(id)
+    }
+}
+
+impl WithPrincipalId for aws_sdk_deadline::operation::list_jobs::builders::ListJobsFluentBuilder {
+    fn principal_id(self, id: impl Into<String>) -> Self {
+        self.principal_id(id)
+    }
+}
+
+impl WithPrincipalId for aws_sdk_deadline::operation::list_fleets::builders::ListFleetsFluentBuilder {
+    fn principal_id(self, id: impl Into<String>) -> Self {
+        self.principal_id(id)
+    }
+}
+
 /// Apply the DCM user's principal_id to a list builder if the user is DCM.
 pub fn apply_dcm_principal<B: WithPrincipalId>(
     builder: B,

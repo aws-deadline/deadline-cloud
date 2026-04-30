@@ -154,7 +154,20 @@ impl DeadlineServer {
     /// List all farms accessible to the current user.
     #[tool(name = "deadline_list_farms")]
     async fn list_farms(&self, Parameters(_p): Parameters<ListFarmsParams>) -> String {
-        match deadline_api::api::list_farms(None, None).await {
+        let dl = deadline_api::session::deadline_client(None).await;
+        let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), None);
+        let resp = deadline_api::client::collect_paginated_raw("farms", |token| {
+            let builder = builder.clone();
+            async move {
+                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
+                let mut req = builder;
+                if let Some(t) = token { req = req.next_token(t); }
+                req.customize().interceptor(cap.clone())
+                    .send().await.map_err(deadline_api::client::deadline_error)?;
+                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+            }
+        }).await;
+        match resp {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -163,7 +176,20 @@ impl DeadlineServer {
     /// List all queues in a farm.
     #[tool(name = "deadline_list_queues")]
     async fn list_queues(&self, Parameters(p): Parameters<ListQueuesParams>) -> String {
-        match deadline_api::api::list_queues(&p.farm_id, None, None).await {
+        let dl = deadline_api::session::deadline_client(None).await;
+        let builder = deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(&p.farm_id), None);
+        let resp = deadline_api::client::collect_paginated_raw("queues", |token| {
+            let builder = builder.clone();
+            async move {
+                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
+                let mut req = builder;
+                if let Some(t) = token { req = req.next_token(t); }
+                req.customize().interceptor(cap.clone())
+                    .send().await.map_err(deadline_api::client::deadline_error)?;
+                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+            }
+        }).await;
+        match resp {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -181,7 +207,20 @@ impl DeadlineServer {
     /// List all fleets in a farm.
     #[tool(name = "deadline_list_fleets")]
     async fn list_fleets(&self, Parameters(p): Parameters<ListFleetsParams>) -> String {
-        match deadline_api::api::list_fleets(&p.farm_id, None, None).await {
+        let dl = deadline_api::session::deadline_client(None).await;
+        let builder = deadline_api::client::apply_dcm_principal(dl.list_fleets().farm_id(&p.farm_id), None);
+        let resp = deadline_api::client::collect_paginated_raw("fleets", |token| {
+            let builder = builder.clone();
+            async move {
+                let cap = deadline_api::response_capture::ResponseBodyCapture::new();
+                let mut req = builder;
+                if let Some(t) = token { req = req.next_token(t); }
+                req.customize().interceptor(cap.clone())
+                    .send().await.map_err(deadline_api::client::deadline_error)?;
+                cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+            }
+        }).await;
+        match resp {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }

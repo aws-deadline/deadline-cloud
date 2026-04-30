@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
-use deadline_api::api;
+use deadline_api::{api, client, response_capture::ResponseBodyCapture, session};
 use deadline_config::config_file;
 use deadline_api::telemetry::create_telemetry;
 use deadline_job_attachments::incremental_download::IncrementalDownloadState;
@@ -205,7 +205,20 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            match api::list_queues(&farm, Some(&config), None).await {
+            let dl = session::deadline_client(Some(&config)).await;
+            let builder = client::apply_dcm_principal(dl.list_queues().farm_id(&farm), Some(&config));
+            let resp = client::collect_paginated_raw("queues", |token| {
+                let builder = builder.clone();
+                async move {
+                    let cap = ResponseBodyCapture::new();
+                    let mut req = builder;
+                    if let Some(t) = token { req = req.next_token(t); }
+                    req.customize().interceptor(cap.clone())
+                        .send().await.map_err(client::deadline_error)?;
+                    cap.json().map_err(|e| deadline_api::errors::DeadlineError::OperationError(e.to_string()))
+                }
+            }).await;
+            match resp {
                 Ok(resp) => {
                     let empty = vec![];
                     let queues = resp["queues"].as_array().unwrap_or(&empty);
@@ -230,17 +243,24 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            match api::get_queue(&farm, &queue, Some(&config), None).await {
-                Ok(resp) => {
+            let dl = session::deadline_client(Some(&config)).await;
+            let cap = ResponseBodyCapture::new();
+            match dl.get_queue().farm_id(&farm).queue_id(&queue)
+                .customize().interceptor(cap.clone())
+                .send().await
+            {
+                Ok(_) => {
+                    let resp = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {
+                    let err = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "GetQueue", Some(&farm), Some(&queue), None, Some(&config),
+                        &err, "GetQueue", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     Err(CliError::Operation(format!(
-                        "Failed to get Queue from Deadline:\n{e}{suggestion}"
+                        "Failed to get Queue from Deadline:\n{err}{suggestion}"
                     )))
                 }
             }

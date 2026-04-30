@@ -1,7 +1,7 @@
 //! Level 2 tests for DCM credential detection and principalId injection
 //! (auth status, list farms with/without DCM, auth CLI commands).
 
-use deadline_test_server::deadline_api::farms;
+use deadline_test_server::deadline_api::{farms, fleets, queues};
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
@@ -98,4 +98,36 @@ async fn auth_status_default_profile_dcm_shows_monitor_login_source() {
         "Default profile with monitor_id should show DEADLINE_CLOUD_MONITOR_LOGIN, got: {}",
         parsed["source"]
     );
+}
+
+// queue list with DCM user injects principalId
+#[tokio::test]
+async fn queue_list_dcm_user_injects_principal_id() {
+    let harness = TestHarness::new().await;
+    write_dcm_aws_config(&harness, "dcm-profile");
+    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+
+    queues::mock_list_queues_with_principal_id(
+        &harness.server, "farm-abc", "user-dcm-test-id",
+        &[json!({"queueId": "queue-dcm", "displayName": "DCM Queue"})],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["queue", "list"]));
+}
+
+// fleet list with DCM user injects principalId
+#[tokio::test]
+async fn fleet_list_dcm_user_injects_principal_id() {
+    let harness = TestHarness::new().await;
+    write_dcm_aws_config(&harness, "dcm-profile");
+    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+
+    fleets::mock_list_fleets_with_principal_id(
+        &harness.server, "farm-abc", "user-dcm-test-id",
+        &[json!({"fleetId": "fleet-dcm", "displayName": "DCM Fleet"})],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["fleet", "list"]));
 }

@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
+use crate::telemetry_interceptor::TelemetryInterceptor;
+
 // ---------------------------------------------------------------------------
 // Global session cache
 // ---------------------------------------------------------------------------
@@ -119,6 +121,9 @@ impl SessionCache {
         if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
             builder = builder.app_name(app_name);
         }
+        // Install telemetry interceptor — every operation gets automatic latency telemetry.
+        let telemetry = crate::telemetry::create_telemetry(config);
+        builder = builder.interceptor(TelemetryInterceptor::new(Some(telemetry)));
         DeadlineClient::from_conf(builder.build())
     }
 

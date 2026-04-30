@@ -82,103 +82,14 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Farm
-// ---------------------------------------------------------------------------
-
-pub async fn list_farms(config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
-    with_telemetry_latency_async("list_farms", config, telemetry, || async {
-        let client = session::deadline_client(config).await;
-        let (user_id, _) = auth::get_user_and_identity_store_id(config);
-        paginated_list("farms", |token| {
-            let client = client.clone();
-            let user_id = user_id.clone();
-            async move {
-                capture_send(|cap| {
-                    let mut req = client.list_farms();
-                    if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
-                    if let Some(t) = token { req = req.next_token(t); }
-                    async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-                }).await
-            }
-        }).await
-    }).await
-}
-
-pub async fn get_farm(farm_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
-    with_telemetry_latency_async("get_farm", config, telemetry, || async {
-        let client = session::deadline_client(config).await;
-        capture_send(|cap| async move {
-            client.get_farm().farm_id(farm_id)
-                .customize().interceptor(cap).send().await.map(|_| ())
-        }).await
-    }).await
-}
-
-// ---------------------------------------------------------------------------
 // Queue
 // ---------------------------------------------------------------------------
-
-pub async fn list_queues(farm_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
-    with_telemetry_latency_async("list_queues", config, telemetry, || async {
-        let client = session::deadline_client(config).await;
-        let (user_id, _) = auth::get_user_and_identity_store_id(config);
-        let farm_id = farm_id.to_string();
-        paginated_list("queues", |token| {
-            let client = client.clone();
-            let user_id = user_id.clone();
-            let farm_id = farm_id.clone();
-            async move {
-                capture_send(|cap| {
-                    let mut req = client.list_queues().farm_id(&farm_id);
-                    if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
-                    if let Some(t) = token { req = req.next_token(t); }
-                    async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-                }).await
-            }
-        }).await
-    }).await
-}
 
 pub async fn get_queue(farm_id: &str, queue_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
     with_telemetry_latency_async("get_queue", config, telemetry, || async {
         let client = session::deadline_client(config).await;
         capture_send(|cap| async move {
             client.get_queue().farm_id(farm_id).queue_id(queue_id)
-                .customize().interceptor(cap).send().await.map(|_| ())
-        }).await
-    }).await
-}
-
-// ---------------------------------------------------------------------------
-// Fleet
-// ---------------------------------------------------------------------------
-
-pub async fn list_fleets(farm_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
-    with_telemetry_latency_async("list_fleets", config, telemetry, || async {
-        let client = session::deadline_client(config).await;
-        let (user_id, _) = auth::get_user_and_identity_store_id(config);
-        let farm_id = farm_id.to_string();
-        paginated_list("fleets", |token| {
-            let client = client.clone();
-            let user_id = user_id.clone();
-            let farm_id = farm_id.clone();
-            async move {
-                capture_send(|cap| {
-                    let mut req = client.list_fleets().farm_id(&farm_id);
-                    if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
-                    if let Some(t) = token { req = req.next_token(t); }
-                    async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-                }).await
-            }
-        }).await
-    }).await
-}
-
-pub async fn get_fleet(farm_id: &str, fleet_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>) -> Result<Value, DeadlineError> {
-    with_telemetry_latency_async("get_fleet", config, telemetry, || async {
-        let client = session::deadline_client(config).await;
-        capture_send(|cap| async move {
-            client.get_fleet().farm_id(farm_id).fleet_id(fleet_id)
                 .customize().interceptor(cap).send().await.map(|_| ())
         }).await
     }).await

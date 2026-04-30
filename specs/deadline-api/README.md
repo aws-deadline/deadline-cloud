@@ -9,21 +9,36 @@ Dependencies: `deadline-config`.
 
 ## How API Calls Work
 
-All API functions use a `ResponseBodyCapture` interceptor to capture the
-raw HTTP response body as `serde_json::Value`. This is necessary because
-the AWS SDK for Rust output types don't implement `serde::Serialize` —
-you can't round-trip them to JSON. Rather than manually extracting 20+
-fields per response type, the interceptor grabs the wire JSON directly.
-The CLI layer only ever sees `serde_json::Value`, never SDK types.
+Two patterns coexist during the migration from wrapper functions to
+direct SDK usage:
 
-The interceptor also post-processes responses: datetime strings are
-converted to Python display format (`2024-12-18 00:37:38+00:00`) and
-null values are stripped. New API fields appear automatically without
-code changes.
+### New pattern (Farm, Queue list, Fleet — Batch B complete)
 
-Paginated list operations use manual `nextToken` loops instead of SDK
-paginators, because paginators don't support the `.customize().interceptor()`
-chain needed for response capture.
+Callers use the SDK fluent builder directly. A `TelemetryInterceptor`
+installed on the client at construction time automatically emits one
+latency event per operation (reading the operation name from the SDK's
+`Metadata` config-bag entry). For raw JSON output, callers attach a
+per-call `ResponseBodyCapture` interceptor via `.customize().interceptor(cap)`.
+
+```rust
+// Typed list with raw capture for full-response output
+let dl = session::deadline_client(config).await;
+let builder = client::apply_dcm_principal(dl.list_farms(), config);
+let resp = client::collect_paginated_raw("farms", |token| { ... }).await?;
+
+// Raw get for full-response print
+let cap = ResponseBodyCapture::new();
+dl.get_farm().farm_id(&farm)
+    .customize().interceptor(cap.clone())
+    .send().await.map_err(client::deadline_error)?;
+let resp = cap.json()?;
+```
+
+### Legacy pattern (Job, Step, Task, Worker, Session — Batch C pending)
+
+Wrapper functions in `api.rs` use `with_telemetry_latency_async` for
+telemetry and `ResponseBodyCapture` for raw JSON capture. These will be
+migrated to the new pattern in Batch C.
 
 ## Document Index
 

@@ -1059,6 +1059,7 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "aws-config",
+ "aws-sdk-deadline",
  "chrono",
  "clap",
  "deadline-api",

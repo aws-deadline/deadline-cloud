@@ -75,3 +75,20 @@ pub async fn mock_assume_fleet_role_for_read_error(
         .mount(server)
         .await;
 }
+
+/// Mount a ListFleets response that requires a specific principalId query param.
+pub async fn mock_list_fleets_with_principal_id(
+    server: &MockServer,
+    farm_id: &str,
+    principal_id: &str,
+    fleets: &[Value],
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/fleets")))
+        .and(query_param("principalId", principal_id))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "fleets": fleets })),
+        )
+        .mount(server)
+        .await;
+}

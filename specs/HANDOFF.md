@@ -361,7 +361,8 @@ tests. Must pass unchanged after each batch.
 - [x] Step 2 — Batch A helper tests written (13 tests).
 - [x] Step 3 — Batch A implemented (client.rs + telemetry_interceptor.rs).
 - [x] Step 5 — Audit clean (stale doc comment fixed, parameter name fixed).
-- [ ] **Next: Batch B** — Wire `TelemetryInterceptor` into `session::build_deadline_client()`, then migrate Farm + Queue + Fleet callers.
+- [x] **Batch B complete** — TelemetryInterceptor wired into session, WithPrincipalId impls, Farm/Queue/Fleet callers migrated (CLI + MCP + FFI + helpers), 5 wrappers deleted from api.rs. All 1,280 tests pass.
+- [ ] **Next: Batch C** — Migrate Job + Step + Task + Worker + Session callers. Move surviving domain functions to `src/job_api.rs`. Delete rest of `api.rs`.
 - [ ] Step 6 — Spec updates (Batch E).
 - [ ] Step 7 — Commit per batch.
 
