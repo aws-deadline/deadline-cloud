@@ -97,7 +97,7 @@ async fn resolve_s3_context(
         let uri = match s3_root_uri.filter(|u| !u.is_empty()) {
             Some(u) => u,
             None => {
-                let queue = deadline_api::api::get_queue(&farm_id, &queue_id, Some(config), None)
+                let queue = deadline_api::api::get_queue(&farm_id, &queue_id, Some(config))
                     .await
                     .map_err(|e| CliError::Operation(e.to_string()))?;
                 let settings = queue

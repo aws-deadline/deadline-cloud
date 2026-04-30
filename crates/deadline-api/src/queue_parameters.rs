@@ -4,7 +4,6 @@
 //! work item #7 is implemented.
 
 use crate::errors::DeadlineError;
-use crate::telemetry::TelemetryClient;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 
@@ -15,16 +14,15 @@ pub async fn get_queue_parameter_definitions(
     farm_id: &str,
     queue_id: &str,
     config: Option<&IniConfig>,
-    telemetry: Option<&TelemetryClient>,
 ) -> Result<Vec<Value>, DeadlineError> {
-    let resp = api::list_queue_environments(farm_id, queue_id, config, telemetry).await?;
+    let resp = api::list_queue_environments(farm_id, queue_id, config).await?;
     let envs = resp["environments"].as_array().cloned().unwrap_or_default();
 
     // Fetch full environment details and sort by priority
     let mut full_envs = Vec::new();
     for env in &envs {
         let env_id = env["queueEnvironmentId"].as_str().unwrap_or("");
-        let full = api::get_queue_environment(farm_id, queue_id, env_id, config, telemetry).await?;
+        let full = api::get_queue_environment(farm_id, queue_id, env_id, config).await?;
         full_envs.push(full);
     }
     full_envs.sort_by_key(|e| e["priority"].as_i64().unwrap_or(0));

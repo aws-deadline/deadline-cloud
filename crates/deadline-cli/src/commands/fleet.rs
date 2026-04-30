@@ -132,7 +132,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 let queue_name = queue_resp["displayName"].as_str().unwrap_or("");
 
                 // List queue-fleet associations (raw paginated)
-                let assoc_resp = api::list_queue_fleet_associations(&farm, &queue, Some(&config), None).await.map_err(|e| {
+                let assoc_resp = api::list_queue_fleet_associations(&farm, &queue, Some(&config)).await.map_err(|e| {
                     CliError::Operation(format!("Failed to list queue fleet associations:\n{e}"))
                 })?;
                 let empty = vec![];

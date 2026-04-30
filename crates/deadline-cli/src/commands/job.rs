@@ -228,7 +228,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
-            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, Some(&config), None).await {
+            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, Some(&config)).await {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
@@ -278,7 +278,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::get_session(&farm, &queue, &job, &session_id, Some(&config), None)
+            let resp = api::get_session(&farm, &queue, &job, &session_id, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp));
@@ -289,7 +289,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_sessions(&farm, &queue, &job, Some(&config), None)
+            let resp = api::list_sessions(&farm, &queue, &job, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["sessions"]));
@@ -300,7 +300,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_steps(&farm, &queue, &job, Some(&config), None)
+            let resp = api::list_steps(&farm, &queue, &job, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["steps"]));
@@ -311,7 +311,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config), None)
+            let resp = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             println!("{}", crate::common::cli_object_repr(&resp["tasks"]));
@@ -324,7 +324,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let job = get(&config, "defaults.job_id");
             let is_json = output.eq_ignore_ascii_case("json");
 
-            let job_resp = api::get_job(&farm, &queue, &job, Some(&config), None).await
+            let job_resp = api::get_job(&farm, &queue, &job, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {e}")))?;
             let job_name = job_resp["name"].as_str().unwrap_or("");
 
@@ -356,7 +356,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             match job_monitoring::wait_for_job_completion(
                 &farm, &queue, &job, max_poll_interval, timeout,
-                Some(&config), None, None, Some(&*job_cb),
+                Some(&config), None, Some(&*job_cb),
             ).await {
                 Ok(result) => {
                     let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
@@ -436,13 +436,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 resolved_session_id_owned = Some(derived);
             }
 
-            let job_resp = api::get_job(&farm, &queue, &job, Some(&config), None).await
+            let job_resp = api::get_job(&farm, &queue, &job, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
             let job_name = job_resp["name"].as_str().unwrap_or("");
 
             // Get session action details for time bounds (after validation)
             if let Some(ref said) = session_action_id {
-                let sa = api::get_session_action(&farm, &queue, &job, said, Some(&config), None).await
+                let sa = api::get_session_action(&farm, &queue, &job, said, Some(&config)).await
                     .map_err(|e| CliError::Operation(format!(
                         "Session action '{}' not found in job '{}':\n{}", said, job, e
                     )))?;
@@ -483,7 +483,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             // Get session start time for timestamp formatting (needed for relative mode)
             let reference_start = {
-                let sess = api::get_session(&farm, &queue, &job, resolved_session_id, Some(&config), None).await
+                let sess = api::get_session(&farm, &queue, &job, resolved_session_id, Some(&config)).await
                     .map_err(|e| CliError::Operation(format!("Failed to get session: {e}")))?;
                 sess["startedAt"].as_str().and_then(|t| {
                     chrono::DateTime::parse_from_rfc3339(&t.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
@@ -603,7 +603,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
             let auto_accept = is_auto_accept(&config);
 
-            let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
+            let job = match api::get_job(&farm, &queue, &job_id, Some(&config)).await {
                 Ok(j) => j,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
@@ -670,7 +670,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             } else {
                 println!("Canceling job and marking as {mark_as}...");
             }
-            api::update_job(&farm, &queue, &job_id, &mark_as, Some(&config), None).await
+            api::update_job(&farm, &queue, &job_id, &mark_as, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to update job:\n{e}")))?;
             Ok(())
         }
@@ -699,7 +699,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
             }
 
-            let job = match api::get_job(&farm, &queue, &job_id, Some(&config), None).await {
+            let job = match api::get_job(&farm, &queue, &job_id, Some(&config)).await {
                 Ok(j) => j,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
@@ -768,7 +768,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             let mut total_requeued: i64 = 0;
 
-            let steps_resp = api::list_steps(&farm, &queue, &job_id, Some(&config), None).await
+            let steps_resp = api::list_steps(&farm, &queue, &job_id, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
             let steps = steps_resp["steps"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
 
@@ -786,7 +786,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
                 println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
 
-                let tasks_resp = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config), None).await
+                let tasks_resp = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config)).await
                     .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
                 let tasks = tasks_resp["tasks"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
 
@@ -812,7 +812,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     };
                     println!("    {status} {task_summary}");
 
-                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config), None,
+                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config),
                         Some(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)),
                     ).await
                         .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
@@ -834,7 +834,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let resp = match api::search_jobs_with_filters(
                 &farm, &[queue.as_str()], item_offset, page_size,
                 filter_json.as_ref(), sort_json.as_ref(),
-                Some(&config), None,
+                Some(&config),
             ).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -979,7 +979,7 @@ fn format_duration(seconds: f64) -> String {
 
 /// Print full job details (used by `job get` in direct mode).
 async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniConfig) -> Result<(), CliError> {
-    match api::get_job(farm, queue, job_id, Some(config), None).await {
+    match api::get_job(farm, queue, job_id, Some(config)).await {
         Ok(resp) => {
             println!("{}", crate::common::cli_object_repr(&resp));
             let est = estimate_remaining_time(&resp);
@@ -1009,7 +1009,7 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
         "operator": "AND"
     });
     let resp = match api::search_jobs_with_filters(
-        farm, &[queue], 0, 5, Some(&filter), None, Some(config), None,
+        farm, &[queue], 0, 5, Some(&filter), None, Some(config),
     ).await {
         Ok(r) => r,
         Err(e) => {
@@ -1245,14 +1245,14 @@ pub(crate) async fn download_output_impl(
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
 
     // Get job
-    let job = api::get_job(farm_id, queue_id, job_id, Some(config), None)
+    let job = api::get_job(farm_id, queue_id, job_id, Some(config))
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
     let job_name = job["name"].as_str().unwrap_or("");
 
     // Get optional step/task
     let step_name = if let Some(sid) = step_id {
-        let step = api::get_step(farm_id, queue_id, job_id, sid, Some(config), None)
+        let step = api::get_step(farm_id, queue_id, job_id, sid, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
         Some(step["name"].as_str().unwrap_or("").to_string())
@@ -1263,7 +1263,7 @@ pub(crate) async fn download_output_impl(
     let task_params;
     let session_action_id;
     if let (Some(sid), Some(tid)) = (step_id, task_id) {
-        let task = api::get_task(farm_id, queue_id, job_id, sid, tid, Some(config), None)
+        let task = api::get_task(farm_id, queue_id, job_id, sid, tid, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
         task_params = task.get("parameters").cloned();
@@ -1290,7 +1290,7 @@ pub(crate) async fn download_output_impl(
     ));
 
     // Get queue for jobAttachmentSettings
-    let queue = api::get_queue(farm_id, queue_id, Some(config), None)
+    let queue = api::get_queue(farm_id, queue_id, Some(config))
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
@@ -1697,7 +1697,7 @@ async fn run_trace_schedule(
     }
 
     println!("Getting the job...");
-    let job_data = api::get_job(&farm, &queue, &job, Some(&config), None).await
+    let job_data = api::get_job(&farm, &queue, &job, Some(&config)).await
         .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
 
     let started_at_str = job_data.get("startedAt").and_then(|v| v.as_str());
@@ -1712,7 +1712,7 @@ async fn run_trace_schedule(
     let trace_end_utc = chrono::Utc::now();
 
     // Fetch all sessions
-    let sessions_resp = api::list_sessions(&farm, &queue, &job, Some(&config), None).await
+    let sessions_resp = api::list_sessions(&farm, &queue, &job, Some(&config)).await
         .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
     let mut sessions: Vec<serde_json::Value> = sessions_resp["sessions"]
         .as_array().cloned().unwrap_or_default();
@@ -1727,7 +1727,7 @@ async fn run_trace_schedule(
     println!("Getting all the session actions for the job...");
     for i in 0..sessions.len() {
         let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_string();
-        let actions_resp = api::list_session_actions(&farm, &queue, &job, &sid, Some(&config), None).await
+        let actions_resp = api::list_session_actions(&farm, &queue, &job, &sid, Some(&config)).await
             .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
         let actions = actions_resp["sessionActions"].as_array().cloned().unwrap_or_default();
         sessions[i]["actions"] = json!(actions);

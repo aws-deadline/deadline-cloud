@@ -90,7 +90,7 @@ pub fn list_storage_profiles_for_queue<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let result = rt.block_on(deadline_api::api::list_storage_profiles_for_queue(farm_id, queue_id, Some(&config), None))
+    let result = rt.block_on(deadline_api::api::list_storage_profiles_for_queue(farm_id, queue_id, Some(&config)))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
@@ -106,7 +106,7 @@ pub fn get_queue_parameter_definitions<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let result = rt.block_on(deadline_api::queue_parameters::get_queue_parameter_definitions(farm_id, queue_id, Some(&config), None))
+    let result = rt.block_on(deadline_api::queue_parameters::get_queue_parameter_definitions(farm_id, queue_id, Some(&config)))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))

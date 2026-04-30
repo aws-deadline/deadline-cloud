@@ -274,8 +274,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let telemetry = create_telemetry(Some(&config));
 
             let result = match mode.to_uppercase().as_str() {
-                "READ" => api::assume_queue_role_for_read(&farm, &queue, Some(&config), Some(&telemetry)).await,
-                _ => api::assume_queue_role_for_user(&farm, &queue, Some(&config), Some(&telemetry)).await,
+                "READ" => api::assume_queue_role_for_read(&farm, &queue, Some(&config)).await,
+                _ => api::assume_queue_role_for_user(&farm, &queue, Some(&config)).await,
             };
 
             let duration_ms = start.elapsed().as_millis() as u64;
@@ -328,7 +328,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            match api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config), None).await {
+            match api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config)).await {
                 Ok(resp) => {
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
@@ -346,7 +346,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match deadline_api::queue_parameters::get_queue_parameter_definitions(
-                &farm, &queue, Some(&config), None,
+                &farm, &queue, Some(&config),
             ).await {
                 Ok(params) => {
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(params)));
@@ -456,7 +456,7 @@ async fn run_sync_output(
             ));
         }
         // Validate the storage profile exists
-        api::get_storage_profile_for_queue(&farm, &queue_id_str, &sp_id, Some(&config), None)
+        api::get_storage_profile_for_queue(&farm, &queue_id_str, &sp_id, Some(&config))
             .await
             .map_err(|e| CliError::Operation(format!(
                 "Could not retrieve the storage profile {sp_id:?} from Deadline Cloud:\n{e}"
@@ -470,7 +470,7 @@ async fn run_sync_output(
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = api::get_queue(&farm, &queue_id_str, Some(&config), None)
+    let queue = api::get_queue(&farm, &queue_id_str, Some(&config))
         .await
         .map_err(|e| CliError::Operation(format!("Failed to get queue:\n{e}")))?;
 
@@ -758,7 +758,7 @@ async fn incremental_output_download(
 
     // For new jobs, call GetJob to get attachments
     for job_id in new_job_ids.clone() {
-        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config), None)
+        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
@@ -830,7 +830,7 @@ async fn incremental_output_download(
         let mut storage_profiles: std::collections::HashMap<String, serde_json::Value> =
             std::collections::HashMap::new();
         for sp_id in &sp_ids {
-            let sp = api::get_storage_profile_for_queue(farm_id, queue_id, sp_id, Some(config), None)
+            let sp = api::get_storage_profile_for_queue(farm_id, queue_id, sp_id, Some(config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get storage profile {sp_id}: {e}")))?;
             storage_profiles.insert(sp_id.clone(), sp);
@@ -909,7 +909,7 @@ async fn incremental_output_download(
     let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
 
     for job_id in &jobs_to_process {
-        let sessions_resp = api::list_sessions(farm_id, queue_id, job_id, Some(config), None)
+        let sessions_resp = api::list_sessions(farm_id, queue_id, job_id, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
 
@@ -919,7 +919,7 @@ async fn incremental_output_download(
             for session in sessions {
                 let session_id = session["sessionId"].as_str().unwrap_or("");
                 let actions_resp = api::list_session_actions(
-                    farm_id, queue_id, job_id, session_id, Some(config), None,
+                    farm_id, queue_id, job_id, session_id, Some(config),
                 ).await.map_err(|e| CliError::Operation(
                     format!("Failed to list session actions for {session_id}: {e}")
                 ))?;

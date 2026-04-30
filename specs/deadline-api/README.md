@@ -34,11 +34,12 @@ dl.get_farm().farm_id(&farm)
 let resp = cap.json()?;
 ```
 
-### Legacy pattern (Job, Step, Task, Worker, Session — Batch C pending)
+### Legacy pattern (Job, Step, Task, Worker, Session — api.rs)
 
-Wrapper functions in `api.rs` use `with_telemetry_latency_async` for
-telemetry and `ResponseBodyCapture` for raw JSON capture. These will be
-migrated to the new pattern in Batch C.
+Wrapper functions in `api.rs` use `ResponseBodyCapture` for raw JSON
+capture. Telemetry is handled by the client-level `TelemetryInterceptor`
+(same as the new pattern). These wrappers are thin convenience functions
+that may be inlined at callers or moved to `job_api.rs` in a future batch.
 
 ## Document Index
 

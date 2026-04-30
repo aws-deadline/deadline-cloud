@@ -1,6 +1,5 @@
 use crate::api;
 use crate::errors::DeadlineError;
-use crate::telemetry::TelemetryClient;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 use std::time::Instant;
@@ -41,12 +40,11 @@ async fn collect_failed_tasks(
     queue_id: &str,
     job_id: &str,
     config: Option<&IniConfig>,
-    telemetry: Option<&TelemetryClient>,
 ) -> Result<Vec<FailedTask>, DeadlineError> {
     let mut failed_tasks = Vec::new();
     let empty = vec![];
 
-    let steps_resp = api::list_steps(farm_id, queue_id, job_id, config, telemetry).await?;
+    let steps_resp = api::list_steps(farm_id, queue_id, job_id, config).await?;
     let steps = steps_resp["steps"].as_array().unwrap_or(&empty);
 
     for step in steps {
@@ -62,7 +60,7 @@ async fn collect_failed_tasks(
             continue;
         }
 
-        let tasks_resp = api::list_tasks(farm_id, queue_id, job_id, step_id, config, telemetry).await?;
+        let tasks_resp = api::list_tasks(farm_id, queue_id, job_id, step_id, config).await?;
         let tasks = tasks_resp["tasks"].as_array().unwrap_or(&empty);
 
         for task in tasks {
@@ -93,7 +91,6 @@ pub async fn wait_for_job_completion(
     max_poll_interval: u64,
     timeout: u64,
     config: Option<&IniConfig>,
-    telemetry: Option<&TelemetryClient>,
     status_callback: Option<&dyn Fn(&str, f64, u64)>,
     job_callback: Option<&dyn Fn(&Value, f64, u64)>,
 ) -> Result<JobCompletionResult, DeadlineError> {
@@ -109,7 +106,7 @@ pub async fn wait_for_job_completion(
             )));
         }
 
-        let job = api::get_job(farm_id, queue_id, job_id, config, telemetry).await?;
+        let job = api::get_job(farm_id, queue_id, job_id, config).await?;
         let status = job.get("taskRunStatus").and_then(|v| v.as_str()).unwrap_or("");
 
         if let Some(cb) = status_callback {
@@ -122,7 +119,7 @@ pub async fn wait_for_job_completion(
         if TERMINAL_STATES.contains(&status) {
             let elapsed_time = start.elapsed().as_secs_f64();
             let failed_tasks = if status != "SUCCEEDED" {
-                collect_failed_tasks(farm_id, queue_id, job_id, config, telemetry).await?
+                collect_failed_tasks(farm_id, queue_id, job_id, config).await?
             } else {
                 Vec::new()
             };

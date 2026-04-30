@@ -214,7 +214,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             };
 
             // Get queue attachment settings
-            let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config), None).await
+            let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
             let ja_settings = queue_resp.get("jobAttachmentSettings")
                 .ok_or_else(|| CliError::Operation(
@@ -224,7 +224,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings["rootPrefix"].as_str().unwrap_or("");
 
             // Get job to check for attachments
-            let job_resp = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config), None).await
+            let job_resp = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
             let attachments = job_resp.get("attachments")
                 .ok_or_else(|| CliError::Operation(
@@ -321,7 +321,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
                     let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
-                    let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config), None).await
+                    let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config)).await
                         .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
                     let ja_settings = queue_resp.get("jobAttachmentSettings")
                         .ok_or_else(|| CliError::Operation(

@@ -181,7 +181,7 @@ async fn try_list_jobs(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::list_jobs(farm_id, queue_id, config, None).await {
+    match api::list_jobs(farm_id, queue_id, config).await {
         Ok(resp) => format_suggestions(
             resp["jobs"].as_array(),
             "jobId",
@@ -199,7 +199,7 @@ async fn try_list_workers(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::search_workers(farm_id, &[fleet_id], 0, 10, config, None).await {
+    match api::search_workers(farm_id, &[fleet_id], 0, 10, config).await {
         Ok(resp) => {
             let workers = match resp["workers"].as_array() {
                 Some(w) if !w.is_empty() => w,
@@ -227,7 +227,7 @@ async fn try_list_storage_profiles(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::list_storage_profiles_for_queue(farm_id, queue_id, config, None).await {
+    match api::list_storage_profiles_for_queue(farm_id, queue_id, config).await {
         Ok(resp) => format_suggestions(
             resp["storageProfiles"].as_array(),
             "storageProfileId",

@@ -334,7 +334,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let farm_id = get_setting("defaults.farm_id", params.config);
     let queue_id = get_setting("defaults.queue_id", params.config);
 
-    let queue = api::get_queue(&farm_id, &queue_id, params.config, None).await?;
+    let queue = api::get_queue(&farm_id, &queue_id, params.config).await?;
     let queue_display_name = queue.get("displayName").and_then(|v| v.as_str()).unwrap_or("Unknown");
     print(&format!("Submitting to Queue: {queue_display_name}\n"));
 
@@ -342,7 +342,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let storage_profile_id = get_setting("settings.storage_profile_id", params.config);
     let storage_profile = if !storage_profile_id.is_empty() {
         let sp_json = api::get_storage_profile_for_queue(
-            &farm_id, &queue_id, &storage_profile_id, params.config, None,
+            &farm_id, &queue_id, &storage_profile_id, params.config,
         ).await?;
         StorageProfile::from_json(&sp_json)
     } else {
@@ -356,7 +356,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let mut asset_references = AssetReferences::from_dict(asset_references_obj.as_ref());
 
     let queue_parameter_definitions = queue_parameters::get_queue_parameter_definitions(
-        &farm_id, &queue_id, params.config, None,
+        &farm_id, &queue_id, params.config,
     ).await?;
 
     let mut parameters = merge_queue_job_parameters(
@@ -695,7 +695,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         return Ok(None);
     }
 
-    let response = api::create_job(&create_job_args, params.config, None).await?;
+    let response = api::create_job(&create_job_args, params.config).await?;
 
     let job_id = response.get("jobId").and_then(|v| v.as_str())
         .ok_or_else(|| op_err("CreateJob response was empty, or did not contain a Job ID.".into()))?

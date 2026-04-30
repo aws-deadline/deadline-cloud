@@ -69,7 +69,7 @@ async fn get_fleet_scoped_config(
     let (user_id, identity_store_id) = auth::get_user_and_identity_store_id(config);
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume fleet role
-        let resp = api::assume_fleet_role_for_read(farm_id, fleet_id, config, None).await
+        let resp = api::assume_fleet_role_for_read(farm_id, fleet_id, config).await
             .map_err(|e| DeadlineError::OperationError(
                 format!("Failed to get fleet credentials: {e}")
             ))?;
@@ -293,7 +293,7 @@ async fn auto_select_session(
     job_id: &str,
     config: Option<&IniConfig>,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
-    let resp = api::list_sessions(farm_id, queue_id, job_id, config, None).await?;
+    let resp = api::list_sessions(farm_id, queue_id, job_id, config).await?;
     let empty = vec![];
     let sessions = resp["sessions"].as_array().unwrap_or(&empty);
 

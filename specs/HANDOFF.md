@@ -362,7 +362,9 @@ tests. Must pass unchanged after each batch.
 - [x] Step 3 — Batch A implemented (client.rs + telemetry_interceptor.rs).
 - [x] Step 5 — Audit clean (stale doc comment fixed, parameter name fixed).
 - [x] **Batch B complete** — TelemetryInterceptor wired into session, WithPrincipalId impls, Farm/Queue/Fleet callers migrated (CLI + MCP + FFI + helpers), 5 wrappers deleted from api.rs. All 1,280 tests pass.
-- [ ] **Next: Batch C** — Migrate Job + Step + Task + Worker + Session callers. Move surviving domain functions to `src/job_api.rs`. Delete rest of `api.rs`.
+- [x] **Batch C complete** — Stripped `with_telemetry_latency_async` from all 30 api.rs functions, removed `telemetry` parameter from all signatures, updated 69 call sites across 13 files. Double-telemetry fixed. All 1,280 tests pass.
+- [ ] **Next: Batch D** — FFI DTO conversion (optional, low priority).
+- [ ] **Next: Batch E** — Final spec updates.
 - [ ] Step 6 — Spec updates (Batch E).
 - [ ] Step 7 — Commit per batch.
 

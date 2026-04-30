@@ -198,7 +198,7 @@ impl DeadlineServer {
     /// List all jobs in a queue.
     #[tool(name = "deadline_list_jobs")]
     async fn list_jobs(&self, Parameters(p): Parameters<ListJobsParams>) -> String {
-        match deadline_api::api::list_jobs(&p.farm_id, &p.queue_id, None, None).await {
+        match deadline_api::api::list_jobs(&p.farm_id, &p.queue_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -229,7 +229,7 @@ impl DeadlineServer {
     /// List storage profiles for a queue.
     #[tool(name = "deadline_list_storage_profiles_for_queue")]
     async fn list_storage_profiles_for_queue(&self, Parameters(p): Parameters<ListStorageProfilesParams>) -> String {
-        match deadline_api::api::list_storage_profiles_for_queue(&p.farm_id, &p.queue_id, None, None).await {
+        match deadline_api::api::list_storage_profiles_for_queue(&p.farm_id, &p.queue_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -269,7 +269,7 @@ impl DeadlineServer {
     /// Get detailed information about a specific job.
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
-        match deadline_api::api::get_job(&p.farm_id, &p.queue_id, &p.job_id, None, None).await {
+        match deadline_api::api::get_job(&p.farm_id, &p.queue_id, &p.job_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -278,7 +278,7 @@ impl DeadlineServer {
     /// Get detailed information about a specific session.
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
-        match deadline_api::api::get_session(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None, None).await {
+        match deadline_api::api::get_session(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -287,7 +287,7 @@ impl DeadlineServer {
     /// List all sessions for a job.
     #[tool(name = "deadline_list_sessions")]
     async fn list_sessions(&self, Parameters(p): Parameters<ListSessionsParams>) -> String {
-        match deadline_api::api::list_sessions(&p.farm_id, &p.queue_id, &p.job_id, None, None).await {
+        match deadline_api::api::list_sessions(&p.farm_id, &p.queue_id, &p.job_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -296,7 +296,7 @@ impl DeadlineServer {
     /// List all steps for a job.
     #[tool(name = "deadline_list_steps")]
     async fn list_steps(&self, Parameters(p): Parameters<ListStepsParams>) -> String {
-        match deadline_api::api::list_steps(&p.farm_id, &p.queue_id, &p.job_id, None, None).await {
+        match deadline_api::api::list_steps(&p.farm_id, &p.queue_id, &p.job_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -305,7 +305,7 @@ impl DeadlineServer {
     /// List all tasks for a step.
     #[tool(name = "deadline_list_tasks")]
     async fn list_tasks(&self, Parameters(p): Parameters<ListTasksParams>) -> String {
-        match deadline_api::api::list_tasks(&p.farm_id, &p.queue_id, &p.job_id, &p.step_id, None, None).await {
+        match deadline_api::api::list_tasks(&p.farm_id, &p.queue_id, &p.job_id, &p.step_id, None).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
@@ -330,7 +330,7 @@ impl DeadlineServer {
 
         match deadline_api::api::search_jobs_with_filters(
             &p.farm_id, &queue_id_refs, item_offset, page_size,
-            filter_expr.as_ref(), None, None, None,
+            filter_expr.as_ref(), None, None,
         ).await {
             Ok(v) => ok_result(v),
             Err(e) => error_json("DeadlineError", &e.to_string()),
@@ -544,7 +544,7 @@ impl DeadlineServer {
 
         // Get session details
         let session = match deadline_api::api::get_session(
-            &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None, None,
+            &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None,
         ).await {
             Ok(v) => v,
             Err(e) => return error_json("DeadlineError", &e.to_string()),

@@ -26,7 +26,7 @@ low-risk, defer if not. If fixes were significant, re-audit the
 changed areas. Loop until clean.
 
 If any fix resolves an existing audit finding (AUDIT-NNN), update the
-finding's entry in `specs/audit_reports/2026-04-17-behavioral-parity.md`:
+finding's entry in `specs/audit_reports/<date>-behavioral-parity.md`:
 mark it as Fixed, update the Rust behavior description, and update the
 summary table and remaining open list at the top and bottom of the report.
 Audit finding status lives in the audit report, not in `progress.md` or
