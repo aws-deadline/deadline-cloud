@@ -66,7 +66,10 @@ from ._job_download_helpers import (
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
 )
-from ....job_attachments._path_mapping import _generate_path_mapping_rules
+from ....job_attachments._path_mapping import (
+    _generate_path_mapping_rules,
+    _PathMappingRuleApplier,
+)
 from ....job_attachments.download import (
     InputDownloader,
     OutputDownloader,
@@ -1192,8 +1195,6 @@ def _download_job_input(
         click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
         if rules:
             # For inputs with storage profiles, apply path mapping via set_root_path
-            from ....job_attachments._path_mapping import _PathMappingRuleApplier
-
             applier = _PathMappingRuleApplier(rules)
             for root in list(input_paths_by_root.keys()):
                 try:
@@ -1208,7 +1209,10 @@ def _download_job_input(
         asset_roots = list(input_paths_by_root.keys())
         for asset_root in asset_roots:
             root_path_format = root_path_format_mapping.get(asset_root, "")
-            if root_path_format and PathFormat.get_host_path_format_string() != root_path_format:
+            if root_path_format == "":
+                # There must be a corresponding root path format for each root path, by design.
+                raise DeadlineOperationError(f"No root path format found for {asset_root}.")
+            if PathFormat.get_host_path_format_string() != root_path_format:
                 click.echo(
                     _get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format)
                 )
@@ -1241,7 +1245,7 @@ def _download_job_input(
     if not auto_accept:
         if not is_json_format:
             user_choice = ""
-            while user_choice != ("y" or "n"):
+            while user_choice not in ("y", "n"):
                 click.echo(
                     _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
                 )
@@ -1353,22 +1357,25 @@ def _download_job_input(
     "-i",
     "--include",
     multiple=True,
-    help="Glob pattern or relative path to include. Repeatable; multiple values are OR'd. "
-    "Without --include, all input files are downloaded",
+    help="Glob pattern or relative path for files to include in download. Matched against "
+    "the full path (root + relative). Supports *, ?, [seq]. A trailing / matches all "
+    "files under that directory. Repeatable",
 )
 @click.option(
     "--match-paths-by",
     type=click.Choice(["JOB", "LOCAL"], case_sensitive=False),
     default="LOCAL",
-    help="Which paths to match --include filters against.\n"
-    "LOCAL (default): match against local download paths.\n"
-    "JOB: match against the paths recorded at job submission",
+    help="Control which paths --include filters are matched against. "
+    "JOB matches against the paths recorded at job submission. "
+    "LOCAL matches against the local download paths (the default).",
 )
 @click.option(
     "--ignore-storage-profiles",
     is_flag=True,
-    help="Ignore storage profile configuration. Only use if the job was "
-    "submitted and downloaded from the same machine",
+    help="Ignores the storage profile configuration. Only use if the job was "
+    "submitted and downloaded from the same machine. Downloads to "
+    "unmapped paths regardless of operating system.\n"
+    "Default value is False.",
     default=False,
 )
 @click.option(
@@ -1382,7 +1389,7 @@ def _download_job_input(
         case_sensitive=False,
     ),
     help="How to handle downloads if a file already exists:\n"
-    "CREATE_COPY (default): Download with a new name, appending '(1)'\n"
+    "CREATE_COPY (default): Download the file with a new name, appending '(1)' to the end\n"
     "SKIP: Do not download the file\n"
     "OVERWRITE: Download and replace the existing file",
 )
@@ -1393,8 +1400,14 @@ def _download_job_input(
 )
 @click.option(
     "--output",
-    type=click.Choice(["verbose", "json"], case_sensitive=False),
-    help="Output format: verbose (human-readable) or json (JSON lines)",
+    type=click.Choice(
+        ["verbose", "json"],
+        case_sensitive=False,
+    ),
+    help="Specifies the output format of the messages printed to stdout.\n"
+    "VERBOSE: Displays messages in a human-readable text format.\n"
+    "JSON: Displays messages in JSON line format, so that the info can be easily "
+    "parsed/consumed by custom scripts.",
 )
 @_handle_error
 def job_download_input(include, match_paths_by, output, ignore_storage_profiles, **args):
@@ -1416,8 +1429,8 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
     job_id = config_file.get_setting("defaults.job_id", config=config)
-    is_json_format = output == "json"
-    include_patterns = _normalize_filters(include)
+    is_json_format = True if output == "json" else False
+    include_patterns = _normalize_filters(list(include)) or None
 
     try:
         _download_job_input(
@@ -1428,9 +1441,7 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
             include_patterns=include_patterns,
-            match_paths_by=MatchPathsBy(match_paths_by.upper())
-            if match_paths_by
-            else MatchPathsBy.LOCAL,
+            match_paths_by=MatchPathsBy(match_paths_by),
         )
     except Exception as e:
         if is_json_format:
