@@ -2047,3 +2047,139 @@ class TestJobDownloadInput:
             # InputDownloader should be created WITH include_filters (JOB mode)
             call_kwargs = mock_downloader.call_args[1]
             assert call_kwargs["include_filters"] == ["*.txt"]
+
+    def test_download_input_mismatching_path_format(self, fresh_deadline_config, tmp_path):
+        """download-input prompts for new root when OS format doesn't match."""
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        # Use the opposite OS path format
+        mock_root_path = "C:\\Users\\username" if sys.platform != "win32" else "/root/path"
+        current_format = PathFormat.get_host_path_format()
+        other_format = (
+            PathFormat.WINDOWS if current_format == PathFormat.POSIX else PathFormat.POSIX
+        )
+
+        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
+            job_group, "InputDownloader"
+        ) as mock_downloader, patch.object(
+            job_group, "_get_conflicting_filenames", return_value=[]
+        ), patch.object(api, "get_queue_user_boto3_session"):
+            mock_download = MagicMock()
+            mock_download.return_value = DownloadSummaryStatistics(
+                total_time=5, processed_files=1, processed_bytes=256
+            )
+            mock_downloader.return_value.download = mock_download
+            mock_downloader.return_value.get_paths_by_root.side_effect = [
+                {mock_root_path: ["file.txt"]},
+                {str(tmp_path): ["file.txt"]},
+                {str(tmp_path): ["file.txt"]},
+            ]
+            boto3_mock().get_queue.return_value = MOCK_GET_QUEUE_RESPONSE
+            boto3_mock().get_job.return_value = {
+                "name": "Mock Job",
+                "attachments": {
+                    "manifests": [
+                        {
+                            "rootPath": mock_root_path,
+                            "rootPathFormat": other_format,
+                            "inputManifestPath": "manifest",
+                            "inputManifestHash": "abc123",
+                        }
+                    ],
+                    "fileSystem": "COPIED",
+                },
+            }
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["job", "download-input", "--job-id", MOCK_JOB_ID],
+                input=f"{str(tmp_path)}\ny\n",
+            )
+
+            assert result.exit_code == 0
+            assert "does not match the operating system" in result.output
+            mock_downloader.return_value.set_root_path.assert_called_once_with(
+                mock_root_path, str(tmp_path)
+            )
+
+    def test_download_input_storage_profile_mapping(self, fresh_deadline_config):
+        """download-input applies storage profile path mapping via set_root_path."""
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+        config.set_setting("settings.auto_accept", "true")
+
+        mock_root = "/original/root"
+        mapped_root = "/mapped/root"
+
+        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
+            job_group, "InputDownloader"
+        ) as mock_downloader, patch.object(
+            job_group, "_get_conflicting_filenames", return_value=[]
+        ), patch.object(api, "get_queue_user_boto3_session"), patch.object(
+            job_group, "_resolve_storage_profiles"
+        ) as mock_resolve, patch.object(
+            job_group, "_generate_path_mapping_rules"
+        ) as mock_gen_rules, patch.object(job_group, "_PathMappingRuleApplier") as mock_applier_cls:
+            mock_download = MagicMock()
+            mock_download.return_value = DownloadSummaryStatistics(
+                total_time=5, processed_files=1, processed_bytes=256
+            )
+            mock_downloader.return_value.download = mock_download
+            mock_downloader.return_value.get_paths_by_root.return_value = {mock_root: ["file.txt"]}
+            boto3_mock().get_queue.return_value = MOCK_GET_QUEUE_RESPONSE
+            boto3_mock().get_job.return_value = self._make_job_response(root_path=mock_root)
+
+            # Set up storage profile resolution
+            mock_resolved = MagicMock()
+            mock_resolved.local_profile.displayName = "TestProfile"
+            mock_resolve.return_value = mock_resolved
+            mock_gen_rules.return_value = [MagicMock()]  # non-empty rules
+
+            # Applier maps original root to mapped root
+            mock_applier = MagicMock()
+            mock_applier.strict_transform.return_value = mapped_root
+            mock_applier_cls.return_value = mock_applier
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["job", "download-input", "--job-id", MOCK_JOB_ID],
+            )
+
+            assert result.exit_code == 0
+            assert "Using storage profile: TestProfile" in result.output
+            mock_downloader.return_value.set_root_path.assert_called_once_with(
+                mock_root, mapped_root
+            )
+
+    def test_download_input_edit_root_path(self, fresh_deadline_config, tmp_path):
+        """download-input allows editing root paths in the confirmation prompt."""
+        config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
+            job_group, "InputDownloader"
+        ) as mock_downloader, patch.object(
+            job_group, "_get_conflicting_filenames", return_value=[]
+        ), patch.object(api, "get_queue_user_boto3_session"):
+            self._setup_mocks(boto3_mock, mock_downloader)
+            # Return different paths after set_root_path is called
+            mock_downloader.return_value.get_paths_by_root.side_effect = [
+                {self.MOCK_ROOT_PATH: self.MOCK_FILES_LIST},
+                {str(tmp_path): self.MOCK_FILES_LIST},
+                {str(tmp_path): self.MOCK_FILES_LIST},
+            ]
+
+            runner = CliRunner()
+            # Select index 0 to edit, enter new path, then confirm with y
+            result = runner.invoke(
+                main,
+                ["job", "download-input", "--job-id", MOCK_JOB_ID],
+                input=f"0\n{str(tmp_path)}\ny\n",
+            )
+
+            assert result.exit_code == 0
+            mock_downloader.return_value.set_root_path.assert_called()
+            assert "Download Summary:" in result.output

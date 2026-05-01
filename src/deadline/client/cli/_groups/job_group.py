@@ -73,6 +73,7 @@ from ....job_attachments._path_mapping import (
 from ....job_attachments.download import (
     InputDownloader,
     OutputDownloader,
+    _BaseFilterableDownloader,
     filter_manifests,
     get_output_manifests_by_asset_root,
 )
@@ -501,6 +502,120 @@ def job_requeue_tasks(run_status: Optional[list[str]], **args):
     click.echo(f"\nRequeued a total of {total_count_requeued} tasks.")
 
 
+def _prompt_for_os_mismatch_roots(
+    downloader: _BaseFilterableDownloader,
+    paths_by_root: dict[str, list[str]],
+    root_path_format_mapping: dict[str, str],
+    is_json_format: bool,
+) -> dict[str, list[str]]:
+    """Prompt the user to remap any asset roots whose OS format doesn't match the host."""
+    asset_roots = list(paths_by_root.keys())
+    for asset_root in asset_roots:
+        root_path_format = root_path_format_mapping.get(asset_root, "")
+        if root_path_format == "":
+            raise DeadlineOperationError(f"No root path format found for {asset_root}.")
+        if PathFormat.get_host_path_format_string() != root_path_format:
+            click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
+            if not is_json_format:
+                new_root = click.prompt(
+                    "> Please enter a new root path",
+                    type=click.Path(exists=False),
+                )
+            else:
+                json_string = click.prompt("", prompt_suffix="", type=str)
+                new_root = _get_value_from_json_line(
+                    json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
+                )[0]
+                _assert_valid_path(new_root)
+            downloader.set_root_path(asset_root, os.path.expanduser(new_root))
+    return downloader.get_paths_by_root()
+
+
+def _prompt_to_confirm_roots(
+    downloader: _BaseFilterableDownloader,
+    paths_by_root: dict[str, list[str]],
+    is_json_format: bool,
+    cancel_message: str,
+    on_roots_changed: Optional[Callable[[dict[str, list[str]]], None]] = None,
+) -> Optional[dict[str, list[str]]]:
+    """
+    Interactive prompt letting the user confirm or edit download root paths.
+    Returns the (possibly updated) paths_by_root, or None if the user canceled.
+    ``on_roots_changed`` is called after every root edit (e.g. for long-path warnings).
+    """
+    if not is_json_format:
+        user_choice = ""
+        while user_choice not in ("y", "n"):
+            click.echo(_get_summary_of_files_to_download_message(paths_by_root, is_json_format))
+            asset_roots = list(paths_by_root.keys())
+            click.echo(_get_roots_list_message(asset_roots, is_json_format))
+            user_choice = click.prompt(
+                "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
+                type=click.Choice([*[str(num) for num in range(len(asset_roots))], "y", "n"]),
+                default="y",
+            )
+            if user_choice == "n":
+                click.echo(cancel_message)
+                return None
+            elif user_choice != "y":
+                index_to_change = int(user_choice)
+                new_root = click.prompt(
+                    "> Please enter the new root directory path, or press Enter to keep it unchanged",
+                    type=click.Path(exists=False),
+                    default=asset_roots[index_to_change],
+                )
+                downloader.set_root_path(asset_roots[index_to_change], str(Path(new_root)))
+                paths_by_root = downloader.get_paths_by_root()
+                if on_roots_changed:
+                    on_roots_changed(paths_by_root)
+    else:
+        click.echo(_get_summary_of_files_to_download_message(paths_by_root, is_json_format))
+        asset_roots = list(paths_by_root.keys())
+        click.echo(_get_roots_list_message(asset_roots, is_json_format))
+        json_string = click.prompt("", prompt_suffix="", type=str)
+        confirmed_asset_roots = _get_value_from_json_line(
+            json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
+        )
+        for index, confirmed_root in enumerate(confirmed_asset_roots):
+            _assert_valid_path(confirmed_root)
+            downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
+        paths_by_root = downloader.get_paths_by_root()
+        if on_roots_changed:
+            on_roots_changed(paths_by_root)
+    return paths_by_root
+
+
+def _execute_download_with_progress(
+    download_fn: Callable[
+        [Optional[FileConflictResolution], Optional[Callable[[ProgressReportMetadata], bool]]],
+        DownloadSummaryStatistics,
+    ],
+    file_conflict_resolution: Optional[FileConflictResolution],
+    is_json_format: bool,
+    progress_label: str,
+) -> DownloadSummaryStatistics:
+    """Run a download function with either a CLI progress bar or JSON progress lines."""
+    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+        if not is_json_format:
+            with click.progressbar(length=100, label=progress_label) as download_progress:  # type: ignore[var-annotated]
+
+                def _update_progress(metadata: ProgressReportMetadata) -> bool:
+                    new_progress = int(metadata.progress) - download_progress.pos
+                    if new_progress > 0:
+                        download_progress.update(new_progress)
+                    return sigint_handler.continue_operation
+
+                return download_fn(file_conflict_resolution, _update_progress)
+        else:
+
+            def _update_progress(metadata: ProgressReportMetadata) -> bool:
+                click.echo(_get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(metadata.progress))))
+                # TODO: enable download cancellation for JSON format
+                return True
+
+            return download_fn(file_conflict_resolution, _update_progress)
+
+
 def _download_job_output(
     config: Optional[ConfigParser],
     farm_id: str,
@@ -649,89 +764,25 @@ def _download_job_output(
             )
     else:
         # No storage profiles — fall back to manual prompt on OS mismatch
-        asset_roots = list(output_paths_by_root.keys())
-        for asset_root in asset_roots:
-            root_path_format = root_path_format_mapping.get(asset_root, "")
-            if root_path_format == "":
-                # There must be a corresponding root path format for each root path, by design.
-                raise DeadlineOperationError(f"No root path format found for {asset_root}.")
-            if PathFormat.get_host_path_format_string() != root_path_format:
-                click.echo(
-                    _get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format)
-                )
-
-                if not is_json_format:
-                    new_root = click.prompt(
-                        "> Please enter a new root path",
-                        type=click.Path(exists=False),
-                    )
-                else:
-                    json_string = click.prompt("", prompt_suffix="", type=str)
-                    new_root = _get_value_from_json_line(
-                        json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
-                    )[0]
-                    _assert_valid_path(new_root)
-
-                job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
-
-        # Re-fetch after potential set_root_path calls above
-        output_paths_by_root = job_output_downloader.get_paths_by_root()
+        output_paths_by_root = _prompt_for_os_mismatch_roots(
+            job_output_downloader, output_paths_by_root, root_path_format_mapping, is_json_format
+        )
         _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Prompt users to confirm local root paths where they will download outputs to,
     # and allow users to select different location to download files to if they want.
     # (If auto-accept is enabled, automatically download to the default root paths.)
     if not auto_accept:
-        if not is_json_format:
-            user_choice = ""
-            while user_choice != ("y" or "n"):
-                click.echo(
-                    _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
-                )
-                asset_roots = list(output_paths_by_root.keys())
-                click.echo(_get_roots_list_message(asset_roots, is_json_format))
-                user_choice = click.prompt(
-                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
-                    type=click.Choice(
-                        [
-                            *[str(num) for num in list(range(0, len(asset_roots)))],
-                            "y",
-                            "n",
-                        ]
-                    ),
-                    default="y",
-                )
-                if user_choice == "n":
-                    click.echo("Output download canceled.")
-                    return
-                elif user_choice != "y":
-                    # User selected an index to modify the root directory.
-                    index_to_change = int(user_choice)
-                    new_root = click.prompt(
-                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
-                        type=click.Path(exists=False),
-                        default=asset_roots[index_to_change],
-                    )
-                    job_output_downloader.set_root_path(
-                        asset_roots[index_to_change], str(Path(new_root))
-                    )
-                    output_paths_by_root = job_output_downloader.get_paths_by_root()
-                    _check_and_warn_long_output_paths(output_paths_by_root)
-        else:
-            click.echo(
-                _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
-            )
-            asset_roots = list(output_paths_by_root.keys())
-            click.echo(_get_roots_list_message(asset_roots, is_json_format))
-            json_string = click.prompt("", prompt_suffix="", type=str)
-            confirmed_asset_roots = _get_value_from_json_line(
-                json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
-            )
-            for index, confirmed_root in enumerate(confirmed_asset_roots):
-                _assert_valid_path(confirmed_root)
-                job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            output_paths_by_root = job_output_downloader.get_paths_by_root()
-            _check_and_warn_long_output_paths(output_paths_by_root)
+        result = _prompt_to_confirm_roots(
+            job_output_downloader,
+            output_paths_by_root,
+            is_json_format,
+            cancel_message="Output download canceled.",
+            on_roots_changed=_check_and_warn_long_output_paths,
+        )
+        if result is None:
+            return
+        output_paths_by_root = result
 
     # Apply include filters against workstation paths (default behavior).
     # When --match-paths-by JOB is set, filtering was already applied at the job level.
@@ -759,56 +810,21 @@ def _download_job_output(
     if file_conflict_resolution is None:
         return
 
-    # TODO: remove logging level setting when the max number connections for boto3 client
-    # in Job Attachments library can be increased (currently using default number, 10, which
-    # makes it keep logging urllib3 warning messages when downloading large files)
-    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+    @api.record_success_fail_telemetry_event(metric_name="download_job_output")
+    def _do_download_output(
+        file_conflict_resolution: Optional[
+            FileConflictResolution
+        ] = FileConflictResolution.CREATE_COPY,
+        on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    ) -> DownloadSummaryStatistics:
+        return job_output_downloader.download(
+            file_conflict_resolution=file_conflict_resolution,
+            on_downloading_files=on_downloading_files,
+        )
 
-        @api.record_success_fail_telemetry_event(metric_name="download_job_output")
-        def _download_job_output(
-            file_conflict_resolution: Optional[
-                FileConflictResolution
-            ] = FileConflictResolution.CREATE_COPY,
-            on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
-        ) -> DownloadSummaryStatistics:
-            return job_output_downloader.download(
-                file_conflict_resolution=file_conflict_resolution,
-                on_downloading_files=on_downloading_files,
-            )
-
-        if not is_json_format:
-            # Note: click doesn't export the return type of progressbar(), so we suppress mypy warnings for
-            # not annotating the type of download_progress.
-            with click.progressbar(length=100, label="Downloading Outputs") as download_progress:  # type: ignore[var-annotated]
-
-                def _update_download_progress(
-                    download_metadata: ProgressReportMetadata,
-                ) -> bool:
-                    new_progress = int(download_metadata.progress) - download_progress.pos
-                    if new_progress > 0:
-                        download_progress.update(new_progress)
-                    return sigint_handler.continue_operation
-
-                download_summary: DownloadSummaryStatistics = _download_job_output(  # type: ignore
-                    file_conflict_resolution=file_conflict_resolution,
-                    on_downloading_files=_update_download_progress,
-                )
-        else:
-
-            def _update_download_progress(
-                download_metadata: ProgressReportMetadata,
-            ) -> bool:
-                click.echo(
-                    _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
-                )
-                # TODO: enable download cancellation for JSON format
-                return True
-
-            download_summary = _download_job_output(  # type: ignore
-                file_conflict_resolution=file_conflict_resolution,
-                on_downloading_files=_update_download_progress,
-            )
-
+    download_summary = _execute_download_with_progress(
+        _do_download_output, file_conflict_resolution, is_json_format, "Downloading Outputs"
+    )
     click.echo(_get_download_summary_message(download_summary, is_json_format))
     click.echo()
 
@@ -1206,31 +1222,9 @@ def _download_job_input(
             input_paths_by_root = job_input_downloader.get_paths_by_root()
     else:
         # No storage profiles — fall back to manual prompt on OS mismatch
-        asset_roots = list(input_paths_by_root.keys())
-        for asset_root in asset_roots:
-            root_path_format = root_path_format_mapping.get(asset_root, "")
-            if root_path_format == "":
-                # There must be a corresponding root path format for each root path, by design.
-                raise DeadlineOperationError(f"No root path format found for {asset_root}.")
-            if PathFormat.get_host_path_format_string() != root_path_format:
-                click.echo(
-                    _get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format)
-                )
-                if not is_json_format:
-                    new_root = click.prompt(
-                        "> Please enter a new root path",
-                        type=click.Path(exists=False),
-                    )
-                else:
-                    json_string = click.prompt("", prompt_suffix="", type=str)
-                    new_root = _get_value_from_json_line(
-                        json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
-                    )[0]
-                    _assert_valid_path(new_root)
-
-                job_input_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
-
-        input_paths_by_root = job_input_downloader.get_paths_by_root()
+        input_paths_by_root = _prompt_for_os_mismatch_roots(
+            job_input_downloader, input_paths_by_root, root_path_format_mapping, is_json_format
+        )
 
     # When match_paths_by is LOCAL (default), apply filters after root mapping.
     if include_patterns and match_paths_by == MatchPathsBy.LOCAL:
@@ -1243,47 +1237,15 @@ def _download_job_input(
 
     # Prompt to confirm root paths (unless auto-accept)
     if not auto_accept:
-        if not is_json_format:
-            user_choice = ""
-            while user_choice not in ("y", "n"):
-                click.echo(
-                    _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
-                )
-                asset_roots = list(input_paths_by_root.keys())
-                click.echo(_get_roots_list_message(asset_roots, is_json_format))
-                user_choice = click.prompt(
-                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download",
-                    type=click.Choice([*[str(num) for num in range(len(asset_roots))], "y", "n"]),
-                    default="y",
-                )
-                if user_choice == "n":
-                    click.echo("Input download canceled.")
-                    return
-                elif user_choice != "y":
-                    index_to_change = int(user_choice)
-                    new_root = click.prompt(
-                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
-                        type=click.Path(exists=False),
-                        default=asset_roots[index_to_change],
-                    )
-                    job_input_downloader.set_root_path(
-                        asset_roots[index_to_change], str(Path(new_root))
-                    )
-                    input_paths_by_root = job_input_downloader.get_paths_by_root()
-        else:
-            click.echo(
-                _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
-            )
-            asset_roots = list(input_paths_by_root.keys())
-            click.echo(_get_roots_list_message(asset_roots, is_json_format))
-            json_string = click.prompt("", prompt_suffix="", type=str)
-            confirmed_asset_roots = _get_value_from_json_line(
-                json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
-            )
-            for index, confirmed_root in enumerate(confirmed_asset_roots):
-                _assert_valid_path(confirmed_root)
-                job_input_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            input_paths_by_root = job_input_downloader.get_paths_by_root()
+        result = _prompt_to_confirm_roots(
+            job_input_downloader,
+            input_paths_by_root,
+            is_json_format,
+            cancel_message="Input download canceled.",
+        )
+        if result is None:
+            return
+        input_paths_by_root = result
 
     if not is_json_format:
         all_input_paths: set[str] = set()
@@ -1300,50 +1262,21 @@ def _download_job_input(
     if file_conflict_resolution is None:
         return
 
-    with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
+    @api.record_success_fail_telemetry_event(metric_name="download_job_input")
+    def _do_download_input(
+        file_conflict_resolution: Optional[
+            FileConflictResolution
+        ] = FileConflictResolution.CREATE_COPY,
+        on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    ) -> DownloadSummaryStatistics:
+        return job_input_downloader.download(
+            file_conflict_resolution=file_conflict_resolution,
+            on_downloading_files=on_downloading_files,
+        )
 
-        @api.record_success_fail_telemetry_event(metric_name="download_job_input")
-        def _do_download_input(
-            file_conflict_resolution: Optional[
-                FileConflictResolution
-            ] = FileConflictResolution.CREATE_COPY,
-            on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
-        ) -> DownloadSummaryStatistics:
-            return job_input_downloader.download(
-                file_conflict_resolution=file_conflict_resolution,
-                on_downloading_files=on_downloading_files,
-            )
-
-        if not is_json_format:
-            with click.progressbar(length=100, label="Downloading Inputs") as download_progress:  # type: ignore[var-annotated]
-
-                def _update_download_progress(
-                    download_metadata: ProgressReportMetadata,
-                ) -> bool:
-                    new_progress = int(download_metadata.progress) - download_progress.pos
-                    if new_progress > 0:
-                        download_progress.update(new_progress)
-                    return sigint_handler.continue_operation
-
-                download_summary: DownloadSummaryStatistics = _do_download_input(
-                    file_conflict_resolution=file_conflict_resolution,
-                    on_downloading_files=_update_download_progress,
-                )
-        else:
-
-            def _update_download_progress(
-                download_metadata: ProgressReportMetadata,
-            ) -> bool:
-                click.echo(
-                    _get_json_line(JSON_MSG_TYPE_PROGRESS, str(int(download_metadata.progress)))
-                )
-                return True
-
-            download_summary = _do_download_input(
-                file_conflict_resolution=file_conflict_resolution,
-                on_downloading_files=_update_download_progress,
-            )
-
+    download_summary = _execute_download_with_progress(
+        _do_download_input, file_conflict_resolution, is_json_format, "Downloading Inputs"
+    )
     click.echo(_get_download_summary_message(download_summary, is_json_format))
     click.echo()
 
