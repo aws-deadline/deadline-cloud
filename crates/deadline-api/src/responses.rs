@@ -7,6 +7,14 @@
 //! implement Serialize. These are stored as `serde_json::Value` extracted from
 //! the raw HTTP response body alongside the typed output.
 
+use crate::type_conversions::{
+    attachments_to_value, dependency_counts_to_value, fleet_configuration_to_value,
+    host_properties_to_value, job_attachment_settings_to_value, job_parameter_to_value,
+    job_run_as_user_to_value, log_configuration_to_value, parameter_space_to_value,
+    scheduling_configuration_to_value, step_required_capabilities_to_value,
+    task_parameter_value_to_value,
+};
+
 use aws_sdk_deadline::operation::get_farm::GetFarmOutput;
 use aws_sdk_deadline::operation::get_fleet::GetFleetOutput;
 use aws_sdk_deadline::operation::get_job::GetJobOutput;
@@ -16,7 +24,7 @@ use aws_sdk_deadline::operation::get_step::GetStepOutput;
 use aws_sdk_deadline::operation::get_task::GetTaskOutput;
 use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 /// Format an AWS SDK DateTime to match Python's display format.
 /// Input: ISO 8601 (e.g. "2024-12-18T00:37:38Z" or "2024-12-18T00:37:38.624Z")
@@ -106,9 +114,8 @@ pub struct QueueResponse {
     pub scheduling_configuration: Option<Value>,
 }
 
-impl QueueResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetQueueOutput, raw: &Value) -> Self {
+impl From<GetQueueOutput> for QueueResponse {
+    fn from(o: GetQueueOutput) -> Self {
         let fslns = o.required_file_system_location_names.filter(|v| !v.is_empty());
         let aspids = o.allowed_storage_profile_ids.filter(|v| !v.is_empty());
         Self {
@@ -123,12 +130,12 @@ impl QueueResponse {
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             description: o.description,
-            job_attachment_settings: raw.get("jobAttachmentSettings").cloned(),
+            job_attachment_settings: o.job_attachment_settings.as_ref().map(job_attachment_settings_to_value),
             role_arn: o.role_arn,
             required_file_system_location_names: fslns,
             allowed_storage_profile_ids: aspids,
-            job_run_as_user: raw.get("jobRunAsUser").cloned(),
-            scheduling_configuration: raw.get("schedulingConfiguration").cloned(),
+            job_run_as_user: o.job_run_as_user.as_ref().map(job_run_as_user_to_value),
+            scheduling_configuration: o.scheduling_configuration.as_ref().map(scheduling_configuration_to_value),
         }
     }
 }
@@ -173,9 +180,8 @@ pub struct FleetResponse {
     pub role_arn: String,
 }
 
-impl FleetResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetFleetOutput, raw: &Value) -> Self {
+impl From<GetFleetOutput> for FleetResponse {
+    fn from(o: GetFleetOutput) -> Self {
         Self {
             fleet_id: o.fleet_id,
             farm_id: o.farm_id,
@@ -187,14 +193,38 @@ impl FleetResponse {
             worker_count: o.worker_count,
             min_worker_count: o.min_worker_count,
             max_worker_count: o.max_worker_count,
-            configuration: raw.get("configuration").cloned(),
+            configuration: o.configuration.as_ref().and_then(|c| {
+                let v = fleet_configuration_to_value(c);
+                if v == json!({}) { None } else { Some(v) }
+            }),
             created_at: format_datetime(&o.created_at),
             created_by: o.created_by,
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             description: o.description,
-            host_configuration: raw.get("hostConfiguration").cloned(),
-            capabilities: raw.get("capabilities").cloned(),
+            host_configuration: o.host_configuration.as_ref().map(|h| {
+                json!({"scriptBody": h.script_body(), "scriptTimeoutSeconds": h.script_timeout_seconds()})
+            }),
+            capabilities: o.capabilities.as_ref().map(|c| {
+                let mut obj = Map::new();
+                if c.amounts.is_some() {
+                    let amounts: Vec<Value> = c.amounts().iter().map(|a| {
+                        let mut ao = Map::new();
+                        ao.insert("name".into(), json!(a.name()));
+                        ao.insert("min".into(), json!(a.min()));
+                        if let Some(max) = a.max() { ao.insert("max".into(), json!(max)); }
+                        Value::Object(ao)
+                    }).collect();
+                    obj.insert("amounts".into(), json!(amounts));
+                }
+                if c.attributes.is_some() {
+                    let attrs: Vec<Value> = c.attributes().iter().map(|a| {
+                        json!({"name": a.name(), "values": a.values()})
+                    }).collect();
+                    obj.insert("attributes".into(), json!(attrs));
+                }
+                Value::Object(obj)
+            }),
             role_arn: o.role_arn,
         }
     }
@@ -251,9 +281,24 @@ pub struct JobResponse {
     pub source_job_id: Option<String>,
 }
 
-impl JobResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetJobOutput, raw: &Value) -> Self {
+impl From<GetJobOutput> for JobResponse {
+    fn from(o: GetJobOutput) -> Self {
+        let task_run_status_counts = o.task_run_status_counts.as_ref().map(|m| {
+            let mut pairs: Vec<_> = m.iter()
+                .map(|(k, v)| (k.as_str().to_string(), json!(v)))
+                .collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            let obj: Map<String, Value> = pairs.into_iter().collect();
+            Value::Object(obj)
+        });
+        let parameters = o.parameters.as_ref().map(|m| {
+            let mut pairs: Vec<_> = m.iter()
+                .map(|(k, v)| (k.clone(), job_parameter_to_value(v)))
+                .collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            let obj: Map<String, Value> = pairs.into_iter().collect();
+            Value::Object(obj)
+        });
         Self {
             job_id: o.job_id,
             name: o.name,
@@ -268,13 +313,13 @@ impl JobResponse {
             ended_at: o.ended_at.as_ref().map(format_datetime),
             task_run_status: o.task_run_status.map(|s| s.as_str().to_string()),
             target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
-            task_run_status_counts: raw.get("taskRunStatusCounts").cloned(),
+            task_run_status_counts,
             task_failure_retry_count: o.task_failure_retry_count,
             storage_profile_id: o.storage_profile_id,
             max_failed_tasks_count: o.max_failed_tasks_count,
             max_retries_per_task: o.max_retries_per_task,
-            parameters: raw.get("parameters").cloned(),
-            attachments: raw.get("attachments").cloned(),
+            parameters,
+            attachments: o.attachments.as_ref().map(attachments_to_value),
             description: o.description,
             max_worker_count: o.max_worker_count,
             source_job_id: o.source_job_id,
@@ -323,16 +368,23 @@ pub struct StepResponse {
     pub description: Option<String>,
 }
 
-impl StepResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetStepOutput, raw: &Value) -> Self {
+impl From<GetStepOutput> for StepResponse {
+    fn from(o: GetStepOutput) -> Self {
+        let task_run_status_counts = {
+            let mut pairs: Vec<_> = o.task_run_status_counts.iter()
+                .map(|(k, v)| (k.as_str().to_string(), json!(v)))
+                .collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            let obj: Map<String, Value> = pairs.into_iter().collect();
+            Value::Object(obj)
+        };
         Self {
             step_id: o.step_id,
             name: o.name,
             lifecycle_status: o.lifecycle_status.as_str().to_string(),
             lifecycle_status_message: o.lifecycle_status_message,
             task_run_status: o.task_run_status.as_str().to_string(),
-            task_run_status_counts: raw.get("taskRunStatusCounts").cloned().unwrap_or(Value::Object(Default::default())),
+            task_run_status_counts,
             task_failure_retry_count: o.task_failure_retry_count,
             target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
             created_at: format_datetime(&o.created_at),
@@ -341,9 +393,9 @@ impl StepResponse {
             updated_by: o.updated_by,
             started_at: o.started_at.as_ref().map(format_datetime),
             ended_at: o.ended_at.as_ref().map(format_datetime),
-            dependency_counts: raw.get("dependencyCounts").cloned(),
-            required_capabilities: raw.get("requiredCapabilities").cloned(),
-            parameter_space: raw.get("parameterSpace").cloned(),
+            dependency_counts: o.dependency_counts.as_ref().map(dependency_counts_to_value),
+            required_capabilities: o.required_capabilities.as_ref().map(step_required_capabilities_to_value),
+            parameter_space: o.parameter_space.as_ref().map(parameter_space_to_value),
             description: o.description,
         }
     }
@@ -380,9 +432,14 @@ pub struct TaskResponse {
     pub parameters: Option<Value>,
 }
 
-impl TaskResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetTaskOutput, raw: &Value) -> Self {
+impl From<GetTaskOutput> for TaskResponse {
+    fn from(o: GetTaskOutput) -> Self {
+        let parameters = o.parameters.as_ref().map(|m| {
+            let obj: Map<String, Value> = m.iter()
+                .map(|(k, v)| (k.clone(), task_parameter_value_to_value(v)))
+                .collect();
+            Value::Object(obj)
+        });
         Self {
             task_id: o.task_id,
             created_at: format_datetime(&o.created_at),
@@ -395,7 +452,7 @@ impl TaskResponse {
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             latest_session_action_id: o.latest_session_action_id,
-            parameters: raw.get("parameters").cloned(),
+            parameters,
         }
     }
 }
@@ -430,9 +487,8 @@ pub struct SessionResponse {
     pub worker_log: Option<Value>,
 }
 
-impl SessionResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetSessionOutput, raw: &Value) -> Self {
+impl From<GetSessionOutput> for SessionResponse {
+    fn from(o: GetSessionOutput) -> Self {
         Self {
             session_id: o.session_id,
             fleet_id: o.fleet_id,
@@ -443,9 +499,13 @@ impl SessionResponse {
             target_lifecycle_status: o.target_lifecycle_status.map(|s| s.as_str().to_string()),
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
-            log: raw.get("log").cloned(),
-            host_properties: raw.get("hostProperties").cloned(),
-            worker_log: raw.get("workerLog").cloned(),
+            log: o.log.as_ref().and_then(|l| {
+                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+            }),
+            host_properties: o.host_properties.as_ref().map(host_properties_to_value),
+            worker_log: o.worker_log.as_ref().and_then(|l| {
+                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+            }),
         }
     }
 }
@@ -475,9 +535,8 @@ pub struct WorkerResponse {
     pub log: Option<Value>,
 }
 
-impl WorkerResponse {
-    /// Build from typed SDK output + raw JSON (for nested types that lack Serialize).
-    pub fn from_output_and_raw(o: GetWorkerOutput, raw: &Value) -> Self {
+impl From<GetWorkerOutput> for WorkerResponse {
+    fn from(o: GetWorkerOutput) -> Self {
         Self {
             farm_id: o.farm_id,
             fleet_id: o.fleet_id,
@@ -487,8 +546,10 @@ impl WorkerResponse {
             created_by: o.created_by,
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
-            host_properties: raw.get("hostProperties").cloned(),
-            log: raw.get("log").cloned(),
+            host_properties: o.host_properties.as_ref().map(host_properties_to_value),
+            log: o.log.as_ref().and_then(|l| {
+                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+            }),
         }
     }
 }

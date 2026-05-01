@@ -260,9 +260,9 @@ impl DeadlineServer {
     /// Get detailed information about a specific job.
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
-        match deadline_api::api::get_job_with_raw(&p.farm_id, &p.queue_id, &p.job_id, None).await {
-            Ok((output, raw)) => {
-                let resp = deadline_api::responses::JobResponse::from_output_and_raw(output, &raw);
+        match deadline_api::api::get_job(&p.farm_id, &p.queue_id, &p.job_id, None).await {
+            Ok(output) => {
+                let resp = deadline_api::responses::JobResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
             }
             Err(e) => error_json("DeadlineError", &e.to_string()),
@@ -272,9 +272,9 @@ impl DeadlineServer {
     /// Get detailed information about a specific session.
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
-        match deadline_api::api::get_session_with_raw(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
-            Ok((output, raw)) => {
-                let resp = deadline_api::responses::SessionResponse::from_output_and_raw(output, &raw);
+        match deadline_api::api::get_session(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
+            Ok(output) => {
+                let resp = deadline_api::responses::SessionResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
             }
             Err(e) => error_json("DeadlineError", &e.to_string()),
@@ -540,7 +540,7 @@ impl DeadlineServer {
         let limit = p.limit.unwrap_or(100);
 
         // Get session details
-        let (session, session_raw) = match deadline_api::api::get_session_with_raw(
+        let session = match deadline_api::api::get_session(
             &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None,
         ).await {
             Ok(v) => v,
@@ -556,12 +556,15 @@ impl DeadlineServer {
             if fid.is_empty() { None } else { Some(fid.to_string()) }
         };
 
+        let host_props = session.host_properties()
+            .map(deadline_api::type_conversions::host_properties_to_value);
+
         let mut result = json!({
             "session_id": p.session_id,
             "worker_id": worker_id,
             "fleet_id": fleet_id,
             "lifecycle_status": session.lifecycle_status().as_str(),
-            "host_properties": session_raw.get("hostProperties"),
+            "host_properties": host_props,
         });
 
         // Get session logs

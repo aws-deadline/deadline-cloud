@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
-use deadline_api::{api, client, response_capture::ResponseBodyCapture, session};
+use deadline_api::{api, client, session};
 use deadline_config::config_file;
 use deadline_api::telemetry::create_telemetry;
 use deadline_job_attachments::incremental_download::IncrementalDownloadState;
@@ -232,14 +232,11 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
-            let cap = ResponseBodyCapture::new();
             match dl.get_queue().farm_id(&farm).queue_id(&queue)
-                .customize().interceptor(cap.clone())
                 .send().await
             {
                 Ok(output) => {
-                    let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                    let resp = deadline_api::responses::QueueResponse::from_output_and_raw(output, &raw);
+                    let resp = deadline_api::responses::QueueResponse::from(output);
                     let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
                     println!("{}", crate::common::cli_object_repr(&val));
                     Ok(())
@@ -748,11 +745,13 @@ async fn incremental_output_download(
 
     // For new jobs, call GetJob to get attachments
     for job_id in new_job_ids.clone() {
-        let (job_detail, job_raw) = api::get_job_with_raw(farm_id, queue_id, &job_id, Some(config))
+        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
-            dc_job["attachments"] = job_raw.get("attachments").cloned().unwrap_or(serde_json::Value::Null);
+            dc_job["attachments"] = job_detail.attachments.as_ref()
+                .map(deadline_api::type_conversions::attachments_to_value)
+                .unwrap_or(serde_json::Value::Null);
             dc_job["storageProfileId"] = serde_json::json!(job_detail.storage_profile_id.as_deref());
         }
 

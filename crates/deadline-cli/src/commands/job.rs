@@ -279,10 +279,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::get_session_with_raw(&farm, &queue, &job, &session_id, Some(&config))
+            let resp = api::get_session(&farm, &queue, &job, &session_id, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
-            let session_resp = SessionResponse::from_output_and_raw(resp.0, &resp.1);
+            let session_resp = SessionResponse::from(resp);
             let val = serde_json::to_value(&session_resp).map_err(|e| CliError::Operation(e.to_string()))?;
             println!("{}", crate::common::cli_object_repr(&val));
             Ok(())
@@ -986,9 +986,9 @@ fn format_duration(seconds: f64) -> String {
 
 /// Print full job details (used by `job get` in direct mode).
 async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniConfig) -> Result<(), CliError> {
-    match api::get_job_with_raw(farm, queue, job_id, Some(config)).await {
-        Ok((output, raw)) => {
-            let resp = JobResponse::from_output_and_raw(output, &raw);
+    match api::get_job(farm, queue, job_id, Some(config)).await {
+        Ok(output) => {
+            let resp = JobResponse::from(output);
             let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
             println!("{}", crate::common::cli_object_repr(&val));
             let est = estimate_remaining_time(&val);
@@ -1254,7 +1254,7 @@ pub(crate) async fn download_output_impl(
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
 
     // Get job
-    let (job, job_raw) = api::get_job_with_raw(farm_id, queue_id, job_id, Some(config))
+    let job = api::get_job(farm_id, queue_id, job_id, Some(config))
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
     let job_name = job.name().to_string();
@@ -1272,11 +1272,16 @@ pub(crate) async fn download_output_impl(
     let task_params;
     let session_action_id;
     if let (Some(sid), Some(tid)) = (step_id, task_id) {
-        let task = api::get_task_with_raw(farm_id, queue_id, job_id, sid, tid, Some(config))
+        let task = api::get_task(farm_id, queue_id, job_id, sid, tid, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
-        task_params = task.1.get("parameters").cloned();
-        session_action_id = task.0.latest_session_action_id.clone();
+        task_params = task.parameters.as_ref().map(|m| {
+            let obj: serde_json::Map<String, serde_json::Value> = m.iter()
+                .map(|(k, v)| (k.clone(), deadline_api::type_conversions::task_parameter_value_to_value(v)))
+                .collect();
+            serde_json::Value::Object(obj)
+        });
+        session_action_id = task.latest_session_action_id.clone();
     } else {
         task_params = None;
         session_action_id = None;
@@ -1343,16 +1348,11 @@ pub(crate) async fn download_output_impl(
 
     // F7: Build root_path_format_mapping from job attachments
     let mut root_path_format_mapping: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    if let Some(attachments) = job_raw.get("attachments") {
-        if let Some(manifests) = attachments.get("manifests").and_then(|m| m.as_array()) {
-            for manifest in manifests {
-                if let (Some(root), Some(fmt)) = (
-                    manifest.get("rootPath").and_then(|v| v.as_str()),
-                    manifest.get("rootPathFormat").and_then(|v| v.as_str()),
-                ) {
-                    root_path_format_mapping.insert(root.to_string(), fmt.to_string());
-                }
-            }
+    if let Some(attachments) = job.attachments() {
+        for manifest in attachments.manifests() {
+            let root = manifest.root_path();
+            let fmt = manifest.root_path_format().as_str();
+            root_path_format_mapping.insert(root.to_string(), fmt.to_string());
         }
     }
 
@@ -1704,7 +1704,7 @@ async fn run_trace_schedule(
     }
 
     println!("Getting the job...");
-    let (job_data, job_data_raw) = api::get_job_with_raw(&farm, &queue, &job, Some(&config)).await
+    let job_data = api::get_job(&farm, &queue, &job, Some(&config)).await
         .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
 
     let started_at = match job_data.started_at() {
@@ -1968,7 +1968,9 @@ async fn run_trace_schedule(
 
     if verbose {
         println!(" ==== TRACE DATA ====");
-        println!("{}", crate::common::cli_object_repr(&job_data_raw));
+        let job_resp = JobResponse::from(api::get_job(&farm, &queue, &job, Some(&config)).await
+            .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?);
+        println!("{}", crate::common::cli_object_repr(&serde_json::to_value(&job_resp).unwrap()));
         println!("{}", crate::common::cli_object_repr(&json!(sessions)));
     }
 

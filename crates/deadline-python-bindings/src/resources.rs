@@ -61,14 +61,9 @@ pub fn get_queue<'py>(py: Python<'py>, farm_id: &str, queue_id: &str, config_pat
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
     let dl = rt.block_on(deadline_api::session::deadline_client(Some(&config)));
-    let cap = deadline_api::response_capture::ResponseBodyCapture::new();
-    let output = rt.block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id)
-        .customize().interceptor(cap.clone())
-        .send())
+    let output = rt.block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
         .map_err(|e| DeadlineOperationError::new_err(deadline_api::client::format_sdk_error(&e)))?;
-    let raw = cap.json()
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
-    let resp = deadline_api::responses::QueueResponse::from_output_and_raw(output, &raw);
+    let resp = deadline_api::responses::QueueResponse::from(output);
     let result = serde_json::to_value(&resp)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)

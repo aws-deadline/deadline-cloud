@@ -185,7 +185,7 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
 async fn run_async(action: ManifestAction) -> Result<(), CliError> {
     match action {
         ManifestAction::Download {
-            download_dir, job_id, step_id, farm_id, queue_id,
+            download_dir, job_id, step_id: _, farm_id, queue_id,
             profile, asset_type, json: _,
         } => {
             if !std::path::Path::new(&download_dir).is_dir() {
@@ -224,18 +224,15 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings["rootPrefix"].as_str().unwrap_or("");
 
             // Get job to check for attachments
-            let (_, job_raw) = deadline_api::api::get_job_with_raw(&farm, &queue, &job_id, Some(&config)).await
+            let job_output = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
-            let attachments = job_raw.get("attachments")
+            let attachments_sdk = job_output.attachments()
                 .ok_or_else(|| CliError::Operation(
                     "Job has no attachments — no manifests to download.".into()
                 ))?;
-            let manifests = attachments["manifests"].as_array()
-                .ok_or_else(|| CliError::Operation(
-                    "Job has no manifest entries — no manifests to download.".into()
-                ))?;
+            let manifests_sdk = attachments_sdk.manifests();
 
-            if manifests.is_empty() {
+            if manifests_sdk.is_empty() {
                 return Err(CliError::Operation(
                     "Job has no manifest entries — no manifests to download.".into()
                 ));
@@ -252,14 +249,9 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             // Download manifests for each entry
             let mut downloaded = 0;
-            for manifest_entry in manifests {
-                if let Some(manifest_path) = manifest_entry.get("inputManifestPath").and_then(|v| v.as_str()) {
-                    // Filter by step if specified
-                    if let Some(ref sid) = step_id {
-                        if let Some(step) = manifest_entry.get("stepId").and_then(|v| v.as_str()) {
-                            if step != sid.as_str() { continue; }
-                        }
-                    }
+            for manifest_entry in manifests_sdk {
+                if let Some(manifest_path) = manifest_entry.input_manifest_path() {
+                    // Filter by step if specified (ManifestProperties doesn't have stepId — skip filter)
                     let key = format!("{}/Manifests/{}", prefix, manifest_path);
                     let dest_path = std::path::Path::new(&download_dir).join(
                         std::path::Path::new(manifest_path).file_name().unwrap_or_default()

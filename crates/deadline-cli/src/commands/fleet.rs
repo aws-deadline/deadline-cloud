@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{api, client, response_capture::ResponseBodyCapture, responses::FleetResponse, session};
+use deadline_api::{api, client, responses::FleetResponse, session};
 use deadline_config::config_file;
 
 use super::config::CliError;
@@ -82,16 +82,13 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
 
             if let Some(fleet) = fleet_id {
-                // --fleet-id mode: typed get with raw for nested fields
+                // --fleet-id mode: typed get
                 let dl = session::deadline_client(Some(&config)).await;
-                let cap = ResponseBodyCapture::new();
                 match dl.get_fleet().farm_id(&farm).fleet_id(&fleet)
-                    .customize().interceptor(cap.clone())
                     .send().await
                 {
                     Ok(output) => {
-                        let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                        let resp = FleetResponse::from_output_and_raw(output, &raw);
+                        let resp = FleetResponse::from(output);
                         let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
                         println!("{}", crate::common::cli_object_repr(&val));
                         Ok(())
@@ -152,14 +149,11 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                     let fleet_id_val = assoc["fleetId"].as_str().unwrap_or("");
                     let status = assoc["status"].as_str().unwrap_or("");
 
-                    let cap = ResponseBodyCapture::new();
                     let output = dl.get_fleet().farm_id(&farm).fleet_id(fleet_id_val)
-                        .customize().interceptor(cap.clone())
                         .send().await.map_err(|e| {
                             CliError::Operation(format!("Failed to get Fleet from Deadline:\n{}", client::format_sdk_error(&e)))
                         })?;
-                    let raw = cap.json().map_err(|e| CliError::Operation(e.to_string()))?;
-                    let resp = FleetResponse::from_output_and_raw(output, &raw);
+                    let resp = FleetResponse::from(output);
                     let mut val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
 
                     // Add queueFleetAssociationStatus to the fleet response

@@ -68,14 +68,14 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::Get { profile, farm_id, fleet_id, worker_id } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let resp = match api::get_worker_with_raw(&farm, &fleet_id, &worker_id, Some(&config)).await {
+            let resp = match api::get_worker(&farm, &fleet_id, &worker_id, Some(&config)).await {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(&e.to_string(), "GetWorker", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
                     return Err(CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}{suggestion}")));
                 }
             };
-            let worker_resp = WorkerResponse::from_output_and_raw(resp.0, &resp.1);
+            let worker_resp = WorkerResponse::from(resp);
             let val = serde_json::to_value(&worker_resp).map_err(|e| CliError::Operation(e.to_string()))?;
             println!("{}", crate::common::cli_object_repr(&val));
             Ok(())
