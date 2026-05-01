@@ -41,11 +41,10 @@ src/
 │                       #   WithPrincipalId, pascal_to_snake
 ├── telemetry_interceptor.rs  # TelemetryInterceptor + pagination grouping
 ├── api.rs              # list_jobs_by_filter_expression, build_filter/sort_expressions,
-│                       #   typed list_sessions/list_steps/list_tasks paginators,
-│                       #   typed get_job/get_step/get_task/get_worker/get_session,
 │                       #   batch_get_steps_page/batch_get_tasks_page,
-│                       #   wait_for_create_job_to_complete (+ legacy wrappers pending D5d)
-├── response_capture.rs # [LEGACY — being removed in D5e] ResponseBodyCapture interceptor
+│                       #   create_job, wait_for_create_job_to_complete
+│                       #   (NO thin wrappers — callers own SDK calls directly)
+├── response_capture.rs # [DEAD CODE — being removed in D5e] ResponseBodyCapture interceptor
 ├── session.rs          # Session caching, credential resolution, queue-scoped configs
 ├── auth.rs             # DCM detection, login/logout, auth status checks
 ├── job_monitoring.rs   # Poll job until terminal state, collect failed task details
@@ -80,10 +79,8 @@ Display paths use `From<Output>` response structs that manually extract
 all fields into serializable types. Nested SDK types that lack
 `Serialize` are converted via `type_conversions.rs` helpers.
 
-**`ResponseBodyCapture` is legacy (D5e removal).** A small number of
-remaining wrapper functions still use it for raw JSON. Do not use for
-new code. See [response-capture.md](response-capture.md) for historical
-context.
+**`ResponseBodyCapture` is dead code (D5e removal).** No code uses it
+anymore. It remains as a module only until D5e deletes the file.
 
 **Global session cache.** A process-wide cache holds SDK configs keyed
 by profile name, and queue credential configs keyed by farm+queue pair.

@@ -130,6 +130,35 @@ let resp = JobResponse::from(output);  // From<GetJobOutput> impl
 println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
 ```
 
+### What is a thin wrapper? (delete these)
+
+A function is a **thin wrapper** if its only job is to:
+1. Get a client (`session::deadline_client`)
+2. Call one SDK method with the same parameters the caller passed in
+3. Map the error
+
+This includes:
+- **Single get/update calls**: `get_job(farm, queue, job, config)` that just
+  does `client.get_job().farm_id(farm)...send().await.map_err(sdk_err)`
+- **Paginated list calls**: `list_sessions(farm, queue, job, config)` that
+  just does `collect_paginated(client.list_sessions()...into_paginator().send())`
+- **Void calls**: `update_job(...)` that sends and discards the response
+
+Even if a wrapper is used by 5+ callers, it's still a thin wrapper.
+Repetition of 2-3 lines at call sites is preferable to indirection that
+hides what SDK operation is being called.
+
+**Keep a function in `api.rs` only if it has real logic beyond
+parameter forwarding:**
+- Algorithmic pagination (e.g. `list_jobs_by_filter_expression` with
+  createdAt thresholding and dedup)
+- Input construction from untyped data (e.g. `create_job` mapping a
+  JSON map to typed SDK builders with conditional fields)
+- Identifier construction (e.g. `batch_get_steps_page` building
+  `BatchGetStepIdentifier` from Value arrays)
+- Polling loops (e.g. `wait_for_create_job_to_complete`)
+- SDK type construction utilities (e.g. `build_filter_expressions`)
+
 ### Shared infrastructure (not wrappers — utilities)
 
 | Utility | Purpose |
@@ -187,14 +216,13 @@ Output format: `"AccessDeniedException: User is not authorized..."`.
 **Never use `format!("{e}")` on an `SdkError`.** It produces `"service
 error"` which is useless to the user and breaks error-type detection.
 
-### Legacy: `ResponseBodyCapture` (being removed)
+### Legacy: `ResponseBodyCapture` (dead code — D5e deletion)
 
-> **⚠️ DEPRECATED — do not use for new code.**
+> **⚠️ DEAD CODE — zero consumers remain.**
 >
-> A small number of remaining wrapper functions in `api.rs` still use
-> `ResponseBodyCapture` to return `serde_json::Value`. These are being
-> deleted in D5d/D5e. See `specs/deadline-api/response-capture.md` for
-> historical context only.
+> `response_capture.rs` and `client::collect_paginated_raw` have no
+> callers after D5d. They will be deleted in D5e. Do not use.
+> See `specs/deadline-api/response-capture.md` for historical context only.
 
 
 ## Credential Scoping for Non-Deadline AWS Services

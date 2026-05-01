@@ -24,34 +24,37 @@ let output = api::get_job(farm_id, queue_id, job_id, config).await?;
 let name = output.name();  // typed field access
 
 // Full-dump display — response struct built entirely from typed output
-let output = api::get_job(farm_id, queue_id, job_id, config).await?;
+let output = client.get_job().farm_id(f).queue_id(q).job_id(j).send().await?;
 let resp = JobResponse::from(output);
 println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
 
-// Typed list — paginator + field extraction
+// Typed list — paginator + field extraction (caller owns the call)
 let pages = client::collect_paginated(dl.list_farms().into_paginator().send()).await?;
 let items: Vec<_> = pages.iter().flat_map(|p| p.farms())
     .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
     .collect();
 
-// Typed list via api.rs — returns Vec<PageOutput>
-let pages = api::list_steps(farm_id, queue_id, job_id, config).await?;
-for page in &pages {
-    for step in page.steps() { /* typed StepSummary access */ }
-}
-
-// Search (single-page, offset-based) — callers call SDK directly
+// Search (single-page, offset-based) — caller calls SDK directly
 let output = client.search_jobs().farm_id(farm).queue_ids(queue)
     .item_offset(0).page_size(25).send().await?;
 for job in output.jobs() { /* typed JobSearchSummary access */ }
 ```
 
-### Legacy wrapper pattern (remaining APIs — D5d-D5e pending)
+### What lives in `api.rs` (only real logic, not wrappers)
 
-Some wrapper functions in `api.rs` still use `ResponseBodyCapture` for
-raw JSON capture (e.g. `list_storage_profiles_for_queue`,
-`list_session_actions`, `list_queue_environments`). These return `Value`
-and will be migrated in D5d-D5e.
+Functions in `api.rs` exist only when they contain algorithmic logic
+beyond parameter forwarding: `list_jobs_by_filter_expression` (pagination
+by createdAt threshold), `create_job` (JSON→typed parameter mapping),
+`batch_get_steps_page`/`batch_get_tasks_page` (identifier construction),
+`wait_for_create_job_to_complete` (polling loop), and
+`build_filter_expressions`/`build_sort_expressions` (SDK type construction).
+
+See `specs/patterns.md` § "What is a thin wrapper?" for the full rule.
+
+### Dead code pending D5e cleanup
+
+`response_capture.rs` and `client::collect_paginated_raw` have zero
+consumers and will be deleted in D5e.
 
 ## Document Index
 
