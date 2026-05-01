@@ -97,10 +97,13 @@ fn history_numbering_gaps_uses_max_plus_one() {
     let base = TempDir::new().unwrap();
     let first =
         create_job_history_bundle_dir("Sub", "Job", base.path().to_str().unwrap()).unwrap();
-    // Rename -01- to -03- to create a gap
+    // Rename sequence number 01 → 03 to create a gap (skip the YYYY-MM-DD- prefix
+    // to avoid matching day-of-month on dates like May 1st)
     let parent = std::path::Path::new(&first).parent().unwrap();
     let first_name = std::path::Path::new(&first).file_name().unwrap().to_str().unwrap();
-    let renamed = first_name.replacen("-01-", "-03-", 1);
+    let prefix = &first_name[..11]; // "YYYY-MM-DD-"
+    let rest = &first_name[11..];   // "01-Sub-Job"
+    let renamed = format!("{prefix}{}", rest.replacen("01-", "03-", 1));
     fs::rename(&first, parent.join(&renamed)).unwrap();
 
     let next =

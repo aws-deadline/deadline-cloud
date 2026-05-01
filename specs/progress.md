@@ -84,6 +84,7 @@ pick and execute work items.
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
 | 27 | Typed SDK API layer | ✅ Done | — | — |
+| 27b | SDK calling behavior audit | ✅ Done | — | 27 |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
@@ -99,7 +100,9 @@ No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
 "In progress" work items.
 
 **Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`.
-All findings resolved (0 remaining).
+All findings resolved (0 remaining). SDK calling behavior audit (#27b)
+complete — 0 high, 3 med, 7 low findings. See `HANDOFF.md` §SDK Calling
+Behavior Audit.
 
 **GUI FFI migration plan (#16a-16f):**
 

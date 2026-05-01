@@ -1,7 +1,7 @@
 //! Convert SDK types that lack `Serialize` into `serde_json::Value`.
 //!
 //! Each function walks the typed SDK accessors and builds a JSON value
-//! manually. This eliminates the need for `ResponseBodyCapture`.
+//! manually. This avoids needing raw HTTP body interception.
 
 use aws_sdk_deadline::types::{
     Attachments, DependencyCounts, FleetConfiguration, HostPropertiesResponse,

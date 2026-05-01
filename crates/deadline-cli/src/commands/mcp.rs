@@ -415,7 +415,7 @@ impl DeadlineServer {
                     .collect();
                 ok_result(json!({"jobs": jobs, "totalResults": output.total_results()}))
             }
-            Err(e) => error_json("DeadlineError", &deadline_api::api::format_sdk_error(&e)),
+            Err(e) => error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e)),
         }
     }
 

@@ -1,38 +1,9 @@
+use crate::client::deadline_error;
 use crate::errors::DeadlineError;
 use crate::session;
 use aws_sdk_deadline::operation::create_job::CreateJobOutput;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
-
-/// Format any AWS SDK error to include the error code and message.
-///
-/// Uses the common `ProvideErrorMetadata` trait from `aws-smithy-types`,
-/// so this works for errors from any AWS SDK crate (Deadline, CloudWatch,
-/// STS, S3, etc.). For `ServiceError`, extracts the error code and message
-/// from the response. For transport-level errors (timeout, dispatch failure),
-/// uses `DisplayErrorContext` to show the full causal chain instead of just
-/// "dispatch failure".
-pub fn format_sdk_error<E, R>(err: &aws_sdk_deadline::error::SdkError<E, R>) -> String
-where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
-    R: std::fmt::Debug,
-{
-    match err {
-        aws_sdk_deadline::error::SdkError::ServiceError(e) => {
-            let inner = e.err();
-            let code = inner.code().unwrap_or("Unknown");
-            let msg = inner.message().unwrap_or("No message");
-            format!("{code}: {msg}")
-        }
-        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
-    }
-}
-
-pub fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static>(
-    e: aws_sdk_deadline::error::SdkError<E>,
-) -> DeadlineError {
-    DeadlineError::OperationError(format_sdk_error(&e))
-}
 
 // ---------------------------------------------------------------------------
 // Job
@@ -90,7 +61,7 @@ pub async fn list_jobs_by_filter_expression(
             .sort_expressions(sort_expr.clone())
             .send()
             .await
-            .map_err(sdk_err)?;
+            .map_err(deadline_error)?;
 
         let jobs = resp.jobs();
         let total_results = resp.total_results() as usize;
@@ -292,7 +263,7 @@ pub async fn batch_get_steps_page(
         ids.push(builder);
     }
     let output = client.batch_get_step().set_identifiers(Some(ids))
-        .send().await.map_err(sdk_err)?;
+        .send().await.map_err(deadline_error)?;
     // Convert typed output to Value for the batch_get helper
     let steps: Vec<Value> = output.steps().iter().map(|s| {
         let mut m = serde_json::Map::new();
@@ -349,7 +320,7 @@ pub async fn batch_get_tasks_page(
         ids.push(builder);
     }
     let output = client.batch_get_task().set_identifiers(Some(ids))
-        .send().await.map_err(sdk_err)?;
+        .send().await.map_err(deadline_error)?;
     let tasks: Vec<Value> = output.tasks().iter().map(|t| {
         let mut m = serde_json::Map::new();
         m.insert("farmId".into(), Value::String(t.farm_id().to_string()));
@@ -507,7 +478,7 @@ pub async fn create_job(
         req = req.attachments(att_builder);
     }
 
-    req.send().await.map_err(sdk_err)
+    req.send().await.map_err(deadline_error)
 }
 
 /// Poll GetJob until the job exits CREATE_IN_PROGRESS.
@@ -544,7 +515,7 @@ pub async fn wait_for_create_job_to_complete(
         }
 
         let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .send().await.map_err(sdk_err)?;
+            .send().await.map_err(deadline_error)?;
 
         let status = job.lifecycle_status.as_str();
         let message = job.lifecycle_status_message.clone();

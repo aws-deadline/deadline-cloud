@@ -9,14 +9,12 @@ Dependencies: `deadline-config`.
 
 ## How API Calls Work
 
-Two patterns coexist:
+### Typed pattern (all API calls)
 
-### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — D5a-D5c complete)
-
-Base API functions return SDK output types directly. Callers that need
-specific fields use typed accessors. Callers that print the full response
-use `From<Output>` on response structs — nested types are converted via
-`type_conversions.rs` helpers.
+Callers use SDK fluent builders directly and return typed SDK output.
+Callers that need specific fields use typed accessors. Callers that
+print the full response use `From<Output>` on response structs — nested
+types are converted via `type_conversions.rs` helpers.
 
 ```rust
 // Typed get — returns SDK output directly
@@ -104,8 +102,10 @@ Mirrors the Python `deadline.client.api` module's public API surface.
 Key differences:
 - Python uses `boto3.Session` with `@lru_cache`; Rust uses `LazyLock<Mutex<SessionCache>>`
 - Python returns typed SDK output objects; Rust returns typed SDK output
-  for get/list/search APIs (D5a-D5c), `Value` for remaining wrappers (D5d)
+  for all APIs. Three `api.rs` functions (`list_jobs_by_filter_expression`,
+  `batch_get_steps_page`, `batch_get_tasks_page`) return `Value` built
+  from typed accessors for display-path convenience.
 - Python uses `botocore` paginators; Rust uses SDK native paginators via
-  `collect_paginated()` for list APIs, manual `nextToken` loops for remaining
+  `collect_paginated()`
 - Python's `QueueBoto3Session` wraps boto3; Rust's `QueueUserCredentialProvider`
   implements the SDK's `ProvideCredentials` trait directly

@@ -133,7 +133,7 @@ pub async fn wait_for_job_completion(
         }
 
         let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .send().await.map_err(crate::api::sdk_err)?;
+            .send().await.map_err(crate::client::deadline_error)?;
         let status = job.task_run_status.as_ref().map(|s| s.as_str()).unwrap_or("");
 
         if let Some(cb) = status_callback {

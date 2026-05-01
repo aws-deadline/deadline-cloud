@@ -29,7 +29,7 @@ pub async fn get_queue_parameter_definitions(
             let full = client.get_queue_environment()
                 .farm_id(farm_id).queue_id(queue_id).queue_environment_id(env_id)
                 .send().await
-                .map_err(crate::api::sdk_err)?;
+                .map_err(crate::client::deadline_error)?;
             let priority = full.priority();
             let template = full.template().to_string();
             full_envs.push((priority, template));

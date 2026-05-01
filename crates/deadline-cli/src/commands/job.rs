@@ -1196,7 +1196,7 @@ fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value
 /// Print job list output (shared between `job list` and `job search`).
 /// Format an AWS DateTime to the display format matching Python CLI output.
 fn format_datetime(dt: &aws_sdk_deadline::primitives::DateTime) -> String {
-    // Format as "YYYY-MM-DD HH:MM:SS+00:00" to match Python/ResponseBodyCapture output
+    // Format as "YYYY-MM-DD HH:MM:SS+00:00" to match Python CLI output
     dt.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset)
         .unwrap_or_default()
         .replace('T', " ")
@@ -1247,7 +1247,7 @@ async fn search_jobs_call(
         );
     }
 
-    req.send().await.map_err(|e| DeadlineError::OperationError(deadline_api::api::format_sdk_error(&e)))
+    req.send().await.map_err(|e| DeadlineError::OperationError(deadline_api::client::format_sdk_error(&e)))
 }
 
 /// Print SearchJobs output in the standard job list format.
@@ -1824,7 +1824,7 @@ fn format_timedelta(us: i64) -> String {
 
 fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     // Handle: "2025-01-27T07:37:53Z", "2025-01-27 07:37:53+00:00",
-    // "2025-01-27 07:37:53.238+00:00" (fractional seconds from ResponseBodyCapture)
+    // "2025-01-27 07:37:53.238+00:00" (fractional seconds from some API responses)
     chrono::DateTime::parse_from_rfc3339(s).ok()
         .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%:z").ok())
         .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%:z").ok())

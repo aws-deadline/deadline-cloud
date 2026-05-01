@@ -3,13 +3,15 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
+No active work item. Last completed: #27b (SDK calling behavior audit).
+
 ---
 
 ## #27 — Typed SDK API layer
 
-**Status:** ✅ Complete
+**Status:** ✅ Complete (all batches D5a–D5e done, audit clean)
 
-### Design intent (FINAL — no exceptions)
+### Design intent
 
 **No raw HTTP interception. No `Value` from API responses. No `ResponseBodyCapture`.**
 
@@ -26,184 +28,26 @@ output structs (typed output). Period.
   (error formatting), `client::collect_paginated()` (pagination), and
   telemetry (interceptor on the client).
 
-- **Display callers** (CLI `get` commands that print the full response)
-  extract every field and subfield manually from the SDK output into a
-  serializable response struct. Helper functions convert shared nested
-  types (e.g. `HostPropertiesResponse` used by both Session and Worker)
-  to avoid duplication.
+- **Display callers** extract every field from SDK output into a
+  serializable response struct (`From<Output>` impls in `responses.rs`).
+  Nested SDK types that lack `Serialize` are converted via
+  `type_conversions.rs` helpers that walk typed accessors.
 
-- **No `Value` intermediary.** The response struct fields that hold
-  nested types use `Option<Value>` only because the nested SDK types
-  lack `Serialize`. The `Value` is built by walking typed accessors —
-  never by intercepting raw HTTP.
+- **Helper functions exist only for:** pagination, error handling,
+  and shared nested type conversion (deduplication).
 
-- **Helper functions exist only for:** pagination, error handling with
-  telemetry, and shared nested type conversion (deduplication).
+### What was done
 
-- **If a new SDK field is added**, we add it to the response struct and
-  converter. That's fine — explicit is better than magic.
+- Deleted `ResponseBodyCapture`, `collect_paginated_raw`, `capture_send`,
+  `paginated_list`, `capture_err`, `response_capture.rs`
+- Deleted 26+ thin wrappers from `api.rs` (all get/list/update/search)
+- Converted all 7 response structs to `From<Output>` with manual nested
+  type extraction in `type_conversions.rs`
+- Migrated 50+ call sites across 11+ files to direct SDK calls
+- All list operations use `collect_paginated` with native SDK paginators
+- All error handling uses `format_sdk_error` / `deadline_error`
 
----
-
-### Current state (exact)
-
-#### ✅ Already typed (return SDK output, no raw):
-
-| Function | Returns |
-|----------|---------|
-| `get_job` | `GetJobOutput` |
-| `get_step` | `GetStepOutput` |
-| `get_task` | `GetTaskOutput` |
-| `get_session` | `GetSessionOutput` |
-| `get_worker` | `GetWorkerOutput` |
-
-#### ⚠️ Typed but ALSO have `_with_raw` variant (MUST REMOVE):
-
-| Function | Why raw is used (will be replaced by typed extraction) |
-|----------|-------------------------------------------------------|
-| `get_job_with_raw` | `attachments`, `parameters`, `taskRunStatusCounts` |
-| `get_step_with_raw` | `taskRunStatusCounts`, `dependencyCounts`, `parameterSpace`, `requiredCapabilities` |
-| `get_task_with_raw` | `parameters` |
-| `get_session_with_raw` | `log`, `hostProperties`, `workerLog` |
-| `get_worker_with_raw` | `hostProperties`, `log` |
-
-#### ❌ Still fully raw (return `Value`, MUST CONVERT):
-
-| Function | Callers access |
-|----------|---------------|
-| `get_queue` | `jobAttachmentSettings.{s3BucketName, rootPrefix}`, `displayName` |
-| `list_jobs` | `jobs[]` array iteration |
-| `search_jobs` / `search_jobs_with_filters` | `jobs[]`, `totalResults` |
-| `search_workers` | `workers[]`, `totalResults` |
-| `list_sessions` | `sessions[]` |
-| `list_steps` | `steps[]` |
-| `list_tasks` | `tasks[]` |
-| `batch_get_steps_page` / `batch_get_tasks_page` | `steps[]`, `tasks[]` |
-| `assume_queue_role_for_user/read` | `credentials.{accessKeyId,...}` |
-| `assume_fleet_role_for_read` | `credentials.{...}` |
-| `get_storage_profile_for_queue` | `displayName`, `fileSystemLocations` |
-| `list_storage_profiles_for_queue` | `storageProfiles[]` |
-| `get_session_action` | `startedAt`, `endedAt` |
-| `list_session_actions` | `sessionActions[]` |
-| `list_queue_environments` | `environments[]` |
-| `get_queue_environment` | `template`, `templateType` |
-| `list_queue_fleet_associations` | `queueFleetAssociations[]` |
-| `update_job` / `update_task` | Ignores response |
-| `create_job` | `jobId` |
-
-#### ❌ Direct `ResponseBodyCapture` usage outside api.rs (MUST REMOVE):
-
-| File | What it does |
-|------|-------------|
-| `fleet.rs` | `fleet get` — captures raw for `FleetResponse::from_output_and_raw` |
-| `queue.rs` | `queue get` — captures raw for `QueueResponse::from_output_and_raw` |
-| `python-bindings/resources.rs` | `get_queue` for FFI |
-| `session.rs` | Test helper |
-
-#### Response structs needing conversion from `from_output_and_raw` → `From<Output>`:
-
-| Struct | Nested types needing manual extraction |
-|--------|----------------------------------------|
-| `FarmResponse` | ✅ Already `From<Output>` — no nested types |
-| `QueueResponse` | `JobAttachmentSettings`, `JobRunAsUser`, `SchedulingConfiguration` |
-| `FleetResponse` | `FleetConfiguration` (deep), host config, capabilities |
-| `JobResponse` | `Attachments`, `JobParameter` map, `TaskRunStatus` map |
-| `StepResponse` | `TaskRunStatus` map, `DependencyCounts`, `ParameterSpace`, `RequiredCapabilities` |
-| `TaskResponse` | `TaskParameterValue` map |
-| `SessionResponse` | `LogConfiguration`, `HostPropertiesResponse` |
-| `WorkerResponse` | `LogConfiguration`, `HostPropertiesResponse` |
-
----
-
-### Implementation plan
-
-#### New module: `type_conversions.rs`
-
-Helper functions that convert nested SDK types → `Value` by walking
-typed accessors. Only for types used by 2+ response structs (dedup).
-Types used by only one struct can be inlined in the `From` impl.
-
-Shared helpers needed:
-- `log_configuration_to_value` — used by SessionResponse + WorkerResponse
-- `host_properties_to_value` — used by SessionResponse + WorkerResponse
-- `ip_addresses_to_value` — used by host_properties_to_value
-
-Everything else can be inlined or extracted based on readability.
-
-#### Changes to `api.rs`
-
-- Delete `capture_send`, `paginated_list`, `capture_err`
-- Delete all `_with_raw` variants
-- Convert each remaining function to return SDK output type
-- For paginated functions: use SDK paginator or manual typed pagination
-- `update_job`/`update_task` → return `()`
-- `create_job` → return `CreateJobOutput`
-
-#### Caller migration
-
-All `value["field"]` access → typed accessor chains:
-- `queue["jobAttachmentSettings"]["s3BucketName"]` → `output.job_attachment_settings().unwrap().s3_bucket_name()`
-- `resp["jobs"].as_array()` → `output.jobs()` (from paginator)
-- `resp["credentials"]["accessKeyId"]` → `output.credentials().unwrap().access_key_id()`
-
-### Batching strategy
-
-- **D5a:** ✅ Convert all 7 response structs to `From<Output>` with manual
-  nested type extraction. Remove `_with_raw` variants. Fix display callers.
-- **D5b:** ✅ Delete `get_queue` + credential API wrappers. Callers call SDK directly.
-- **D5c:** ✅ Convert list/search APIs to typed paginators. Delete wrappers. Migrate callers.
-  - Deleted 7 wrappers: `list_jobs`, `search_jobs`, `search_jobs_with_filters`,
-    `search_workers`, `list_sessions`, `list_steps`, `list_tasks`
-  - Replaced `list_sessions`/`list_steps`/`list_tasks` with typed paginator versions
-  - Refactored `list_jobs_by_filter_expression` to call SDK directly
-  - Made `build_filter_expressions`/`build_sort_expressions` public
-  - Migrated 15+ callers across job.rs, worker.rs, helpers.rs, mcp.rs,
-    queue.rs, job_monitoring.rs, log_retrieval.rs
-  - One accepted difference: task parameter ordering now sorted alphabetically
-    (HashMap non-determinism → explicit sort for deterministic output)
-- **D5d:** Convert remaining (queue environments, fleet associations,
-  storage profiles, session actions, update/create). Delete ALL remaining thin
-  wrappers including get_*, update_*, list_sessions/list_steps/list_tasks.
-  Callers own their SDK calls — no wrapper functions in api.rs.
-- **D5e:** ✅ Delete `response_capture.rs`, `collect_paginated_raw`. Clean sweep.
-
-### Step status
-
-**D5a** — ✅ Complete (type_conversions.rs + From<Output> for all 7 structs)
-
-**D5b** — ✅ Complete
-- Deleted 4 thin wrappers: `get_queue`, `assume_queue_role_for_user`,
-  `assume_queue_role_for_read`, `assume_fleet_role_for_read`
-- Migrated 8 callers to direct SDK calls with typed output
-- Migrated `session.rs` QueueUserCredentialProvider (removed ResponseBodyCapture)
-- Migrated `log_retrieval.rs` fleet role (typed AwsCredentials)
-- CLI comparison: identical output (pre-existing error format difference only)
-
-**D5d** — ✅ Complete
-- Deleted 15 thin wrappers from api.rs: `get_job`, `get_step`, `get_task`,
-  `get_worker`, `get_session`, `update_job`, `update_task`,
-  `get_storage_profile_for_queue`, `list_storage_profiles_for_queue`,
-  `get_session_action`, `list_session_actions`, `get_queue_environment`,
-  `list_queue_environments`, `list_queue_fleet_associations`,
-  `list_sessions`, `list_steps`, `list_tasks`
-- Deleted infrastructure: `capture_send`, `paginated_list`, `capture_err`
-- Removed `ResponseBodyCapture` import from api.rs
-- Converted `create_job` → returns `CreateJobOutput` (typed)
-- Converted `batch_get_steps_page`/`batch_get_tasks_page` from `capture_send`
-  to typed SDK with manual Value conversion (sorted keys, formatted datetimes)
-- Inlined SDK calls in `wait_for_create_job_to_complete` and `job_monitoring.rs`
-- Migrated 30+ call sites across 11 files to direct SDK calls
-- All callers use `client::format_sdk_error(&e)` for error handling at call site
-- Telemetry pre-injected via `TelemetryInterceptor` on client — no per-call work
-- One snapshot updated: trace_schedule task parameter keys now sorted alphabetically
-  (same accepted difference as D5c — HashMap non-determinism → explicit sort)
-
-**D5e** — ✅ Complete
-- Deleted `response_capture.rs` (ResponseBodyCapture interceptor — zero consumers)
-- Deleted `collect_paginated_raw` function and its 4 tests from `client.rs`
-- Removed `pub mod response_capture;` from `lib.rs`
-- Removed unused imports (`serde_json::Value`, `std::future::Future`) from `client.rs`
-- Zero references to `response_capture` or `collect_paginated_raw` remain in crates/
+See `specs/patterns.md` §AWS SDK for Rust Usage for the lasting patterns.
 
 ---
 
@@ -228,3 +72,64 @@ Normalize `\`↔`/` for path-type config settings on Windows.
 
 `asset_upload`, `asset_snapshot`, `queue_sync_output`, `download_job_output`
 success/fail telemetry events.
+
+---
+
+## SDK Calling Behavior Audit
+
+**Status:** ✅ Audit complete — 2026-05-01
+**Scope:** Every `.rs` file in `crates/` that calls the Deadline SDK or other AWS SDKs.
+**Crates audited:** deadline-api, deadline-cli, deadline-job-attachments, deadline-job-bundle, deadline-python-bindings, deadline-config, deadline-test-server
+
+### Criteria checked
+
+1. No raw `Value` intermediary from HTTP bodies
+2. Error handling via `format_sdk_error` / `deadline_error` (no `.unwrap()` on SDK results)
+3. Pagination via `collect_paginated` with native SDK paginators (no manual nextToken)
+4. Telemetry via `session::deadline_client` (no raw `Client::new()` in production)
+5. DCM principal via `apply_dcm_principal` on list operations that support it
+6. No thin wrappers (every `api.rs` function has real logic)
+7. Credential scoping for non-Deadline AWS services (S3, CloudWatch, STS)
+
+### Findings
+
+| File:Line | Issue | Severity | Status |
+|-----------|-------|----------|--------|
+| `deadline-api/src/api.rs:15-31` | Duplicate `format_sdk_error` and `sdk_err` — identical to `client.rs` versions | low | ✅ Fixed — deleted duplicates, 8 callers updated to `client::` |
+| `deadline-api/src/api.rs:48` | `list_jobs_by_filter_expression` returns `Vec<Value>` built from typed accessors | med | Accepted — function has real algorithmic logic (createdAt thresholding, dedup); Value return is pragmatic for its single display-path caller |
+| `deadline-api/src/api.rs:278` | `batch_get_steps_page` returns `Value` built from typed accessors | med | Accepted — function has real logic (identifier construction, error extraction); serves single display-path caller |
+| `deadline-api/src/api.rs:334` | `batch_get_tasks_page` returns `Value` built from typed accessors | med | Accepted — same rationale as batch_get_steps_page |
+| `deadline-cli/src/commands/worker.rs:60` | Used `api::format_sdk_error` instead of `client::` | low | ✅ Fixed |
+| `deadline-cli/src/commands/mcp.rs:418` | Used `api::format_sdk_error` instead of `client::` | low | ✅ Fixed |
+| `deadline-cli/src/commands/job.rs:1199` | Stale comment referenced `ResponseBodyCapture` | low | ✅ Fixed |
+| `deadline-cli/src/commands/job.rs:1827` | Stale comment referenced `ResponseBodyCapture` | low | ✅ Fixed |
+| `deadline-api/src/type_conversions.rs:4` | Module doc referenced `ResponseBodyCapture` | low | ✅ Fixed |
+| `deadline-test-server/src/deadline_api/mod.rs:5` | Module doc referenced `ResponseBodyCapture` as current behavior | low | ✅ Fixed |
+
+### Criteria pass/fail summary
+
+| Criterion | Result | Notes |
+|-----------|--------|-------|
+| 1. No raw Value intermediary | **PASS** | All SDK calls use typed output. `Value` is only built from typed accessors for display paths. Three `api.rs` functions return `Value` but construct it from typed accessors (not HTTP bodies) — a typed return would be cleaner but not a correctness issue. |
+| 2. Error handling | **PASS** | All `.send().await` errors go through `format_sdk_error` / `deadline_error` / domain-specific equivalents (`cw_sdk_err`, `format_sts_sdk_err`). No `.unwrap()` on SDK results. |
+| 3. Pagination | **PASS** | All list operations use `collect_paginated` with native SDK paginators. Zero manual `nextToken` loops for Deadline APIs. S3 `ListObjectsV2` in job-attachments uses manual continuation token (correct for S3). |
+| 4. Telemetry | **PASS** | All Deadline API calls use `session::deadline_client`. No raw `Client::new()` in production code. Test code uses raw clients (appropriate). |
+| 5. DCM principal | **PASS** | `apply_dcm_principal` used on all four list operations that support it (`list_farms`, `list_queues`, `list_jobs`, `list_fleets`) across CLI, MCP, helpers, and python-bindings. |
+| 6. No thin wrappers | **PASS** | All `api.rs` functions have real logic (algorithmic pagination, identifier construction, polling, filter building). |
+| 7. Credential scoping | **PASS** | CloudWatch Logs uses queue-scoped or fleet-scoped credentials. S3 in job-attachments receives caller-provided scoped `SdkConfig`. STS calls use scoped credentials. |
+
+### ResponseBodyCapture remnant check
+
+- **Source code:** Zero active references in `crates/`. Four stale comments (listed in findings table).
+- **Docs:** `specs/HANDOFF.md` references are historical changelog (acceptable). `specs/patterns.md` mentions it in a "don't do this" rule (acceptable prescriptive guidance).
+- **`collect_paginated_raw`:** Zero source references. Only in HANDOFF.md history.
+- **`response_capture` module:** Deleted. Zero imports remain.
+- **Build artifacts:** Stale `.d` files in `target/` reference the deleted file — harmless, cleared by `cargo clean`.
+
+### Bottom line
+
+**No high-severity issues.** Three medium-severity findings (Value return
+types in `api.rs`) accepted as-is — the functions have real algorithmic
+logic and serve single display-path callers. All seven low-severity
+findings fixed: duplicate functions deleted, import paths corrected,
+stale comments updated. **Zero open findings.**

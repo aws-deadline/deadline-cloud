@@ -2,13 +2,12 @@
 //!
 //! ## Mock response data rules
 //!
-//! **Background:** Our `api.rs` functions use `ResponseBodyCapture` to
-//! extract raw JSON from AWS SDK responses. However, the SDK deserializes
-//! the HTTP response into its typed output struct *before* the interceptor
-//! runs. If deserialization fails, the SDK returns
+//! **Background:** Our API callers use the typed SDK output directly.
+//! The SDK deserializes the HTTP response into its typed output struct.
+//! If deserialization fails, the SDK returns
 //! `SdkError::ServiceError` with "Unknown: No message" and our code never
 //! sees the raw bytes. This means mock response bodies must be valid
-//! enough for the SDK's deserializer, even though we only use the raw JSON.
+//! enough for the SDK's deserializer.
 //!
 //! **What the SDK tolerates (safe to omit from mocks):**
 //!

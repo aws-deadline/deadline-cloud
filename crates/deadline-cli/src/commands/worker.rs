@@ -57,7 +57,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    let err_str = deadline_api::api::format_sdk_error(&e);
+                    let err_str = deadline_api::client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(&err_str, "SearchWorkers", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
                     return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{err_str}{suggestion}")));
                 }
