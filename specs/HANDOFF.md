@@ -54,55 +54,177 @@ Rules:
 ### What D5 must do
 
 1. **Remove `ResponseBodyCapture`** — delete `response_capture.rs`,
-   remove all `_with_raw` variants, remove `capture_send` helper.
+   remove all `_with_raw` variants, remove `capture_send` helper,
+   remove `paginated_list` helper.
 
 2. **Fix response structs** — change `from_output_and_raw(output, &raw)`
-   to `from(output)`. Manually convert complex nested types by walking
-   SDK accessors (e.g. `output.attachments()` → build JSON from its
-   typed fields).
+   to `From<Output> for Response`. Manually convert complex nested types
+   by walking SDK accessors.
 
 3. **Convert remaining raw functions** — every function in `api.rs` that
    still uses `capture_send` must return SDK output types or be inlined
-   at call sites:
-   - `get_queue` → `GetQueueOutput`
-   - `list_sessions` → `Vec<SessionSummary>` (paginated)
-   - `list_steps` → `Vec<StepSummary>` (paginated)
-   - `list_tasks` → `Vec<TaskSummary>` (paginated)
-   - `search_jobs` / `search_jobs_with_filters` → search output
-   - `search_workers` → search output
-   - `batch_get_steps_page` / `batch_get_tasks_page` → batch output
-   - `assume_queue_role_for_user/read` → credentials output
-   - `assume_fleet_role_for_read` → credentials output
-   - `get_session_action` → `GetSessionActionOutput`
-   - `get_storage_profile_for_queue` → output
-   - `list_storage_profiles_for_queue` → paginated output
-   - `list_queue_environments` → paginated output
-   - `get_queue_environment` → output
-   - `list_queue_fleet_associations` → paginated output
-   - `list_session_actions` → paginated output
-   - `update_job` → `()`
-   - `update_task` → `()`
-   - `create_job` → `CreateJobOutput`
+   at call sites.
 
 4. **Migrate all callers** to use typed SDK output fields instead of
    `value["fieldName"]` access.
 
-### Batching strategy
+### Step 1 — Study findings
 
-- **D5a:** Remove `_with_raw` from D4 structs. Convert `from_output_and_raw`
-  to `from(output)` with manual nested type conversion. Delete
-  `ResponseBodyCapture` usage from get_job/step/task/session/worker.
-- **D5b:** Convert `get_queue`, credential APIs (`assume_*`), and
-  `get_session_action`. These have few callers.
-- **D5c:** Convert list/search APIs (`list_sessions`, `list_steps`,
-  `list_tasks`, `search_jobs`, `search_workers`, `batch_get_*`).
-  These are paginated — keep helper functions for pagination logic.
-- **D5d:** Convert remaining (`list_queue_environments`,
+#### Complex nested types requiring manual conversion functions
+
+Each of these SDK types lacks `Serialize`. We need `fn foo_to_value(&T) -> Value`:
+
+| SDK Type | Fields | Depth | Used by |
+|----------|--------|-------|---------|
+| `Attachments` | manifests: Vec<ManifestProperties>, file_system: enum | 2 | JobResponse |
+| `ManifestProperties` | file_system_location_name?, root_path, root_path_format: enum, output_relative_directories?, input_manifest_path?, input_manifest_hash? | 1 | Attachments |
+| `JobParameter` | enum: Float(String), Int(String), Path(String), String(String) | 1 | JobResponse |
+| `TaskParameterValue` | enum: ChunkInt(String), Float(String), Int(String), Path(String), String(String) | 1 | TaskResponse |
+| `LogConfiguration` | log_driver, options?: HashMap<S,S>, parameters?: HashMap<S,S>, error? | 1 | SessionResponse, WorkerResponse |
+| `HostPropertiesResponse` | ip_addresses?: IpAddresses, host_name?, ec2_instance_arn?, ec2_instance_type? | 2 | SessionResponse, WorkerResponse |
+| `IpAddresses` | ipv4_addresses?: Vec<String>, ipv6_addresses?: Vec<String> | 1 | HostPropertiesResponse |
+| `FleetConfiguration` | enum: CustomerManaged(CMFC), ServiceManagedEc2(SMEFC) | 3+ | FleetResponse |
+| `CustomerManagedFleetConfiguration` | mode: enum, auto_scaling_configuration?, worker_capabilities?, storage_profile_id?, tag_propagation_mode? | 3+ | FleetConfiguration |
+| `ServiceManagedEc2FleetConfiguration` | instance_capabilities?, instance_market_options?, vpc_configuration?, storage_profile_id?, auto_scaling_configuration? | 3+ | FleetConfiguration |
+| `JobRunAsUser` | posix?: PosixUser, windows?: WindowsUser, run_as: enum | 2 | QueueResponse |
+| `PosixUser` | user, group | 1 | JobRunAsUser |
+| `WindowsUser` | user, passwordArn | 1 | JobRunAsUser |
+| `JobAttachmentSettings` | s3_bucket_name, root_prefix | 1 | QueueResponse |
+| `ParameterSpace` | parameters: Vec<StepParameter>, combination? | 2 | StepResponse |
+| `StepParameter` | name, type: enum, chunks?: StepParameterChunks | 2 | ParameterSpace |
+| `StepRequiredCapabilities` | attributes: Vec<...>, amounts: Vec<...> | 2+ | StepResponse |
+| `DependencyCounts` | dependencies_resolved, dependencies_unresolved, consumers_resolved, consumers_unresolved | 1 | StepResponse |
+
+#### Callers of remaining raw functions
+
+| Function | Callers | What they access |
+|----------|---------|-----------------|
+| `get_queue` (→ Value) | job.rs, queue.rs, manifest.rs, attachment.rs, submission.rs | `jobAttachmentSettings.{s3BucketName, rootPrefix}`, `displayName`, `roleArn` |
+| `list_jobs` (→ Value) | job.rs | iterates `jobs[]`, accesses `jobId`, `name`, `lifecycleStatus`, etc. |
+| `search_jobs` (→ Value) | job.rs | iterates `jobs[]`, accesses `jobId`, `name` |
+| `search_jobs_with_filters` (→ Value) | job.rs (list-jobs-by-filter) | iterates `jobs[]` |
+| `search_workers` (→ Value) | worker.rs | iterates `workers[]`, accesses `workerId`, `status`, etc. |
+| `list_sessions` (→ Value) | job.rs | iterates `sessions[]`, accesses `sessionId`, `startedAt`, `endedAt` |
+| `list_steps` (→ Value) | job.rs | iterates `steps[]`, accesses `stepId`, `name`, `taskRunStatusCounts` |
+| `list_tasks` (→ Value) | job.rs | iterates `tasks[]`, accesses `taskId`, `runStatus`, `parameters` |
+| `batch_get_steps_page` (→ Value) | job.rs (download-output) | accesses `steps[].name` |
+| `batch_get_tasks_page` (→ Value) | job.rs (download-output) | accesses `tasks[].parameters`, `latestSessionActionId` |
+| `assume_queue_role_for_user` (→ Value) | session.rs | accesses `credentials.{accessKeyId, secretAccessKey, sessionToken, expiration}` |
+| `assume_queue_role_for_read` (→ Value) | session.rs | same credential fields |
+| `assume_fleet_role_for_read` (→ Value) | session.rs | same credential fields |
+| `get_storage_profile_for_queue` (→ Value) | submission.rs, queue.rs | accesses `displayName`, `fileSystemLocations[]` |
+| `list_storage_profiles_for_queue` (→ Value) | queue.rs | iterates `storageProfiles[]` |
+| `get_session_action` (→ Value) | job.rs (download-output) | accesses `startedAt`, `endedAt` |
+| `list_session_actions` (→ Value) | job.rs (trace-schedule) | iterates `sessionActions[]` |
+| `list_queue_environments` (→ Value) | queue.rs, queue_parameters.rs | iterates `environments[]` |
+| `get_queue_environment` (→ Value) | queue_parameters.rs | accesses `template`, `templateType` |
+| `list_queue_fleet_associations` (→ Value) | queue.rs | iterates `queueFleetAssociations[]` |
+| `update_job` (→ Value) | job.rs | ignores response (just checks success) |
+| `update_task` (→ Value) | job.rs | ignores response |
+| `create_job` (→ Value) | submission.rs | accesses `jobId` |
+
+#### Conversion function complexity estimate
+
+- **Shallow types** (1 level, ~5 lines each): `JobParameter`, `TaskParameterValue`, `JobAttachmentSettings`, `PosixUser`, `WindowsUser`, `IpAddresses`, `LogConfiguration`, `DependencyCounts`
+- **Medium types** (2 levels, ~15 lines each): `Attachments`, `ManifestProperties`, `HostPropertiesResponse`, `JobRunAsUser`, `ParameterSpace`, `StepParameter`
+- **Deep types** (3+ levels, ~50+ lines each): `FleetConfiguration` (CustomerManaged + ServiceManagedEc2 with nested capabilities, market options, VPC config, etc.)
+
+### Implementation plan
+
+#### Module: `crates/deadline-api/src/type_conversions.rs` (NEW)
+
+All `fn sdk_type_to_value(&T) -> Value` converters live here. Keeps
+`responses.rs` clean. Organized by complexity:
+
+```rust
+// Simple enum → {"variant": "value"}
+pub fn job_parameter_to_value(p: &JobParameter) -> Value
+pub fn task_parameter_value_to_value(p: &TaskParameterValue) -> Value
+
+// Flat structs → json object
+pub fn job_attachment_settings_to_value(s: &JobAttachmentSettings) -> Value
+pub fn log_configuration_to_value(l: &LogConfiguration) -> Value
+pub fn ip_addresses_to_value(a: &IpAddresses) -> Value
+pub fn host_properties_to_value(h: &HostPropertiesResponse) -> Value
+pub fn posix_user_to_value(u: &PosixUser) -> Value
+pub fn windows_user_to_value(u: &WindowsUser) -> Value
+pub fn job_run_as_user_to_value(j: &JobRunAsUser) -> Value
+pub fn dependency_counts_to_value(d: &DependencyCounts) -> Value
+
+// Nested structs
+pub fn manifest_properties_to_value(m: &ManifestProperties) -> Value
+pub fn attachments_to_value(a: &Attachments) -> Value
+pub fn parameter_space_to_value(p: &ParameterSpace) -> Value
+pub fn fleet_configuration_to_value(c: &FleetConfiguration) -> Value
+```
+
+#### Changes to `responses.rs`
+
+- `QueueResponse`: `from_output_and_raw` → `From<GetQueueOutput>`, uses
+  `job_attachment_settings_to_value`, `job_run_as_user_to_value`
+- `FleetResponse`: `from_output_and_raw` → `From<GetFleetOutput>`, uses
+  `fleet_configuration_to_value`, `host_properties_to_value`
+- `JobResponse`: `from_output_and_raw` → `From<GetJobOutput>`, uses
+  `job_parameter_to_value`, `attachments_to_value`
+- `StepResponse`: `from_output_and_raw` → `From<GetStepOutput>`, uses
+  `parameter_space_to_value`, `dependency_counts_to_value`
+- `TaskResponse`: `from_output_and_raw` → `From<GetTaskOutput>`, uses
+  `task_parameter_value_to_value`
+- `SessionResponse`: `from_output_and_raw` → `From<GetSessionOutput>`, uses
+  `log_configuration_to_value`, `host_properties_to_value`
+- `WorkerResponse`: `from_output_and_raw` → `From<GetWorkerOutput>`, uses
+  `log_configuration_to_value`, `host_properties_to_value`
+
+#### Changes to `api.rs`
+
+- Delete `capture_send`, `paginated_list`, `capture_err`
+- Delete all `_with_raw` variants
+- Convert each remaining function to return SDK output type
+- For paginated functions: use SDK paginator or manual typed pagination
+- `update_job`/`update_task` → return `()`
+- `create_job` → return `CreateJobOutput`
+
+#### Caller migration
+
+- `queue["jobAttachmentSettings"]["s3BucketName"]` → `output.job_attachment_settings().map(|s| s.s3_bucket_name())`
+- `value["jobs"].as_array()` → `output.jobs()` (paginator)
+- `value["credentials"]["accessKeyId"]` → `output.credentials().access_key_id()`
+
+### Batching strategy (revised)
+
+- **D5a:** Create `type_conversions.rs`. Convert all response structs to
+  `From<Output>`. Remove `_with_raw` variants. Fix all callers of
+  `get_job/step/task/session/worker` and `get_queue/fleet` display paths.
+  (~200 lines new converters, ~100 lines caller changes)
+
+- **D5b:** Convert `get_queue` to return `GetQueueOutput`. Migrate 6
+  callers from `value["field"]` to typed accessors. Convert credential
+  APIs (`assume_*`) to return typed output. Migrate session.rs callers.
+  (~80 lines)
+
+- **D5c:** Convert list/search APIs to return typed SDK output.
+  `list_sessions` → paginator → `Vec<SessionSummary>`, etc.
+  Migrate all callers in job.rs, worker.rs. (~150 lines)
+
+- **D5d:** Convert remaining: `list_queue_environments`,
   `get_queue_environment`, `list_queue_fleet_associations`,
   `list_storage_profiles_for_queue`, `get_storage_profile_for_queue`,
-  `list_session_actions`, `update_job`, `update_task`, `create_job`).
-- **D5e:** Delete `response_capture.rs`, `capture_send`, and any
-  remaining `ResponseBodyCapture` imports. Clean sweep.
+  `list_session_actions`, `update_job`, `update_task`, `create_job`.
+  (~100 lines)
+
+- **D5e:** Delete `response_capture.rs`. Remove all `ResponseBodyCapture`
+  imports. Update `specs/patterns.md` to remove raw pattern docs.
+  Clean sweep. (~50 lines deleted)
+
+### Step status
+
+- [x] Step 1 — Study
+- [ ] Step 2 — Write tests
+- [ ] Step 3 — Implement
+- [ ] Step 4 — CLI comparison
+- [ ] Step 5 — Audit
+- [ ] Step 6 — Spec
+- [ ] Step 7 — Commit
 
 ---
 
