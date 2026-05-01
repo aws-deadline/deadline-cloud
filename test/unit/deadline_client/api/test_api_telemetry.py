@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 from typing import Any, Dict
+import json
 import platform
 import pytest
 import uuid
@@ -156,7 +157,9 @@ def test_process_event_queue_thread(fresh_deadline_config, mock_telemetry_client
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
     # WHEN
-    with patch.object(request, "urlopen") as urlopen_mock:
+    with patch.object(request, "urlopen") as urlopen_mock, patch.object(
+        TelemetryClient, "get_account_id", return_value=None
+    ), patch.object(api._telemetry, "get_boto3_session"):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
@@ -184,7 +187,9 @@ def test_process_event_queue_thread_retries_and_exits(
     # WHEN
     with patch.object(request, "urlopen", side_effect=http_error) as urlopen_mock, patch.object(
         time, "sleep"
-    ) as sleep_mock:
+    ) as sleep_mock, patch.object(
+        TelemetryClient, "get_account_id", return_value=None
+    ), patch.object(api._telemetry, "get_boto3_session"):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.call_count = attempt_count
         sleep_mock.call_count = attempt_count
@@ -202,7 +207,11 @@ def test_process_event_queue_thread_handles_unexpected_error(
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
     # WHEN
-    with patch.object(request, "urlopen", side_effect=Exception("Some error")) as urlopen_mock:
+    with patch.object(
+        request, "urlopen", side_effect=Exception("Some error")
+    ) as urlopen_mock, patch.object(
+        TelemetryClient, "get_account_id", return_value=None
+    ), patch.object(api._telemetry, "get_boto3_session"):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
@@ -216,7 +225,6 @@ def test_record_hashing_summary(fresh_deadline_config, mock_telemetry_client):
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
     expected_summary = asdict(test_summary)
     expected_summary["usage_mode"] = "CLI"
-    expected_summary["accountId"] = "111122223333"
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.job_attachments.hashing_summary",
         event_details=expected_summary,
@@ -224,10 +232,7 @@ def test_record_hashing_summary(fresh_deadline_config, mock_telemetry_client):
     mock_telemetry_client.event_queue = queue_mock
 
     # WHEN
-    with patch.object(
-        mock_telemetry_client, "get_account_id", return_value="111122223333"
-    ), patch.object(api._telemetry, "get_boto3_session"):
-        mock_telemetry_client.record_hashing_summary(test_summary)
+    mock_telemetry_client.record_hashing_summary(test_summary)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -240,7 +245,6 @@ def test_record_upload_summary(fresh_deadline_config, mock_telemetry_client):
     test_summary = SummaryStatistics(total_bytes=123, total_files=12, total_time=12345)
     expected_summary = asdict(test_summary)
     expected_summary["usage_mode"] = "GUI"
-    expected_summary["accountId"] = "111122223333"
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.job_attachments.upload_summary",
         event_details=expected_summary,
@@ -248,10 +252,7 @@ def test_record_upload_summary(fresh_deadline_config, mock_telemetry_client):
     mock_telemetry_client.event_queue = queue_mock
 
     # WHEN
-    with patch.object(
-        mock_telemetry_client, "get_account_id", return_value="111122223333"
-    ), patch.object(api._telemetry, "get_boto3_session"):
-        mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
+    mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -267,18 +268,14 @@ def test_record_error(fresh_deadline_config, mock_telemetry_client):
         "some_field": "some_value",
         "exception_type": str(type(test_exc)),
         "usage_mode": "CLI",
-        "accountId": "111122223333",
     }
     expected_event = TelemetryEvent(
         event_type="com.amazon.rum.deadline.error", event_details=expected_event_details
     )
     mock_telemetry_client.event_queue = queue_mock
 
-    with patch.object(
-        mock_telemetry_client, "get_account_id", return_value="111122223333"
-    ), patch.object(api._telemetry, "get_boto3_session"):
-        # WHEN
-        mock_telemetry_client.record_error(test_error_details, str(type(test_exc)))
+    # WHEN
+    mock_telemetry_client.record_error(test_error_details, str(type(test_exc)))
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -328,7 +325,6 @@ def test_record_decorator_success(fresh_deadline_config):
         expected_summary: Dict[str, Any] = dict()
         expected_summary["is_success"] = True
         expected_summary["usage_mode"] = "CLI"
-        expected_summary["accountId"] = "111122223333"
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.successful",
             event_details=expected_summary,
@@ -336,16 +332,12 @@ def test_record_decorator_success(fresh_deadline_config):
         telemetry_client = get_deadline_cloud_library_telemetry_client()
         telemetry_client.event_queue = queue_mock
 
-        with patch.object(
-            api.TelemetryClient, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        @record_success_fail_telemetry_event()
+        def successful():
+            return
 
-            @record_success_fail_telemetry_event()
-            def successful():
-                return
-
-            # WHEN
-            successful()  # type:ignore
+        # WHEN
+        successful()  # type:ignore
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -362,7 +354,6 @@ def test_record_decorator_fails(fresh_deadline_config):
         expected_summary["is_success"] = False
         expected_summary["exception_type"] = "RuntimeError"
         expected_summary["usage_mode"] = "CLI"
-        expected_summary["accountId"] = "111122223333"
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.fails",
             event_details=expected_summary,
@@ -370,17 +361,13 @@ def test_record_decorator_fails(fresh_deadline_config):
         telemetry_client = get_deadline_cloud_library_telemetry_client()
         telemetry_client.event_queue = queue_mock
 
-        with patch.object(
-            api.TelemetryClient, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        @record_success_fail_telemetry_event()
+        def fails():
+            raise RuntimeError("foobar")
 
-            @record_success_fail_telemetry_event()
-            def fails():
-                raise RuntimeError("foobar")
-
-            # WHEN
-            with pytest.raises(RuntimeError):
-                fails()  # type:ignore
+        # WHEN
+        with pytest.raises(RuntimeError):
+            fails()  # type:ignore
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -397,7 +384,6 @@ def test_latency_decorator(fresh_deadline_config):
         expected_summary["latency"] = 0
         expected_summary["function_call"] = "test_call"
         expected_summary["usage_mode"] = "CLI"
-        expected_summary["accountId"] = "111122223333"
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.latency",
             event_details=expected_summary,
@@ -405,16 +391,12 @@ def test_latency_decorator(fresh_deadline_config):
         telemetry_client = get_deadline_cloud_library_telemetry_client()
         telemetry_client.event_queue = queue_mock
 
-        with patch.object(
-            api.TelemetryClient, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        @record_function_latency_telemetry_event()
+        def test_call():
+            return
 
-            @record_function_latency_telemetry_event()
-            def test_call():
-                return
-
-            # WHEN
-            test_call()  # type:ignore
+        # WHEN
+        test_call()  # type:ignore
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
@@ -498,11 +480,11 @@ class TestTelemetryClientSwallowExceptions:
 
     def test_record_event_swallows_exception(self, fresh_deadline_config, mock_telemetry_client):
         with patch.object(
-            mock_telemetry_client, "get_account_id", side_effect=RuntimeError("boom")
-        ), patch.object(api._telemetry, "get_boto3_session"):
+            mock_telemetry_client, "_put_telemetry_record", side_effect=RuntimeError("boom")
+        ):
             mock_telemetry_client.record_event(
                 event_type="com.amazon.rum.deadline.test",
-                event_details=None,  # type: ignore
+                event_details={},
                 from_gui=False,
             )
 
@@ -546,3 +528,125 @@ class TestTelemetryClientSwallowExceptions:
                 config=config.config_file.read_config(),
             )
             assert "version" not in client._system_metadata
+
+
+class TestGetAccountId:
+    """Tests for the background-thread account ID resolution."""
+
+    def test_prefers_credential_account_id(self, fresh_deadline_config, mock_telemetry_client):
+        """When credentials expose account_id, it is used directly without any STS call."""
+        session_mock = MagicMock()
+        session_mock.get_credentials.return_value.account_id = "111122223333"
+        # Bypass the @lru_cache so each test gets a fresh call.
+        mock_telemetry_client.get_account_id.cache_clear()
+        assert mock_telemetry_client.get_account_id(session_mock) == "111122223333"
+        session_mock.client.assert_not_called()
+
+    def test_falls_back_to_sts_when_credentials_lack_account_id(
+        self, fresh_deadline_config, mock_telemetry_client
+    ):
+        """When credentials don't expose account_id, a short-timeout STS call is used."""
+        session_mock = MagicMock()
+        session_mock.get_credentials.return_value.account_id = None
+        session_mock.client.return_value.get_caller_identity.return_value = {
+            "Account": "444455556666"
+        }
+        mock_telemetry_client.get_account_id.cache_clear()
+        assert mock_telemetry_client.get_account_id(session_mock) == "444455556666"
+        # The STS client must be built with a short-timeout Config.
+        args, kwargs = session_mock.client.call_args
+        assert args[0] == "sts"
+        assert kwargs["config"].connect_timeout == 2
+        assert kwargs["config"].read_timeout == 2
+
+    def test_returns_none_when_sts_unreachable(self, fresh_deadline_config, mock_telemetry_client):
+        """When STS is unreachable, get_account_id silently returns None."""
+        session_mock = MagicMock()
+        session_mock.get_credentials.return_value.account_id = None
+        session_mock.client.return_value.get_caller_identity.side_effect = Exception(
+            "STS unreachable"
+        )
+        mock_telemetry_client.get_account_id.cache_clear()
+        assert mock_telemetry_client.get_account_id(session_mock) is None
+
+    def test_returns_none_when_no_credentials(self, fresh_deadline_config, mock_telemetry_client):
+        """When there are no credentials at all, returns None without calling STS."""
+        session_mock = MagicMock()
+        session_mock.get_credentials.return_value = None
+        session_mock.client.return_value.get_caller_identity.side_effect = Exception(
+            "no creds, no STS"
+        )
+        mock_telemetry_client.get_account_id.cache_clear()
+        assert mock_telemetry_client.get_account_id(session_mock) is None
+
+
+@pytest.mark.timeout(5)
+def test_process_event_queue_thread_attaches_account_id(
+    fresh_deadline_config, mock_telemetry_client
+):
+    """The background thread resolves the account ID once and attaches it to _common_details."""
+    queue_mock = MagicMock()
+    queue_mock.get.side_effect = [TelemetryEvent(), None]
+    mock_telemetry_client.event_queue = queue_mock
+
+    with patch.object(
+        TelemetryClient, "get_account_id", return_value="111122223333"
+    ) as resolve_mock, patch.object(api._telemetry, "get_boto3_session"), patch.object(
+        request, "urlopen"
+    ):
+        mock_telemetry_client._process_event_queue_thread()
+
+    resolve_mock.assert_called_once()
+    assert mock_telemetry_client._common_details.get("accountId") == "111122223333"
+
+
+@pytest.mark.timeout(5)
+def test_process_event_queue_thread_merges_common_details_into_payload(
+    fresh_deadline_config, mock_telemetry_client
+):
+    """Common details (including a late-resolved account ID) are merged into the event
+    payload at send time, so even an event that was enqueued before resolution completes
+    still includes the resolved accountId in the outgoing request body."""
+    queue_mock = MagicMock()
+    queue_mock.get.side_effect = [
+        TelemetryEvent(
+            event_type="com.amazon.rum.deadline.test",
+            event_details={"probe": 1, "usage_mode": "CLI"},
+        ),
+        None,
+    ]
+    mock_telemetry_client.event_queue = queue_mock
+
+    with patch.object(TelemetryClient, "get_account_id", return_value="111122223333"), patch.object(
+        api._telemetry, "get_boto3_session"
+    ), patch.object(request, "urlopen") as urlopen_mock:
+        mock_telemetry_client._process_event_queue_thread()
+
+    # Inspect the actual HTTP request body sent by urlopen.
+    assert urlopen_mock.call_count == 1
+    sent_request = urlopen_mock.call_args[0][0]
+    body = json.loads(sent_request.data.decode("utf-8"))
+    details = json.loads(body["RumEvents"][0]["details"])
+    assert details["accountId"] == "111122223333"
+    assert details["probe"] == 1
+    assert details["usage_mode"] == "CLI"
+
+
+@pytest.mark.timeout(5)
+def test_process_event_queue_thread_skips_account_id_when_resolution_fails(
+    fresh_deadline_config, mock_telemetry_client
+):
+    """When the account ID can't be resolved, no accountId key is added to common details."""
+    queue_mock = MagicMock()
+    queue_mock.get.side_effect = [TelemetryEvent(), None]
+    mock_telemetry_client.event_queue = queue_mock
+
+    with patch.object(
+        TelemetryClient, "get_account_id", return_value=None
+    ) as resolve_mock, patch.object(api._telemetry, "get_boto3_session"), patch.object(
+        request, "urlopen"
+    ):
+        mock_telemetry_client._process_event_queue_thread()
+
+    resolve_mock.assert_called_once()
+    assert "accountId" not in mock_telemetry_client._common_details

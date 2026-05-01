@@ -128,6 +128,7 @@ known-first-party = ["deadline"]
 # XML, HTML, and terminal reports.
 [tool.pytest.ini_options]
 xfail_strict = true
+pythonpath = ["test"]
 
 addopts = [
   "--durations=5",
@@ -137,8 +138,8 @@ addopts = [
   "--cov-report=term-missing",
   "--numprocesses=auto",
 ]
-testpaths = ["test/unit"]
-looponfailroots = ["src", "test/unit"]
+testpaths = ["test/unit", "test/cli_e2e"]
+looponfailroots = ["src", "test/unit", "test/cli_e2e"]
 markers = [
   "no_setup: mark that test shouldn't use default setups",
   "integ: tests that run against AWS resources",
@@ -152,7 +153,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 [tool.coverage.run]
 disable_warnings = ["module-not-measured"]
 branch = true
-parallel = false
+parallel = true
 source_pkgs = ["deadline"]
 omit = ["*/deadline/client/ui/*"]
 plugins = ["coverage_conditional_plugin"]

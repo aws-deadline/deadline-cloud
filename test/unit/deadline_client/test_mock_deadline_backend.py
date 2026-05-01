@@ -9,7 +9,7 @@ import sys
 import pytest
 from botocore.exceptions import ClientError
 
-from .mock_deadline_backend import MockDeadlineBackend
+from _common.mock_deadline_backend import MockDeadlineBackend
 
 pytestmark = pytest.mark.skipif(
     sys.version_info < (3, 9), reason="openjd-model requires Python 3.9+"

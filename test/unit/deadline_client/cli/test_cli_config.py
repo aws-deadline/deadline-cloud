@@ -36,7 +36,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 21
+    assert len(settings.keys()) == 23
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -108,6 +108,8 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.allow_bundle_hooks", "true")
     config.set_setting("settings.allow_environment_hooks", "true")
     config.set_setting("settings.submitter_update_notification", "false")
+    config.set_setting("settings.max_retries_per_task", "10")
+    config.set_setting("settings.max_failed_tasks_count", "50")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])

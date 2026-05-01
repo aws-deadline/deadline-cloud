@@ -306,12 +306,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_failed_tasks_count_box.setValue(
             settings.max_failed_tasks_count
             if self._has_compatible_attr(settings, "max_failed_tasks_count", int)
-            else 20
+            else int(get_setting("settings.max_failed_tasks_count"))
         )
         self.max_retries_per_task_box.setValue(
             settings.max_retries_per_task
             if self._has_compatible_attr(settings, "max_retries_per_task", int)
-            else 5
+            else int(get_setting("settings.max_retries_per_task"))
         )
         self.priority_box.setValue(
             settings.priority if self._has_compatible_attr(settings, "priority", int) else 50
@@ -395,7 +395,11 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
                 "minValue": 0,
                 "value": self.max_retries_per_task_box.value(),
             },
-            {"name": "deadline:priority", "type": "INT", "value": self.priority_box.value()},
+            {
+                "name": "deadline:priority",
+                "type": "INT",
+                "value": self.priority_box.value(),
+            },
         ]
         if not self.unlimited_max_worker_count.isChecked():
             job_parameters.append(
@@ -585,7 +589,11 @@ class DeadlineFarmDisplay(_DeadlineNamedResourceDisplay):
         if farm_id:
             deadline = api.get_boto3_client("deadline")
             response = deadline.get_farm(farmId=farm_id)
-            return (response["farmId"], response["displayName"], response["description"])
+            return (
+                response["farmId"],
+                response["displayName"],
+                response["description"],
+            )
         else:
             return ("", "", "")
 
@@ -600,7 +608,11 @@ class DeadlineQueueDisplay(_DeadlineNamedResourceDisplay):
         if farm_id and queue_id:
             deadline = api.get_boto3_client("deadline")
             response = deadline.get_queue(farmId=farm_id, queueId=queue_id)
-            return (response["queueId"], response["displayName"], response["description"])
+            return (
+                response["queueId"],
+                response["displayName"],
+                response["description"],
+            )
         else:
             return ("", "", "")
 

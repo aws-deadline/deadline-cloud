@@ -1568,6 +1568,12 @@ def job_logs(
                 f"Failed to retrieve session details for session ID '{session_id}':\n{exc}"
             ) from exc
 
+        # Parse user-supplied ISO timestamps the same way the session-action path does.
+        if isinstance(start_time, str):
+            start_time = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        if isinstance(end_time, str):
+            end_time = datetime.datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+
     # Create timestamp formatter now that we have all necessary information
     timestamp_formatter = TimestampFormatter(timestamp_format_enum, reference_start_time)
 

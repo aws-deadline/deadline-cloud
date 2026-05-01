@@ -16,7 +16,10 @@ from typing import Callable, Dict, List, Optional
 
 import boto3  # type: ignore[import]
 from botocore.exceptions import ProfileNotFound  # type: ignore[import]
-from deadline.job_attachments.models import FileConflictResolution, JobAttachmentsFileSystem
+from deadline.job_attachments.models import (
+    FileConflictResolution,
+    JobAttachmentsFileSystem,
+)
 from qtpy.QtCore import QSize, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -34,6 +37,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QPushButton,
     QSizePolicy,
     QSpacerItem,
+    QSpinBox,
     QStyle,
     QVBoxLayout,
     QWidget,
@@ -47,7 +51,9 @@ from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file, get_setting_default, str2bool
 from .._utils import block_signals, tr
 from ..widgets import DirectoryPickerWidget
-from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
+from ..widgets.deadline_authentication_status_widget import (
+    DeadlineAuthenticationStatusWidget,
+)
 from ..widgets import (
     DeadlineFarmListComboBoxController,
     DeadlineQueueListComboBoxController,
@@ -92,7 +98,8 @@ class DeadlineConfigDialog(QDialog):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(
-            parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
+            parent=parent,
+            f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint,
         )
 
         self.setWindowTitle(tr("AWS Deadline Cloud workstation configuration"))
@@ -105,7 +112,7 @@ class DeadlineConfigDialog(QDialog):
         available_height = screen.height()
 
         # Calculate optimal dialog height based on screen size
-        content_height = 850  # Height needed to show all content without scroll bars
+        content_height = 910  # Height needed to show all content without scroll bars
         max_dialog_height = int(available_height * 0.9)  # 90% of screen height
 
         # Use smaller of content height or max screen percentage
@@ -141,7 +148,8 @@ class DeadlineConfigDialog(QDialog):
 
         # We only use a Close button, not OK/Cancel, because we live update the settings.
         self.button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply, Qt.Horizontal
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply,
+            Qt.Horizontal,
         )
         self.button_box.button(QDialogButtonBox.Ok).setText(tr("Ok"))
         self.button_box.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
@@ -395,8 +403,12 @@ class DeadlineWorkstationConfigWidget(QWidget):
             group, layout, "telemetry.opt_out", tr("Telemetry opt out")
         )
         self.force_s3_check = self._init_checkbox_setting(
-            group, layout, "settings.force_s3_check", tr("Always check S3 job attachments")
+            group,
+            layout,
+            "settings.force_s3_check",
+            tr("Always check S3 job attachments"),
         )
+
         self.submitter_update_notification = self._init_checkbox_setting(
             group,
             layout,
@@ -463,6 +475,19 @@ class DeadlineWorkstationConfigWidget(QWidget):
                 self.locale_change_message.hide()
 
         self._refresh_callbacks.append(refresh_locale_message)
+
+        self.max_retries_per_task_spinbox = self._init_spinbox_setting(
+            group,
+            layout,
+            "settings.max_retries_per_task",
+            tr("Default maximum retries per task"),
+        )
+        self.max_failed_tasks_count_spinbox = self._init_spinbox_setting(
+            group,
+            layout,
+            "settings.max_failed_tasks_count",
+            tr("Default maximum failed tasks count"),
+        )
 
         # Known asset paths section
         known_paths_label = QLabel(tr("Known asset paths"))
@@ -559,6 +584,44 @@ class DeadlineWorkstationConfigWidget(QWidget):
         checkbox.stateChanged.connect(checkbox_changed)
 
         return checkbox
+
+    def _init_spinbox_setting(
+        self, group: QWidget, layout: QFormLayout, setting_name: str, label_text: str
+    ) -> QSpinBox:
+        """
+        Creates a spinbox setting for an integer config value.
+
+        Args:
+            group (QWidget): The parent widget
+            layout (QFormLayout): The layout to add a row to
+            setting_name (str): The setting name as provided to the config. E.g. "settings.foo_bar"
+            label_text (str): The displayed description. E.g. "Foo Bar"
+
+        Returns:
+            QSpinBox: The created spinbox.
+        """
+        spinbox = QSpinBox(parent=group)
+        spinbox.setRange(0, 2147483647)
+        label = self.labels[setting_name] = QLabel(label_text)
+        layout.addRow(label, spinbox)
+
+        def refresh_spinbox():
+            with block_signals(spinbox):
+                try:
+                    value = int(config_file.get_setting(setting_name, config=self.config))
+                except (ValueError, TypeError):
+                    value = int(get_setting_default(setting_name, config=self.config))
+                spinbox.setValue(value)
+
+        self._refresh_callbacks.append(refresh_spinbox)
+
+        def spinbox_changed(new_value: int):
+            self.changes[setting_name] = str(new_value)
+            self.refresh()
+
+        spinbox.valueChanged.connect(spinbox_changed)
+
+        return spinbox
 
     def _init_combobox_setting(
         self,
@@ -948,7 +1011,9 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def _on_add_known_path(self):
         """Handle adding a new known path"""
         path = QFileDialog.getExistingDirectory(
-            self, "Select a directory to add to known asset paths", os.path.expanduser("~")
+            self,
+            "Select a directory to add to known asset paths",
+            os.path.expanduser("~"),
         )
         if path:
             # Normalize path
@@ -995,7 +1060,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             path = QFileDialog.getExistingDirectory(
                 self,
                 "Select a directory to replace the selected path",
-                current_path if os.path.exists(current_path) else os.path.expanduser("~"),
+                (current_path if os.path.exists(current_path) else os.path.expanduser("~")),
             )
             if path:
                 # Normalize path

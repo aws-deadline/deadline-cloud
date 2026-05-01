@@ -83,12 +83,41 @@ class MockDeadlineBackend:
         self.tasks: dict[tuple, dict] = {}
         self.sessions: dict[tuple, dict] = {}
         self.session_actions: dict[tuple, dict] = {}
+        self.call_counts: dict[str, int] = {}
+        self.batch_call_sizes: dict[str, list[int]] = {}
         self._job_environments: dict[str, list[str]] = {}  # job_id -> [env_name, ...]
         self._step_environments: dict[tuple, list[str]] = {}  # (job_id, step_id) -> [env_name, ...]
         self._id_counter = 0
         self._validate_params = validate_params
         self._validator = None
         self._service_model = None
+
+    def clear(self) -> None:
+        """Reset all in-memory state. Lets a single backend + HTTP server be
+        reused across tests by clearing per-test data between runs."""
+        self.farms.clear()
+        self.queues.clear()
+        self.fleets.clear()
+        self.workers.clear()
+        self.jobs.clear()
+        self.steps.clear()
+        self.tasks.clear()
+        self.sessions.clear()
+        self.session_actions.clear()
+        self.call_counts.clear()
+        self.batch_call_sizes.clear()
+        self._job_environments.clear()
+        self._step_environments.clear()
+        self._id_counter = 0
+        # Ad-hoc attrs some tests/routes stash on the backend.
+        for attr in (
+            "queue_fleet_associations",
+            "storage_profiles",
+            "queue_read_credentials",
+            "_injected_failures",
+        ):
+            if hasattr(self, attr):
+                delattr(self, attr)
 
     def _get_validator(self) -> tuple[ParamValidator, ServiceModel]:
         """Lazy-load the botocore service model and validator."""
@@ -181,6 +210,9 @@ class MockDeadlineBackend:
         for step in job.steps:
             step_id = self._gen_id("step")
             self.steps[(farm_id, queue_id, job_id, step_id)] = {
+                "farmId": farm_id,
+                "queueId": queue_id,
+                "jobId": job_id,
                 "stepId": step_id,
                 "name": step.name,
                 "lifecycleStatus": "CREATE_COMPLETE",
@@ -206,6 +238,10 @@ class MockDeadlineBackend:
                     for name, pv in task_params.items()
                 }
                 self.tasks[(farm_id, queue_id, job_id, step_id, task_id)] = {
+                    "farmId": farm_id,
+                    "queueId": queue_id,
+                    "jobId": job_id,
+                    "stepId": step_id,
                     "taskId": task_id,
                     "runStatus": "PENDING",
                     "parameters": params,
@@ -236,6 +272,15 @@ class MockDeadlineBackend:
             raise _resource_not_found("farm", farmId, "GetFarm")
         return self.farms[farmId]
 
+    @route("GET", "/farms", "ListFarms")
+    def list_farms(self, *, nextToken: str | None = None, **kwargs) -> dict:
+        params: dict = {}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListFarms", params)
+        return {"farms": list(self.farms.values())}
+
     # ========== Queue APIs ==========
 
     @route("POST", "/farms/{farmId}/queues", "CreateQueue")
@@ -262,6 +307,97 @@ class MockDeadlineBackend:
         if key not in self.queues:
             raise _resource_not_found("queue", queueId, "GetQueue")
         return self.queues[key]
+
+    @route("GET", "/farms/{farmId}/queues", "ListQueues")
+    def list_queues(self, *, farmId: str, nextToken: str | None = None, **kwargs) -> dict:
+        params: dict = {"farmId": farmId}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListQueues", params)
+        return {"queues": [q for (f, _), q in self.queues.items() if f == farmId]}
+
+    @route("GET", "/farms/{farmId}/queue-fleet-associations", "ListQueueFleetAssociations")
+    def list_queue_fleet_associations(
+        self,
+        *,
+        farmId: str,
+        queueId: str | None = None,
+        fleetId: str | None = None,
+        nextToken: str | None = None,
+        **kwargs,
+    ) -> dict:
+        params: dict = {"farmId": farmId}
+        if queueId is not None:
+            params["queueId"] = queueId
+        if fleetId is not None:
+            params["fleetId"] = fleetId
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListQueueFleetAssociations", params)
+        qfas = getattr(self, "queue_fleet_associations", {})
+        items = [
+            qfa
+            for (f, q, fl), qfa in qfas.items()
+            if f == farmId
+            and (queueId is None or q == queueId)
+            and (fleetId is None or fl == fleetId)
+        ]
+        return {"queueFleetAssociations": items}
+
+    @route(
+        "GET", "/farms/{farmId}/queues/{queueId}/storage-profiles", "ListStorageProfilesForQueue"
+    )
+    def list_storage_profiles_for_queue(
+        self, *, farmId: str, queueId: str, nextToken: str | None = None, **kwargs
+    ) -> dict:
+        params: dict = {"farmId": farmId, "queueId": queueId}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListStorageProfilesForQueue", params)
+        sps = getattr(self, "storage_profiles", {})
+        return {
+            "storageProfiles": [sp for (f, q, _), sp in sps.items() if f == farmId and q == queueId]
+        }
+
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/storage-profiles/{storageProfileId}",
+        "GetStorageProfileForQueue",
+    )
+    def get_storage_profile_for_queue(
+        self, *, farmId: str, queueId: str, storageProfileId: str
+    ) -> dict:
+        self._validate(
+            "GetStorageProfileForQueue",
+            {"farmId": farmId, "queueId": queueId, "storageProfileId": storageProfileId},
+        )
+        sps = getattr(self, "storage_profiles", {})
+        key = (farmId, queueId, storageProfileId)
+        if key not in sps:
+            raise _resource_not_found(
+                "storageProfile", storageProfileId, "GetStorageProfileForQueue"
+            )
+        return sps[key]
+
+    @route("GET", "/farms/{farmId}/queues/{queueId}/read-roles", "AssumeQueueRoleForRead")
+    def assume_queue_role_for_read(self, *, farmId: str, queueId: str) -> dict:
+        self._validate("AssumeQueueRoleForRead", {"farmId": farmId, "queueId": queueId})
+        if (farmId, queueId) not in self.queues:
+            raise _resource_not_found("queue", queueId, "AssumeQueueRoleForRead")
+        creds = getattr(
+            self,
+            "queue_read_credentials",
+            {
+                "accessKeyId": "testing",
+                "secretAccessKey": "testing",
+                "sessionToken": "testing",
+                "expiration": self._now() + timedelta(hours=1),
+            },
+        )
+        return {"credentials": creds}
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/environments", "ListQueueEnvironments")
     def list_queue_environments(
@@ -456,6 +592,88 @@ class MockDeadlineBackend:
             raise _resource_not_found("job", jobId, "GetJob")
         return self.jobs[key]
 
+    @route("PATCH", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}", "UpdateJob")
+    def update_job(self, *, farmId: str, queueId: str, jobId: str, **kwargs) -> dict:
+        params = {"farmId": farmId, "queueId": queueId, "jobId": jobId, **kwargs}
+        self._validate("UpdateJob", params)
+        key = (farmId, queueId, jobId)
+        if key not in self.jobs:
+            raise _resource_not_found("job", jobId, "UpdateJob")
+        target = kwargs.get("targetTaskRunStatus")
+        if target:
+            self.jobs[key]["taskRunStatus"] = target
+            # Mirror target onto tasks so wait/cancel/requeue flows observe the
+            # transition without extra simulation.
+            for k in list(self.tasks):
+                if k[:3] == key:
+                    self.tasks[k] = {**self.tasks[k], "runStatus": target}
+        return {}
+
+    @route(
+        "PATCH",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
+        "UpdateTask",
+    )
+    def update_task(
+        self, *, farmId: str, queueId: str, jobId: str, stepId: str, taskId: str, **kwargs
+    ) -> dict:
+        params = {
+            "farmId": farmId,
+            "queueId": queueId,
+            "jobId": jobId,
+            "stepId": stepId,
+            "taskId": taskId,
+            **kwargs,
+        }
+        self._validate("UpdateTask", params)
+        key = (farmId, queueId, jobId, stepId, taskId)
+        if key not in self.tasks:
+            raise _resource_not_found("task", taskId, "UpdateTask")
+        target = kwargs.get("targetRunStatus")
+        if target:
+            self.tasks[key] = {**self.tasks[key], "runStatus": target}
+        return {}
+
+    @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps", "ListSteps")
+    def list_steps(
+        self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None, **kwargs
+    ) -> dict:
+        params: dict = {"farmId": farmId, "queueId": queueId, "jobId": jobId}
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListSteps", params)
+        prefix = (farmId, queueId, jobId)
+        return {"steps": [s for k, s in self.steps.items() if k[:3] == prefix]}
+
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks",
+        "ListTasks",
+    )
+    def list_tasks(
+        self,
+        *,
+        farmId: str,
+        queueId: str,
+        jobId: str,
+        stepId: str,
+        nextToken: str | None = None,
+        **kwargs,
+    ) -> dict:
+        params: dict = {
+            "farmId": farmId,
+            "queueId": queueId,
+            "jobId": jobId,
+            "stepId": stepId,
+        }
+        if nextToken is not None:
+            params["nextToken"] = nextToken
+        params.update(kwargs)
+        self._validate("ListTasks", params)
+        prefix = (farmId, queueId, jobId, stepId)
+        return {"tasks": [t for k, t in self.tasks.items() if k[:4] == prefix]}
+
     @route("POST", "/farms/{farmId}/search/jobs", "SearchJobs")
     def search_jobs(
         self,
@@ -479,6 +697,11 @@ class MockDeadlineBackend:
         if sortExpressions:
             params["sortExpressions"] = sortExpressions
         self._validate("SearchJobs", params)
+
+        # Real Deadline rejects queueIds that don't exist in the farm.
+        for qid in queueIds:
+            if (farmId, qid) not in self.queues:
+                raise _resource_not_found("queue", qid, "SearchJobs")
 
         jobs = [j for key, j in self.jobs.items() if key[0] == farmId and key[1] in queueIds]
         # Basic sort by createdAt
@@ -543,7 +766,45 @@ class MockDeadlineBackend:
 
     @route(
         "GET",
-        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}/actions",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions/{sessionId}",
+        "GetSession",
+    )
+    def get_session(self, *, farmId: str, queueId: str, jobId: str, sessionId: str) -> dict:
+        self._validate(
+            "GetSession",
+            {"farmId": farmId, "queueId": queueId, "jobId": jobId, "sessionId": sessionId},
+        )
+        key = (farmId, queueId, jobId, sessionId)
+        if key not in self.sessions:
+            raise _resource_not_found("session", sessionId, "GetSession")
+        return self.sessions[key]
+
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/session-actions/{sessionActionId}",
+        "GetSessionAction",
+    )
+    def get_session_action(
+        self, *, farmId: str, queueId: str, jobId: str, sessionActionId: str
+    ) -> dict:
+        self._validate(
+            "GetSessionAction",
+            {
+                "farmId": farmId,
+                "queueId": queueId,
+                "jobId": jobId,
+                "sessionActionId": sessionActionId,
+            },
+        )
+        # session id is embedded as the prefix: sessionaction-<sessionuuid>-N
+        for key, action in self.session_actions.items():
+            if key[:3] == (farmId, queueId, jobId) and key[4] == sessionActionId:
+                return action
+        raise _resource_not_found("sessionAction", sessionActionId, "GetSessionAction")
+
+    @route(
+        "GET",
+        "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/session-actions",
         "ListSessionActions",
     )
     def list_session_actions(
@@ -552,15 +813,21 @@ class MockDeadlineBackend:
         farmId: str,
         queueId: str,
         jobId: str,
-        sessionId: str,
+        sessionId: str | None = None,
         nextToken: str | None = None,
     ) -> dict:
-        params = {"farmId": farmId, "queueId": queueId, "jobId": jobId, "sessionId": sessionId}
+        params: dict = {"farmId": farmId, "queueId": queueId, "jobId": jobId}
+        if sessionId:
+            params["sessionId"] = sessionId
         if nextToken:
             params["nextToken"] = nextToken
         self._validate("ListSessionActions", params)
-        prefix = (farmId, queueId, jobId, sessionId)
-        actions = [a for key, a in self.session_actions.items() if key[:4] == prefix]
+        prefix = (farmId, queueId, jobId)
+        actions = [
+            a
+            for key, a in self.session_actions.items()
+            if key[:3] == prefix and (sessionId is None or key[3] == sessionId)
+        ]
         return {"sessionActions": actions}
 
     # ========== Simulation Helpers ==========
@@ -647,6 +914,13 @@ class MockDeadlineBackend:
             "fleetId": "fleet-mock",
             "workerId": worker_id,
             "lifecycleStatus": "ENDED",
+            "log": {
+                "logDriver": "awslogs",
+                "options": {
+                    "logGroupName": f"/aws/deadline/{farm_id}/{queue_id}",
+                    "logStreamName": session_id,
+                },
+            },
             "startedAt": now,
             "endedAt": current_time,
         }
@@ -695,6 +969,7 @@ class MockDeadlineBackend:
                 )
         return {items_field: items, "errors": errors}
 
+    @route("POST", "/batch-get-step", "BatchGetStep")
     def batch_get_step(self, *, identifiers: list[dict]) -> dict:
         return self._batch_get(
             operation="BatchGetStep",
@@ -706,6 +981,7 @@ class MockDeadlineBackend:
             resource_type="step",
         )
 
+    @route("POST", "/batch-get-task", "BatchGetTask")
     def batch_get_task(self, *, identifiers: list[dict]) -> dict:
         return self._batch_get(
             operation="BatchGetTask",
@@ -815,14 +1091,41 @@ class _ResponseValidator:
         self._model = ServiceModel(loader.load_service_model("deadline", "service-2"))
         self._validator = ParamValidator()
 
+    _TYPE_DEFAULTS = {
+        "string": "",
+        "integer": 0,
+        "long": 0,
+        "float": 0.0,
+        "double": 0.0,
+        "boolean": False,
+        "timestamp": datetime(1970, 1, 1, tzinfo=timezone.utc),
+        "list": [],
+        "map": {},
+        "structure": {},
+    }
+
     def _filter(self, shape, value):
-        """Recursively drop keys that aren't part of the shape."""
+        """Recursively drop keys that aren't part of the shape, and fill
+        required members the caller didn't supply with type-appropriate
+        defaults.
+
+        Botocore service models are periodically extended with new required
+        response fields (e.g. `costScaleFactor`, `kmsKeyArn` on GetFarm).
+        Tests that were written before those additions shouldn't have to
+        thread new fields through the mock for every boto3 bump — we just
+        synthesize safe defaults so response validation passes on whichever
+        botocore happens to be installed.
+        """
         if shape is None or value is None:
             return value
         t = shape.type_name
         if t == "structure":
             members = shape.members
-            return {k: self._filter(members[k], v) for k, v in value.items() if k in members}
+            filtered = {k: self._filter(members[k], v) for k, v in value.items() if k in members}
+            for req in getattr(shape, "required_members", []):
+                if req not in filtered and req in members:
+                    filtered[req] = self._TYPE_DEFAULTS.get(members[req].type_name, None)
+            return filtered
         if t == "list":
             return [self._filter(shape.member, v) for v in value]
         if t == "map":
@@ -842,7 +1145,7 @@ class _ResponseValidator:
         return filtered
 
 
-def _make_handler(routes, validator):
+def _make_handler(routes, validator, backend):
     class _Handler(_BaseHTTPRequestHandler):
         def log_message(self, format, *args):  # silence stderr access logs
             return
@@ -865,12 +1168,17 @@ def _make_handler(routes, validator):
                 m = pattern.match(parsed.path)
                 if not m:
                     continue
+                backend.call_counts[op_name] = backend.call_counts.get(op_name, 0) + 1
                 kwargs = dict(m.groupdict())
                 for k, v in _parse_qs(parsed.query).items():
                     kwargs[k] = int(v[0]) if k in _INT_QUERY_PARAMS else v[0]
                 length = int(self.headers.get("Content-Length", 0))
                 if length:
                     kwargs.update(_json.loads(self.rfile.read(length)))
+                if "identifiers" in kwargs and isinstance(kwargs["identifiers"], list):
+                    backend.batch_call_sizes.setdefault(op_name, []).append(
+                        len(kwargs["identifiers"])
+                    )
                 try:
                     result = handler_fn(**kwargs)
                     result = validator.filter_and_validate(op_name, result)
@@ -898,6 +1206,9 @@ def _make_handler(routes, validator):
         def do_POST(self):  # noqa: N802
             self._dispatch("POST")
 
+        def do_PATCH(self):  # noqa: N802
+            self._dispatch("PATCH")
+
     return _Handler
 
 
@@ -911,7 +1222,7 @@ def start_server(backend: "MockDeadlineBackend", port: int = 0):
     """
     routes = _discover_routes(backend)
     validator = _ResponseValidator()
-    handler_cls = _make_handler(routes, validator)
+    handler_cls = _make_handler(routes, validator, backend)
     server = _HTTPServer(("127.0.0.1", port), handler_cls)
     actual_port = server.server_address[1]
     thread = _threading.Thread(target=server.serve_forever, daemon=True)

@@ -96,6 +96,10 @@ git commit -s            # Always sign commits with -s
 
 ## Testing
 
+**Every code change — new or modified — must include tests.** See
+[test/README.md](test/README.md) for the test suite layers and how to
+pick the right one.
+
 - **Unit tests:** `test/unit/` - Run with `hatch run test`
 - **Integration tests:** `test/integ/` - Requires AWS resources
 - **Squish GUI tests:** `test/squish/` - Requires Squish license

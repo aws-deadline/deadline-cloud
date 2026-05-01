@@ -23,9 +23,7 @@ def test_get_boto3_session(fresh_deadline_config):
 
         # Confirm it returned the mocked value, and was called with the correct args
         assert result == mock_session
-        boto3_session.assert_called_once_with(
-            profile_name="SomeRandomProfileName", botocore_session=ANY
-        )
+        boto3_session.assert_called_once_with(profile_name="SomeRandomProfileName")
 
 
 def test_get_boto3_session_caching_behavior(fresh_deadline_config):
@@ -35,7 +33,7 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
     """
 
     # mock boto3.Session to return a fresh object based on the input profile name
-    def mock_create_session(profile_name: Optional[str], botocore_session=None):
+    def mock_create_session(profile_name: Optional[str]):
         session = MagicMock()
         session._profile_name = profile_name
         return session
@@ -67,32 +65,27 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         # value of AWS profile name that was configured.
         boto3_session.assert_has_calls(
             [
-                call(profile_name=None, botocore_session=ANY),
-                call(profile_name="SomeRandomProfileName", botocore_session=ANY),
+                call(profile_name=None),
+                call(profile_name="SomeRandomProfileName"),
             ]
         )
 
 
 def test_get_check_authentication_status_authenticated(fresh_deadline_config):
     """Confirm that check_authentication_status returns AUTHENTICATED"""
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
-    ):
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock:
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        session_mock().client("sts").get_caller_identity.return_value = {}
+        boto3_client_mock.return_value.list_farms.return_value = {"farms": []}
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.AUTHENTICATED
+        boto3_client_mock.return_value.list_farms.assert_called_once_with(maxResults=1)
 
 
 def test_get_check_authentication_status_configuration_error(fresh_deadline_config):
     """Confirm that check_authentication_status returns CONFIGURATION_ERROR"""
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
-    ):
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock:
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        session_mock().client("sts").get_caller_identity.side_effect = Exception(
-            "some uncaught exception"
-        )
+        boto3_client_mock.return_value.list_farms.side_effect = Exception("some uncaught exception")
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
 
