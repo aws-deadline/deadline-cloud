@@ -584,7 +584,7 @@ def _download_job_output(
                             fg="yellow",
                         )
 
-    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+    output_paths_by_root = job_output_downloader.get_paths_by_root()
     # If no output paths were found, log a message and exit.
     if output_paths_by_root == {}:
         click.echo(_get_no_output_message(is_json_format))
@@ -672,7 +672,7 @@ def _download_job_output(
                 job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
         # Re-fetch after potential set_root_path calls above
-        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+        output_paths_by_root = job_output_downloader.get_paths_by_root()
         _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Prompt users to confirm local root paths where they will download outputs to,
@@ -712,7 +712,7 @@ def _download_job_output(
                     job_output_downloader.set_root_path(
                         asset_roots[index_to_change], str(Path(new_root))
                     )
-                    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+                    output_paths_by_root = job_output_downloader.get_paths_by_root()
                     _check_and_warn_long_output_paths(output_paths_by_root)
         else:
             click.echo(
@@ -727,14 +727,14 @@ def _download_job_output(
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
                 job_output_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+            output_paths_by_root = job_output_downloader.get_paths_by_root()
             _check_and_warn_long_output_paths(output_paths_by_root)
 
     # Apply include filters against workstation paths (default behavior).
     # When --match-paths-by JOB is set, filtering was already applied at the job level.
     if include_patterns and match_paths_by != MatchPathsBy.JOB:
         job_output_downloader.apply_include_filters(include_patterns)
-        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+        output_paths_by_root = job_output_downloader.get_paths_by_root()
         if output_paths_by_root == {}:
             click.echo(_get_no_output_message(is_json_format))
             return
@@ -768,7 +768,7 @@ def _download_job_output(
             ] = FileConflictResolution.CREATE_COPY,
             on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         ) -> DownloadSummaryStatistics:
-            return job_output_downloader.download_job_output(
+            return job_output_downloader.download(
                 file_conflict_resolution=file_conflict_resolution,
                 on_downloading_files=on_downloading_files,
             )
@@ -1104,12 +1104,6 @@ def job_download_output(
             raise DeadlineOperationError(f"Failed to download output:\n{e}") from e
 
 
-def _normalize_filters(include: tuple[str, ...]) -> Optional[list[str]]:
-    """Normalize CLI --include values into a filter list, or None if empty."""
-    filters = list(include)
-    return [f.replace("\\", "/") for f in filters] if filters else None
-
-
 def _build_attachments(job: dict) -> Optional[JA_Attachments]:
     """Build an Attachments object from a job's attachments dict, or None if absent."""
     job_attachments = job.get("attachments")
@@ -1129,7 +1123,7 @@ def _download_job_input(
     is_json_format: bool = False,
     ignore_storage_profiles: bool = False,
     include_patterns: Optional[list[str]] = None,
-    match_paths_by: str = "LOCAL",
+    match_paths_by: MatchPathsBy = MatchPathsBy.LOCAL,
 ):
     """
     Starts the download of job input and handles the progress reporting callback.
@@ -1174,10 +1168,10 @@ def _download_job_input(
         s3_settings=s3_settings,
         attachments=attachments,
         session=queue_role_session,
-        include_filters=include_patterns if match_paths_by == "JOB" else None,
+        include_filters=include_patterns if match_paths_by == MatchPathsBy.JOB else None,
     )
 
-    input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+    input_paths_by_root = job_input_downloader.get_paths_by_root()
     if not input_paths_by_root:
         msg = "No input files available for download."
         click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
@@ -1208,7 +1202,7 @@ def _download_job_input(
                         job_input_downloader.set_root_path(root, new_root)
                 except ValueError:
                     pass  # No rule matches this root
-            input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+            input_paths_by_root = job_input_downloader.get_paths_by_root()
     else:
         # No storage profiles — fall back to manual prompt on OS mismatch
         asset_roots = list(input_paths_by_root.keys())
@@ -1232,12 +1226,12 @@ def _download_job_input(
 
                 job_input_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
 
-        input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+        input_paths_by_root = job_input_downloader.get_paths_by_root()
 
     # When match_paths_by is LOCAL (default), apply filters after root mapping.
-    if include_patterns and match_paths_by == "LOCAL":
+    if include_patterns and match_paths_by == MatchPathsBy.LOCAL:
         job_input_downloader.apply_include_filters(include_patterns)
-        input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+        input_paths_by_root = job_input_downloader.get_paths_by_root()
         if not input_paths_by_root:
             msg = "No input files match the provided filters."
             click.echo(_get_json_line(JSON_MSG_TYPE_SUMMARY, msg) if is_json_format else msg)
@@ -1271,7 +1265,7 @@ def _download_job_input(
                     job_input_downloader.set_root_path(
                         asset_roots[index_to_change], str(Path(new_root))
                     )
-                    input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+                    input_paths_by_root = job_input_downloader.get_paths_by_root()
         else:
             click.echo(
                 _get_summary_of_files_to_download_message(input_paths_by_root, is_json_format)
@@ -1285,7 +1279,7 @@ def _download_job_input(
             for index, confirmed_root in enumerate(confirmed_asset_roots):
                 _assert_valid_path(confirmed_root)
                 job_input_downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
-            input_paths_by_root = job_input_downloader.get_input_paths_by_root()
+            input_paths_by_root = job_input_downloader.get_paths_by_root()
 
     if not is_json_format:
         all_input_paths: set[str] = set()
@@ -1311,7 +1305,7 @@ def _download_job_input(
             ] = FileConflictResolution.CREATE_COPY,
             on_downloading_files: Optional[Callable[[ProgressReportMetadata], bool]] = None,
         ) -> DownloadSummaryStatistics:
-            return job_input_downloader.download_job_input(
+            return job_input_downloader.download(
                 file_conflict_resolution=file_conflict_resolution,
                 on_downloading_files=on_downloading_files,
             )
@@ -1434,7 +1428,9 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
             is_json_format=is_json_format,
             ignore_storage_profiles=ignore_storage_profiles,
             include_patterns=include_patterns,
-            match_paths_by=match_paths_by.upper() if match_paths_by else "LOCAL",
+            match_paths_by=MatchPathsBy(match_paths_by.upper())
+            if match_paths_by
+            else MatchPathsBy.LOCAL,
         )
     except Exception as e:
         if is_json_format:

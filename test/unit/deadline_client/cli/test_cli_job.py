@@ -316,14 +316,14 @@ def test_cli_job_download_output_stdout_with_only_required_input(
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_files_list = [
             "outputs/file1.txt",
             "outputs/file2.txt",
             "outputs/file3.txt",
         ]
-        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+        MockOutputDownloader.return_value.get_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
                 f"{mock_root_path}2": mock_files_list,
@@ -433,7 +433,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
 
         mock_root_path = "C:\\Users\\username" if sys.platform != "win32" else "/root/path"
         mock_files_list = [
@@ -441,7 +441,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             "outputs/file2.txt",
             "outputs/file3.txt",
         ]
-        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+        MockOutputDownloader.return_value.get_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
             },
@@ -539,7 +539,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
 
         # UNC format (which refers to the same location as 'C:\Users\username')
         mock_root_path = "\\\\127.0.0.1\\c$\\Users\\username"
@@ -548,7 +548,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
             "outputs/file2.txt",
             "outputs/file3.txt",
         ]
-        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+        MockOutputDownloader.return_value.get_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
             },
@@ -640,8 +640,8 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
-        MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {}
+        MockOutputDownloader.return_value.download = mock_download
+        MockOutputDownloader.return_value.get_paths_by_root.return_value = {}
 
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
         boto3_client_mock().get_job.return_value = {
@@ -716,13 +716,13 @@ def test_cli_job_download_output_stdout_with_json_format(
                 f"{mock_root_path}/outputs/file3.txt",
             ],
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_files_list = [
             "outputs/file1.txt",
             "outputs/file2.txt",
             "outputs/file3.txt",
         ]
-        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+        MockOutputDownloader.return_value.get_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
                 f"{mock_root_path}2": mock_files_list,
@@ -1344,7 +1344,7 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
@@ -1430,7 +1430,7 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         windows_root_path = "C:\\Users\\username"
         not_windows_root_path = "/root/path"
         mock_root_path = not_windows_root_path if sys.platform == "win32" else windows_root_path
@@ -1439,7 +1439,7 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
             "outputs/file2.txt",
             "outputs/file3.txt",
         ]
-        MockOutputDownloader.return_value.get_output_paths_by_root.side_effect = [
+        MockOutputDownloader.return_value.get_paths_by_root.side_effect = [
             {
                 f"{mock_root_path}": mock_files_list,
             },
@@ -1661,8 +1661,8 @@ def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
-        MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {}
+        MockOutputDownloader.return_value.download = mock_download
+        MockOutputDownloader.return_value.get_paths_by_root.return_value = {}
 
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
         boto3_client_mock().get_job.return_value = {
