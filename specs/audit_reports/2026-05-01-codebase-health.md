@@ -246,18 +246,18 @@ be parameterized with `#[test_case]`. `is_auto_accept` duplicated in
 
 ## Top 10 Actions by Impact
 
-| # | Action | Findings | Lines saved | Risk |
-|---|--------|----------|-------------|------|
-| 1 | Split `job.rs` into `job/` module | HEALTH-004 | 0 (reorg) | Low |
-| 2 | Split `upload.rs` into `upload/` module | HEALTH-005 | 0 (reorg) | Low |
-| 3 | Extract `parse_conflict_resolution` to `FromStr` | HEALTH-002 | ~80 | Low |
-| 4 | Extract shared S3 error handler | HEALTH-003 | ~60 | Low |
-| 5 | Create parameter structs for 10+ functions | HEALTH-007,008,009,022 | 0 (clarity) | Low |
-| 6 | Delete dead `SubmitterInfo` module | HEALTH-006 | ~137 | Low |
-| 7 | Consolidate `expand_tilde` | HEALTH-001 | ~20 | Low |
-| 8 | Consolidate duration formatting | HEALTH-010 | ~30 | Low |
-| 9 | Delete duplicate `fmt_size` / `human_readable_file_size` | HEALTH-014,015 | ~40 | Low |
-| 10 | Extract shared test helpers | HEALTH-023 | ~100 | Low |
+| # | Action | Findings | Status | Rationale |
+|---|--------|----------|--------|-----------|
+| 1 | Split `job.rs` into `job/` module | HEALTH-004 | ⊘ Skipped | One file per command group is the natural organization. Sections have clear comment headers. Splitting adds indirection without benefit — you'd jump between files instead of scrolling. |
+| 2 | Split `upload.rs` into `upload/` module | HEALTH-005 | ⊘ Skipped | Sections are sequential (prep → hash → upload → orchestrate) and read top-to-bottom. `S3UploadContext` is only used within upload.rs. Splitting scatters a linear flow. |
+| 3 | Extract `parse_conflict_resolution` to `FromStr` | HEALTH-002 | ✅ Done | Phase A cleanup batch |
+| 4 | Extract shared S3 error handler | HEALTH-003 | Deferred | Medium effort, low urgency |
+| 5 | Create parameter structs for 10+ functions | HEALTH-007,008,009,022 | ⊘ Skipped | Most functions are called from 1-2 sites. A struct for a single-caller function just moves field names from call site to constructor — same lines, more indirection. Suppress clippy warnings instead. |
+| 6 | Delete dead `SubmitterInfo` module | HEALTH-006 | ✅ Done | Phase A cleanup batch |
+| 7 | Consolidate `expand_tilde` | HEALTH-001 | ✅ Done | Phase A cleanup batch |
+| 8 | Consolidate duration formatting | HEALTH-010 | Deferred | Low urgency |
+| 9 | Delete duplicate `fmt_size` / `human_readable_file_size` | HEALTH-014,015 | ✅ Done | Phase A cleanup batch |
+| 10 | Extract shared test helpers | HEALTH-023 | Deferred | Low urgency |
 
 ## Cross-Crate Boundary Assessment
 
@@ -265,7 +265,7 @@ be parameterized with `#[test_case]`. `is_auto_accept` duplicated in
 |----------|--------|
 | `deadline-cli` → `deadline-api` | ✅ Clean — uses session, client, auth, telemetry APIs |
 | `deadline-cli` → `deadline-job-bundle` | ✅ Clean — uses `create_job_from_job_bundle` + `SubmitJobParams` |
-| `deadline-cli` → `deadline-job-attachments` | ⚠️ **Over-coupled** — `queue sync-output` uses 15+ internal types directly. Should use a higher-level orchestration API. |
+| `deadline-cli` → `deadline-job-attachments` | ✅ Acceptable — `queue sync-output` uses 15+ types but the orchestration is CLI-specific (progress bars, prompts, checkpoints). Wrapping in a library API would push CLI concerns into the library or create a thin wrapper with no value. The FFI layer doesn't use sync-output. |
 | `deadline-job-bundle` → `deadline-api` | ✅ Clean |
 | `deadline-job-bundle` → `deadline-job-attachments` | ✅ Clean |
 | `deadline-python-bindings` → all | ✅ Clean — thin FFI layer |

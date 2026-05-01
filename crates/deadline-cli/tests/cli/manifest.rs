@@ -551,3 +551,114 @@ async fn manifest_download_job_no_attachments_exits_with_error() {
         "Error should mention missing attachments/manifests, got: {combined}"
     );
 }
+
+// ===========================================================================
+// -ie short alias for --include-exclude-config
+// ===========================================================================
+
+/// `-ie` should be accepted as a short alias for `--include-exclude-config`
+/// on `manifest snapshot`.
+#[tokio::test]
+async fn manifest_snapshot_ie_short_alias() {
+    let harness = TestHarness::new().await;
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.txt"), b"hello").unwrap();
+
+    let output = harness.cli(&[
+        "manifest", "snapshot",
+        "--root", dir.path().to_str().unwrap(),
+        "-ie", r#"{"include": ["**/*"], "exclude": []}"#,
+    ]).output().expect("failed to run");
+
+    assert!(
+        output.status.success(),
+        "Expected -ie alias to be accepted, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+// ===========================================================================
+// manifest diff --root optional
+// ===========================================================================
+
+/// `manifest diff --manifest <file>` without `--root` should succeed,
+/// deriving the root from the manifest file's parent directory.
+#[tokio::test]
+async fn manifest_diff_root_optional() {
+    let harness = TestHarness::new().await;
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.txt"), b"hello").unwrap();
+
+    // First create a snapshot to get a manifest file
+    let output = harness.cli(&[
+        "manifest", "snapshot",
+        "--root", dir.path().to_str().unwrap(),
+    ]).output().expect("failed to run snapshot");
+    assert!(output.status.success());
+
+    // Find the manifest file
+    let manifest_file = fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .expect("manifest file should exist")
+        .path();
+
+    // Run diff WITHOUT --root — should derive root from manifest path
+    let output = harness.cli(&[
+        "manifest", "diff",
+        "--manifest", manifest_file.to_str().unwrap(),
+    ]).output().expect("failed to run diff");
+
+    assert!(
+        output.status.success(),
+        "Expected diff without --root to succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+// ===========================================================================
+// --json suppresses human-readable output
+// ===========================================================================
+
+/// `manifest snapshot --json` should only output valid JSON on stdout.
+/// Human-readable messages like "Manifest creation path defaulted to..."
+/// should NOT appear on stdout.
+#[tokio::test]
+async fn manifest_snapshot_json_only_json_on_stdout() {
+    let harness = TestHarness::new().await;
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.txt"), b"hello").unwrap();
+
+    let output = harness.cli(&[
+        "manifest", "snapshot",
+        "--root", dir.path().to_str().unwrap(),
+        "--json",
+    ]).output().expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // stdout should NOT contain human-readable messages
+    assert!(
+        !stdout.contains("Manifest creation path defaulted to"),
+        "Human-readable message should not appear on stdout with --json, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Manifest generated at"),
+        "Human-readable message should not appear on stdout with --json, got: {stdout}"
+    );
+
+    // stdout should be valid JSON
+    let trimmed = stdout.trim();
+    assert!(
+        !trimmed.is_empty(),
+        "Expected JSON output on stdout"
+    );
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(trimmed);
+    assert!(
+        parsed.is_ok(),
+        "stdout should be valid JSON, got parse error: {:?} for: {trimmed}",
+        parsed.err()
+    );
+}

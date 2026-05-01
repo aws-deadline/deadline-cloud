@@ -242,8 +242,18 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 job_parameters,
                 name,
                 priority: Some(priority),
-                max_failed_tasks_count,
-                max_retries_per_task,
+                max_failed_tasks_count: Some(max_failed_tasks_count.unwrap_or_else(|| {
+                    config_file::get_setting("settings.max_failed_tasks_count", &config)
+                        .unwrap_or_else(|_| "20".into())
+                        .parse::<i32>()
+                        .unwrap_or(20)
+                })),
+                max_retries_per_task: Some(max_retries_per_task.unwrap_or_else(|| {
+                    config_file::get_setting("settings.max_retries_per_task", &config)
+                        .unwrap_or_else(|_| "5".into())
+                        .parse::<i32>()
+                        .unwrap_or(5)
+                })),
                 max_worker_count,
                 target_task_run_status,
                 job_attachments_file_system,

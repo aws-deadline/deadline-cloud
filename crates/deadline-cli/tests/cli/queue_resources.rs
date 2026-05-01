@@ -218,3 +218,33 @@ async fn queue_get_storage_profile_sends_latency_telemetry() {
 
     harness.cli(&["queue", "get-storage-profile", "--storage-profile-id", "sp-001"]).assert().success();
 }
+
+// ===========================================================================
+// --output-format backward-compat flag
+// ===========================================================================
+
+/// `--output-format credentials_process` should be accepted (same behavior as without it).
+#[tokio::test]
+async fn export_credentials_output_format_flag() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        json!({
+            "credentials": {
+                "accessKeyId": "ASIAQUEUEUSER",
+                "secretAccessKey": "secretqueue",
+                "sessionToken": "tokenqueue",
+                "expiration": "2024-12-18T01:30:45Z"
+            }
+        }),
+    ).await;
+
+    // The --output-format flag should be accepted without error
+    harness.cli(&["queue", "export-credentials", "--output-format", "credentials_process"])
+        .assert()
+        .success();
+}

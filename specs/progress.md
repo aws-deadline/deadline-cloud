@@ -77,7 +77,7 @@ pick and execute work items.
 | 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
 | 21b | Spec drift detection | ✅ Done | — | — |
 | 21c | Python GUI boundary contract | Not started | — | 16c |
-| 21d | CLI backward-compat flags | Not started | — | — |
+| 21d | CLI backward-compat flags | ✅ Done | — | — |
 | 21e | `deadlinew` windowless launcher | Not started | — | — |
 | 21f | Windows config path normalization | Not started | — | — |
 | 21g | Telemetry parity (success/fail events) | Not started | — | — |
@@ -99,10 +99,10 @@ No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
 **In-progress details:** See `HANDOFF.md` for current state of any
 "In progress" work items.
 
-**Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`.
-All findings resolved (0 remaining). SDK calling behavior audit (#27b)
-complete — 0 high, 3 med, 7 low findings. See `HANDOFF.md` §SDK Calling
-Behavior Audit.
+**Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`
+(all findings resolved) and `audit_reports/2026-05-01-cli-feature-parity.md`
+(4 open findings: AUDIT-101, 103, 106, 107). Codebase health audit
+complete — see `audit_reports/2026-05-01-codebase-health.md`.
 
 **GUI FFI migration plan (#16a-16f):**
 

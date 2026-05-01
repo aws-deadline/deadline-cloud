@@ -1031,4 +1031,24 @@ mod tests {
             }
         }
     }
+
+    // --- New config settings for submission defaults ---
+
+    #[test]
+    fn max_retries_per_task_setting_exists_with_default() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting("settings.max_retries_per_task", &config).unwrap(),
+            "5"
+        );
+    }
+
+    #[test]
+    fn max_failed_tasks_count_setting_exists_with_default() {
+        let config = IniConfig::new();
+        assert_eq!(
+            get_setting("settings.max_failed_tasks_count", &config).unwrap(),
+            "20"
+        );
+    }
 }

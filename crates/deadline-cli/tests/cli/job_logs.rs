@@ -803,3 +803,87 @@ async fn job_logs_session_action_id_matches_session_id_succeeds() {
         "--session-action-id", "sessionaction-00000000000000000000000000000001-0",
     ]));
 }
+
+// ===========================================================================
+// --timezone deprecated flag
+// ===========================================================================
+
+/// `--timezone utc` should be accepted as a deprecated alias for `--timestamp-format utc`.
+/// A deprecation warning should appear on stderr.
+#[tokio::test]
+async fn job_logs_timezone_deprecated_flag() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
+        "jobId": "job-aaa", "name": "Render Job",
+    })).await;
+
+    sessions::mock_get_session(&harness.server, "farm-abc", "queue-abc", "job-aaa", json!({
+        "sessionId": "session-001",
+        "startedAt": "2024-12-18T00:00:00Z",
+        "fleetId": "fleet-abc",
+        "workerId": "worker-001",
+    })).await;
+
+    cloudwatch::mock_get_log_events(&harness.server, &[
+        json!({"timestamp": 1702857600000_i64, "message": "Test log line"}),
+    ], None).await;
+
+    let output = harness.cli(&[
+        "job", "logs",
+        "--session-id", "session-001",
+        "--timezone", "utc",
+    ]).output().expect("failed to run");
+
+    assert!(output.status.success(), "Expected success, stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--timezone is deprecated"), "Expected deprecation warning on stderr, got: {stderr}");
+}
+
+/// Using both --timezone and --timestamp-format should produce an error.
+#[tokio::test]
+async fn job_logs_timezone_and_timestamp_format_conflict() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    let output = harness.cli(&[
+        "job", "logs",
+        "--session-id", "session-001",
+        "--timezone", "utc",
+        "--timestamp-format", "local",
+    ]).output().expect("failed to run");
+
+    assert!(!output.status.success(), "Expected failure when both flags are provided");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("Cannot use both") || combined.contains("conflict"),
+        "Expected conflict error, got stdout: {stdout}, stderr: {stderr}"
+    );
+}
+
+/// Using both --timezone and --timestamp-format should error even when values match.
+/// The conflict is about using both flags, not about the values.
+#[tokio::test]
+async fn job_logs_timezone_and_timestamp_format_conflict_same_value() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    let output = harness.cli(&[
+        "job", "logs",
+        "--session-id", "session-001",
+        "--timezone", "utc",
+        "--timestamp-format", "utc",
+    ]).output().expect("failed to run");
+
+    assert!(!output.status.success(), "Expected failure when both flags are provided, even with same value");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("Cannot use both"),
+        "Expected conflict error, got stdout: {stdout}, stderr: {stderr}"
+    );
+}

@@ -254,6 +254,7 @@ mod tests {
                 farm_id: None,
                 queue_id: None,
                 mode: "USER".into(),
+                output_format: "credentials_process".into(),
             },
         };
         assert_eq!(command_name(&cmd), "deadline.queue.export-credentials");
@@ -284,7 +285,12 @@ fn redirect_std_to_file(file: &std::fs::File) {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    // Rewrite `-ie` → `--include-exclude-config` before clap parses args.
+    // Python click supports multi-char short flags; clap does not.
+    let args: Vec<String> = std::env::args()
+        .map(|a| if a == "-ie" { "--include-exclude-config".into() } else { a })
+        .collect();
+    let cli = Cli::parse_from(args);
 
     // Install SIGINT handler for graceful cancellation of long-running operations
     common::install_sigint_handler();

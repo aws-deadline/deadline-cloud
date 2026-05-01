@@ -1371,3 +1371,70 @@ async fn bundle_submit_no_attachments_no_hashing_upload_telemetry() {
     assert!(!stdout.contains("Upload Summary"),
         "Expected no upload summary for no-attachment bundle, got: {stdout}");
 }
+
+// ===========================================================================
+// Config defaults for max_retries_per_task / max_failed_tasks_count
+// ===========================================================================
+
+/// When --max-retries-per-task is not specified on CLI, the value from
+/// settings.max_retries_per_task config should be used in the CreateJob request.
+#[tokio::test]
+async fn bundle_submit_max_retries_from_config() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    harness.cli(&["config", "set", "settings.max_retries_per_task", "10"]).assert().success();
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "config_retries");
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+
+    // Verify the CreateJob request body contains maxRetriesPerTask: 10
+    let create_job_requests: Vec<_> = harness.server.received_requests().await.unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("/jobs") && r.method.as_ref() == "POST")
+        .collect();
+    assert_eq!(create_job_requests.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
+    assert_eq!(body["maxRetriesPerTask"], 10, "Expected config default maxRetriesPerTask=10, got: {}", body);
+}
+
+/// When --max-failed-tasks-count is not specified on CLI, the value from
+/// settings.max_failed_tasks_count config should be used in the CreateJob request.
+#[tokio::test]
+async fn bundle_submit_max_failed_from_config() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    harness.cli(&["config", "set", "settings.max_failed_tasks_count", "15"]).assert().success();
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "config_failed");
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
+
+    let create_job_requests: Vec<_> = harness.server.received_requests().await.unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("/jobs") && r.method.as_ref() == "POST")
+        .collect();
+    assert_eq!(create_job_requests.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
+    assert_eq!(body["maxFailedTasksCount"], 15, "Expected config default maxFailedTasksCount=15, got: {}", body);
+}
+
+/// CLI flag --max-retries-per-task should override the config setting.
+#[tokio::test]
+async fn bundle_submit_cli_flag_overrides_config_max_retries() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    harness.cli(&["config", "set", "settings.max_retries_per_task", "10"]).assert().success();
+    mock_submit_no_attachments(&harness).await;
+    let bundle_dir = create_bundle(&harness, "override_retries");
+
+    harness.cli(&["bundle", "submit", &bundle_dir, "--yes", "--max-retries-per-task", "3"]).assert().success();
+
+    let create_job_requests: Vec<_> = harness.server.received_requests().await.unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().contains("/jobs") && r.method.as_ref() == "POST")
+        .collect();
+    assert_eq!(create_job_requests.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
+    assert_eq!(body["maxRetriesPerTask"], 3, "CLI flag should override config, got: {}", body);
+}

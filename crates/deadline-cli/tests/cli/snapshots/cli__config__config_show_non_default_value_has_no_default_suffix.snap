@@ -11,17 +11,17 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:65042"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:65042"
-    AWS_ENDPOINT_URL_S3: "http://localhost:65042"
-    AWS_ENDPOINT_URL_STS: "http://localhost:65042"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:61183"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:61183"
+    AWS_ENDPOINT_URL_S3: "http://localhost:61183"
+    AWS_ENDPOINT_URL_STS: "http://localhost:61183"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpM4CLMH/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpM4CLMH
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp0bkxoB/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp0bkxoB
 ---
 success: true
 exit_code: 0
@@ -117,6 +117,14 @@ settings.submitter_update_notification: true (default)
    Enable update notification checks for DCC submitter integrations. When
    'true', the submitter checks for newer versions at startup. When 'false',
    update checks are skipped.
+
+settings.max_retries_per_task: 5 (default)
+   The default maximum number of times a task will retry before it is marked
+   as failed.
+
+settings.max_failed_tasks_count: 20 (default)
+   The default maximum number of tasks that can fail before the job is marked
+   as failed.
 
 
 ----- stderr -----

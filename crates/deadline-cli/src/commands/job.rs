@@ -140,8 +140,11 @@ pub enum JobAction {
         #[arg(long)] next_token: Option<String>,
         #[arg(long, default_value = "verbose")]
         output: String,
-        #[arg(long, default_value = "utc")]
-        timestamp_format: String,
+        #[arg(long)]
+        timestamp_format: Option<String>,
+        /// [DEPRECATED] Use --timestamp-format instead
+        #[arg(long)]
+        timezone: Option<String>,
     },
     /// Cancel a job, optionally marking it with an alternative status
     Cancel {
@@ -458,11 +461,30 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
             }
         }
-        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format } => {
+        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format, timezone } => {
             let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let is_json = output.eq_ignore_ascii_case("json");
+
+            // Handle --timezone deprecation
+            let timestamp_format = if let Some(ref tz) = timezone {
+                if timestamp_format.is_some() {
+                    // User explicitly provided both flags
+                    return Err(CliError::Operation(
+                        "Cannot use both --timezone and --timestamp-format options. Use --timestamp-format instead.".into()
+                    ));
+                }
+                if !is_json {
+                    eprintln!(
+                        "Warning: --timezone is deprecated and will be removed in a future version. \
+                         Use --timestamp-format {} instead.", tz
+                    );
+                }
+                tz.clone()
+            } else {
+                timestamp_format.unwrap_or_else(|| "utc".into())
+            };
 
             let job = get(&config, "defaults.job_id");
 

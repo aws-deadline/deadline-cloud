@@ -206,6 +206,24 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
             description: "Enable update notification checks for DCC submitter integrations. When 'true', the submitter checks for newer versions at startup. When 'false', update checks are skipped.",
         },
     ),
+    (
+        "settings.max_retries_per_task",
+        SettingDef {
+            default: "5",
+            depend: None,
+            section_format: None,
+            description: "The default maximum number of times a task will retry before it is marked as failed.",
+        },
+    ),
+    (
+        "settings.max_failed_tasks_count",
+        SettingDef {
+            default: "20",
+            depend: None,
+            section_format: None,
+            description: "The default maximum number of tasks that can fail before the job is marked as failed.",
+        },
+    ),
 ];
 
 /// Look up a setting definition by name. Returns `None` if unknown.

@@ -11,12 +11,12 @@
 | Priority | Count | Fixed | No Issue / Accepted | Remaining |
 |----------|-------|-------|---------------------|-----------|
 | Critical | 1     | 0     | 0                   | 1         |
-| High     | 2     | 0     | 0                   | 2         |
-| Medium   | 4     | 0     | 0                   | 4         |
-| Low      | 5     | 0     | 3                   | 2         |
+| High     | 2     | 1     | 0                   | 1         |
+| Medium   | 4     | 2     | 0                   | 2         |
+| Low      | 5     | 3     | 3                   | 0         |
 | Info     | 2     | 0     | 2                   | 0         |
 
-**Remaining open findings: 9**
+**Remaining open findings: 4** (AUDIT-101, AUDIT-103, AUDIT-106, AUDIT-107)
 
 ## Methodology
 
@@ -71,8 +71,8 @@ and subcommands to identify Rust-only additions and missing flags.
 - **Impact:** Users who configure `max_retries_per_task=10` via
   `deadline config set` will have it honored by Python CLI but silently
   ignored by Rust CLI. `config show` lists 20 settings (Rust) vs 22 (Python).
-- **Resolution:** Pending — add both settings to `SETTINGS` in
-  `deadline-config/src/settings.rs`, add config fallback in `bundle.rs`
+- **Resolution:** ✅ Fixed — added both settings to `SETTINGS` in
+  `deadline-config/src/settings.rs`, added config fallback in `bundle.rs`
 
 ### AUDIT-103: Missing `--ignore-storage-profiles` on `job download-output`
 
@@ -114,8 +114,7 @@ and subcommands to identify Rust-only additions and missing flags.
   defaulted to...", "Manifest generated at...") AND JSON to stdout. Breaks
   piping to `jq` or other JSON parsers.
 - **Impact:** Scripts that parse `--json` output will fail.
-- **Resolution:** Pending — suppress non-JSON output when `--json` is active,
-  or redirect human messages to stderr
+- **Resolution:** ✅ Fixed — gate human messages on `!json` in manifest.rs
 
 ### AUDIT-106: Telemetry `account_id` not resolved
 
@@ -189,7 +188,10 @@ and subcommands to identify Rust-only additions and missing flags.
 - **Rust behavior:** None of these flags exist.
 - **Impact:** Scripts using deprecated flags will break when switching
   to Rust CLI.
-- **Resolution:** Pending — tracked as work item #21d
+- **Resolution:** ✅ Fixed — added `--timezone` (deprecated, maps to
+  `--timestamp-format`), `--output-format` on `export-credentials`
+  (validates `credentials_process`), `-ie` arg rewriting in `main.rs`,
+  `--ie` long alias on manifest commands
 
 ### AUDIT-111: `manifest diff --root` is required in Rust, optional in Python
 
@@ -200,7 +202,8 @@ and subcommands to identify Rust-only additions and missing flags.
   the root from the manifest file's directory.
 - **Rust behavior:** `--root` is required (clap enforces it).
 - **Impact:** Minor UX difference. Users must always specify `--root` in Rust.
-- **Resolution:** Pending — make `--root` optional, derive from manifest path
+- **Resolution:** ✅ Fixed — `--root` is now `Option<String>`, derives
+  from manifest file's parent directory when omitted
 
 ### AUDIT-112: `config show` description text differs
 
@@ -257,16 +260,16 @@ and subcommands to identify Rust-only additions and missing flags.
 | ID | Title | Priority | Category | Status |
 |----|-------|----------|----------|--------|
 | AUDIT-101 | Auth status uses STS instead of ListFarms | Critical | Behavioral gap | Pending |
-| AUDIT-102 | Missing config settings for submission defaults | High | Behavioral gap | Pending |
+| AUDIT-102 | Missing config settings for submission defaults | High | Behavioral gap | ✅ Fixed |
 | AUDIT-103 | Missing `--ignore-storage-profiles` on download-output | High | Behavioral gap | Pending |
 | AUDIT-104 | Manifest snapshot includes `.manifest` files | Medium | Bug | Pending |
-| AUDIT-105 | `--json` doesn't suppress human-readable output | Medium | Bug | Pending |
+| AUDIT-105 | `--json` doesn't suppress human-readable output | Medium | Bug | ✅ Fixed |
 | AUDIT-106 | Telemetry `account_id` not resolved | Medium | Behavioral gap | Pending |
 | AUDIT-107 | Debug snapshot has reduced content | Medium | Behavioral gap | Pending |
 | AUDIT-108 | Rust-only subcommands not in Python CLI | Low | Extra Rust behavior | Pending |
 | AUDIT-109 | Rust-only `--json` on `bundle submit` | Low | Extra Rust behavior | Pending |
-| AUDIT-110 | Missing backward-compat flags | Low | Behavioral gap | Pending (#21d) |
-| AUDIT-111 | `manifest diff --root` required vs optional | Low | Behavioral gap | Pending |
+| AUDIT-110 | Missing backward-compat flags | Low | Behavioral gap | ✅ Fixed |
+| AUDIT-111 | `manifest diff --root` required vs optional | Low | Behavioral gap | ✅ Fixed |
 | AUDIT-112 | Config description text differs | Info | Nice-to-have | Accepted |
 | AUDIT-113 | Help text framework differences | Info | Nice-to-have | Accepted |
 | AUDIT-114 | Hash cache surrogatepass encoding | Info | Behavioral gap | Accepted |

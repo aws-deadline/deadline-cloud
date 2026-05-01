@@ -20,7 +20,7 @@ pub enum ManifestAction {
         include: Vec<String>,
         #[arg(short = 'e', long, num_args = 1..)]
         exclude: Vec<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "ie")]
         include_exclude_config: Option<String>,
         #[arg(long)]
         diff: Option<String>,
@@ -34,12 +34,12 @@ pub enum ManifestAction {
         #[arg(long, required = true)]
         manifest: String,
         #[arg(long)]
-        root: String,
+        root: Option<String>,
         #[arg(short = 'i', long, num_args = 1..)]
         include: Vec<String>,
         #[arg(short = 'e', long, num_args = 1..)]
         exclude: Vec<String>,
-        #[arg(long)]
+        #[arg(long, visible_alias = "ie")]
         include_exclude_config: Option<String>,
         #[arg(long)]
         force_rehash: bool,
@@ -113,7 +113,9 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
                     d.clone()
                 }
                 None => {
-                    println!("Manifest creation path defaulted to {root} \n");
+                    if !json {
+                        println!("Manifest creation path defaulted to {root} \n");
+                    }
                     root.clone()
                 }
             };
@@ -127,7 +129,9 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
             ).map_err(|e| CliError::Operation(e.to_string()))?;
 
             if let Some(snap) = result {
-                println!("Manifest generated at {}", snap.manifest);
+                if !json {
+                    println!("Manifest generated at {}", snap.manifest);
+                }
                 if json {
                     println!("{}", serde_json::to_string(&snap).unwrap_or_default());
                 }
@@ -143,6 +147,13 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
                     "Specified manifest file {manifest} does not exist. "
                 )));
             }
+            // Derive root from manifest's parent directory when not specified
+            let root = root.unwrap_or_else(|| {
+                std::path::Path::new(&manifest)
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| ".".to_string())
+            });
             if !std::path::Path::new(&root).is_dir() {
                 return Err(CliError::Operation(format!(
                     "Specified root directory {root} does not exist. "

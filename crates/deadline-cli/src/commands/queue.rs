@@ -37,6 +37,9 @@ pub enum QueueAction {
         /// USER (default) or READ
         #[arg(long, default_value = "USER")]
         mode: String,
+        /// Format of the output (default: credentials_process)
+        #[arg(long, default_value = "credentials_process", value_parser = ["credentials_process"])]
+        output_format: String,
     },
     /// Get a storage profile for a queue
     GetStorageProfile {
@@ -252,7 +255,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
             }
         }
-        QueueAction::ExportCredentials { profile, farm_id, queue_id, mode } => {
+        QueueAction::ExportCredentials { profile, farm_id, queue_id, mode, output_format: _ } => {
             let start = std::time::Instant::now();
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
