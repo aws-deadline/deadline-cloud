@@ -130,7 +130,7 @@ let resp = JobResponse::from(output);  // From<GetJobOutput> impl
 println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
 ```
 
-### What is a thin wrapper? (delete these)
+### What is a thin SDK wrapper? (delete these)
 
 A function is a **thin wrapper** if its only job is to:
 1. Get a client (`session::deadline_client`)
@@ -146,7 +146,8 @@ This includes:
 
 Even if a wrapper is used by 5+ callers, it's still a thin wrapper.
 Repetition of 2-3 lines at call sites is preferable to indirection that
-hides what SDK operation is being called.
+hides what SDK operation is being called, since operations can have optional
+parameters that may or may not be added, no point in wrapping that.
 
 **Keep a function in `api.rs` only if it has real logic beyond
 parameter forwarding:**
@@ -215,14 +216,6 @@ Output format: `"AccessDeniedException: User is not authorized..."`.
 
 **Never use `format!("{e}")` on an `SdkError`.** It produces `"service
 error"` which is useless to the user and breaks error-type detection.
-
-### Legacy: `ResponseBodyCapture` (dead code — D5e deletion)
-
-> **⚠️ DEAD CODE — zero consumers remain.**
->
-> `response_capture.rs` and `client::collect_paginated_raw` have no
-> callers after D5d. They will be deleted in D5e. Do not use.
-> See `specs/deadline-api/response-capture.md` for historical context only.
 
 
 ## Credential Scoping for Non-Deadline AWS Services

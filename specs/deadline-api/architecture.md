@@ -44,7 +44,6 @@ src/
 │                       #   batch_get_steps_page/batch_get_tasks_page,
 │                       #   create_job, wait_for_create_job_to_complete
 │                       #   (NO thin wrappers — callers own SDK calls directly)
-├── response_capture.rs # [DEAD CODE — being removed in D5e] ResponseBodyCapture interceptor
 ├── session.rs          # Session caching, credential resolution, queue-scoped configs
 ├── auth.rs             # DCM detection, login/logout, auth status checks
 ├── job_monitoring.rs   # Poll job until terminal state, collect failed task details
@@ -78,9 +77,6 @@ Callers access fields via typed accessors (`.farm_id()`, `.name()`).
 Display paths use `From<Output>` response structs that manually extract
 all fields into serializable types. Nested SDK types that lack
 `Serialize` are converted via `type_conversions.rs` helpers.
-
-**`ResponseBodyCapture` is dead code (D5e removal).** No code uses it
-anymore. It remains as a module only until D5e deletes the file.
 
 **Global session cache.** A process-wide cache holds SDK configs keyed
 by profile name, and queue credential configs keyed by farm+queue pair.
@@ -117,14 +113,6 @@ let client = session::deadline_client(Some(&config)).await;
 let pages: Vec<ListFarmsOutput> = client::collect_paginated(
     client.list_farms().into_paginator().send()
 ).await?;
-
-// Raw for print
-use deadline_api::response_capture::ResponseBodyCapture;
-let cap = ResponseBodyCapture::new();
-client.get_farm().farm_id(&farm)
-    .customize().interceptor(cap.clone())
-    .send().await.map_err(client::deadline_error)?;
-let resp = cap.json()?;
 ```
 
 ### Client helpers (`client.rs`)
@@ -132,7 +120,6 @@ let resp = cap.json()?;
 | Function | Description |
 |----------|-------------|
 | `collect_paginated` | Drain SDK paginator into Vec, one telemetry event |
-| `collect_paginated_raw` | Manual nextToken loop, aggregate items under key |
 | `apply_dcm_principal` | Set principal_id on list builders for DCM users |
 | `format_sdk_error` | Extract error code + message from any `SdkError` |
 | `deadline_error` | Map `SdkError` → `DeadlineError::OperationError` |
@@ -191,5 +178,4 @@ base config.
 | `TelemetryClient` | Background telemetry — pass to API functions for latency tracking |
 | `AwsCredentialsSource` | Enum: `NotValid`, `HostProvided`, `DeadlineCloudMonitorLogin` |
 | `AwsAuthenticationStatus` | Enum: `ConfigurationError`, `Authenticated`, `NeedsLogin` |
-| `ResponseBodyCapture` | SDK interceptor for raw JSON capture (print paths only) |
 | `TelemetryInterceptor` | SDK interceptor for automatic latency recording |

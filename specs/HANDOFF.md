@@ -7,7 +7,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** In progress — D5e next.
+**Status:** ✅ Complete
 
 ### Design intent (FINAL — no exceptions)
 
@@ -165,7 +165,7 @@ All `value["field"]` access → typed accessor chains:
   storage profiles, session actions, update/create). Delete ALL remaining thin
   wrappers including get_*, update_*, list_sessions/list_steps/list_tasks.
   Callers own their SDK calls — no wrapper functions in api.rs.
-- **D5e:** Delete `response_capture.rs`, `collect_paginated_raw`. Clean sweep.
+- **D5e:** ✅ Delete `response_capture.rs`, `collect_paginated_raw`. Clean sweep.
 
 ### Step status
 
@@ -197,6 +197,13 @@ All `value["field"]` access → typed accessor chains:
 - Telemetry pre-injected via `TelemetryInterceptor` on client — no per-call work
 - One snapshot updated: trace_schedule task parameter keys now sorted alphabetically
   (same accepted difference as D5c — HashMap non-determinism → explicit sort)
+
+**D5e** — ✅ Complete
+- Deleted `response_capture.rs` (ResponseBodyCapture interceptor — zero consumers)
+- Deleted `collect_paginated_raw` function and its 4 tests from `client.rs`
+- Removed `pub mod response_capture;` from `lib.rs`
+- Removed unused imports (`serde_json::Value`, `std::future::Future`) from `client.rs`
+- Zero references to `response_capture` or `collect_paginated_raw` remain in crates/
 
 ---
 

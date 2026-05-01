@@ -83,7 +83,7 @@ pick and execute work items.
 | 21g | Telemetry parity (success/fail events) | Not started | — | — |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
-| 27 | Typed SDK API layer | In progress (D5d done) | — | — |
+| 27 | Typed SDK API layer | ✅ Done | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |

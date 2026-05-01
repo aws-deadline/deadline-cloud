@@ -51,18 +51,12 @@ by createdAt threshold), `create_job` (JSON→typed parameter mapping),
 
 See `specs/patterns.md` § "What is a thin wrapper?" for the full rule.
 
-### Dead code pending D5e cleanup
-
-`response_capture.rs` and `client::collect_paginated_raw` have zero
-consumers and will be deleted in D5e.
-
 ## Document Index
 
 | Document | Description |
 |----------|-------------|
 | [architecture.md](architecture.md) | Module layout, public API surface, design decisions |
 | [session-cache.md](session-cache.md) | Global session cache, credential resolution, user-agent enrichment |
-| [response-capture.md](response-capture.md) | ResponseBodyCapture interceptor, datetime conversion, known differences from boto3 |
 | [credential-scoping.md](credential-scoping.md) | Queue/fleet role assumption for DCM users, scoped SdkConfig construction |
 | [log-retrieval.md](log-retrieval.md) | CloudWatch Logs integration, session auto-selection, fleet-scoped credentials |
 | [job-monitoring.md](job-monitoring.md) | wait_for_job_completion polling loop, failed task collection, backoff curve |
@@ -94,11 +88,6 @@ Gaps:
   hostname (Smithy host prefix). In tests, the stub server receives requests
   at `management.localhost:PORT`. The `.localhost` TLD resolves to 127.0.0.1
   per RFC 6761.
-
-- `ResponseBodyCapture` datetime conversion replaces `T` with space and
-  `Z` with `+00:00`. This matches the display format users expect but
-  means the raw JSON values are no longer valid ISO 8601. Code that needs
-  RFC 3339 (like `export-credentials`) must convert back.
 
 - CloudWatch SDK retries `AccessDeniedException` with backoff. Error-path
   tests that return 403 from a mock may cause subprocess hangs if retries

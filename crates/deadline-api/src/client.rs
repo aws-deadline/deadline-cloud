@@ -1,7 +1,7 @@
 //! Client helpers for invoking the Deadline Cloud SDK.
 //!
 //! Callers use the SDK fluent builder directly. These helpers handle:
-//! - Pagination aggregation (`collect_paginated`, `collect_paginated_raw`)
+//! - Pagination aggregation (`collect_paginated`)
 //! - Error mapping (`format_sdk_error`, `deadline_error`)
 //! - DCM principal injection (`apply_dcm_principal`)
 //!
@@ -12,8 +12,6 @@ use crate::errors::DeadlineError;
 use aws_sdk_deadline::error::SdkError;
 use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
-use serde_json::Value;
-use std::future::Future;
 
 /// Format any AWS SDK error to include the error code and message.
 pub fn format_sdk_error<E, R>(err: &SdkError<E, R>) -> String
@@ -53,30 +51,6 @@ where
         pages.push(page.map_err(deadline_error)?);
     }
     Ok(pages)
-}
-
-/// Raw-paginated drain. Loops on `nextToken`, aggregates items under `items_key`.
-pub async fn collect_paginated_raw<F, Fut>(
-    items_key: &str,
-    send_page: F,
-) -> Result<Value, DeadlineError>
-where
-    F: Fn(Option<String>) -> Fut,
-    Fut: Future<Output = Result<Value, DeadlineError>>,
-{
-    let mut all_items = Vec::new();
-    let mut next_token: Option<String> = None;
-    loop {
-        let page = send_page(next_token.take()).await?;
-        if let Some(items) = page[items_key].as_array() {
-            all_items.extend(items.iter().cloned());
-        }
-        match page.get("nextToken").and_then(|t| t.as_str()) {
-            Some(t) => next_token = Some(t.to_string()),
-            None => break,
-        }
-    }
-    Ok(serde_json::json!({ items_key: all_items }))
 }
 
 /// Trait for fluent builders that accept a `principal_id` filter.
@@ -175,65 +149,6 @@ mod tests {
         assert_eq!(pascal_to_snake(""), "");
         assert_eq!(pascal_to_snake("A"), "a");
         assert_eq!(pascal_to_snake("AB"), "a_b");
-    }
-
-    // --- collect_paginated_raw ---
-
-    #[tokio::test]
-    async fn collect_paginated_raw_aggregates_items_under_key() {
-        let page1 = json!({"farms": [{"farmId": "farm-aaa"}, {"farmId": "farm-bbb"}], "nextToken": "tok2"});
-        let page2 = json!({"farms": [{"farmId": "farm-ccc"}]});
-        let pages = vec![page1, page2];
-        let idx = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-        let result = collect_paginated_raw("farms", |token| {
-            let pages = pages.clone();
-            let idx = idx.clone();
-            async move {
-                let i = idx.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                match i {
-                    0 => { assert!(token.is_none()); Ok(pages[0].clone()) }
-                    1 => { assert_eq!(token.as_deref(), Some("tok2")); Ok(pages[1].clone()) }
-                    _ => panic!("too many calls"),
-                }
-            }
-        }).await.unwrap();
-
-        let farms = result["farms"].as_array().unwrap();
-        assert_eq!(farms.len(), 3);
-        assert_eq!(farms[0]["farmId"], "farm-aaa");
-        assert_eq!(farms[2]["farmId"], "farm-ccc");
-    }
-
-    #[tokio::test]
-    async fn collect_paginated_raw_single_page_no_loop() {
-        let result = collect_paginated_raw("queues", |token| {
-            async move {
-                assert!(token.is_none());
-                Ok(json!({"queues": [{"queueId": "q-1"}]}))
-            }
-        }).await.unwrap();
-
-        assert_eq!(result["queues"].as_array().unwrap().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn collect_paginated_raw_propagates_error() {
-        let result = collect_paginated_raw("farms", |_| async {
-            Err(DeadlineError::OperationError("AccessDeniedException: forbidden".into()))
-        }).await;
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("AccessDeniedException"));
-    }
-
-    #[tokio::test]
-    async fn collect_paginated_raw_empty_items() {
-        let result = collect_paginated_raw("jobs", |_| async {
-            Ok(json!({"jobs": []}))
-        }).await.unwrap();
-
-        assert_eq!(result["jobs"].as_array().unwrap().len(), 0);
     }
 
     // --- collect_paginated (typed, real SDK paginator against wiremock) ---
