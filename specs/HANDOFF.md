@@ -152,12 +152,12 @@ All `value["field"]` access → typed accessor chains:
 ### Step status
 
 - [x] Step 1 — Study
-- [x] Step 2 — Write tests (25 tests in type_conversions.rs, all fail)
-- [ ] Step 3 — Implement
-- [ ] Step 4 — CLI comparison
-- [ ] Step 5 — Audit
-- [ ] Step 6 — Spec
-- [ ] Step 7 — Commit
+- [x] Step 2 — Write tests (30 tests in type_conversions.rs)
+- [x] Step 3 — Implement (type_conversions.rs + From<Output> for all 7 structs + caller migration)
+- [x] Step 4 — CLI comparison (identical except pre-existing fractional seconds + alphabetical key order)
+- [x] Step 5 — Audit (stale doc comments fixed, no bugs)
+- [x] Step 6 — Spec (README.md updated)
+- [x] Step 7 — Commit
 
 ---
 

@@ -4,8 +4,8 @@
 //! for Python/JSON compatibility. DateTime fields are pre-formatted as strings.
 //!
 //! Complex nested SDK types (FleetConfiguration, JobRunAsUser, etc.) don't
-//! implement Serialize. These are stored as `serde_json::Value` extracted from
-//! the raw HTTP response body alongside the typed output.
+//! implement Serialize. These are converted to `serde_json::Value` by walking
+//! typed SDK accessors via helpers in `type_conversions.rs`.
 
 use crate::type_conversions::{
     attachments_to_value, dependency_counts_to_value, fleet_configuration_to_value,
@@ -81,7 +81,7 @@ impl From<GetFarmOutput> for FarmResponse {
 
 /// Response struct for GetQueue API output.
 /// Complex nested fields (jobAttachmentSettings, jobRunAsUser, schedulingConfiguration)
-/// are stored as raw JSON extracted from the HTTP response body.
+/// are converted from typed SDK output via type_conversions.rs helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueResponse {
@@ -146,7 +146,7 @@ impl From<GetQueueOutput> for QueueResponse {
 
 /// Response struct for GetFleet API output.
 /// Complex nested fields (configuration, hostConfiguration, capabilities)
-/// are stored as raw JSON extracted from the HTTP response body.
+/// are converted from typed SDK output via type_conversions.rs helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FleetResponse {
@@ -236,7 +236,7 @@ impl From<GetFleetOutput> for FleetResponse {
 
 /// Response struct for GetJob API output.
 /// Complex nested fields (taskRunStatusCounts, parameters, attachments)
-/// are stored as raw JSON extracted from the HTTP response body.
+/// are converted from typed SDK output via type_conversions.rs helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobResponse {
@@ -333,7 +333,7 @@ impl From<GetJobOutput> for JobResponse {
 
 /// Response struct for GetStep API output.
 /// Complex nested fields (taskRunStatusCounts, dependencyCounts,
-/// requiredCapabilities, parameterSpace) are stored as raw JSON.
+/// requiredCapabilities, parameterSpace) are converted from typed SDK output.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StepResponse {

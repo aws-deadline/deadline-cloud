@@ -11,20 +11,21 @@ Dependencies: `deadline-config`.
 
 Two patterns coexist:
 
-### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — Batch D1–D4 complete)
+### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — D5a complete)
 
 Base API functions return SDK output types directly. Callers that need
 specific fields use typed accessors. Callers that print the full response
-use `_with_raw` variants + response structs for serialization.
+use `From<Output>` on response structs — nested types are converted via
+`type_conversions.rs` helpers.
 
 ```rust
 // Typed get — returns SDK output directly
 let output = api::get_job(farm_id, queue_id, job_id, config).await?;
 let name = output.name();  // typed field access
 
-// Full-dump display — response struct from typed output + raw JSON
-let (output, raw) = api::get_job_with_raw(farm_id, queue_id, job_id, config).await?;
-let resp = JobResponse::from_output_and_raw(output, &raw);
+// Full-dump display — response struct built entirely from typed output
+let output = api::get_job(farm_id, queue_id, job_id, config).await?;
+let resp = JobResponse::from(output);
 println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
 
 // Typed list — paginator + field extraction
@@ -34,11 +35,11 @@ let items: Vec<_> = pages.iter().flat_map(|p| p.farms())
     .collect();
 ```
 
-### Legacy wrapper pattern (Queue, search APIs)
+### Legacy wrapper pattern (list/search APIs — D5b-D5e pending)
 
 Some wrapper functions in `api.rs` still use `ResponseBodyCapture` for
 raw JSON capture (e.g. `get_queue`, `search_workers`, `list_sessions`).
-These return `Value` and will be migrated in future batches.
+These return `Value` and will be migrated in D5b-D5e.
 
 ## Document Index
 
@@ -57,7 +58,8 @@ These return `Value` and will be migrated in future batches.
 `SessionResponse`, `WorkerResponse`) and `format_datetime` helper. Each
 struct maps 1:1 to a Get API output with `#[serde(rename_all = "camelCase")]`
 and `skip_serializing_if` for optional fields. Complex nested SDK types
-that lack `Serialize` are stored as `serde_json::Value` from raw capture.
+that lack `Serialize` are converted to `serde_json::Value` via
+`type_conversions.rs` helpers that walk typed SDK accessors.
 
 ## Status
 
