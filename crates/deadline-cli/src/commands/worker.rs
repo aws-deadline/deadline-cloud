@@ -46,19 +46,29 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::List { profile, farm_id, fleet_id, page_size, item_offset } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let resp = match api::search_workers(&farm, &[&fleet_id], item_offset, page_size, Some(&config)).await {
+            let dl = deadline_api::session::deadline_client(Some(&config)).await;
+            let resp = match dl.search_workers()
+                .farm_id(&farm)
+                .fleet_ids(&fleet_id)
+                .item_offset(item_offset)
+                .page_size(page_size)
+                .send()
+                .await
+            {
                 Ok(r) => r,
                 Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "SearchWorkers", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
-                    return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{e}{suggestion}")));
+                    let err_str = deadline_api::api::format_sdk_error(&e);
+                    let suggestion = suggest_resources_on_client_error(&err_str, "SearchWorkers", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{err_str}{suggestion}")));
                 }
             };
-            let total = resp["totalResults"].as_i64().unwrap_or(0);
-            let empty = vec![];
-            let workers = resp["workers"].as_array().unwrap_or(&empty);
+            let total = resp.total_results() as i64;
+            let workers = resp.workers();
             let structured: Vec<serde_json::Value> = workers
                 .iter()
-                .map(|w| serde_json::json!({"workerId": w["workerId"], "status": w["status"], "createdAt": w["createdAt"]}))
+                .map(|w| serde_json::json!({"workerId": w.worker_id().unwrap_or(""), "status": w.status().map(|s| s.as_str()).unwrap_or(""), "createdAt": w.created_at().map(|d| {
+                    d.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset).unwrap_or_default().replace('T', " ").replace('Z', "+00:00")
+                }).unwrap_or_default()}))
                 .collect();
             println!("Displaying {} of {} workers starting at {}", structured.len(), total, item_offset);
             println!();

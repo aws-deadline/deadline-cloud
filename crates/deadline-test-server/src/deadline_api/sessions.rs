@@ -37,6 +37,42 @@ pub async fn mock_list_sessions(
         .await;
 }
 
+/// Mount a paginated ListSessions response (2 pages).
+pub async fn mock_list_sessions_paginated(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    page1: &[Value],
+    page2: &[Value],
+) {
+    use wiremock::matchers::query_param;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "sessions": page1,
+                "nextToken": "sessions-page2"
+            })),
+        )
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions"
+        )))
+        .and(query_param("nextToken", "sessions-page2"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "sessions": page2 })),
+        )
+        .mount(server)
+        .await;
+}
+
 pub async fn mock_list_steps(
     server: &MockServer,
     farm_id: &str,
@@ -50,6 +86,42 @@ pub async fn mock_list_steps(
         )))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({ "steps": steps })),
+        )
+        .mount(server)
+        .await;
+}
+
+/// Mount a paginated ListSteps response (2 pages).
+pub async fn mock_list_steps_paginated(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    page1: &[Value],
+    page2: &[Value],
+) {
+    use wiremock::matchers::query_param;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "steps": page1,
+                "nextToken": "steps-page2"
+            })),
+        )
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps"
+        )))
+        .and(query_param("nextToken", "steps-page2"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "steps": page2 })),
         )
         .mount(server)
         .await;
@@ -69,6 +141,43 @@ pub async fn mock_list_tasks(
         )))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({ "tasks": tasks })),
+        )
+        .mount(server)
+        .await;
+}
+
+/// Mount a paginated ListTasks response (2 pages).
+pub async fn mock_list_tasks_paginated(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    step_id: &str,
+    page1: &[Value],
+    page2: &[Value],
+) {
+    use wiremock::matchers::query_param;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "tasks": page1,
+                "nextToken": "tasks-page2"
+            })),
+        )
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks"
+        )))
+        .and(query_param("nextToken", "tasks-page2"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "tasks": page2 })),
         )
         .mount(server)
         .await;

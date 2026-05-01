@@ -11,6 +11,37 @@ pub async fn mock_list_jobs(server: &MockServer, farm_id: &str, queue_id: &str, 
         .await;
 }
 
+/// Mount a paginated ListJobs response (GET, 2 pages).
+pub async fn mock_list_jobs_paginated(
+    server: &MockServer,
+    farm_id: &str,
+    queue_id: &str,
+    page1: &[Value],
+    page2: &[Value],
+) {
+    use wiremock::matchers::query_param;
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs")))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({
+                "jobs": page1,
+                "nextToken": "jobs-page2"
+            })),
+        )
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs")))
+        .and(query_param("nextToken", "jobs-page2"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "jobs": page2 })),
+        )
+        .mount(server)
+        .await;
+}
+
 /// Mount a SearchJobs response (POST). Used by `deadline job list`.
 pub async fn mock_search_jobs(
     server: &MockServer,

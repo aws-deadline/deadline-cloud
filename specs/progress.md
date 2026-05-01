@@ -83,7 +83,7 @@ pick and execute work items.
 | 21g | Telemetry parity (success/fail events) | Not started | — | — |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
-| 27 | Typed SDK API layer | In progress | — | — |
+| 27 | Typed SDK API layer | In progress (D5c done) | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
@@ -196,3 +196,10 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   types crossing the Rust→Python boundary (e.g. `ProgressReportMetadata`,
   `IniConfig`, API response dicts). Would catch contract drift between
   the Rust structs and Python dataclasses at the PyO3 boundary.
+- **API output field ordering**: Typed SDK output uses `HashMap` for maps
+  (e.g. `TaskParameterValue`, `taskRunStatusCounts`), which has
+  non-deterministic iteration order. Currently we sort parameter keys
+  alphabetically in `requeue-tasks` output. Audit all CLI print paths
+  that serialize SDK map types to ensure deterministic output order.
+  The Python CLI preserved wire order via JSON parsing; Rust needs
+  explicit sorting wherever maps are displayed.

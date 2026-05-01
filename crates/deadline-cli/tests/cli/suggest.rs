@@ -169,3 +169,20 @@ async fn queue_get_storage_profile_error_suggests_available_profiles() {
         "--storage-profile-id", "sp-bad",
     ]));
 }
+
+// GetJob error with paginated list_jobs for suggestions — verifies all pages are shown
+#[tokio::test]
+async fn job_get_error_paginated_list_jobs_shows_all_suggestions() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+
+    errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad").await;
+    jobs::mock_list_jobs_paginated(
+        &harness.server, "farm-abc", "queue-abc",
+        &[json!({"jobId": "job-page1", "name": "First Page Job"})],
+        &[json!({"jobId": "job-page2", "name": "Second Page Job"})],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "get", "--job-id", "job-bad"]));
+}

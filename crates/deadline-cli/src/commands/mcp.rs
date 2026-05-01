@@ -192,8 +192,16 @@ impl DeadlineServer {
     /// List all jobs in a queue.
     #[tool(name = "deadline_list_jobs")]
     async fn list_jobs(&self, Parameters(p): Parameters<ListJobsParams>) -> String {
-        match deadline_api::api::list_jobs(&p.farm_id, &p.queue_id, None).await {
-            Ok(v) => ok_result(v),
+        let dl = deadline_api::session::deadline_client(None).await;
+        let builder = deadline_api::client::apply_dcm_principal(dl.list_jobs().farm_id(&p.farm_id).queue_id(&p.queue_id), None);
+        match deadline_api::client::collect_paginated(builder.into_paginator().send()).await {
+            Ok(pages) => {
+                let jobs: Vec<serde_json::Value> = pages.iter()
+                    .flat_map(|p| p.jobs())
+                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(|s| s.as_str()), "lifecycleStatus": j.lifecycle_status().as_str(), "createdAt": j.created_at().to_string()}))
+                    .collect();
+                ok_result(json!({"jobs": jobs}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -285,7 +293,13 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_sessions")]
     async fn list_sessions(&self, Parameters(p): Parameters<ListSessionsParams>) -> String {
         match deadline_api::api::list_sessions(&p.farm_id, &p.queue_id, &p.job_id, None).await {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let sessions: Vec<serde_json::Value> = pages.iter()
+                    .flat_map(|pg| pg.sessions())
+                    .map(|s| json!({"sessionId": s.session_id(), "fleetId": s.fleet_id(), "workerId": s.worker_id(), "startedAt": s.started_at().to_string(), "lifecycleStatus": s.lifecycle_status().as_str()}))
+                    .collect();
+                ok_result(json!({"sessions": sessions}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -294,7 +308,13 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_steps")]
     async fn list_steps(&self, Parameters(p): Parameters<ListStepsParams>) -> String {
         match deadline_api::api::list_steps(&p.farm_id, &p.queue_id, &p.job_id, None).await {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let steps: Vec<serde_json::Value> = pages.iter()
+                    .flat_map(|pg| pg.steps())
+                    .map(|s| json!({"stepId": s.step_id(), "name": s.name(), "lifecycleStatus": s.lifecycle_status().as_str(), "createdAt": s.created_at.to_string()}))
+                    .collect();
+                ok_result(json!({"steps": steps}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -303,7 +323,13 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_tasks")]
     async fn list_tasks(&self, Parameters(p): Parameters<ListTasksParams>) -> String {
         match deadline_api::api::list_tasks(&p.farm_id, &p.queue_id, &p.job_id, &p.step_id, None).await {
-            Ok(v) => ok_result(v),
+            Ok(pages) => {
+                let tasks: Vec<serde_json::Value> = pages.iter()
+                    .flat_map(|pg| pg.tasks())
+                    .map(|t| json!({"taskId": t.task_id(), "runStatus": t.run_status().as_str(), "createdAt": t.created_at.to_string(), "createdBy": t.created_by()}))
+                    .collect();
+                ok_result(json!({"tasks": tasks}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -311,7 +337,6 @@ impl DeadlineServer {
     /// Search for jobs with optional filters.
     #[tool(name = "deadline_search_jobs")]
     async fn search_jobs(&self, Parameters(p): Parameters<SearchJobsParams>) -> String {
-        let queue_id_refs: Vec<&str> = p.queue_ids.iter().map(|s| s.as_str()).collect();
         let page_size = p.page_size.unwrap_or(25).clamp(1, 100);
         let item_offset = p.item_offset.unwrap_or(0).clamp(0, 10000);
 
@@ -325,12 +350,42 @@ impl DeadlineServer {
         let filter_expr = if filters.is_empty() { None }
         else { Some(json!({"filters": filters, "operator": "AND"})) };
 
-        match deadline_api::api::search_jobs_with_filters(
-            &p.farm_id, &queue_id_refs, item_offset, page_size,
-            filter_expr.as_ref(), None, None,
-        ).await {
-            Ok(v) => ok_result(v),
-            Err(e) => error_json("DeadlineError", &e.to_string()),
+        let filter = filter_expr.as_ref().map(|f| deadline_api::api::build_filter_expressions(f));
+        let filter = match filter {
+            Some(Ok(f)) => Some(f),
+            Some(Err(e)) => return error_json("DeadlineError", &e.to_string()),
+            None => None,
+        };
+
+        let dl = deadline_api::session::deadline_client(None).await;
+        let mut req = dl.search_jobs()
+            .farm_id(&p.farm_id)
+            .set_queue_ids(Some(p.queue_ids.clone()))
+            .item_offset(item_offset)
+            .page_size(page_size);
+
+        if let Some(ref f) = filter {
+            req = req.filter_expressions(f.clone());
+        }
+
+        req = req.sort_expressions(
+            aws_sdk_deadline::types::SearchSortExpression::FieldSort(
+                aws_sdk_deadline::types::FieldSortExpression::builder()
+                    .name("CREATED_AT")
+                    .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
+                    .build()
+                    .unwrap(),
+            ),
+        );
+
+        match req.send().await {
+            Ok(output) => {
+                let jobs: Vec<serde_json::Value> = output.jobs().iter()
+                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(|s| s.as_str()), "createdAt": j.created_at().map(|d| d.to_string()), "createdBy": j.created_by()}))
+                    .collect();
+                ok_result(json!({"jobs": jobs, "totalResults": output.total_results()}))
+            }
+            Err(e) => error_json("DeadlineError", &deadline_api::api::format_sdk_error(&e)),
         }
     }
 

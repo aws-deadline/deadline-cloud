@@ -229,7 +229,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
-            let resp = match api::search_jobs(&farm, &[&queue], item_offset, page_size, Some(&config)).await {
+            let resp = match search_jobs_call(&farm, &[&queue], item_offset, page_size, None, None, Some(&config)).await {
                 Ok(r) => r,
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
@@ -240,7 +240,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     )));
                 }
             };
-            print_job_list(&resp, item_offset);
+            print_search_jobs_output(&resp, item_offset);
             Ok(())
         }
         JobAction::Get { search_term, profile, farm_id, queue_id, job_id } => {
@@ -292,10 +292,23 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_sessions(&farm, &queue, &job, Some(&config))
+            let pages = api::list_sessions(&farm, &queue, &job, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
-            println!("{}", crate::common::cli_object_repr(&resp["sessions"]));
+            let sessions: Vec<serde_json::Value> = pages.iter()
+                .flat_map(|p| p.sessions())
+                .map(|s| {
+                    let mut m = serde_json::Map::new();
+                    m.insert("sessionId".into(), serde_json::Value::String(s.session_id().to_string()));
+                    m.insert("fleetId".into(), serde_json::Value::String(s.fleet_id().to_string()));
+                    m.insert("workerId".into(), serde_json::Value::String(s.worker_id().to_string()));
+                    m.insert("startedAt".into(), serde_json::Value::String(format_datetime(s.started_at())));
+                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_string()));
+                    if let Some(ended) = s.ended_at() { m.insert("endedAt".into(), serde_json::Value::String(format_datetime(ended))); }
+                    serde_json::Value::Object(m)
+                })
+                .collect();
+            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(sessions)));
             Ok(())
         }
         JobAction::ListSteps { profile, farm_id, queue_id, job_id } => {
@@ -303,10 +316,21 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_steps(&farm, &queue, &job, Some(&config))
+            let pages = api::list_steps(&farm, &queue, &job, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
-            println!("{}", crate::common::cli_object_repr(&resp["steps"]));
+            let steps: Vec<serde_json::Value> = pages.iter()
+                .flat_map(|p| p.steps())
+                .map(|s| {
+                    let mut m = serde_json::Map::new();
+                    m.insert("stepId".into(), serde_json::Value::String(s.step_id().to_string()));
+                    m.insert("name".into(), serde_json::Value::String(s.name().to_string()));
+                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_string()));
+                    m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&s.created_at)));
+                    serde_json::Value::Object(m)
+                })
+                .collect();
+            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(steps)));
             Ok(())
         }
         JobAction::ListTasks { profile, farm_id, queue_id, job_id, step_id } => {
@@ -314,10 +338,21 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config))
+            let pages = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config))
                 .await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
-            println!("{}", crate::common::cli_object_repr(&resp["tasks"]));
+            let tasks: Vec<serde_json::Value> = pages.iter()
+                .flat_map(|p| p.tasks())
+                .map(|t| {
+                    let mut m = serde_json::Map::new();
+                    m.insert("taskId".into(), serde_json::Value::String(t.task_id().to_string()));
+                    m.insert("runStatus".into(), serde_json::Value::String(t.run_status().as_str().to_string()));
+                    m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&t.created_at)));
+                    m.insert("createdBy".into(), serde_json::Value::String(t.created_by().to_string()));
+                    serde_json::Value::Object(m)
+                })
+                .collect();
+            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(tasks)));
             Ok(())
         }
         JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
@@ -774,55 +809,63 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             let mut total_requeued: i64 = 0;
 
-            let steps_resp = api::list_steps(&farm, &queue, &job_id, Some(&config)).await
+            let steps_pages = api::list_steps(&farm, &queue, &job_id, Some(&config)).await
                 .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
-            let steps = steps_resp["steps"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
 
-            for step in steps {
-                let step_id = step["stepId"].as_str().unwrap_or("");
-                let step_name = step["name"].as_str().unwrap_or("");
-                println!("\nStep: {step_name} ({step_id})");
+            for page in &steps_pages {
+                for step in page.steps() {
+                    let step_id = step.step_id();
+                    let step_name = step.name();
+                    println!("\nStep: {step_name} ({step_id})");
 
-                let step_counts = step.get("taskRunStatusCounts").and_then(|v| v.as_object());
-                let (step_to_requeue, step_summary) = count_and_summarize(step_counts, &run_status_set);
+                    let step_counts = step.task_run_status_counts();
+                    let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts.iter()
+                        .map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into())))
+                        .collect();
+                    let (step_to_requeue, step_summary) = count_and_summarize(Some(&step_counts_map), &run_status_set);
 
-                if step_to_requeue == 0 {
-                    println!("  Step has no tasks to requeue.");
-                    continue;
-                }
-                println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
-
-                let tasks_resp = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config)).await
-                    .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
-                let tasks = tasks_resp["tasks"].as_array().map(|v| v.as_slice()).unwrap_or(&[]);
-
-                for task in tasks {
-                    let status = task.get("runStatus").and_then(|v| v.as_str()).unwrap_or("");
-                    if !run_status_set.contains(&status.to_uppercase()) {
+                    if step_to_requeue == 0 {
+                        println!("  Step has no tasks to requeue.");
                         continue;
                     }
-                    let task_id = task["taskId"].as_str().unwrap_or("");
-                    let params = task.get("parameters").and_then(|v| v.as_object());
-                    let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
-                        let param_str: String = p.iter().map(|(name, val)| {
-                            // Union type: {"Frame": {"int": "1"}} → extract first value of inner dict
-                            let extracted = val.as_object()
-                                .and_then(|inner| inner.values().next())
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            format!("{name}={extracted}")
-                        }).collect::<Vec<_>>().join(",");
-                        format!("{param_str} ({task_id})")
-                    } else {
-                        task_id.to_string()
-                    };
-                    println!("    {status} {task_summary}");
+                    println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
 
-                    api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config),
-                        Some(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)),
-                    ).await
-                        .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
-                    total_requeued += 1;
+                    let tasks_pages = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config)).await
+                        .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
+
+                    for tpage in &tasks_pages {
+                        for task in tpage.tasks() {
+                            let status = task.run_status().as_str();
+                            if !run_status_set.contains(&status.to_uppercase()) {
+                                continue;
+                            }
+                            let task_id = task.task_id();
+                            let params = task.parameters();
+                            let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
+                                let mut param_pairs: Vec<_> = p.iter().map(|(name, val)| {
+                                    let extracted = match val {
+                                        aws_sdk_deadline::types::TaskParameterValue::Int(i) => i.clone(),
+                                        aws_sdk_deadline::types::TaskParameterValue::Float(f) => f.clone(),
+                                        aws_sdk_deadline::types::TaskParameterValue::String(s) => s.clone(),
+                                        aws_sdk_deadline::types::TaskParameterValue::Path(p) => p.clone(),
+                                        _ => String::new(),
+                                    };
+                                    format!("{name}={extracted}")
+                                }).collect();
+                                param_pairs.sort();
+                                format!("{} ({task_id})", param_pairs.join(","))
+                            } else {
+                                task_id.to_string()
+                            };
+                            println!("    {status} {task_summary}");
+
+                            api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config),
+                                Some(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)),
+                            ).await
+                                .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
+                            total_requeued += 1;
+                        }
+                    }
                 }
             }
 
@@ -837,7 +880,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let filter_json = parse_json_or_file_arg(filter_expressions.as_deref())?;
             let sort_json = parse_json_or_file_arg(sort_expressions.as_deref())?;
 
-            let resp = match api::search_jobs_with_filters(
+            let resp = match search_jobs_call(
                 &farm, &[queue.as_str()], item_offset, page_size,
                 filter_json.as_ref(), sort_json.as_ref(),
                 Some(&config),
@@ -852,7 +895,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     )));
                 }
             };
-            print_job_list(&resp, item_offset);
+            print_search_jobs_output(&resp, item_offset);
             Ok(())
         }
         JobAction::TraceSchedule {
@@ -1017,7 +1060,7 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
         }],
         "operator": "AND"
     });
-    let resp = match api::search_jobs_with_filters(
+    let resp = match search_jobs_call(
         farm, &[queue], 0, 5, Some(&filter), None, Some(config),
     ).await {
         Ok(r) => r,
@@ -1026,9 +1069,8 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
         }
     };
 
-    let empty = vec![];
-    let jobs = resp["jobs"].as_array().unwrap_or(&empty);
-    let total = resp["totalResults"].as_i64().unwrap_or(0);
+    let jobs = resp.jobs();
+    let total = resp.total_results() as i64;
 
     if jobs.is_empty() {
         println!("No jobs found matching \"{search_term}\"");
@@ -1036,26 +1078,27 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
     }
 
     if total == 1 {
-        let job_id = jobs[0]["jobId"].as_str().unwrap_or("");
+        let job_id = jobs[0].job_id().unwrap_or("");
         return print_job_details(farm, queue, job_id, config).await;
     }
 
     // Multiple results — show summary
     println!("Found {total} job(s) matching \"{search_term}\", showing most recent {}:\n", jobs.len());
     for job in jobs {
-        let name = job.get("name").or(job.get("displayName"))
-            .and_then(|v| v.as_str()).unwrap_or("");
+        let name = job.name().unwrap_or("");
         let name = truncate_middle(name, 80);
-        let job_id = job["jobId"].as_str().unwrap_or("");
-        let status = job["taskRunStatus"].as_str().unwrap_or("");
-        let created = job["createdAt"].as_str().map(|s| {
-            // Convert to local time like Python's _format_timestamp
+        let job_id = job.job_id().unwrap_or("");
+        let status = job.task_run_status().map(|s| s.as_str()).unwrap_or("");
+        let created = job.created_at().map(|dt| {
+            let s = format_datetime(dt);
             chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
                 .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S %z").to_string())
-                .unwrap_or_else(|_| s.to_string())
+                .unwrap_or_else(|_| s)
         }).unwrap_or_default();
-        let counts = job.get("taskRunStatusCounts").and_then(|v| v.as_object());
-        let task_summary = format_task_summary(counts);
+        let counts = job.task_run_status_counts().map(|c| {
+            c.iter().map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into()))).collect::<serde_json::Map<String, serde_json::Value>>()
+        });
+        let task_summary = format_task_summary(counts.as_ref());
 
         println!("  {name}");
         println!("    {job_id}  {status:<12}  {created}");
@@ -1106,26 +1149,87 @@ fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value
 }
 
 /// Print job list output (shared between `job list` and `job search`).
-fn print_job_list(resp: &serde_json::Value, item_offset: i32) {
-    let total = resp["totalResults"].as_i64().unwrap_or(0);
-    let empty = vec![];
-    let jobs = resp["jobs"].as_array().unwrap_or(&empty);
+/// Format an AWS DateTime to the display format matching Python CLI output.
+fn format_datetime(dt: &aws_sdk_deadline::primitives::DateTime) -> String {
+    // Format as "YYYY-MM-DD HH:MM:SS+00:00" to match Python/ResponseBodyCapture output
+    dt.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset)
+        .unwrap_or_default()
+        .replace('T', " ")
+        // Remove fractional seconds if present (e.g. ".000Z" → "+00:00")
+        .replace('Z', "+00:00")
+}
 
-    let name_field = if jobs.first().map_or(false, |j| j.get("name").is_some()) {
-        "name"
+/// Call SearchJobs directly via the SDK. Returns typed output.
+async fn search_jobs_call(
+    farm_id: &str,
+    queue_ids: &[&str],
+    item_offset: i32,
+    page_size: i32,
+    filter_expressions: Option<&serde_json::Value>,
+    sort_expressions: Option<&serde_json::Value>,
+    config: Option<&IniConfig>,
+) -> Result<aws_sdk_deadline::operation::search_jobs::SearchJobsOutput, deadline_api::errors::DeadlineError> {
+    use deadline_api::errors::DeadlineError;
+
+    let filter = filter_expressions.map(api::build_filter_expressions).transpose()?;
+    let sort = sort_expressions.map(api::build_sort_expressions).transpose()?;
+    let client = deadline_api::session::deadline_client(config).await;
+
+    let mut req = client
+        .search_jobs()
+        .farm_id(farm_id)
+        .set_queue_ids(Some(queue_ids.iter().map(|s| s.to_string()).collect()))
+        .item_offset(item_offset)
+        .page_size(page_size);
+
+    if let Some(ref f) = filter {
+        req = req.filter_expressions(f.clone());
+    }
+
+    if let Some(ref sorts) = sort {
+        for s in sorts {
+            req = req.sort_expressions(s.clone());
+        }
     } else {
-        "displayName"
-    };
+        req = req.sort_expressions(
+            aws_sdk_deadline::types::SearchSortExpression::FieldSort(
+                aws_sdk_deadline::types::FieldSortExpression::builder()
+                    .name("CREATED_AT")
+                    .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
+                    .build()
+                    .unwrap(),
+            ),
+        );
+    }
+
+    req.send().await.map_err(|e| DeadlineError::OperationError(deadline_api::api::format_sdk_error(&e)))
+}
+
+/// Print SearchJobs output in the standard job list format.
+fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::SearchJobsOutput, item_offset: i32) {
+    let total = resp.total_results() as i64;
+    let jobs = resp.jobs();
 
     let structured: Vec<serde_json::Value> = jobs.iter().map(|j| {
         let mut m = serde_json::Map::new();
-        for &field in &[name_field, "jobId", "taskRunStatus", "startedAt", "endedAt", "createdBy", "createdAt"] {
-            let v = j.get(field).and_then(|v| v.as_str()).unwrap_or("");
-            m.insert(field.into(), serde_json::Value::String(v.to_string()));
-        }
+        m.insert("name".into(), serde_json::Value::String(j.name().unwrap_or("").to_string()));
+        m.insert("jobId".into(), serde_json::Value::String(j.job_id().unwrap_or("").to_string()));
+        m.insert("taskRunStatus".into(), serde_json::Value::String(j.task_run_status().map(|s| s.as_str()).unwrap_or("").to_string()));
+        m.insert("startedAt".into(), serde_json::Value::String(j.started_at().map(|d| format_datetime(d)).unwrap_or_default()));
+        m.insert("endedAt".into(), serde_json::Value::String(j.ended_at().map(|d| format_datetime(d)).unwrap_or_default()));
+        m.insert("createdBy".into(), serde_json::Value::String(j.created_by().unwrap_or("").to_string()));
+        m.insert("createdAt".into(), serde_json::Value::String(j.created_at().map(|d| format_datetime(d)).unwrap_or_default()));
+        // Estimate remaining time from task run status counts
+        let counts_val = j.task_run_status_counts().map(|counts| {
+            let map: serde_json::Map<String, serde_json::Value> = counts.iter()
+                .map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into())))
+                .collect();
+            serde_json::Value::Object(map)
+        }).unwrap_or(serde_json::Value::Null);
+        let fake_job = serde_json::json!({"taskRunStatusCounts": counts_val, "startedAt": j.started_at().map(|d| format_datetime(d)).unwrap_or_default()});
         m.insert("estimatedTimeRemaining".into(),
             serde_json::Value::String(
-                estimate_remaining_time(j).unwrap_or_else(|| "N/A".into())
+                estimate_remaining_time(&fake_job).unwrap_or_else(|| "N/A".into())
             ));
         serde_json::Value::Object(m)
     }).collect();
@@ -1722,10 +1826,21 @@ async fn run_trace_schedule(
     let trace_end_utc = chrono::Utc::now();
 
     // Fetch all sessions
-    let sessions_resp = api::list_sessions(&farm, &queue, &job, Some(&config)).await
+    let sessions_pages = api::list_sessions(&farm, &queue, &job, Some(&config)).await
         .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
-    let mut sessions: Vec<serde_json::Value> = sessions_resp["sessions"]
-        .as_array().cloned().unwrap_or_default();
+    let mut sessions: Vec<serde_json::Value> = sessions_pages.iter()
+        .flat_map(|p| p.sessions())
+        .map(|s| {
+            let mut m = serde_json::Map::new();
+            m.insert("sessionId".into(), json!(s.session_id()));
+            m.insert("workerId".into(), json!(s.worker_id()));
+            m.insert("fleetId".into(), json!(s.fleet_id()));
+            m.insert("lifecycleStatus".into(), json!(s.lifecycle_status().as_str()));
+            m.insert("startedAt".into(), json!(format_datetime(s.started_at())));
+            if let Some(ended) = s.ended_at() { m.insert("endedAt".into(), json!(format_datetime(ended))); }
+            serde_json::Value::Object(m)
+        })
+        .collect();
     // Sort by startedAt
     sessions.sort_by(|a, b| {
         let a_t = a["startedAt"].as_str().unwrap_or("");

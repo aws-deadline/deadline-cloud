@@ -11,7 +11,7 @@ Dependencies: `deadline-config`.
 
 Two patterns coexist:
 
-### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — D5a complete)
+### Typed pattern (Farm, Queue, Fleet, Job, Step, Task, Session, Worker — D5a-D5c complete)
 
 Base API functions return SDK output types directly. Callers that need
 specific fields use typed accessors. Callers that print the full response
@@ -33,13 +33,25 @@ let pages = client::collect_paginated(dl.list_farms().into_paginator().send()).a
 let items: Vec<_> = pages.iter().flat_map(|p| p.farms())
     .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
     .collect();
+
+// Typed list via api.rs — returns Vec<PageOutput>
+let pages = api::list_steps(farm_id, queue_id, job_id, config).await?;
+for page in &pages {
+    for step in page.steps() { /* typed StepSummary access */ }
+}
+
+// Search (single-page, offset-based) — callers call SDK directly
+let output = client.search_jobs().farm_id(farm).queue_ids(queue)
+    .item_offset(0).page_size(25).send().await?;
+for job in output.jobs() { /* typed JobSearchSummary access */ }
 ```
 
-### Legacy wrapper pattern (list/search APIs — D5b-D5e pending)
+### Legacy wrapper pattern (remaining APIs — D5d-D5e pending)
 
 Some wrapper functions in `api.rs` still use `ResponseBodyCapture` for
-raw JSON capture (e.g. `get_queue`, `search_workers`, `list_sessions`).
-These return `Value` and will be migrated in D5b-D5e.
+raw JSON capture (e.g. `list_storage_profiles_for_queue`,
+`list_session_actions`, `list_queue_environments`). These return `Value`
+and will be migrated in D5d-D5e.
 
 ## Document Index
 
@@ -99,8 +111,9 @@ Gaps:
 Mirrors the Python `deadline.client.api` module's public API surface.
 Key differences:
 - Python uses `boto3.Session` with `@lru_cache`; Rust uses `LazyLock<Mutex<SessionCache>>`
-- Python returns typed SDK output objects; Rust returns `serde_json::Value`
-  (via `ResponseBodyCapture`)
-- Python uses `botocore` paginators; Rust uses manual `nextToken` loops
+- Python returns typed SDK output objects; Rust returns typed SDK output
+  for get/list/search APIs (D5a-D5c), `Value` for remaining wrappers (D5d)
+- Python uses `botocore` paginators; Rust uses SDK native paginators via
+  `collect_paginated()` for list APIs, manual `nextToken` loops for remaining
 - Python's `QueueBoto3Session` wraps boto3; Rust's `QueueUserCredentialProvider`
   implements the SDK's `ProvideCredentials` trait directly

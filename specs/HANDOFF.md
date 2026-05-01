@@ -7,7 +7,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** In progress — D5c next.
+**Status:** In progress — D5d next.
 
 ### Design intent (FINAL — no exceptions)
 
@@ -151,7 +151,16 @@ All `value["field"]` access → typed accessor chains:
 - **D5a:** ✅ Convert all 7 response structs to `From<Output>` with manual
   nested type extraction. Remove `_with_raw` variants. Fix display callers.
 - **D5b:** ✅ Delete `get_queue` + credential API wrappers. Callers call SDK directly.
-- **D5c:** Convert list/search APIs to typed paginators. Delete wrappers. Migrate callers.
+- **D5c:** ✅ Convert list/search APIs to typed paginators. Delete wrappers. Migrate callers.
+  - Deleted 7 wrappers: `list_jobs`, `search_jobs`, `search_jobs_with_filters`,
+    `search_workers`, `list_sessions`, `list_steps`, `list_tasks`
+  - Replaced `list_sessions`/`list_steps`/`list_tasks` with typed paginator versions
+  - Refactored `list_jobs_by_filter_expression` to call SDK directly
+  - Made `build_filter_expressions`/`build_sort_expressions` public
+  - Migrated 15+ callers across job.rs, worker.rs, helpers.rs, mcp.rs,
+    queue.rs, job_monitoring.rs, log_retrieval.rs
+  - One accepted difference: task parameter ordering now sorted alphabetically
+    (HashMap non-determinism → explicit sort for deterministic output)
 - **D5d:** Convert remaining (queue environments, fleet associations,
   storage profiles, session actions, update/create). Delete remaining thin
   get_* wrappers (get_job, get_step, get_task, get_worker, get_session).

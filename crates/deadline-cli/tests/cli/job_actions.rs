@@ -273,3 +273,31 @@ async fn job_requeue_tasks_get_job_fails_prints_error() {
 
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--yes"]));
 }
+
+// Requeue with paginated list_steps — verifies all pages are processed
+#[tokio::test]
+async fn job_requeue_tasks_with_paginated_steps() {
+    let harness = TestHarness::new().await;
+    setup(&harness).await;
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
+        "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
+        "taskRunStatus": "FAILED",
+        "taskRunStatusCounts": { "FAILED": 2, "SUCCEEDED": 3 },
+    })).await;
+    // Steps across 2 pages
+    sessions::mock_list_steps_paginated(&harness.server, FARM, QUEUE, JOB,
+        &[json!({"stepId": "step-aaaa", "name": "Step A", "taskRunStatusCounts": {"SUCCEEDED": 3}})],
+        &[json!({"stepId": "step-bbbb", "name": "Step B", "taskRunStatusCounts": {"FAILED": 2}})],
+    ).await;
+    sessions::mock_list_tasks(&harness.server, FARM, QUEUE, JOB, "step-aaaa",
+        &[json!({"taskId": "task-0001", "runStatus": "SUCCEEDED"})]).await;
+    sessions::mock_list_tasks(&harness.server, FARM, QUEUE, JOB, "step-bbbb", &[
+        json!({"taskId": "task-0002", "runStatus": "FAILED"}),
+        json!({"taskId": "task-0003", "runStatus": "FAILED"}),
+    ]).await;
+    for tid in &["task-0002", "task-0003"] {
+        sessions::mock_update_task(&harness.server, FARM, QUEUE, JOB, "step-bbbb", tid).await;
+    }
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--yes"]));
+}

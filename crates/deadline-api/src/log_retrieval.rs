@@ -297,8 +297,9 @@ async fn auto_select_session(
     config: Option<&IniConfig>,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
     let resp = api::list_sessions(farm_id, queue_id, job_id, config).await?;
-    let empty = vec![];
-    let sessions = resp["sessions"].as_array().unwrap_or(&empty);
+    let sessions: Vec<&aws_sdk_deadline::types::SessionSummary> = resp.iter()
+        .flat_map(|p| p.sessions())
+        .collect();
 
     if sessions.is_empty() {
         return Err(DeadlineError::OperationError(format!(
@@ -307,30 +308,30 @@ async fn auto_select_session(
     }
 
     if sessions.len() == 1 {
-        let id = sessions[0]["sessionId"].as_str().unwrap_or("").to_string();
+        let id = sessions[0].session_id().to_string();
         return Ok((id.clone(), SessionAutoSelect::OnlySession(id)));
     }
 
     // Prefer ongoing sessions (no endedAt), most recently started
-    let ongoing: Vec<&serde_json::Value> = sessions
+    let ongoing: Vec<&&aws_sdk_deadline::types::SessionSummary> = sessions
         .iter()
-        .filter(|s| s.get("endedAt").is_none())
+        .filter(|s| s.ended_at().is_none())
         .collect();
 
     let best = if !ongoing.is_empty() {
         ongoing
             .iter()
-            .max_by_key(|s| s["startedAt"].as_str().unwrap_or(""))
+            .max_by_key(|s| s.started_at())
             .unwrap()
     } else {
         // Fall back to most recently ended
         sessions
             .iter()
-            .max_by_key(|s| s["endedAt"].as_str().unwrap_or(""))
+            .max_by_key(|s| s.ended_at())
             .unwrap()
     };
 
-    let id = best["sessionId"].as_str().unwrap_or("").to_string();
+    let id = best.session_id().to_string();
     Ok((id.clone(), SessionAutoSelect::LatestSession(id)))
 }
 

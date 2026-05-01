@@ -1,5 +1,5 @@
 use crate::errors::DeadlineError;
-use crate::{auth, response_capture::ResponseBodyCapture, session};
+use crate::{response_capture::ResponseBodyCapture, session};
 use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use aws_sdk_deadline::operation::get_session::GetSessionOutput;
 use aws_sdk_deadline::operation::get_step::GetStepOutput;
@@ -89,87 +89,6 @@ where
 // Job
 // ---------------------------------------------------------------------------
 
-pub async fn list_jobs(farm_id: &str, queue_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let (user_id, _) = auth::get_user_and_identity_store_id(config);
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    paginated_list("jobs", |token| {
-        let client = client.clone();
-        let user_id = user_id.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_jobs().farm_id(&farm_id).queue_id(&queue_id);
-                if let Some(ref uid) = user_id { req = req.principal_id(uid.as_str()); }
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
-}
-
-pub async fn search_jobs(
-    farm_id: &str,
-    queue_ids: &[&str],
-    item_offset: i32,
-    page_size: i32,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    search_jobs_with_filters(farm_id, queue_ids, item_offset, page_size, None, None, config).await
-}
-
-/// Search jobs with optional filter and sort expressions.
-#[allow(clippy::too_many_arguments)]
-pub async fn search_jobs_with_filters(
-    farm_id: &str,
-    queue_ids: &[&str],
-    item_offset: i32,
-    page_size: i32,
-    filter_expressions: Option<&Value>,
-    sort_expressions: Option<&Value>,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let filter = filter_expressions.map(build_filter_expressions).transpose()?;
-    let sort = sort_expressions.map(build_sort_expressions).transpose()?;
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        let mut req = client
-            .search_jobs()
-            .farm_id(farm_id)
-            .set_queue_ids(Some(queue_ids.iter().map(|s| s.to_string()).collect()))
-            .item_offset(item_offset)
-            .page_size(page_size);
-
-        if let Some(ref f) = filter {
-            req = req.filter_expressions(f.clone());
-        }
-
-        if let Some(ref sorts) = sort {
-            for s in sorts {
-                req = req.sort_expressions(s.clone());
-            }
-        } else {
-            req = req.sort_expressions(
-                aws_sdk_deadline::types::SearchSortExpression::FieldSort(
-                    aws_sdk_deadline::types::FieldSortExpression::builder()
-                        .name("CREATED_AT")
-                        .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
-                        .build()
-                        .unwrap(),
-                ),
-            );
-        }
-
-        req.customize()
-            .interceptor(cap)
-            .send()
-            .await
-            .map(|_| ())
-    }).await
-}
-
 /// Retrieve all jobs matching a filter expression, paginating via `createdAt`
 /// thresholding. Ports Python's `_list_jobs_by_filter_expression` algorithm.
 ///
@@ -183,34 +102,69 @@ pub async fn list_jobs_by_filter_expression(
     filter_expression: &Value,
     config: Option<&IniConfig>,
 ) -> Result<Vec<Value>, DeadlineError> {
-    let sort = serde_json::json!([{
-        "fieldSort": {"name": "CREATED_AT", "sortOrder": "ASCENDING"}
-    }]);
+    use aws_sdk_deadline::types::*;
 
-    let provided_filter = serde_json::json!({
-        "groupFilter": filter_expression,
-    });
+    let client = session::deadline_client(config).await;
 
-    // First call: no timestamp threshold
-    let mut query_filters = serde_json::json!({
-        "filters": [provided_filter.clone()],
-        "operator": "AND"
-    });
+    let provided_filter = build_filter_expressions(filter_expression)?;
+
+    let sort_expr = SearchSortExpression::FieldSort(
+        FieldSortExpression::builder()
+            .name("CREATED_AT")
+            .sort_order(SortOrder::Ascending)
+            .build()
+            .map_err(|e| DeadlineError::OperationError(format!("Invalid sort: {e}")))?,
+    );
 
     let mut result_jobs: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+    let mut threshold_filter: Option<SearchFilterExpression> = None;
 
     loop {
-        let resp = search_jobs_with_filters(
-            farm_id, &[queue_id], 0, 100,
-            Some(&query_filters), Some(&sort), config,
-        ).await?;
+        // Build the combined filter: provided + optional timestamp threshold
+        let mut filters = vec![SearchFilterExpression::GroupFilter(provided_filter.clone())];
+        if let Some(ref tf) = threshold_filter {
+            filters.push(tf.clone());
+        }
+        let combined = SearchGroupedFilterExpressions::builder()
+            .set_filters(Some(filters))
+            .operator(LogicalOperator::And)
+            .build()
+            .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?;
 
-        let jobs = resp["jobs"].as_array().cloned().unwrap_or_default();
-        let total_results = resp["totalResults"].as_u64().unwrap_or(0) as usize;
+        let resp = client
+            .search_jobs()
+            .farm_id(farm_id)
+            .queue_ids(queue_id)
+            .item_offset(0)
+            .page_size(100)
+            .filter_expressions(combined)
+            .sort_expressions(sort_expr.clone())
+            .send()
+            .await
+            .map_err(sdk_err)?;
 
-        for job in &jobs {
-            if let Some(id) = job["jobId"].as_str() {
-                result_jobs.insert(id.to_string(), job.clone());
+        let jobs = resp.jobs();
+        let total_results = resp.total_results() as usize;
+
+        for job in jobs {
+            if let Some(id) = job.job_id() {
+                // Convert to Value for callers that still need Value access
+                let mut map = serde_json::Map::new();
+                map.insert("jobId".into(), Value::String(id.to_string()));
+                if let Some(name) = job.name() { map.insert("name".into(), Value::String(name.to_string())); }
+                if let Some(status) = job.task_run_status() { map.insert("taskRunStatus".into(), Value::String(status.as_str().to_string())); }
+                if let Some(created_at) = job.created_at() { map.insert("createdAt".into(), Value::String(created_at.to_string())); }
+                if let Some(started_at) = job.started_at() { map.insert("startedAt".into(), Value::String(started_at.to_string())); }
+                if let Some(ended_at) = job.ended_at() { map.insert("endedAt".into(), Value::String(ended_at.to_string())); }
+                if let Some(counts) = job.task_run_status_counts() {
+                    let counts_map: serde_json::Map<String, Value> = counts.iter()
+                        .map(|(k, v)| (k.as_str().to_string(), Value::Number((*v).into())))
+                        .collect();
+                    map.insert("taskRunStatusCounts".into(), Value::Object(counts_map));
+                }
+                if let Some(queue_id) = job.queue_id() { map.insert("queueId".into(), Value::String(queue_id.to_string())); }
+                if let Some(created_by) = job.created_by() { map.insert("createdBy".into(), Value::String(created_by.to_string())); }
+                result_jobs.insert(id.to_string(), Value::Object(map));
             }
         }
 
@@ -219,8 +173,8 @@ pub async fn list_jobs_by_filter_expression(
         }
 
         // Edge case: all jobs on this page have identical createdAt
-        let first_ts = jobs.first().and_then(|j| j["createdAt"].as_str());
-        let last_ts = jobs.last().and_then(|j| j["createdAt"].as_str());
+        let first_ts = jobs.first().and_then(|j| j.created_at());
+        let last_ts = jobs.last().and_then(|j| j.created_at());
         if first_ts == last_ts {
             return Err(DeadlineError::OperationError(
                 "Failure fetching jobs based on the createdAt field as more than 100 jobs \
@@ -228,30 +182,23 @@ pub async fn list_jobs_by_filter_expression(
             ));
         }
 
-        // Threshold: use the last job's createdAt for the next page.
-        // ResponseBodyCapture converts datetimes to display format (space separator),
-        // but the SearchJobs API needs RFC 3339 (T separator).
-        let threshold = last_ts.unwrap_or_default().replacen(' ', "T", 1);
-        query_filters = serde_json::json!({
-            "filters": [
-                provided_filter.clone(),
-                {
-                    "dateTimeFilter": {
-                        "name": "CREATED_AT",
-                        "dateTime": threshold,
-                        "operator": "GREATER_THAN_EQUAL_TO"
-                    }
-                }
-            ],
-            "operator": "AND"
-        });
+        // Threshold: use the last job's createdAt for the next page
+        let ts = last_ts.unwrap().clone();
+        threshold_filter = Some(SearchFilterExpression::DateTimeFilter(
+            DateTimeFilterExpression::builder()
+                .name("CREATED_AT")
+                .date_time(ts)
+                .operator(ComparisonOperator::GreaterThanEqualTo)
+                .build()
+                .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
+        ));
     }
 
     Ok(result_jobs.into_values().collect())
 }
 
 /// Build SDK SearchGroupedFilterExpressions from JSON.
-fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
+pub fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
     use aws_sdk_deadline::types::*;
 
     let operator = match json["operator"].as_str().unwrap_or("AND") {
@@ -347,7 +294,7 @@ fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::Sea
 }
 
 /// Build SDK SearchSortExpression list from JSON.
-fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::types::SearchSortExpression>, DeadlineError> {
+pub fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::types::SearchSortExpression>, DeadlineError> {
     use aws_sdk_deadline::types::*;
 
     let arr = json.as_array()
@@ -395,29 +342,6 @@ pub async fn get_task(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str
 // Worker
 // ---------------------------------------------------------------------------
 
-pub async fn search_workers(
-    farm_id: &str,
-    fleet_ids: &[&str],
-    item_offset: i32,
-    page_size: i32,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client
-            .search_workers()
-            .farm_id(farm_id)
-            .set_fleet_ids(Some(fleet_ids.iter().map(|s| s.to_string()).collect()))
-            .item_offset(item_offset)
-            .page_size(page_size)
-            .customize()
-            .interceptor(cap)
-            .send()
-            .await
-            .map(|_| ())
-    }).await
-}
-
 pub async fn get_worker(
     farm_id: &str,
     fleet_id: &str,
@@ -450,24 +374,12 @@ pub async fn list_sessions(
     queue_id: &str,
     job_id: &str,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<Vec<aws_sdk_deadline::operation::list_sessions::ListSessionsOutput>, DeadlineError> {
     let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    let job_id = job_id.to_string();
-    paginated_list("sessions", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        let job_id = job_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_sessions().farm_id(&farm_id).queue_id(&queue_id).job_id(&job_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
+    crate::client::collect_paginated(
+        client.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .into_paginator().send()
+    ).await
 }
 
 pub async fn list_steps(
@@ -475,24 +387,12 @@ pub async fn list_steps(
     queue_id: &str,
     job_id: &str,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<Vec<aws_sdk_deadline::operation::list_steps::ListStepsOutput>, DeadlineError> {
     let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    let job_id = job_id.to_string();
-    paginated_list("steps", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        let job_id = job_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_steps().farm_id(&farm_id).queue_id(&queue_id).job_id(&job_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
+    crate::client::collect_paginated(
+        client.list_steps().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .into_paginator().send()
+    ).await
 }
 
 pub async fn list_tasks(
@@ -501,26 +401,12 @@ pub async fn list_tasks(
     job_id: &str,
     step_id: &str,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<Vec<aws_sdk_deadline::operation::list_tasks::ListTasksOutput>, DeadlineError> {
     let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    let job_id = job_id.to_string();
-    let step_id = step_id.to_string();
-    paginated_list("tasks", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        let job_id = job_id.clone();
-        let step_id = step_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_tasks().farm_id(&farm_id).queue_id(&queue_id).job_id(&job_id).step_id(&step_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
+    crate::client::collect_paginated(
+        client.list_tasks().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
+            .into_paginator().send()
+    ).await
 }
 
 /// Send a single BatchGetStep request for up to 100 step identifiers.

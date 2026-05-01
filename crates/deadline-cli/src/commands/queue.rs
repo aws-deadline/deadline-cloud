@@ -903,15 +903,15 @@ async fn incremental_output_download(
     let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
 
     for job_id in &jobs_to_process {
-        let sessions_resp = api::list_sessions(farm_id, queue_id, job_id, Some(config))
+        let sessions_pages = api::list_sessions(farm_id, queue_id, job_id, Some(config))
             .await
             .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
 
         let mut job_actions: Vec<serde_json::Value> = Vec::new();
 
-        if let Some(sessions) = sessions_resp["sessions"].as_array() {
-            for session in sessions {
-                let session_id = session["sessionId"].as_str().unwrap_or("");
+        for spage in &sessions_pages {
+            for session in spage.sessions() {
+                let session_id = session.session_id();
                 let actions_resp = api::list_session_actions(
                     farm_id, queue_id, job_id, session_id, Some(config),
                 ).await.map_err(|e| CliError::Operation(

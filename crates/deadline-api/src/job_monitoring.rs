@@ -43,43 +43,61 @@ async fn collect_failed_tasks(
     config: Option<&IniConfig>,
 ) -> Result<Vec<FailedTask>, DeadlineError> {
     let mut failed_tasks = Vec::new();
-    let empty = vec![];
 
-    let steps_resp = api::list_steps(farm_id, queue_id, job_id, config).await?;
-    let steps = steps_resp["steps"].as_array().unwrap_or(&empty);
+    let steps_pages = api::list_steps(farm_id, queue_id, job_id, config).await?;
 
-    for step in steps {
-        let step_id = step["stepId"].as_str().unwrap_or("");
-        let step_name = step["name"].as_str().unwrap_or("");
-        let failed_count = step
-            .get("taskRunStatusCounts")
-            .and_then(|c| c.get("FAILED"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+    for page in &steps_pages {
+        for step in page.steps() {
+            let step_id = step.step_id();
+            let step_name = step.name();
+            let failed_count = step.task_run_status_counts()
+                .get(&aws_sdk_deadline::types::TaskRunStatus::Failed)
+                .copied()
+                .unwrap_or(0);
 
-        if failed_count == 0 {
-            continue;
-        }
-
-        let tasks_resp = api::list_tasks(farm_id, queue_id, job_id, step_id, config).await?;
-        let tasks = tasks_resp["tasks"].as_array().unwrap_or(&empty);
-
-        for task in tasks {
-            if task.get("runStatus").and_then(|s| s.as_str()) != Some("FAILED") {
+            if failed_count == 0 {
                 continue;
             }
-            let session_id = task
-                .get("latestSessionActionId")
-                .and_then(|v| v.as_str())
-                .and_then(extract_session_id);
 
-            failed_tasks.push(FailedTask {
-                step_id: step_id.to_string(),
-                task_id: task["taskId"].as_str().unwrap_or("").to_string(),
-                step_name: step_name.to_string(),
-                parameters: task.get("parameters").cloned().unwrap_or(Value::Object(Default::default())),
-                session_id,
-            });
+            let tasks_pages = api::list_tasks(farm_id, queue_id, job_id, step_id, config).await?;
+
+            for tpage in &tasks_pages {
+                for task in tpage.tasks() {
+                    if task.run_status() != &aws_sdk_deadline::types::TaskRunStatus::Failed {
+                        continue;
+                    }
+                    let session_id = task.latest_session_action_id()
+                        .and_then(extract_session_id);
+
+                    // Convert parameters to Value for FailedTask
+                    let parameters = match task.parameters() {
+                        Some(params) => {
+                            let map: serde_json::Map<String, Value> = params.iter()
+                                .map(|(k, v)| {
+                                    let inner = match v {
+                                        aws_sdk_deadline::types::TaskParameterValue::Int(i) => serde_json::json!({"int": i}),
+                                        aws_sdk_deadline::types::TaskParameterValue::Float(f) => serde_json::json!({"float": f}),
+                                        aws_sdk_deadline::types::TaskParameterValue::String(s) => serde_json::json!({"string": s}),
+                                        aws_sdk_deadline::types::TaskParameterValue::Path(p) => serde_json::json!({"path": p}),
+                                        _ => serde_json::json!(null),
+                                    };
+                                    (k.clone(), inner)
+                                })
+                                .collect();
+                            Value::Object(map)
+                        }
+                        None => Value::Object(Default::default()),
+                    };
+
+                    failed_tasks.push(FailedTask {
+                        step_id: step_id.to_string(),
+                        task_id: task.task_id().to_string(),
+                        step_name: step_name.to_string(),
+                        parameters,
+                        session_id,
+                    });
+                }
+            }
         }
     }
     Ok(failed_tasks)

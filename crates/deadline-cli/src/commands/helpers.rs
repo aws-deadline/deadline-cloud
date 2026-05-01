@@ -172,14 +172,22 @@ async fn try_list_jobs(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::list_jobs(farm_id, queue_id, config).await {
-        Ok(resp) => format_suggestions(
-            resp["jobs"].as_array(),
-            "jobId",
-            "name",
-            &format!("Recent jobs in queue {queue_id}:"),
-            out,
-        ),
+    let dl = session::deadline_client(config).await;
+    let builder = client::apply_dcm_principal(dl.list_jobs().farm_id(farm_id).queue_id(queue_id), config);
+    match client::collect_paginated(builder.into_paginator().send()).await {
+        Ok(pages) => {
+            let items: Vec<serde_json::Value> = pages.iter()
+                .flat_map(|p| p.jobs())
+                .map(|j| serde_json::json!({"jobId": j.job_id(), "name": j.name()}))
+                .collect();
+            format_suggestions(
+                Some(&items),
+                "jobId",
+                "name",
+                &format!("Recent jobs in queue {queue_id}:"),
+                out,
+            )
+        }
         Err(_) => false,
     }
 }
@@ -190,19 +198,25 @@ async fn try_list_workers(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::search_workers(farm_id, &[fleet_id], 0, 10, config).await {
-        Ok(resp) => {
-            let workers = match resp["workers"].as_array() {
-                Some(w) if !w.is_empty() => w,
-                _ => return false,
-            };
+    let dl = session::deadline_client(config).await;
+    let resp = dl.search_workers()
+        .farm_id(farm_id)
+        .fleet_ids(fleet_id)
+        .item_offset(0)
+        .page_size(10)
+        .send()
+        .await;
+    match resp {
+        Ok(output) => {
+            let workers = output.workers();
+            if workers.is_empty() { return false; }
             out.push(format!("\nAvailable workers in fleet {fleet_id}:"));
             for w in workers.iter().take(10) {
-                let id = w["workerId"].as_str().unwrap_or("");
-                let status = w["status"].as_str().unwrap_or("");
+                let id = w.worker_id().unwrap_or("");
+                let status = w.status().map(|s| s.as_str()).unwrap_or("");
                 out.push(format!("  {id}  {status}"));
             }
-            let total = resp["totalResults"].as_i64().unwrap_or(workers.len() as i64);
+            let total = output.total_results() as i64;
             if total > 10 {
                 out.push(format!("  ... and {} more", total - 10));
             }

@@ -202,3 +202,93 @@ async fn job_list_tasks_sends_latency_telemetry() {
 
     harness.cli(&["job", "list-tasks", "--job-id", "job-001", "--step-id", "step-001"]).assert().success();
 }
+
+// ===========================================================================
+// Pagination: list-sessions, list-steps, list-tasks across multiple pages
+// ===========================================================================
+
+#[tokio::test]
+async fn job_list_sessions_aggregates_multiple_pages() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    sessions::mock_list_sessions_paginated(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-001",
+        &[json!({
+            "sessionId": "session-001",
+            "fleetId": "fleet-abc",
+            "workerId": "worker-001",
+            "startedAt": "2024-12-18T00:00:00Z",
+            "lifecycleStatus": "ENDED"
+        })],
+        &[json!({
+            "sessionId": "session-002",
+            "fleetId": "fleet-abc",
+            "workerId": "worker-002",
+            "startedAt": "2024-12-18T01:00:00Z",
+            "lifecycleStatus": "STARTED"
+        })],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "list-sessions", "--job-id", "job-001"]));
+}
+
+#[tokio::test]
+async fn job_list_steps_aggregates_multiple_pages() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    sessions::mock_list_steps_paginated(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-001",
+        &[json!({
+            "stepId": "step-001",
+            "name": "Setup",
+            "lifecycleStatus": "COMPLETE",
+            "createdAt": "2024-12-18T00:00:00Z"
+        })],
+        &[json!({
+            "stepId": "step-002",
+            "name": "Render",
+            "lifecycleStatus": "COMPLETE",
+            "createdAt": "2024-12-18T00:01:00Z"
+        })],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&["job", "list-steps", "--job-id", "job-001"]));
+}
+
+#[tokio::test]
+async fn job_list_tasks_aggregates_multiple_pages() {
+    let harness = TestHarness::new().await;
+    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    sessions::mock_list_tasks_paginated(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-001",
+        "step-001",
+        &[json!({
+            "taskId": "task-001",
+            "runStatus": "SUCCEEDED",
+            "createdAt": "2024-12-18T00:00:00Z",
+            "createdBy": "user:test"
+        })],
+        &[json!({
+            "taskId": "task-002",
+            "runStatus": "FAILED",
+            "createdAt": "2024-12-18T00:01:00Z",
+            "createdBy": "user:test"
+        })],
+    ).await;
+
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "list-tasks", "--job-id", "job-001", "--step-id", "step-001"
+    ]));
+}
