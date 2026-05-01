@@ -2,7 +2,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use deadline_config::ini::IniConfig;
 
 use crate::errors::DeadlineError;
-use crate::{api, auth, session};
+use crate::{auth, session};
 
 /// A single log event from CloudWatch Logs.
 #[derive(Debug)]
@@ -296,7 +296,11 @@ async fn auto_select_session(
     job_id: &str,
     config: Option<&IniConfig>,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
-    let resp = api::list_sessions(farm_id, queue_id, job_id, config).await?;
+    let client = crate::session::deadline_client(config).await;
+    let resp = crate::client::collect_paginated(
+        client.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .into_paginator().send()
+    ).await?;
     let sessions: Vec<&aws_sdk_deadline::types::SessionSummary> = resp.iter()
         .flat_map(|p| p.sessions())
         .collect();

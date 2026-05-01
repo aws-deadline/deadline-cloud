@@ -7,30 +7,39 @@ use crate::errors::DeadlineError;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
 
-use crate::api;
-
 /// Fetch all queue parameter definitions for a queue.
 pub async fn get_queue_parameter_definitions(
     farm_id: &str,
     queue_id: &str,
     config: Option<&IniConfig>,
 ) -> Result<Vec<Value>, DeadlineError> {
-    let resp = api::list_queue_environments(farm_id, queue_id, config).await?;
-    let envs = resp["environments"].as_array().cloned().unwrap_or_default();
+    let client = crate::session::deadline_client(config).await;
+
+    // List all queue environments
+    let env_pages = crate::client::collect_paginated(
+        client.list_queue_environments().farm_id(farm_id).queue_id(queue_id)
+            .into_paginator().send()
+    ).await?;
 
     // Fetch full environment details and sort by priority
-    let mut full_envs = Vec::new();
-    for env in &envs {
-        let env_id = env["queueEnvironmentId"].as_str().unwrap_or("");
-        let full = api::get_queue_environment(farm_id, queue_id, env_id, config).await?;
-        full_envs.push(full);
+    let mut full_envs: Vec<(i32, String)> = Vec::new(); // (priority, template)
+    for page in &env_pages {
+        for env in page.environments() {
+            let env_id = env.queue_environment_id();
+            let full = client.get_queue_environment()
+                .farm_id(farm_id).queue_id(queue_id).queue_environment_id(env_id)
+                .send().await
+                .map_err(crate::api::sdk_err)?;
+            let priority = full.priority();
+            let template = full.template().to_string();
+            full_envs.push((priority, template));
+        }
     }
-    full_envs.sort_by_key(|e| e["priority"].as_i64().unwrap_or(0));
+    full_envs.sort_by_key(|(priority, _)| *priority);
 
     // Parse templates and collect parameters
     let mut params: indexmap::IndexMap<String, Value> = indexmap::IndexMap::new();
-    for env in &full_envs {
-        let template_str = env["template"].as_str().unwrap_or("");
+    for (_priority, template_str) in &full_envs {
         let template: Value = serde_yaml::from_str(template_str)
             .map_err(|e| DeadlineError::OperationError(format!("Failed to parse environment template: {e}")))?;
 

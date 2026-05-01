@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{api, client, responses::FleetResponse, session};
+use deadline_api::{client, responses::FleetResponse, session};
 use deadline_config::config_file;
 
 use super::config::CliError;
@@ -136,18 +136,22 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 let queue_name = queue_output.display_name();
 
                 // List queue-fleet associations
-                let assoc_resp = api::list_queue_fleet_associations(&farm, &queue, Some(&config)).await.map_err(|e| {
+                let assoc_pages = client::collect_paginated(
+                    dl.list_queue_fleet_associations().farm_id(&farm).queue_id(&queue)
+                        .into_paginator().send()
+                ).await.map_err(|e| {
                     CliError::Operation(format!("Failed to list queue fleet associations:\n{e}"))
                 })?;
-                let empty = vec![];
-                let associations = assoc_resp["queueFleetAssociations"].as_array().unwrap_or(&empty);
+                let associations: Vec<_> = assoc_pages.iter()
+                    .flat_map(|p| p.queue_fleet_associations())
+                    .collect();
 
                 println!("Showing all fleets ({} total) associated with queue: {queue_name}", associations.len());
 
                 // Get each fleet and print with association status
-                for assoc in associations {
-                    let fleet_id_val = assoc["fleetId"].as_str().unwrap_or("");
-                    let status = assoc["status"].as_str().unwrap_or("");
+                for assoc in &associations {
+                    let fleet_id_val = assoc.fleet_id();
+                    let status = assoc.status().as_str();
 
                     let output = dl.get_fleet().farm_id(&farm).fleet_id(fleet_id_val)
                         .send().await.map_err(|e| {

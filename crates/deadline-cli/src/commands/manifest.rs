@@ -226,8 +226,10 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings.root_prefix();
 
             // Get job to check for attachments
-            let job_output = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config)).await
-                .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+            let job_output = deadline_api::session::deadline_client(Some(&config)).await
+                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to get job: {}", deadline_api::client::format_sdk_error(&e))))?;
             let attachments_sdk = job_output.attachments()
                 .ok_or_else(|| CliError::Operation(
                     "Job has no attachments — no manifests to download.".into()

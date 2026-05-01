@@ -344,9 +344,12 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     // 4. Get storage profile (conditional)
     let storage_profile_id = get_setting("settings.storage_profile_id", params.config);
     let storage_profile = if !storage_profile_id.is_empty() {
-        let sp_json = api::get_storage_profile_for_queue(
-            &farm_id, &queue_id, &storage_profile_id, params.config,
-        ).await?;
+        let sp_output = deadline_api::session::deadline_client(params.config).await
+            .get_storage_profile_for_queue()
+            .farm_id(&farm_id).queue_id(&queue_id).storage_profile_id(&storage_profile_id)
+            .send().await
+            .map_err(deadline_api::client::deadline_error)?;
+        let sp_json = storage_profile_output_to_value(&sp_output);
         StorageProfile::from_json(&sp_json)
     } else {
         None
@@ -698,9 +701,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
     let response = api::create_job(&create_job_args, params.config).await?;
 
-    let job_id = response.get("jobId").and_then(|v| v.as_str())
-        .ok_or_else(|| op_err("CreateJob response was empty, or did not contain a Job ID.".into()))?
-        .to_string();
+    let job_id = response.job_id().to_string();
 
     // 10. Poll for completion
     print("Waiting for Job to be created...");
@@ -1131,4 +1132,9 @@ mod tests {
         let bad: Vec<&str> = input.split(std::path::MAIN_SEPARATOR).collect();
         assert!(bad.len() > 2, "MAIN_SEPARATOR splits paths incorrectly: {bad:?}");
     }
+}
+
+/// Convert GetStorageProfileForQueueOutput to a serde_json::Value matching the API JSON shape.
+fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> serde_json::Value {
+    deadline_api::type_conversions::storage_profile_output_to_value(output)
 }

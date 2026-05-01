@@ -7,7 +7,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** In progress — D5d next.
+**Status:** In progress — D5e next.
 
 ### Design intent (FINAL — no exceptions)
 
@@ -162,9 +162,10 @@ All `value["field"]` access → typed accessor chains:
   - One accepted difference: task parameter ordering now sorted alphabetically
     (HashMap non-determinism → explicit sort for deterministic output)
 - **D5d:** Convert remaining (queue environments, fleet associations,
-  storage profiles, session actions, update/create). Delete remaining thin
-  get_* wrappers (get_job, get_step, get_task, get_worker, get_session).
-- **D5e:** Delete `response_capture.rs`, `paginated_list`, `capture_send`. Clean sweep.
+  storage profiles, session actions, update/create). Delete ALL remaining thin
+  wrappers including get_*, update_*, list_sessions/list_steps/list_tasks.
+  Callers own their SDK calls — no wrapper functions in api.rs.
+- **D5e:** Delete `response_capture.rs`, `collect_paginated_raw`. Clean sweep.
 
 ### Step status
 
@@ -177,6 +178,25 @@ All `value["field"]` access → typed accessor chains:
 - Migrated `session.rs` QueueUserCredentialProvider (removed ResponseBodyCapture)
 - Migrated `log_retrieval.rs` fleet role (typed AwsCredentials)
 - CLI comparison: identical output (pre-existing error format difference only)
+
+**D5d** — ✅ Complete
+- Deleted 15 thin wrappers from api.rs: `get_job`, `get_step`, `get_task`,
+  `get_worker`, `get_session`, `update_job`, `update_task`,
+  `get_storage_profile_for_queue`, `list_storage_profiles_for_queue`,
+  `get_session_action`, `list_session_actions`, `get_queue_environment`,
+  `list_queue_environments`, `list_queue_fleet_associations`,
+  `list_sessions`, `list_steps`, `list_tasks`
+- Deleted infrastructure: `capture_send`, `paginated_list`, `capture_err`
+- Removed `ResponseBodyCapture` import from api.rs
+- Converted `create_job` → returns `CreateJobOutput` (typed)
+- Converted `batch_get_steps_page`/`batch_get_tasks_page` from `capture_send`
+  to typed SDK with manual Value conversion (sorted keys, formatted datetimes)
+- Inlined SDK calls in `wait_for_create_job_to_complete` and `job_monitoring.rs`
+- Migrated 30+ call sites across 11 files to direct SDK calls
+- All callers use `client::format_sdk_error(&e)` for error handling at call site
+- Telemetry pre-injected via `TelemetryInterceptor` on client — no per-call work
+- One snapshot updated: trace_schedule task parameter keys now sorted alphabetically
+  (same accepted difference as D5c — HashMap non-determinism → explicit sort)
 
 ---
 

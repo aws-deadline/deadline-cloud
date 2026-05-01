@@ -1,5 +1,4 @@
 use deadline_config::ini::IniConfig;
-use deadline_api::api;
 use deadline_api::{client, session};
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
@@ -232,14 +231,27 @@ async fn try_list_storage_profiles(
     config: Option<&IniConfig>,
     out: &mut Vec<String>,
 ) -> bool {
-    match api::list_storage_profiles_for_queue(farm_id, queue_id, config).await {
-        Ok(resp) => format_suggestions(
-            resp["storageProfiles"].as_array(),
-            "storageProfileId",
-            "displayName",
-            &format!("Available storage profiles for queue {queue_id}:"),
-            out,
-        ),
+    let client = session::deadline_client(config).await;
+    match client::collect_paginated(
+        client.list_storage_profiles_for_queue().farm_id(farm_id).queue_id(queue_id)
+            .into_paginator().send()
+    ).await {
+        Ok(pages) => {
+            let profiles: Vec<serde_json::Value> = pages.iter()
+                .flat_map(|p| p.storage_profiles())
+                .map(|sp| serde_json::json!({
+                    "storageProfileId": sp.storage_profile_id(),
+                    "displayName": sp.display_name(),
+                }))
+                .collect();
+            format_suggestions(
+                Some(&profiles),
+                "storageProfileId",
+                "displayName",
+                &format!("Available storage profiles for queue {queue_id}:"),
+                out,
+            )
+        }
         Err(_) => false,
     }
 }

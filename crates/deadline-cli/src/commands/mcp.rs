@@ -228,8 +228,22 @@ impl DeadlineServer {
     /// List storage profiles for a queue.
     #[tool(name = "deadline_list_storage_profiles_for_queue")]
     async fn list_storage_profiles_for_queue(&self, Parameters(p): Parameters<ListStorageProfilesParams>) -> String {
-        match deadline_api::api::list_storage_profiles_for_queue(&p.farm_id, &p.queue_id, None).await {
-            Ok(v) => ok_result(v),
+        let client = deadline_api::session::deadline_client(None).await;
+        match deadline_api::client::collect_paginated(
+            client.list_storage_profiles_for_queue().farm_id(&p.farm_id).queue_id(&p.queue_id)
+                .into_paginator().send()
+        ).await {
+            Ok(pages) => {
+                let profiles: Vec<Value> = pages.iter()
+                    .flat_map(|p| p.storage_profiles())
+                    .map(|sp| json!({
+                        "storageProfileId": sp.storage_profile_id(),
+                        "displayName": sp.display_name(),
+                        "osFamily": sp.os_family().as_str(),
+                    }))
+                    .collect();
+                ok_result(json!({"storageProfiles": profiles}))
+            }
             Err(e) => error_json("DeadlineError", &e.to_string()),
         }
     }
@@ -268,31 +282,39 @@ impl DeadlineServer {
     /// Get detailed information about a specific job.
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
-        match deadline_api::api::get_job(&p.farm_id, &p.queue_id, &p.job_id, None).await {
+        match deadline_api::session::deadline_client(None).await
+            .get_job().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
+            .send().await {
             Ok(output) => {
                 let resp = deadline_api::responses::JobResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
             }
-            Err(e) => error_json("DeadlineError", &e.to_string()),
+            Err(e) => error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e)),
         }
     }
 
     /// Get detailed information about a specific session.
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
-        match deadline_api::api::get_session(&p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None).await {
+        match deadline_api::session::deadline_client(None).await
+            .get_session().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).session_id(&p.session_id)
+            .send().await {
             Ok(output) => {
                 let resp = deadline_api::responses::SessionResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
             }
-            Err(e) => error_json("DeadlineError", &e.to_string()),
+            Err(e) => error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e)),
         }
     }
 
     /// List all sessions for a job.
     #[tool(name = "deadline_list_sessions")]
     async fn list_sessions(&self, Parameters(p): Parameters<ListSessionsParams>) -> String {
-        match deadline_api::api::list_sessions(&p.farm_id, &p.queue_id, &p.job_id, None).await {
+        let client = deadline_api::session::deadline_client(None).await;
+        match deadline_api::client::collect_paginated(
+            client.list_sessions().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
+                .into_paginator().send()
+        ).await {
             Ok(pages) => {
                 let sessions: Vec<serde_json::Value> = pages.iter()
                     .flat_map(|pg| pg.sessions())
@@ -307,7 +329,11 @@ impl DeadlineServer {
     /// List all steps for a job.
     #[tool(name = "deadline_list_steps")]
     async fn list_steps(&self, Parameters(p): Parameters<ListStepsParams>) -> String {
-        match deadline_api::api::list_steps(&p.farm_id, &p.queue_id, &p.job_id, None).await {
+        let client = deadline_api::session::deadline_client(None).await;
+        match deadline_api::client::collect_paginated(
+            client.list_steps().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
+                .into_paginator().send()
+        ).await {
             Ok(pages) => {
                 let steps: Vec<serde_json::Value> = pages.iter()
                     .flat_map(|pg| pg.steps())
@@ -322,7 +348,11 @@ impl DeadlineServer {
     /// List all tasks for a step.
     #[tool(name = "deadline_list_tasks")]
     async fn list_tasks(&self, Parameters(p): Parameters<ListTasksParams>) -> String {
-        match deadline_api::api::list_tasks(&p.farm_id, &p.queue_id, &p.job_id, &p.step_id, None).await {
+        let client = deadline_api::session::deadline_client(None).await;
+        match deadline_api::client::collect_paginated(
+            client.list_tasks().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).step_id(&p.step_id)
+                .into_paginator().send()
+        ).await {
             Ok(pages) => {
                 let tasks: Vec<serde_json::Value> = pages.iter()
                     .flat_map(|pg| pg.tasks())
@@ -595,11 +625,11 @@ impl DeadlineServer {
         let limit = p.limit.unwrap_or(100);
 
         // Get session details
-        let session = match deadline_api::api::get_session(
-            &p.farm_id, &p.queue_id, &p.job_id, &p.session_id, None,
-        ).await {
+        let session = match deadline_api::session::deadline_client(None).await
+            .get_session().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).session_id(&p.session_id)
+            .send().await {
             Ok(v) => v,
-            Err(e) => return error_json("DeadlineError", &e.to_string()),
+            Err(e) => return error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e)),
         };
 
         let worker_id = {

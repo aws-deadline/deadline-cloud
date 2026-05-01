@@ -319,16 +319,21 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            match api::get_storage_profile_for_queue(&farm, &queue, &storage_profile_id, Some(&config)).await {
-                Ok(resp) => {
+            match session::deadline_client(Some(&config)).await
+                .get_storage_profile_for_queue()
+                .farm_id(&farm).queue_id(&queue).storage_profile_id(&storage_profile_id)
+                .send().await {
+                Ok(output) => {
+                    let resp = storage_profile_output_to_value(&output);
                     println!("{}", crate::common::cli_object_repr(&resp));
                     Ok(())
                 }
                 Err(e) => {
+                    let err_str = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "GetStorageProfileForQueue", Some(&farm), Some(&queue), None, Some(&config),
+                        &err_str, "GetStorageProfileForQueue", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
-                    Err(CliError::Operation(format!("Failed to get storage profile:\n{e}{suggestion}")))
+                    Err(CliError::Operation(format!("Failed to get storage profile:\n{err_str}{suggestion}")))
                 }
             }
         }
@@ -447,10 +452,12 @@ async fn run_sync_output(
             ));
         }
         // Validate the storage profile exists
-        api::get_storage_profile_for_queue(&farm, &queue_id_str, &sp_id, Some(&config))
-            .await
+        session::deadline_client(Some(&config)).await
+            .get_storage_profile_for_queue()
+            .farm_id(&farm).queue_id(&queue_id_str).storage_profile_id(&sp_id)
+            .send().await
             .map_err(|e| CliError::Operation(format!(
-                "Could not retrieve the storage profile {sp_id:?} from Deadline Cloud:\n{e}"
+                "Could not retrieve the storage profile {sp_id:?} from Deadline Cloud:\n{}", client::format_sdk_error(&e)
             )))?;
         Some(sp_id)
     };
@@ -749,10 +756,11 @@ async fn incremental_output_download(
     }
 
     // For new jobs, call GetJob to get attachments
+    let dl = session::deadline_client(Some(config)).await;
     for job_id in new_job_ids.clone() {
-        let job_detail = api::get_job(farm_id, queue_id, &job_id, Some(config))
-            .await
-            .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {e}")))?;
+        let job_detail = dl.get_job().farm_id(farm_id).queue_id(queue_id).job_id(&job_id)
+            .send().await
+            .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {}", client::format_sdk_error(&e))))?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
             dc_job["attachments"] = job_detail.attachments.as_ref()
                 .map(deadline_api::type_conversions::attachments_to_value)
@@ -824,10 +832,11 @@ async fn incremental_output_download(
         let mut storage_profiles: std::collections::HashMap<String, serde_json::Value> =
             std::collections::HashMap::new();
         for sp_id in &sp_ids {
-            let sp = api::get_storage_profile_for_queue(farm_id, queue_id, sp_id, Some(config))
-                .await
-                .map_err(|e| CliError::Operation(format!("Failed to get storage profile {sp_id}: {e}")))?;
-            storage_profiles.insert(sp_id.clone(), sp);
+            let sp_output = dl.get_storage_profile_for_queue()
+                .farm_id(farm_id).queue_id(queue_id).storage_profile_id(sp_id)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to get storage profile {sp_id}: {}", client::format_sdk_error(&e))))?;
+            storage_profiles.insert(sp_id.clone(), storage_profile_output_to_value(&sp_output));
         }
 
         // Print local profile info
@@ -903,8 +912,10 @@ async fn incremental_output_download(
     let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
 
     for job_id in &jobs_to_process {
-        let sessions_pages = api::list_sessions(farm_id, queue_id, job_id, Some(config))
-            .await
+        let sessions_pages = client::collect_paginated(
+            dl.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+                .into_paginator().send()
+        ).await
             .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
 
         let mut job_actions: Vec<serde_json::Value> = Vec::new();
@@ -912,22 +923,25 @@ async fn incremental_output_download(
         for spage in &sessions_pages {
             for session in spage.sessions() {
                 let session_id = session.session_id();
-                let actions_resp = api::list_session_actions(
-                    farm_id, queue_id, job_id, session_id, Some(config),
+                let action_pages = client::collect_paginated(
+                    dl.list_session_actions()
+                        .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
+                        .into_paginator().send()
                 ).await.map_err(|e| CliError::Operation(
                     format!("Failed to list session actions for {session_id}: {e}")
                 ))?;
 
-                if let Some(actions) = actions_resp["sessionActions"].as_array() {
-                    for action in actions {
+                for apage in &action_pages {
+                    for action in apage.session_actions() {
                         // Only include succeeded taskRun actions
-                        let succeeded = action.get("status")
-                            .and_then(|s| s.as_str()) == Some("SUCCEEDED");
-                        let is_task_run = action.get("definition")
-                            .and_then(|d| d.get("taskRun")).is_some();
+                        let succeeded = action.status().as_str() == "SUCCEEDED";
+                        let is_task_run = matches!(
+                            action.definition(),
+                            Some(aws_sdk_deadline::types::SessionActionDefinitionSummary::TaskRun(_))
+                        );
                         if succeeded && is_task_run {
                             // Check if already downloaded (by session action index)
-                            let sa_id = action["sessionActionId"].as_str().unwrap_or("");
+                            let sa_id = action.session_action_id();
                             let sa_index: i64 = sa_id.rsplit('-').next()
                                 .and_then(|s| s.parse().ok()).unwrap_or(0);
                             let completed_index = checkpoint_session_indexes
@@ -935,7 +949,21 @@ async fn incremental_output_download(
                                 .and_then(|m| m.get(session_id))
                                 .copied();
                             if completed_index.map_or(true, |ci| sa_index > ci) {
-                                job_actions.push(action.clone());
+                                let mut action_val = serde_json::Map::new();
+                                action_val.insert("sessionActionId".into(), serde_json::json!(sa_id));
+                                action_val.insert("status".into(), serde_json::json!(action.status().as_str()));
+                                if let Some(dt) = action.started_at() {
+                                    action_val.insert("startedAt".into(), serde_json::json!(dt.to_string()));
+                                }
+                                if let Some(dt) = action.ended_at() {
+                                    action_val.insert("endedAt".into(), serde_json::json!(dt.to_string()));
+                                }
+                                if let Some(aws_sdk_deadline::types::SessionActionDefinitionSummary::TaskRun(tr)) = action.definition() {
+                                    action_val.insert("definition".into(), serde_json::json!({
+                                        "taskRun": {"stepId": tr.step_id(), "taskId": tr.task_id()}
+                                    }));
+                                }
+                                job_actions.push(serde_json::Value::Object(action_val));
                             }
                         }
                     }
@@ -1229,4 +1257,9 @@ fn is_writable(path: &Path) -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// Convert GetStorageProfileForQueueOutput to a serde_json::Value matching the API JSON shape.
+fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> serde_json::Value {
+    deadline_api::type_conversions::storage_profile_output_to_value(output)
 }

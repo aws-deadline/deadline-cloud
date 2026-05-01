@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{api, job_monitoring, log_retrieval};
+use deadline_api::{api, client, job_monitoring, log_retrieval, session};
 use deadline_api::log_retrieval::SessionAutoSelect;
 use deadline_api::responses::{self, JobResponse, SessionResponse};
 use deadline_config::config_file;
@@ -279,9 +279,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let resp = api::get_session(&farm, &queue, &job, &session_id, Some(&config))
-                .await
-                .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{e}")))?;
+            let resp = session::deadline_client(Some(&config)).await
+                .get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(&session_id)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{}", client::format_sdk_error(&e))))?;
             let session_resp = SessionResponse::from(resp);
             let val = serde_json::to_value(&session_resp).map_err(|e| CliError::Operation(e.to_string()))?;
             println!("{}", crate::common::cli_object_repr(&val));
@@ -292,8 +293,11 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let pages = api::list_sessions(&farm, &queue, &job, Some(&config))
-                .await
+            let pages = client::collect_paginated(
+                session::deadline_client(Some(&config)).await
+                    .list_sessions().farm_id(&farm).queue_id(&queue).job_id(&job)
+                    .into_paginator().send()
+            ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
             let sessions: Vec<serde_json::Value> = pages.iter()
                 .flat_map(|p| p.sessions())
@@ -316,8 +320,11 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let pages = api::list_steps(&farm, &queue, &job, Some(&config))
-                .await
+            let pages = client::collect_paginated(
+                session::deadline_client(Some(&config)).await
+                    .list_steps().farm_id(&farm).queue_id(&queue).job_id(&job)
+                    .into_paginator().send()
+            ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
             let steps: Vec<serde_json::Value> = pages.iter()
                 .flat_map(|p| p.steps())
@@ -338,8 +345,11 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let farm = get(&config, "defaults.farm_id");
             let queue = get(&config, "defaults.queue_id");
             let job = get(&config, "defaults.job_id");
-            let pages = api::list_tasks(&farm, &queue, &job, &step_id, Some(&config))
-                .await
+            let pages = client::collect_paginated(
+                session::deadline_client(Some(&config)).await
+                    .list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job).step_id(&step_id)
+                    .into_paginator().send()
+            ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             let tasks: Vec<serde_json::Value> = pages.iter()
                 .flat_map(|p| p.tasks())
@@ -362,8 +372,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let job = get(&config, "defaults.job_id");
             let is_json = output.eq_ignore_ascii_case("json");
 
-            let job_resp = api::get_job(&farm, &queue, &job, Some(&config)).await
-                .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {e}")))?;
+            let job_resp = session::deadline_client(Some(&config)).await
+                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {}", client::format_sdk_error(&e))))?;
             let job_name = job_resp.name().to_string();
 
             let job_cb: Box<dyn Fn(&aws_sdk_deadline::operation::get_job::GetJobOutput, f64, u64)> = if is_json {
@@ -477,24 +489,29 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 resolved_session_id_owned = Some(derived);
             }
 
-            let job_resp = api::get_job(&farm, &queue, &job, Some(&config)).await
-                .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+            let dl = session::deadline_client(Some(&config)).await;
+
+            let job_resp = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
             let job_name = job_resp.name();
 
             // Get session action details for time bounds (after validation)
             if let Some(ref said) = session_action_id {
-                let sa = api::get_session_action(&farm, &queue, &job, said, Some(&config)).await
+                let sa = dl.get_session_action()
+                    .farm_id(&farm).queue_id(&queue).job_id(&job).session_action_id(said)
+                    .send().await
                     .map_err(|e| CliError::Operation(format!(
-                        "Session action '{}' not found in job '{}':\n{}", said, job, e
+                        "Session action '{}' not found in job '{}':\n{}", said, job, client::format_sdk_error(&e)
                     )))?;
-                let sa_start = sa["startedAt"].as_str().map(String::from);
+                let sa_start = sa.started_at().map(|dt| responses::format_datetime(dt));
                 if sa_start.is_none() {
                     return Err(CliError::Operation(format!(
                         "Session action '{}' has not started yet. No logs are available.", said
                     )));
                 }
                 action_start = sa_start;
-                action_end = sa["endedAt"].as_str().map(String::from);
+                action_end = sa.ended_at().map(|dt| responses::format_datetime(dt));
             }
 
             let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
@@ -524,8 +541,9 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             // Get session start time for timestamp formatting (needed for relative mode)
             let reference_start = {
-                let sess = api::get_session(&farm, &queue, &job, resolved_session_id, Some(&config)).await
-                    .map_err(|e| CliError::Operation(format!("Failed to get session: {e}")))?;
+                let sess = dl.get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(resolved_session_id)
+                    .send().await
+                    .map_err(|e| CliError::Operation(format!("Failed to get session: {}", client::format_sdk_error(&e))))?;
                 let s = responses::format_datetime(&sess.started_at);
                 chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
                     .ok()
@@ -643,14 +661,17 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             }
             let auto_accept = is_auto_accept(&config);
 
-            let job = match api::get_job(&farm, &queue, &job_id, Some(&config)).await {
+            let job = match session::deadline_client(Some(&config)).await
+                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                .send().await {
                 Ok(j) => j,
                 Err(e) => {
+                    let err_str = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "GetJob", Some(&farm), Some(&queue), None, Some(&config),
+                        &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
-                        "Failed to get Job from Deadline:\n{e}{suggestion}"
+                        "Failed to get Job from Deadline:\n{err_str}{suggestion}"
                     )));
                 }
             };
@@ -712,8 +733,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             } else {
                 println!("Canceling job and marking as {mark_as}...");
             }
-            api::update_job(&farm, &queue, &job_id, &mark_as, Some(&config)).await
-                .map_err(|e| CliError::Operation(format!("Failed to update job:\n{e}")))?;
+            let dl = session::deadline_client(Some(&config)).await;
+            let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = mark_as.as_str().into();
+            dl.update_job()
+                .farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                .target_task_run_status(status)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to update job:\n{}", client::format_sdk_error(&e))))?;
             Ok(())
         }
         JobAction::RequeueTasks { profile, farm_id, queue_id, job_id, run_status, yes } => {
@@ -741,14 +767,17 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
             }
 
-            let job = match api::get_job(&farm, &queue, &job_id, Some(&config)).await {
+            let job = match session::deadline_client(Some(&config)).await
+                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                .send().await {
                 Ok(j) => j,
                 Err(e) => {
+                    let err_str = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "GetJob", Some(&farm), Some(&queue), None, Some(&config),
+                        &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
                     ).await;
                     return Err(CliError::Operation(format!(
-                        "Failed to get Job from Deadline:\n{e}{suggestion}"
+                        "Failed to get Job from Deadline:\n{err_str}{suggestion}"
                     )));
                 }
             };
@@ -809,7 +838,11 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
             let mut total_requeued: i64 = 0;
 
-            let steps_pages = api::list_steps(&farm, &queue, &job_id, Some(&config)).await
+            let dl = session::deadline_client(Some(&config)).await;
+            let steps_pages = client::collect_paginated(
+                dl.list_steps().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                    .into_paginator().send()
+            ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
 
             for page in &steps_pages {
@@ -830,7 +863,10 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     }
                     println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
 
-                    let tasks_pages = api::list_tasks(&farm, &queue, &job_id, step_id, Some(&config)).await
+                    let tasks_pages = client::collect_paginated(
+                        dl.list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job_id).step_id(step_id)
+                            .into_paginator().send()
+                    ).await
                         .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
 
                     for tpage in &tasks_pages {
@@ -859,10 +895,16 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                             };
                             println!("    {status} {task_summary}");
 
-                            api::update_task(&farm, &queue, &job_id, step_id, task_id, "PENDING", Some(&config),
-                                Some(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)),
-                            ).await
-                                .map_err(|e| CliError::Operation(format!("Failed to update task:\n{e}")))?;
+                            session::deadline_client(Some(&config)).await
+                                .update_task()
+                                .farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                                .step_id(step_id).task_id(task_id)
+                                .target_run_status(aws_sdk_deadline::types::TaskTargetRunStatus::Pending)
+                                .customize()
+                                .config_override(aws_sdk_deadline::config::Builder::default()
+                                    .retry_config(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)))
+                                .send().await
+                                .map_err(|e| CliError::Operation(format!("Failed to update task:\n{}", client::format_sdk_error(&e))))?;
                             total_requeued += 1;
                         }
                     }
@@ -1029,7 +1071,9 @@ fn format_duration(seconds: f64) -> String {
 
 /// Print full job details (used by `job get` in direct mode).
 async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniConfig) -> Result<(), CliError> {
-    match api::get_job(farm, queue, job_id, Some(config)).await {
+    match session::deadline_client(Some(config)).await
+        .get_job().farm_id(farm).queue_id(queue).job_id(job_id)
+        .send().await {
         Ok(output) => {
             let resp = JobResponse::from(output);
             let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
@@ -1039,11 +1083,12 @@ async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniCo
             Ok(())
         }
         Err(e) => {
+            let err_str = client::format_sdk_error(&e);
             let suggestion = suggest_resources_on_client_error(
-                &e.to_string(), "GetJob", Some(farm), Some(queue), None, Some(config),
+                &err_str, "GetJob", Some(farm), Some(queue), None, Some(config),
             ).await;
             Err(CliError::Operation(format!(
-                "Failed to get Job from Deadline:\n{e}{suggestion}"
+                "Failed to get Job from Deadline:\n{err_str}{suggestion}"
             )))
         }
     }
@@ -1358,16 +1403,17 @@ pub(crate) async fn download_output_impl(
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
 
     // Get job
-    let job = api::get_job(farm_id, queue_id, job_id, Some(config))
-        .await
-        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+    let dl = session::deadline_client(Some(config)).await;
+    let job = dl.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
     let job_name = job.name().to_string();
 
     // Get optional step/task
     let step_name = if let Some(sid) = step_id {
-        let step = api::get_step(farm_id, queue_id, job_id, sid, Some(config))
-            .await
-            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+        let step = dl.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(sid)
+            .send().await
+            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
         Some(step.name().to_string())
     } else {
         None
@@ -1376,9 +1422,9 @@ pub(crate) async fn download_output_impl(
     let task_params;
     let session_action_id;
     if let (Some(sid), Some(tid)) = (step_id, task_id) {
-        let task = api::get_task(farm_id, queue_id, job_id, sid, tid, Some(config))
-            .await
-            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+        let task = dl.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(sid).task_id(tid)
+            .send().await
+            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
         task_params = task.parameters.as_ref().map(|m| {
             let obj: serde_json::Map<String, serde_json::Value> = m.iter()
                 .map(|(k, v)| (k.clone(), deadline_api::type_conversions::task_parameter_value_to_value(v)))
@@ -1809,8 +1855,10 @@ async fn run_trace_schedule(
     }
 
     println!("Getting the job...");
-    let job_data = api::get_job(&farm, &queue, &job, Some(&config)).await
-        .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?;
+    let dl = session::deadline_client(Some(&config)).await;
+    let job_data = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
 
     let started_at = match job_data.started_at() {
         Some(dt) => {
@@ -1826,7 +1874,10 @@ async fn run_trace_schedule(
     let trace_end_utc = chrono::Utc::now();
 
     // Fetch all sessions
-    let sessions_pages = api::list_sessions(&farm, &queue, &job, Some(&config)).await
+    let sessions_pages = client::collect_paginated(
+        dl.list_sessions().farm_id(&farm).queue_id(&queue).job_id(&job)
+            .into_paginator().send()
+    ).await
         .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
     let mut sessions: Vec<serde_json::Value> = sessions_pages.iter()
         .flat_map(|p| p.sessions())
@@ -1852,9 +1903,12 @@ async fn run_trace_schedule(
     println!("Getting all the session actions for the job...");
     for i in 0..sessions.len() {
         let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_string();
-        let actions_resp = api::list_session_actions(&farm, &queue, &job, &sid, Some(&config)).await
+        let action_pages = collect_paginated_session_actions(&dl, &farm, &queue, &job, &sid).await
             .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
-        let actions = actions_resp["sessionActions"].as_array().cloned().unwrap_or_default();
+        let actions: Vec<serde_json::Value> = action_pages.iter()
+            .flat_map(|p| p.session_actions())
+            .map(|a| session_action_summary_to_value(a))
+            .collect();
         sessions[i]["actions"] = json!(actions);
     }
 
@@ -2084,8 +2138,9 @@ async fn run_trace_schedule(
 
     if verbose {
         println!(" ==== TRACE DATA ====");
-        let job_resp = JobResponse::from(api::get_job(&farm, &queue, &job, Some(&config)).await
-            .map_err(|e| CliError::Operation(format!("Failed to get job: {e}")))?);
+        let job_resp = JobResponse::from(dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+            .send().await
+            .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?);
         println!("{}", crate::common::cli_object_repr(&serde_json::to_value(&job_resp).unwrap()));
         println!("{}", crate::common::cli_object_repr(&json!(sessions)));
     }
@@ -2171,4 +2226,54 @@ fn expand_tilde(path: &str) -> String {
         }
     }
     path.to_string()
+}
+
+/// Paginate ListSessionActions using the SDK paginator.
+async fn collect_paginated_session_actions(
+    client: &aws_sdk_deadline::Client,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    session_id: &str,
+) -> Result<Vec<aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput>, deadline_api::errors::DeadlineError> {
+    deadline_api::client::collect_paginated(
+        client.list_session_actions()
+            .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
+            .into_paginator().send()
+    ).await
+}
+
+/// Convert a SessionActionSummary to a serde_json::Value for the trace-schedule consumer.
+fn session_action_summary_to_value(a: &aws_sdk_deadline::types::SessionActionSummary) -> serde_json::Value {
+    use serde_json::json;
+    let mut m = serde_json::Map::new();
+    m.insert("sessionActionId".into(), json!(a.session_action_id()));
+    m.insert("status".into(), json!(a.status().as_str()));
+    if let Some(dt) = a.started_at() { m.insert("startedAt".into(), json!(responses::format_datetime(dt))); }
+    if let Some(dt) = a.ended_at() { m.insert("endedAt".into(), json!(responses::format_datetime(dt))); }
+    // Convert definition to match the JSON structure callers expect
+    if let Some(def) = a.definition() {
+        use aws_sdk_deadline::types::SessionActionDefinitionSummary;
+        match def {
+            SessionActionDefinitionSummary::TaskRun(tr) => {
+                m.insert("definition".into(), json!({
+                    "taskRun": {
+                        "stepId": tr.step_id(),
+                        "taskId": tr.task_id(),
+                    }
+                }));
+            }
+            SessionActionDefinitionSummary::SyncInputJobAttachments(_) => {
+                m.insert("definition".into(), json!({"syncInputJobAttachments": {}}));
+            }
+            SessionActionDefinitionSummary::EnvEnter(ee) => {
+                m.insert("definition".into(), json!({"envEnter": {"environmentId": ee.environment_id()}}));
+            }
+            SessionActionDefinitionSummary::EnvExit(ee) => {
+                m.insert("definition".into(), json!({"envExit": {"environmentId": ee.environment_id()}}));
+            }
+            _ => {}
+        }
+    }
+    serde_json::Value::Object(m)
 }

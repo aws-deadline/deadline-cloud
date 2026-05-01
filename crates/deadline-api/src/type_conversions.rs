@@ -8,6 +8,7 @@ use aws_sdk_deadline::types::{
     JobAttachmentSettings, JobParameter, JobRunAsUser, LogConfiguration, ManifestProperties,
     ParameterSpace, SchedulingConfiguration, StepRequiredCapabilities, TaskParameterValue,
 };
+use aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput;
 use serde_json::{json, Map, Value};
 
 pub fn job_parameter_to_value(p: &JobParameter) -> Value {
@@ -408,6 +409,23 @@ pub fn step_required_capabilities_to_value(c: &StepRequiredCapabilities) -> Valu
         Value::Object(obj)
     }).collect();
     json!({"attributes": attributes, "amounts": amounts})
+}
+
+/// Convert GetStorageProfileForQueueOutput to Value matching the API JSON shape.
+pub fn storage_profile_output_to_value(output: &GetStorageProfileForQueueOutput) -> Value {
+    let mut m = Map::new();
+    m.insert("storageProfileId".into(), json!(output.storage_profile_id()));
+    m.insert("displayName".into(), json!(output.display_name()));
+    m.insert("osFamily".into(), json!(output.os_family().as_str()));
+    let locations: Vec<Value> = output.file_system_locations().iter().map(|loc| {
+        json!({
+            "name": loc.name(),
+            "path": loc.path(),
+            "type": loc.r#type().as_str(),
+        })
+    }).collect();
+    m.insert("fileSystemLocations".into(), json!(locations));
+    Value::Object(m)
 }
 
 #[cfg(test)]

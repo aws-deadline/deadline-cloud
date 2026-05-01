@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_api::{api, responses::WorkerResponse};
+use deadline_api::{client, responses::WorkerResponse, session};
 use deadline_config::config_file;
 
 use super::config::CliError;
@@ -78,11 +78,14 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::Get { profile, farm_id, fleet_id, worker_id } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let resp = match api::get_worker(&farm, &fleet_id, &worker_id, Some(&config)).await {
+            let resp = match session::deadline_client(Some(&config)).await
+                .get_worker().farm_id(&farm).fleet_id(&fleet_id).worker_id(&worker_id)
+                .send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "GetWorker", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
-                    return Err(CliError::Operation(format!("Failed to get Worker from Deadline:\n{e}{suggestion}")));
+                    let err_str = client::format_sdk_error(&e);
+                    let suggestion = suggest_resources_on_client_error(&err_str, "GetWorker", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
+                    return Err(CliError::Operation(format!("Failed to get Worker from Deadline:\n{err_str}{suggestion}")));
                 }
             };
             let worker_resp = WorkerResponse::from(resp);

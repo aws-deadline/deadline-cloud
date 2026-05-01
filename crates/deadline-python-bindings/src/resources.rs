@@ -80,8 +80,22 @@ pub fn list_storage_profiles_for_queue<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let result = rt.block_on(deadline_api::api::list_storage_profiles_for_queue(farm_id, queue_id, Some(&config)))
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    let result = rt.block_on(async {
+        let client = deadline_api::session::deadline_client(Some(&config)).await;
+        let pages = deadline_api::client::collect_paginated(
+            client.list_storage_profiles_for_queue().farm_id(farm_id).queue_id(queue_id)
+                .into_paginator().send()
+        ).await?;
+        let profiles: Vec<serde_json::Value> = pages.iter()
+            .flat_map(|p| p.storage_profiles())
+            .map(|sp| serde_json::json!({
+                "storageProfileId": sp.storage_profile_id(),
+                "displayName": sp.display_name(),
+                "osFamily": sp.os_family().as_str(),
+            }))
+            .collect();
+        Ok::<_, deadline_api::errors::DeadlineError>(serde_json::json!({"storageProfiles": profiles}))
+    }).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }

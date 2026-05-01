@@ -1,4 +1,3 @@
-use crate::api;
 use crate::errors::DeadlineError;
 use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use deadline_config::ini::IniConfig;
@@ -43,8 +42,12 @@ async fn collect_failed_tasks(
     config: Option<&IniConfig>,
 ) -> Result<Vec<FailedTask>, DeadlineError> {
     let mut failed_tasks = Vec::new();
+    let client = crate::session::deadline_client(config).await;
 
-    let steps_pages = api::list_steps(farm_id, queue_id, job_id, config).await?;
+    let steps_pages = crate::client::collect_paginated(
+        client.list_steps().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .into_paginator().send()
+    ).await?;
 
     for page in &steps_pages {
         for step in page.steps() {
@@ -59,7 +62,10 @@ async fn collect_failed_tasks(
                 continue;
             }
 
-            let tasks_pages = api::list_tasks(farm_id, queue_id, job_id, step_id, config).await?;
+            let tasks_pages = crate::client::collect_paginated(
+                client.list_tasks().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
+                    .into_paginator().send()
+            ).await?;
 
             for tpage in &tasks_pages {
                 for task in tpage.tasks() {
@@ -115,6 +121,7 @@ pub async fn wait_for_job_completion(
 ) -> Result<JobCompletionResult, DeadlineError> {
     let start = Instant::now();
     let mut interval_ms: u64 = 500;
+    let client = crate::session::deadline_client(config).await;
 
     loop {
         let elapsed = start.elapsed().as_secs_f64();
@@ -125,7 +132,8 @@ pub async fn wait_for_job_completion(
             )));
         }
 
-        let job = api::get_job(farm_id, queue_id, job_id, config).await?;
+        let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .send().await.map_err(crate::api::sdk_err)?;
         let status = job.task_run_status.as_ref().map(|s| s.as_str()).unwrap_or("");
 
         if let Some(cb) = status_callback {

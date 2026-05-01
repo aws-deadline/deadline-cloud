@@ -1,13 +1,8 @@
 use crate::errors::DeadlineError;
-use crate::{response_capture::ResponseBodyCapture, session};
-use aws_sdk_deadline::operation::get_job::GetJobOutput;
-use aws_sdk_deadline::operation::get_session::GetSessionOutput;
-use aws_sdk_deadline::operation::get_step::GetStepOutput;
-use aws_sdk_deadline::operation::get_task::GetTaskOutput;
-use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
+use crate::session;
+use aws_sdk_deadline::operation::create_job::CreateJobOutput;
 use deadline_config::ini::IniConfig;
 use serde_json::Value;
-use std::future::Future;
 
 /// Format any AWS SDK error to include the error code and message.
 ///
@@ -33,56 +28,10 @@ where
     }
 }
 
-fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static>(
+pub fn sdk_err<E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static>(
     e: aws_sdk_deadline::error::SdkError<E>,
 ) -> DeadlineError {
     DeadlineError::OperationError(format_sdk_error(&e))
-}
-
-fn capture_err(e: serde_json::Error) -> DeadlineError {
-    DeadlineError::OperationError(e.to_string())
-}
-
-// ---------------------------------------------------------------------------
-// Paginated list helper
-// ---------------------------------------------------------------------------
-
-/// Generic paginated list using ResponseBodyCapture + manual nextToken loop.
-/// `send_page` is called for each page with an optional nextToken.
-/// `items_key` is the JSON key containing the items array (e.g. "farms").
-async fn paginated_list<F, Fut>(
-    items_key: &str,
-    send_page: F,
-) -> Result<Value, DeadlineError>
-where
-    F: Fn(Option<String>) -> Fut,
-    Fut: Future<Output = Result<Value, DeadlineError>>,
-{
-    let mut all_items = Vec::new();
-    let mut next_token: Option<String> = None;
-    loop {
-        let page = send_page(next_token.take()).await?;
-        if let Some(items) = page[items_key].as_array() {
-            all_items.extend(items.iter().cloned());
-        }
-        match page.get("nextToken").and_then(|t| t.as_str()) {
-            Some(t) => next_token = Some(t.to_string()),
-            None => break,
-        }
-    }
-    Ok(serde_json::json!({items_key: all_items}))
-}
-
-/// Helper: send a single ResponseBodyCapture request and return parsed JSON.
-async fn capture_send<F, R, E>(build: F) -> Result<Value, DeadlineError>
-where
-    F: FnOnce(ResponseBodyCapture) -> R,
-    R: Future<Output = Result<(), aws_sdk_deadline::error::SdkError<E>>>,
-    E: std::fmt::Display + aws_sdk_deadline::error::ProvideErrorMetadata + std::error::Error + 'static,
-{
-    let capture = ResponseBodyCapture::new();
-    build(capture.clone()).await.map_err(sdk_err)?;
-    capture.json().map_err(capture_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -320,94 +269,9 @@ pub fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::type
     Ok(result)
 }
 
-pub async fn get_job(farm_id: &str, queue_id: &str, job_id: &str, config: Option<&IniConfig>) -> Result<GetJobOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-        .send().await.map_err(sdk_err)
-}
-
-pub async fn get_step(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, config: Option<&IniConfig>) -> Result<GetStepOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    client.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
-        .send().await.map_err(sdk_err)
-}
-
-pub async fn get_task(farm_id: &str, queue_id: &str, job_id: &str, step_id: &str, task_id: &str, config: Option<&IniConfig>) -> Result<GetTaskOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    client.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id).task_id(task_id)
-        .send().await.map_err(sdk_err)
-}
-
 // ---------------------------------------------------------------------------
-// Worker
+// Batch APIs (identifier construction logic)
 // ---------------------------------------------------------------------------
-
-pub async fn get_worker(
-    farm_id: &str,
-    fleet_id: &str,
-    worker_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<GetWorkerOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    client.get_worker().farm_id(farm_id).fleet_id(fleet_id).worker_id(worker_id)
-        .send().await.map_err(sdk_err)
-}
-
-// ---------------------------------------------------------------------------
-// Session / Step / Task
-// ---------------------------------------------------------------------------
-
-pub async fn get_session(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    session_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<GetSessionOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    client.get_session().farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
-        .send().await.map_err(sdk_err)
-}
-
-pub async fn list_sessions(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Vec<aws_sdk_deadline::operation::list_sessions::ListSessionsOutput>, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    crate::client::collect_paginated(
-        client.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .into_paginator().send()
-    ).await
-}
-
-pub async fn list_steps(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Vec<aws_sdk_deadline::operation::list_steps::ListStepsOutput>, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    crate::client::collect_paginated(
-        client.list_steps().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .into_paginator().send()
-    ).await
-}
-
-pub async fn list_tasks(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    step_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Vec<aws_sdk_deadline::operation::list_tasks::ListTasksOutput>, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    crate::client::collect_paginated(
-        client.list_tasks().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
-            .into_paginator().send()
-    ).await
-}
 
 /// Send a single BatchGetStep request for up to 100 step identifiers.
 /// Returns raw JSON with `steps` and `errors` arrays.
@@ -427,10 +291,42 @@ pub async fn batch_get_steps_page(
             .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
         ids.push(builder);
     }
-    capture_send(|cap| async move {
-        client.batch_get_step().set_identifiers(Some(ids))
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
+    let output = client.batch_get_step().set_identifiers(Some(ids))
+        .send().await.map_err(sdk_err)?;
+    // Convert typed output to Value for the batch_get helper
+    let steps: Vec<Value> = output.steps().iter().map(|s| {
+        let mut m = serde_json::Map::new();
+        m.insert("farmId".into(), Value::String(s.farm_id().to_string()));
+        m.insert("queueId".into(), Value::String(s.queue_id().to_string()));
+        m.insert("jobId".into(), Value::String(s.job_id().to_string()));
+        m.insert("stepId".into(), Value::String(s.step_id().to_string()));
+        m.insert("name".into(), Value::String(s.name().to_string()));
+        m.insert("lifecycleStatus".into(), Value::String(s.lifecycle_status().as_str().to_string()));
+        if !s.task_run_status().as_str().contains("no value") {
+            m.insert("taskRunStatus".into(), Value::String(s.task_run_status().as_str().to_string()));
+        }
+        m.insert("createdAt".into(), Value::String(crate::responses::format_datetime(s.created_at())));
+        if let Some(dt) = s.started_at() { m.insert("startedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
+        if let Some(dt) = s.ended_at() { m.insert("endedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
+        let counts_map: serde_json::Map<String, Value> = s.task_run_status_counts().iter()
+            .map(|(k, v)| (k.as_str().to_string(), Value::Number((*v).into())))
+            .collect();
+        if !counts_map.is_empty() {
+            m.insert("taskRunStatusCounts".into(), Value::Object(counts_map));
+        }
+        Value::Object(m)
+    }).collect();
+    let errors: Vec<Value> = output.errors().iter().map(|e| {
+        let mut m = serde_json::Map::new();
+        m.insert("farmId".into(), Value::String(e.farm_id().to_string()));
+        m.insert("queueId".into(), Value::String(e.queue_id().to_string()));
+        m.insert("jobId".into(), Value::String(e.job_id().to_string()));
+        m.insert("stepId".into(), Value::String(e.step_id().to_string()));
+        m.insert("code".into(), Value::String(e.code().as_str().to_string()));
+        m.insert("message".into(), Value::String(e.message().to_string()));
+        Value::Object(m)
+    }).collect();
+    Ok(serde_json::json!({"steps": steps, "errors": errors}))
 }
 
 /// Send a single BatchGetTask request for up to 100 task identifiers.
@@ -452,201 +348,50 @@ pub async fn batch_get_tasks_page(
             .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
         ids.push(builder);
     }
-    capture_send(|cap| async move {
-        client.batch_get_task().set_identifiers(Some(ids))
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-// ---------------------------------------------------------------------------
-// Storage profile
-// ---------------------------------------------------------------------------
-
-pub async fn get_storage_profile_for_queue(
-    farm_id: &str,
-    queue_id: &str,
-    storage_profile_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_storage_profile_for_queue()
-            .farm_id(farm_id).queue_id(queue_id).storage_profile_id(storage_profile_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-pub async fn list_storage_profiles_for_queue(
-    farm_id: &str,
-    queue_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    paginated_list("storageProfiles", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_storage_profiles_for_queue()
-                    .farm_id(&farm_id).queue_id(&queue_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
+    let output = client.batch_get_task().set_identifiers(Some(ids))
+        .send().await.map_err(sdk_err)?;
+    let tasks: Vec<Value> = output.tasks().iter().map(|t| {
+        let mut m = serde_json::Map::new();
+        m.insert("farmId".into(), Value::String(t.farm_id().to_string()));
+        m.insert("queueId".into(), Value::String(t.queue_id().to_string()));
+        m.insert("jobId".into(), Value::String(t.job_id().to_string()));
+        m.insert("stepId".into(), Value::String(t.step_id().to_string()));
+        m.insert("taskId".into(), Value::String(t.task_id().to_string()));
+        if let Some(params) = t.parameters() {
+            let params_map: serde_json::Map<String, Value> = params.iter()
+                .map(|(k, v)| {
+                    let val = match v {
+                        aws_sdk_deadline::types::TaskParameterValue::Int(s) => serde_json::json!({"int": s}),
+                        aws_sdk_deadline::types::TaskParameterValue::Float(s) => serde_json::json!({"float": s}),
+                        aws_sdk_deadline::types::TaskParameterValue::String(s) => serde_json::json!({"string": s}),
+                        aws_sdk_deadline::types::TaskParameterValue::Path(s) => serde_json::json!({"path": s}),
+                        _ => Value::Null,
+                    };
+                    (k.to_string(), val)
+                })
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .collect();
+            m.insert("parameters".into(), Value::Object(params_map));
         }
-    }).await
-}
-
-// ---------------------------------------------------------------------------
-// Session actions
-// ---------------------------------------------------------------------------
-
-pub async fn list_session_actions(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    session_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    let job_id = job_id.to_string();
-    let session_id = session_id.to_string();
-    paginated_list("sessionActions", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        let job_id = job_id.clone();
-        let session_id = session_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_session_actions()
-                    .farm_id(&farm_id).queue_id(&queue_id).job_id(&job_id).session_id(&session_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
-}
-
-pub async fn get_session_action(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    session_action_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_session_action()
-            .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_action_id(session_action_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-pub async fn list_queue_environments(
-    farm_id: &str,
-    queue_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    paginated_list("environments", |token| {
-        let client = client.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_queue_environments()
-                    .farm_id(farm_id).queue_id(queue_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
-}
-
-pub async fn get_queue_environment(
-    farm_id: &str,
-    queue_id: &str,
-    queue_environment_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_queue_environment()
-            .farm_id(farm_id).queue_id(queue_id).queue_environment_id(queue_environment_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-// ---------------------------------------------------------------------------
-// Queue-Fleet Associations
-// ---------------------------------------------------------------------------
-
-pub async fn list_queue_fleet_associations(
-    farm_id: &str,
-    queue_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let farm_id = farm_id.to_string();
-    let queue_id = queue_id.to_string();
-    paginated_list("queueFleetAssociations", |token| {
-        let client = client.clone();
-        let farm_id = farm_id.clone();
-        let queue_id = queue_id.clone();
-        async move {
-            capture_send(|cap| {
-                let mut req = client.list_queue_fleet_associations()
-                    .farm_id(&farm_id).queue_id(&queue_id);
-                if let Some(t) = token { req = req.next_token(t); }
-                async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
-            }).await
-        }
-    }).await
-}
-
-pub async fn update_job(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    target_task_run_status: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = target_task_run_status.into();
-    capture_send(|cap| async move {
-        client.update_job()
-            .farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .target_task_run_status(status)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-pub async fn update_task(
-    farm_id: &str,
-    queue_id: &str,
-    job_id: &str,
-    step_id: &str,
-    task_id: &str,
-    target_run_status: &str,
-    config: Option<&IniConfig>,
-    retry_config: Option<aws_config::retry::RetryConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    let status: aws_sdk_deadline::types::TaskTargetRunStatus = target_run_status.into();
-    capture_send(|cap| async move {
-        let mut req = client.update_task()
-            .farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .step_id(step_id).task_id(task_id)
-            .target_run_status(status)
-            .customize().interceptor(cap);
-        if let Some(rc) = retry_config {
-            req = req.config_override(aws_sdk_deadline::config::Builder::default().retry_config(rc));
-        }
-        req.send().await.map(|_| ())
-    }).await
+        m.insert("createdAt".into(), Value::String(crate::responses::format_datetime(t.created_at())));
+        m.insert("runStatus".into(), Value::String(t.run_status().as_str().to_string()));
+        if let Some(dt) = t.started_at() { m.insert("startedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
+        if let Some(dt) = t.ended_at() { m.insert("endedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
+        Value::Object(m)
+    }).collect();
+    let errors: Vec<Value> = output.errors().iter().map(|e| {
+        let mut m = serde_json::Map::new();
+        m.insert("farmId".into(), Value::String(e.farm_id().to_string()));
+        m.insert("queueId".into(), Value::String(e.queue_id().to_string()));
+        m.insert("jobId".into(), Value::String(e.job_id().to_string()));
+        m.insert("stepId".into(), Value::String(e.step_id().to_string()));
+        m.insert("taskId".into(), Value::String(e.task_id().to_string()));
+        m.insert("code".into(), Value::String(e.code().as_str().to_string()));
+        m.insert("message".into(), Value::String(e.message().to_string()));
+        Value::Object(m)
+    }).collect();
+    Ok(serde_json::json!({"tasks": tasks, "errors": errors}))
 }
 
 // ---------------------------------------------------------------------------
@@ -704,68 +449,65 @@ fn build_sdk_attachments(att: &Value) -> Result<aws_sdk_deadline::types::Attachm
 pub async fn create_job(
     args: &serde_json::Map<String, Value>,
     config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
+) -> Result<CreateJobOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
 
-        let farm_id = args.get("farmId").and_then(|v| v.as_str()).unwrap_or("");
-        let queue_id = args.get("queueId").and_then(|v| v.as_str()).unwrap_or("");
-        let template = args.get("template").and_then(|v| v.as_str()).unwrap_or("");
-        let template_type: aws_sdk_deadline::types::JobTemplateType = args
-            .get("templateType")
-            .and_then(|v| v.as_str())
-            .unwrap_or("YAML")
-            .into();
-        let priority = args.get("priority").and_then(|v| v.as_i64()).unwrap_or(50) as i32;
+    let farm_id = args.get("farmId").and_then(|v| v.as_str()).unwrap_or("");
+    let queue_id = args.get("queueId").and_then(|v| v.as_str()).unwrap_or("");
+    let template = args.get("template").and_then(|v| v.as_str()).unwrap_or("");
+    let template_type: aws_sdk_deadline::types::JobTemplateType = args
+        .get("templateType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("YAML")
+        .into();
+    let priority = args.get("priority").and_then(|v| v.as_i64()).unwrap_or(50) as i32;
 
-        let mut req = client
-            .create_job()
-            .farm_id(farm_id)
-            .queue_id(queue_id)
-            .template(template)
-            .template_type(template_type)
-            .priority(priority);
+    let mut req = client
+        .create_job()
+        .farm_id(farm_id)
+        .queue_id(queue_id)
+        .template(template)
+        .template_type(template_type)
+        .priority(priority);
 
-        if let Some(v) = args.get("storageProfileId").and_then(|v| v.as_str()) {
-            req = req.storage_profile_id(v);
+    if let Some(v) = args.get("storageProfileId").and_then(|v| v.as_str()) {
+        req = req.storage_profile_id(v);
+    }
+    if let Some(v) = args.get("maxFailedTasksCount").and_then(|v| v.as_i64()) {
+        req = req.max_failed_tasks_count(v as i32);
+    }
+    if let Some(v) = args.get("maxRetriesPerTask").and_then(|v| v.as_i64()) {
+        req = req.max_retries_per_task(v as i32);
+    }
+    if let Some(v) = args.get("maxWorkerCount").and_then(|v| v.as_i64()) {
+        req = req.max_worker_count(v as i32);
+    }
+    if let Some(v) = args.get("targetTaskRunStatus").and_then(|v| v.as_str()) {
+        let status: aws_sdk_deadline::types::CreateJobTargetTaskRunStatus = v.into();
+        req = req.target_task_run_status(status);
+    }
+    if let Some(params) = args.get("parameters").and_then(|v| v.as_object()) {
+        for (name, value) in params {
+            let param = if let Some(s) = value.get("string").and_then(|v| v.as_str()) {
+                aws_sdk_deadline::types::JobParameter::String(s.to_string())
+            } else if let Some(s) = value.get("int").and_then(|v| v.as_str()) {
+                aws_sdk_deadline::types::JobParameter::Int(s.to_string())
+            } else if let Some(s) = value.get("float").and_then(|v| v.as_str()) {
+                aws_sdk_deadline::types::JobParameter::Float(s.to_string())
+            } else if let Some(s) = value.get("path").and_then(|v| v.as_str()) {
+                aws_sdk_deadline::types::JobParameter::Path(s.to_string())
+            } else {
+                continue;
+            };
+            req = req.parameters(name.clone(), param);
         }
-        if let Some(v) = args.get("maxFailedTasksCount").and_then(|v| v.as_i64()) {
-            req = req.max_failed_tasks_count(v as i32);
-        }
-        if let Some(v) = args.get("maxRetriesPerTask").and_then(|v| v.as_i64()) {
-            req = req.max_retries_per_task(v as i32);
-        }
-        if let Some(v) = args.get("maxWorkerCount").and_then(|v| v.as_i64()) {
-            req = req.max_worker_count(v as i32);
-        }
-        if let Some(v) = args.get("targetTaskRunStatus").and_then(|v| v.as_str()) {
-            let status: aws_sdk_deadline::types::CreateJobTargetTaskRunStatus = v.into();
-            req = req.target_task_run_status(status);
-        }
-        if let Some(params) = args.get("parameters").and_then(|v| v.as_object()) {
-            for (name, value) in params {
-                let param = if let Some(s) = value.get("string").and_then(|v| v.as_str()) {
-                    aws_sdk_deadline::types::JobParameter::String(s.to_string())
-                } else if let Some(s) = value.get("int").and_then(|v| v.as_str()) {
-                    aws_sdk_deadline::types::JobParameter::Int(s.to_string())
-                } else if let Some(s) = value.get("float").and_then(|v| v.as_str()) {
-                    aws_sdk_deadline::types::JobParameter::Float(s.to_string())
-                } else if let Some(s) = value.get("path").and_then(|v| v.as_str()) {
-                    aws_sdk_deadline::types::JobParameter::Path(s.to_string())
-                } else {
-                    continue;
-                };
-                req = req.parameters(name.clone(), param);
-            }
-        }
-        if let Some(att) = args.get("attachments") {
-            let att_builder = build_sdk_attachments(att)?;
-            req = req.attachments(att_builder);
-        }
+    }
+    if let Some(att) = args.get("attachments") {
+        let att_builder = build_sdk_attachments(att)?;
+        req = req.attachments(att_builder);
+    }
 
-        capture_send(|cap| async move {
-            req.customize().interceptor(cap).send().await.map(|_| ())
-        })
-        .await
+    req.send().await.map_err(sdk_err)
 }
 
 /// Poll GetJob until the job exits CREATE_IN_PROGRESS.
@@ -783,6 +525,7 @@ pub async fn wait_for_create_job_to_complete(
 
     let start = std::time::Instant::now();
     let mut delay = initial_delay;
+    let client = session::deadline_client(config).await;
 
     tokio::time::sleep(initial_delay).await;
 
@@ -800,7 +543,8 @@ pub async fn wait_for_create_job_to_complete(
             ));
         }
 
-        let job = get_job(farm_id, queue_id, job_id, config).await?;
+        let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
+            .send().await.map_err(sdk_err)?;
 
         let status = job.lifecycle_status.as_str();
         let message = job.lifecycle_status_message.clone();

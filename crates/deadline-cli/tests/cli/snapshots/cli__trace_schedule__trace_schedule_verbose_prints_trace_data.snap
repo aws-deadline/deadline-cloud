@@ -14,17 +14,17 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:64475"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:64475"
-    AWS_ENDPOINT_URL_S3: "http://localhost:64475"
-    AWS_ENDPOINT_URL_STS: "http://localhost:64475"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:64796"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:64796"
+    AWS_ENDPOINT_URL_S3: "http://localhost:64796"
+    AWS_ENDPOINT_URL_STS: "http://localhost:64796"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpkGqrip/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpkGqrip
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpXNRdDb/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpXNRdDb
 ---
 success: true
 exit_code: 0
@@ -67,10 +67,10 @@ endedAt: 2025-01-27 07:38:53+00:00
       stepId: step-00000000000000000000000000000001
       taskId: task-001
       parameters:
-        Frame:
-          int: '42'
         Camera:
           string: main
+        Frame:
+          int: '42'
       createdAt: 2025-01-27 07:34:41+00:00
       runStatus: SUCCEEDED
   index: 0
