@@ -69,20 +69,23 @@ async fn get_fleet_scoped_config(
     let (user_id, identity_store_id) = auth::get_user_and_identity_store_id(config);
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume fleet role
-        let resp = api::assume_fleet_role_for_read(farm_id, fleet_id, config).await
+        let dl = session::deadline_client(config).await;
+        let resp = dl.assume_fleet_role_for_read()
+            .farm_id(farm_id).fleet_id(fleet_id)
+            .send().await
             .map_err(|e| DeadlineError::OperationError(
-                format!("Failed to get fleet credentials: {e}")
+                format!("Failed to get fleet credentials: {}", crate::client::format_sdk_error(&e))
             ))?;
-        let creds = &resp["credentials"];
-        let access_key = creds["accessKeyId"].as_str().unwrap_or_default();
-        let secret_key = creds["secretAccessKey"].as_str().unwrap_or_default();
-        let session_token = creds["sessionToken"].as_str().unwrap_or_default();
+        let creds = resp.credentials().ok_or_else(|| DeadlineError::OperationError(
+            "Failed to get fleet credentials: Empty credentials received.".into()
+        ))?;
 
         let base_config = session::get_sdk_config(config).await;
         let region = base_config.region().cloned();
 
         let credentials = aws_credential_types::Credentials::new(
-            access_key, secret_key, Some(session_token.to_string()), None, "fleet-role",
+            creds.access_key_id(), creds.secret_access_key(),
+            Some(creds.session_token().to_string()), None, "fleet-role",
         );
         let mut builder = aws_config::SdkConfig::builder()
             .behavior_version(aws_config::BehaviorVersion::latest())

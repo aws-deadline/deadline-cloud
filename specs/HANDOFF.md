@@ -7,7 +7,7 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## #27 — Typed SDK API layer
 
-**Status:** In progress — D5 next.
+**Status:** In progress — D5c next.
 
 ### Design intent (FINAL — no exceptions)
 
@@ -18,6 +18,13 @@ output structs (typed output). Period.
 
 - **Business logic callers** chain typed accessors directly:
   `output.job_attachment_settings().unwrap().s3_bucket_name()`
+
+- **No thin wrapper functions.** Callers call the SDK directly via
+  `session::deadline_client(config).await.get_queue()...send().await`.
+  The only shared infrastructure is `session::deadline_client()` (session
+  caching), `client::deadline_error()` / `client::format_sdk_error()`
+  (error formatting), `client::collect_paginated()` (pagination), and
+  telemetry (interceptor on the client).
 
 - **Display callers** (CLI `get` commands that print the full response)
   extract every field and subfield manually from the SDK output into a
@@ -141,23 +148,26 @@ All `value["field"]` access → typed accessor chains:
 
 ### Batching strategy
 
-- **D5a:** Convert all 7 response structs to `From<Output>` with manual
+- **D5a:** ✅ Convert all 7 response structs to `From<Output>` with manual
   nested type extraction. Remove `_with_raw` variants. Fix display callers.
-- **D5b:** Convert `get_queue` + credential APIs to typed. Migrate callers.
-- **D5c:** Convert list/search APIs to typed paginators. Migrate callers.
+- **D5b:** ✅ Delete `get_queue` + credential API wrappers. Callers call SDK directly.
+- **D5c:** Convert list/search APIs to typed paginators. Delete wrappers. Migrate callers.
 - **D5d:** Convert remaining (queue environments, fleet associations,
-  storage profiles, session actions, update/create).
-- **D5e:** Delete `response_capture.rs`. Clean sweep.
+  storage profiles, session actions, update/create). Delete remaining thin
+  get_* wrappers (get_job, get_step, get_task, get_worker, get_session).
+- **D5e:** Delete `response_capture.rs`, `paginated_list`, `capture_send`. Clean sweep.
 
 ### Step status
 
-- [x] Step 1 — Study
-- [x] Step 2 — Write tests (30 tests in type_conversions.rs)
-- [x] Step 3 — Implement (type_conversions.rs + From<Output> for all 7 structs + caller migration)
-- [x] Step 4 — CLI comparison (identical except pre-existing fractional seconds + alphabetical key order)
-- [x] Step 5 — Audit (stale doc comments fixed, no bugs)
-- [x] Step 6 — Spec (README.md updated)
-- [x] Step 7 — Commit
+**D5a** — ✅ Complete (type_conversions.rs + From<Output> for all 7 structs)
+
+**D5b** — ✅ Complete
+- Deleted 4 thin wrappers: `get_queue`, `assume_queue_role_for_user`,
+  `assume_queue_role_for_read`, `assume_fleet_role_for_read`
+- Migrated 8 callers to direct SDK calls with typed output
+- Migrated `session.rs` QueueUserCredentialProvider (removed ResponseBodyCapture)
+- Migrated `log_retrieval.rs` fleet role (typed AwsCredentials)
+- CLI comparison: identical output (pre-existing error format difference only)
 
 ---
 

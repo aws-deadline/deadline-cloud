@@ -1302,18 +1302,19 @@ pub(crate) async fn download_output_impl(
     ));
 
     // Get queue for jobAttachmentSettings
-    let queue = api::get_queue(farm_id, queue_id, Some(config))
-        .await
-        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+    let queue = deadline_api::session::deadline_client(Some(config)).await
+        .get_queue().farm_id(farm_id).queue_id(queue_id)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", deadline_api::client::format_sdk_error(&e))))?;
 
-    let attachment_settings = queue.get("jobAttachmentSettings")
+    let attachment_settings = queue.job_attachment_settings()
         .ok_or_else(|| CliError::Operation(format!(
             "Queue '{}' does not have job attachments configured.",
-            queue["displayName"].as_str().unwrap_or(queue_id)
+            queue.display_name()
         )))?;
 
-    let bucket = attachment_settings["s3BucketName"].as_str().unwrap_or("");
-    let prefix = attachment_settings["rootPrefix"].as_str().unwrap_or("");
+    let bucket = attachment_settings.s3_bucket_name();
+    let prefix = attachment_settings.root_prefix();
     let s3_settings = JobAttachmentS3Settings {
         s3_bucket_name: bucket.to_string(),
         root_prefix: prefix.to_string(),

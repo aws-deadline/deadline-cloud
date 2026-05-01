@@ -230,15 +230,10 @@ impl QueueUserCredentialProvider {
     }
 
     async fn load_credentials(&self) -> provider::Result {
-        use crate::response_capture::ResponseBodyCapture;
-
-        let capture = ResponseBodyCapture::new();
         let result = self.client
             .assume_queue_role_for_user()
             .farm_id(&self.farm_id)
             .queue_id(&self.queue_id)
-            .customize()
-            .interceptor(capture.clone())
             .send()
             .await;
 
@@ -273,36 +268,31 @@ impl QueueUserCredentialProvider {
             return Err(aws_credential_types::provider::error::CredentialsError::provider_error(err_msg));
         }
 
-        let json = capture.json().map_err(|e|
-            aws_credential_types::provider::error::CredentialsError::provider_error(e.to_string())
-        )?;
+        let output = result.unwrap();
+        let creds = match output.credentials() {
+            Some(c) if !c.access_key_id().is_empty() => c,
+            _ => {
+                let display = &self.queue_display_name_or_id;
+                return Err(aws_credential_types::provider::error::CredentialsError::provider_error(
+                    format!("Failed to get credentials for '{display}': Empty credentials received.")
+                ));
+            }
+        };
 
-        let creds = &json["credentials"];
-        if creds.is_null() || !creds.is_object() {
-            let display = &self.queue_display_name_or_id;
-            return Err(aws_credential_types::provider::error::CredentialsError::provider_error(
-                format!("Failed to get credentials for '{display}': Empty credentials received.")
-            ));
-        }
-
-        let access_key = creds["accessKeyId"].as_str().unwrap_or_default();
-        let secret_key = creds["secretAccessKey"].as_str().unwrap_or_default();
-        let session_token = creds["sessionToken"].as_str().map(String::from);
-        let expiration = creds["expiration"].as_str().and_then(|s| {
-            // Parse ISO 8601 datetime to SystemTime.
-            // ResponseBodyCapture converts to "2024-12-18 01:30:45+00:00" format,
-            // so handle both T-separator and space-separator.
-            let normalized = s.replace(' ', "T");
-            chrono::DateTime::parse_from_rfc3339(&normalized)
-                .or_else(|_| chrono::DateTime::parse_from_str(&normalized, "%Y-%m-%dT%H:%M:%S%.f%:z"))
-                .ok()
-                .map(|dt| std::time::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64))
-        });
+        let expiration = {
+            let dt = creds.expiration();
+            let epoch_secs = dt.secs();
+            if epoch_secs > 0 {
+                Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch_secs as u64))
+            } else {
+                None
+            }
+        };
 
         Ok(Credentials::new(
-            access_key,
-            secret_key,
-            session_token,
+            creds.access_key_id(),
+            creds.secret_access_key(),
+            Some(creds.session_token().to_string()),
             expiration,
             "queue-credential-provider",
         ))

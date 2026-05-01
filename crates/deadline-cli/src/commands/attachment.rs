@@ -97,19 +97,17 @@ async fn resolve_s3_context(
         let uri = match s3_root_uri.filter(|u| !u.is_empty()) {
             Some(u) => u,
             None => {
-                let queue = deadline_api::api::get_queue(&farm_id, &queue_id, Some(config))
-                    .await
-                    .map_err(|e| CliError::Operation(e.to_string()))?;
-                let settings = queue
-                    .get("jobAttachmentSettings")
-                    .filter(|s| s.get("s3BucketName").and_then(|b| b.as_str()).is_some_and(|b| !b.is_empty()));
-                match settings {
-                    Some(s) => {
-                        let bucket = s["s3BucketName"].as_str().unwrap();
-                        let prefix = s["rootPrefix"].as_str().unwrap_or("");
+                let queue = deadline_api::session::deadline_client(Some(config)).await
+                    .get_queue().farm_id(&farm_id).queue_id(&queue_id)
+                    .send().await
+                    .map_err(|e| CliError::Operation(deadline_api::client::format_sdk_error(&e)))?;
+                match queue.job_attachment_settings() {
+                    Some(s) if !s.s3_bucket_name().is_empty() => {
+                        let bucket = s.s3_bucket_name();
+                        let prefix = s.root_prefix();
                         format!("s3://{bucket}/{prefix}")
                     }
-                    None => {
+                    _ => {
                         return Err(CliError::Operation(format!(
                             "Queue {queue_id} has no attachment settings"
                         )));

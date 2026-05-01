@@ -190,7 +190,7 @@ use crate::loader::{
 };
 use crate::parameters::{apply_job_parameters, merge_queue_job_parameters, read_job_bundle_parameters};
 
-use deadline_api::{api, queue_parameters, session};
+use deadline_api::{api, client, queue_parameters, session};
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use deadline_job_attachments::models::{
@@ -334,8 +334,11 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let farm_id = get_setting("defaults.farm_id", params.config);
     let queue_id = get_setting("defaults.queue_id", params.config);
 
-    let queue = api::get_queue(&farm_id, &queue_id, params.config).await?;
-    let queue_display_name = queue.get("displayName").and_then(|v| v.as_str()).unwrap_or("Unknown");
+    let queue = session::deadline_client(params.config).await
+        .get_queue().farm_id(&farm_id).queue_id(&queue_id)
+        .send().await
+        .map_err(client::deadline_error)?;
+    let queue_display_name = queue.display_name();
     print(&format!("Submitting to Queue: {queue_display_name}\n"));
 
     // 4. Get storage profile (conditional)
@@ -434,10 +437,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     }
 
     // 7. Handle attachments
-    let has_attachment_settings = queue.get("jobAttachmentSettings")
-        .and_then(|s| s.get("s3BucketName"))
-        .and_then(|b| b.as_str())
-        .is_some_and(|b| !b.is_empty());
+    let has_attachment_settings = queue.job_attachment_settings()
+        .is_some_and(|s| !s.s3_bucket_name().is_empty());
 
     if asset_references.is_non_empty() && has_attachment_settings {
         expand_input_directories(&mut asset_references, params.require_paths_exist)?;
@@ -582,11 +583,11 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 tc.record_event("com.amazon.rum.deadline.job_attachments.hashing_summary", details, false);
             }
 
-            let ja_settings = queue.get("jobAttachmentSettings").unwrap();
+            let ja_settings = queue.job_attachment_settings().unwrap();
             let s3_settings = JobAttachmentS3Settings::from_root_path(&format!(
                 "{}/{}",
-                ja_settings["s3BucketName"].as_str().unwrap_or(""),
-                ja_settings["rootPrefix"].as_str().unwrap_or(""),
+                ja_settings.s3_bucket_name(),
+                ja_settings.root_prefix(),
             )).map_err(|e| op_err(e.to_string()))?;
 
             let upload_ctx = upload::S3UploadContext::new(s3_client, account_id, params.config)
@@ -691,7 +692,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
     // F8: If debug snapshot dir is set, save snapshot and return without calling CreateJob
     if let Some(ref snapshot_dir) = params.debug_snapshot_dir {
-        save_debug_snapshot(snapshot_dir, &create_job_args, &queue)?;
+        save_debug_snapshot(snapshot_dir, &create_job_args, queue.job_attachment_settings())?;
         return Ok(None);
     }
 
@@ -753,7 +754,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 fn save_debug_snapshot(
     snapshot_dir: &str,
     create_job_args: &serde_json::Map<String, Value>,
-    queue: &Value,
+    job_attachment_settings: Option<&aws_sdk_deadline::types::JobAttachmentSettings>,
 ) -> Result<(), DeadlineError> {
     use std::fs;
     use std::io::Write;
@@ -799,10 +800,8 @@ fn save_debug_snapshot(
     }
 
     // Determine S3 path for attachment upload commands in scripts
-    let s3_base = queue.get("jobAttachmentSettings").and_then(|ja| {
-        let bucket = ja.get("s3BucketName").and_then(|v| v.as_str())?;
-        let prefix = ja.get("rootPrefix").and_then(|v| v.as_str())?;
-        Some(format!("s3://{bucket}/{prefix}"))
+    let s3_base = job_attachment_settings.map(|ja| {
+        format!("s3://{}/{}", ja.s3_bucket_name(), ja.root_prefix())
     });
     let has_attachments = create_job_args.contains_key("attachments");
 
@@ -840,9 +839,16 @@ fn save_debug_snapshot(
     write_create_job_commands(&mut bat, &cli_args, " ^\r\n")
         .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
 
-    // 5. queue.json
-    let queue_json = serde_json::to_string_pretty(queue)
-        .unwrap_or_else(|_| "{}".to_string());
+    // 5. queue.json (attachment settings snapshot)
+    let queue_json = match job_attachment_settings {
+        Some(s) => serde_json::to_string_pretty(&serde_json::json!({
+            "jobAttachmentSettings": {
+                "s3BucketName": s.s3_bucket_name(),
+                "rootPrefix": s.root_prefix(),
+            }
+        })).unwrap_or_else(|_| "{}".to_string()),
+        None => "{}".to_string(),
+    };
     fs::write(
         std::path::Path::new(snapshot_dir).join("queue.json"),
         &queue_json,

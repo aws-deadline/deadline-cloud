@@ -260,9 +260,17 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
 
             let telemetry = create_telemetry(Some(&config));
 
-            let result = match mode.to_uppercase().as_str() {
-                "READ" => api::assume_queue_role_for_read(&farm, &queue, Some(&config)).await,
-                _ => api::assume_queue_role_for_user(&farm, &queue, Some(&config)).await,
+            // Both typed outputs have identical .credentials() shape
+            let dl = session::deadline_client(Some(&config)).await;
+            let creds_result = match mode.to_uppercase().as_str() {
+                "READ" => dl.assume_queue_role_for_read()
+                    .farm_id(&farm).queue_id(&queue).send().await
+                    .map(|o| o.credentials)
+                    .map_err(|e| client::format_sdk_error(&e)),
+                _ => dl.assume_queue_role_for_user()
+                    .farm_id(&farm).queue_id(&queue).send().await
+                    .map(|o| o.credentials)
+                    .map_err(|e| client::format_sdk_error(&e)),
             };
 
             let duration_ms = start.elapsed().as_millis() as u64;
@@ -271,37 +279,33 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             details.insert("queue_id".into(), serde_json::json!(queue));
             details.insert("duration_ms".into(), serde_json::json!(duration_ms));
 
-            match result {
-                Ok(resp) => {
-                    let creds = &resp["credentials"];
-                    let access_key = creds["accessKeyId"].as_str();
-                    let secret_key = creds["secretAccessKey"].as_str();
-                    let session_token = creds["sessionToken"].as_str();
-                    let expiration = creds["expiration"].as_str();
+            match creds_result {
+                Ok(Some(creds)) if !creds.access_key_id().is_empty() => {
+                    let expiration = creds.expiration()
+                        .fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTime)
+                        .unwrap_or_default()
+                        .replace('Z', "+00:00");
 
-                    if let (Some(ak), Some(sk), Some(st), Some(exp)) =
-                        (access_key, secret_key, session_token, expiration)
-                    {
-                        details.insert("is_success".into(), serde_json::json!(true));
-                        telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                    details.insert("is_success".into(), serde_json::json!(true));
+                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
 
-                        let output = serde_json::json!({
-                            "Version": 1,
-                            "AccessKeyId": ak,
-                            "SecretAccessKey": sk,
-                            "SessionToken": st,
-                            "Expiration": exp.replacen(' ', "T", 1),
-                        });
-                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
-                        Ok(())
-                    } else {
-                        details.insert("is_success".into(), serde_json::json!(false));
-                        details.insert("error_type".into(), serde_json::json!("MissingCredentials"));
-                        telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
-                        Err(CliError::Operation(
-                            "Failed to export credentials:\nResponse missing required credential fields".into()
-                        ))
-                    }
+                    let output = serde_json::json!({
+                        "Version": 1,
+                        "AccessKeyId": creds.access_key_id(),
+                        "SecretAccessKey": creds.secret_access_key(),
+                        "SessionToken": creds.session_token(),
+                        "Expiration": expiration,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    Ok(())
+                }
+                Ok(None) | Ok(Some(_)) => {
+                    details.insert("is_success".into(), serde_json::json!(false));
+                    details.insert("error_type".into(), serde_json::json!("MissingCredentials"));
+                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                    Err(CliError::Operation(
+                        "Failed to export credentials:\nResponse missing required credential fields".into()
+                    ))
                 }
                 Err(e) => {
                     details.insert("is_success".into(), serde_json::json!(false));
@@ -457,18 +461,19 @@ async fn run_sync_output(
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = api::get_queue(&farm, &queue_id_str, Some(&config))
-        .await
-        .map_err(|e| CliError::Operation(format!("Failed to get queue:\n{e}")))?;
+    let queue = deadline_api::session::deadline_client(Some(&config)).await
+        .get_queue().farm_id(&farm).queue_id(&queue_id_str)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to get queue:\n{}", client::format_sdk_error(&e))))?;
 
-    if queue.get("jobAttachmentSettings").is_none() {
-        let display_name = queue["displayName"].as_str().unwrap_or(&queue_id_str);
+    if queue.job_attachment_settings().is_none() {
         return Err(CliError::Operation(format!(
-            "Queue '{display_name}' does not have job attachments configured."
+            "Queue '{}' does not have job attachments configured.",
+            queue.display_name()
         )));
     }
 
-    let display_name = queue["displayName"].as_str().unwrap_or(&queue_id_str);
+    let display_name = queue.display_name();
     eprintln!("Started incremental download for queue: {display_name}");
     eprintln!("Checkpoint: {}", checkpoint_file_path.display());
     eprintln!();
@@ -554,7 +559,7 @@ async fn run_sync_output(
 async fn incremental_output_download(
     farm_id: &str,
     queue_id: &str,
-    queue: &serde_json::Value,
+    queue: &aws_sdk_deadline::operation::get_queue::GetQueueOutput,
     config: &deadline_config::ini::IniConfig,
     mut checkpoint: IncrementalDownloadState,
     local_storage_profile_id: &Option<String>,
@@ -951,9 +956,9 @@ async fn incremental_output_download(
 
     // Step 4: Download output manifests and files
     eprintln!("Populating manifest S3 keys for {} jobs...", jobs_to_process.len());
-    let attachment_settings = &queue["jobAttachmentSettings"];
-    let bucket = attachment_settings["s3BucketName"].as_str().unwrap_or("");
-    let prefix = attachment_settings["rootPrefix"].as_str().unwrap_or("");
+    let attachment_settings = queue.job_attachment_settings().unwrap();
+    let bucket = attachment_settings.s3_bucket_name();
+    let prefix = attachment_settings.root_prefix();
 
     let mut downloaded_manifests: Vec<(chrono::DateTime<Utc>, deadline_job_attachments::asset_manifests::AssetManifest)> = Vec::new();
     let mut downloaded_files_count: usize = 0;

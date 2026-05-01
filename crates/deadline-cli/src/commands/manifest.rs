@@ -214,14 +214,16 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             };
 
             // Get queue attachment settings
-            let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config)).await
-                .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
-            let ja_settings = queue_resp.get("jobAttachmentSettings")
+            let queue_resp = deadline_api::session::deadline_client(Some(&config)).await
+                .get_queue().farm_id(&farm).queue_id(&queue)
+                .send().await
+                .map_err(|e| CliError::Operation(format!("Failed to get queue: {}", deadline_api::client::format_sdk_error(&e))))?;
+            let ja_settings = queue_resp.job_attachment_settings()
                 .ok_or_else(|| CliError::Operation(
                     "Queue does not have job attachment settings configured.".into()
                 ))?;
-            let bucket = ja_settings["s3BucketName"].as_str().unwrap_or("");
-            let prefix = ja_settings["rootPrefix"].as_str().unwrap_or("");
+            let bucket = ja_settings.s3_bucket_name();
+            let prefix = ja_settings.root_prefix();
 
             // Get job to check for attachments
             let job_output = deadline_api::api::get_job(&farm, &queue, &job_id, Some(&config)).await
@@ -313,14 +315,16 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
                     let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
-                    let queue_resp = deadline_api::api::get_queue(&farm, &queue, Some(&config)).await
-                        .map_err(|e| CliError::Operation(format!("Failed to get queue: {e}")))?;
-                    let ja_settings = queue_resp.get("jobAttachmentSettings")
+                    let queue_resp = deadline_api::session::deadline_client(Some(&config)).await
+                        .get_queue().farm_id(&farm).queue_id(&queue)
+                        .send().await
+                        .map_err(|e| CliError::Operation(format!("Failed to get queue: {}", deadline_api::client::format_sdk_error(&e))))?;
+                    let ja_settings = queue_resp.job_attachment_settings()
                         .ok_or_else(|| CliError::Operation(
                             "Queue does not have job attachment settings not configured.".into()
                         ))?;
-                    let b = ja_settings["s3BucketName"].as_str().unwrap_or("").to_string();
-                    let p = ja_settings["rootPrefix"].as_str().unwrap_or("").to_string();
+                    let b = ja_settings.s3_bucket_name().to_string();
+                    let p = ja_settings.root_prefix().to_string();
 
                     let cfg = deadline_api::session::get_queue_scoped_config(
                         &farm, &queue, Some(&config),

@@ -86,18 +86,6 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Queue
-// ---------------------------------------------------------------------------
-
-pub async fn get_queue(farm_id: &str, queue_id: &str, config: Option<&IniConfig>) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.get_queue().farm_id(farm_id).queue_id(queue_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-// ---------------------------------------------------------------------------
 // Job
 // ---------------------------------------------------------------------------
 
@@ -585,34 +573,6 @@ pub async fn batch_get_tasks_page(
 }
 
 // ---------------------------------------------------------------------------
-// Queue credentials
-// ---------------------------------------------------------------------------
-
-pub async fn assume_queue_role_for_user(
-    farm_id: &str,
-    queue_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.assume_queue_role_for_user().farm_id(farm_id).queue_id(queue_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-pub async fn assume_queue_role_for_read(
-    farm_id: &str,
-    queue_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.assume_queue_role_for_read().farm_id(farm_id).queue_id(queue_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
-    }).await
-}
-
-// ---------------------------------------------------------------------------
 // Storage profile
 // ---------------------------------------------------------------------------
 
@@ -650,22 +610,6 @@ pub async fn list_storage_profiles_for_queue(
                 async move { req.customize().interceptor(cap).send().await.map(|_| ()) }
             }).await
         }
-    }).await
-}
-
-// ---------------------------------------------------------------------------
-// Fleet credentials
-// ---------------------------------------------------------------------------
-
-pub async fn assume_fleet_role_for_read(
-    farm_id: &str,
-    fleet_id: &str,
-    config: Option<&IniConfig>,
-) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
-    capture_send(|cap| async move {
-        client.assume_fleet_role_for_read().farm_id(farm_id).fleet_id(fleet_id)
-            .customize().interceptor(cap).send().await.map(|_| ())
     }).await
 }
 
