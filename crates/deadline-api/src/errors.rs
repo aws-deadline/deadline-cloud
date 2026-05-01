@@ -17,8 +17,6 @@ pub enum DeadlineError {
     CreateJobWaiterCanceled(String),
     /// User explicitly requested cancellation (default: "Operation canceled by user").
     UserInitiatedCancel(String),
-    /// User input is not valid.
-    NonValidInput(String),
 }
 
 impl DeadlineError {
@@ -48,8 +46,7 @@ impl fmt::Display for DeadlineError {
             | Self::OperationCanceled(msg)
             | Self::OperationTimedOut(msg)
             | Self::CreateJobWaiterCanceled(msg)
-            | Self::UserInitiatedCancel(msg)
-            | Self::NonValidInput(msg) => write!(f, "{msg}"),
+            | Self::UserInitiatedCancel(msg) => write!(f, "{msg}"),
         }
     }
 }

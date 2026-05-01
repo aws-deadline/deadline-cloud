@@ -84,27 +84,21 @@ pub struct HashCacheEntry {
 }
 
 impl HashCacheEntry {
-    pub fn new(
+    /// Whole-file hash entry (range_start=0, range_end=-1).
+    pub fn whole_file(
         file_path: String,
         hash_algorithm: HashAlgorithm,
         file_hash: String,
         last_modified_time: String,
-        range_start: i64,
-        range_end: i64,
-    ) -> Result<Self, JobAttachmentsError> {
-        if range_end != -1 && range_end <= range_start {
-            return Err(JobAttachmentsError::AssetSync(format!(
-                "For byte-range entries, range_end ({range_end}) must be greater than range_start ({range_start})"
-            )));
-        }
-        Ok(Self {
+    ) -> Self {
+        Self {
             file_path,
             hash_algorithm,
             file_hash,
             last_modified_time,
-            range_start,
-            range_end,
-        })
+            range_start: 0,
+            range_end: -1,
+        }
     }
 }
 
@@ -470,21 +464,6 @@ mod tests {
             .get_entry("/tmp/test.txt", HashAlgorithm::Xxh128, 0, -1)
             .unwrap();
         assert_eq!(result.file_hash, "whole_hash");
-    }
-
-    // === : HashCacheEntry validation ===
-
-    #[test]
-    fn hash_cache_entry_byte_range_end_must_exceed_start() {
-        let result = HashCacheEntry::new(
-            "/tmp/test.txt".into(),
-            HashAlgorithm::Xxh128,
-            "hash".into(),
-            "2024-01-01 00:00:00".into(),
-            50,
-            10,
-        );
-        assert!(result.is_err());
     }
 
     // === : Hash cache V4 compatibility ===

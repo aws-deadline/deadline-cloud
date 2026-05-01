@@ -33,14 +33,7 @@ fn parse_trace_format(s: &str) -> Result<String, String> {
 }
 
 fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
-    match s.to_uppercase().as_str() {
-        "SKIP" => Ok(deadline_job_attachments::models::FileConflictResolution::Skip),
-        "OVERWRITE" => Ok(deadline_job_attachments::models::FileConflictResolution::Overwrite),
-        "CREATE_COPY" => Ok(deadline_job_attachments::models::FileConflictResolution::CreateCopy),
-        other => Err(format!(
-            "Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY"
-        )),
-    }
+    s.parse()
 }
 
 /// Set up config from CLI options and extract required settings.
@@ -1538,7 +1531,8 @@ pub(crate) async fn download_output_impl(
                 let mut new_root = String::new();
                 std::io::stdin().read_line(&mut new_root).unwrap_or(0);
                 let new_root = new_root.trim();
-                let new_root = expand_tilde(new_root);
+                let new_root = crate::common::expand_tilde(new_root);
+                let new_root = new_root.to_string_lossy();
                 if !new_root.is_empty() {
                     downloader.set_root_path(asset_root, &new_root);
                 }
@@ -2216,16 +2210,6 @@ async fn run_trace_schedule(
     }
 
     Ok(())
-}
-
-/// Expand leading `~` to the user's home directory.
-fn expand_tilde(path: &str) -> String {
-    if path.starts_with('~') {
-        if let Ok(home) = std::env::var("HOME") {
-            return path.replacen('~', &home, 1);
-        }
-    }
-    path.to_string()
 }
 
 /// Paginate ListSessionActions using the SDK paginator.

@@ -549,7 +549,7 @@ impl DeadlineServer {
         };
         if let Some(ref cr) = p.conflict_resolution {
             let upper = cr.to_uppercase();
-            if !["SKIP", "OVERWRITE", "CREATE_COPY"].contains(&upper.as_str()) {
+            if upper.parse::<deadline_job_attachments::models::FileConflictResolution>().is_err() {
                 return error_json("ValueError",
                     &format!("Invalid conflict_resolution: {cr}. Must be SKIP, OVERWRITE, or CREATE_COPY"));
             }
@@ -579,12 +579,7 @@ impl DeadlineServer {
         }
 
         let conflict = p.conflict_resolution.as_deref().and_then(|cr| {
-            match cr.to_uppercase().as_str() {
-                "SKIP" => Some(deadline_job_attachments::models::FileConflictResolution::Skip),
-                "OVERWRITE" => Some(deadline_job_attachments::models::FileConflictResolution::Overwrite),
-                "CREATE_COPY" => Some(deadline_job_attachments::models::FileConflictResolution::CreateCopy),
-                _ => None,
-            }
+            cr.parse::<deadline_job_attachments::models::FileConflictResolution>().ok()
         });
 
         let step_id = p.step_id;

@@ -325,6 +325,24 @@ fn format_timedelta(d: chrono::TimeDelta) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Path utilities
+// ---------------------------------------------------------------------------
+
+/// Expand leading `~` to the user's home directory.
+pub fn expand_tilde(path: &str) -> std::path::PathBuf {
+    if path.starts_with("~/") || path == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return std::path::PathBuf::from(home).join(&path[2..]);
+        }
+        #[cfg(windows)]
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            return std::path::PathBuf::from(profile).join(&path[2..]);
+        }
+    }
+    std::path::PathBuf::from(path)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

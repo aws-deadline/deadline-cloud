@@ -37,14 +37,19 @@ impl std::fmt::Display for AwsAuthenticationStatus {
     }
 }
 
+/// Resolve the AWS config file path from `AWS_CONFIG_FILE` env var or default `~/.aws/config`.
+fn aws_config_file_path() -> String {
+    std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        format!("{home}/.aws/config")
+    })
+}
+
 /// Read a key from the AWS config profile section.
 /// Parses `~/.aws/config` (or `AWS_CONFIG_FILE`) looking for
 /// `[profile <name>]` and returning the value of `key` if present.
 fn read_aws_profile_key(profile_name: &str, key: &str) -> Option<String> {
-    let config_path = std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
-        let home = std::env::var("HOME").unwrap_or_default();
-        format!("{home}/.aws/config")
-    });
+    let config_path = aws_config_file_path();
 
     let content = std::fs::read_to_string(&config_path).ok()?;
 
@@ -55,10 +60,7 @@ fn read_aws_profile_key(profile_name: &str, key: &str) -> Option<String> {
 
 /// Read a key from the `[default]` section of the AWS config file.
 fn read_aws_default_profile_key(key: &str) -> Option<String> {
-    let config_path = std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
-        let home = std::env::var("HOME").unwrap_or_default();
-        format!("{home}/.aws/config")
-    });
+    let config_path = aws_config_file_path();
 
     let content = std::fs::read_to_string(&config_path).ok()?;
     read_aws_config_section(&content, "[default]", key)
@@ -112,10 +114,7 @@ pub fn get_credentials_source(
 
 /// Check whether a named profile section exists in the AWS config file.
 fn aws_profile_exists(profile_name: &str) -> bool {
-    let config_path = std::env::var("AWS_CONFIG_FILE").ok().unwrap_or_else(|| {
-        let home = std::env::var("HOME").unwrap_or_default();
-        format!("{home}/.aws/config")
-    });
+    let config_path = aws_config_file_path();
     let Ok(content) = std::fs::read_to_string(&config_path) else {
         return false;
     };

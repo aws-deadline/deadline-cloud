@@ -481,6 +481,21 @@ pub enum FileConflictResolution {
     CreateCopy,
 }
 
+impl std::str::FromStr for FileConflictResolution {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "SKIP" => Ok(Self::Skip),
+            "OVERWRITE" => Ok(Self::Overwrite),
+            "CREATE_COPY" => Ok(Self::CreateCopy),
+            other => Err(format!(
+                "Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY"
+            )),
+        }
+    }
+}
+
 // --- UploadManifestInfo ---
 
 /// Result of uploading a single manifest via `attachment_upload`.

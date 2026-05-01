@@ -8,7 +8,6 @@ pub mod telemetry_interceptor;
 pub mod job_monitoring;
 pub mod log_retrieval;
 pub mod queue_parameters;
-pub mod submitter_info;
 pub mod telemetry;
 pub mod type_conversions;
 pub mod update_checker;

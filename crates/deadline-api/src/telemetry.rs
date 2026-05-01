@@ -12,10 +12,6 @@
 //!   Use when you manage timing yourself.
 //! - [`with_telemetry_latency`] — wrap a **sync** function with latency telemetry.
 //!   Resolves the client, times the call, records the event.
-//! - [`with_telemetry_latency_async`] — wrap an **async** function with latency telemetry.
-//!   Same as `with_telemetry_latency` but `.await`s the future. Required because Rust's
-//!   type system distinguishes sync and async at compile time — a sync closure
-//!   cannot `.await`.
 //!
 //! All helpers match Python's `@record_function_latency_telemetry_event()`
 //! decorator: event type `com.amazon.rum.deadline.latency`, details
@@ -493,9 +489,6 @@ pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std:
 
 /// Run a sync function with latency telemetry. Uses the provided TelemetryClient
 /// or creates an ephemeral one. Matches Python's @record_function_latency_telemetry_event.
-///
-/// Use for sync functions like `login`/`logout`.
-/// For async functions, use [`with_telemetry_latency_async`].
 pub fn with_telemetry_latency<F, T>(
     function_call: &str,
     config: Option<&deadline_config::ini::IniConfig>,
@@ -512,32 +505,6 @@ where
     };
     let start = std::time::Instant::now();
     let result = f();
-    record_latency(tc, function_call, start);
-    result
-}
-
-/// Run an async function with latency telemetry. Uses the provided TelemetryClient
-/// or creates an ephemeral one. Matches Python's @record_function_latency_telemetry_event.
-///
-/// Use for async API functions like `list_farms`, `get_job`, etc.
-/// For sync functions, use [`with_telemetry_latency`].
-pub async fn with_telemetry_latency_async<F, Fut, T>(
-    function_call: &str,
-    config: Option<&deadline_config::ini::IniConfig>,
-    telemetry: Option<&TelemetryClient>,
-    f: F,
-) -> T
-where
-    F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = T>,
-{
-    let ephemeral;
-    let tc = match telemetry {
-        Some(t) => t,
-        None => { ephemeral = create_telemetry(config); &ephemeral }
-    };
-    let start = std::time::Instant::now();
-    let result = f().await;
     record_latency(tc, function_call, start);
     result
 }

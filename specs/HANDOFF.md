@@ -7,6 +7,35 @@ No active work item. Last completed: #27b (SDK calling behavior audit).
 
 ---
 
+## CLI Feature Parity Audit (2026-05-01)
+
+**Report:** `audit_reports/2026-05-01-cli-feature-parity.md`
+**Scope:** Full three-tier audit against Python CLI v0.56.0
+**Status:** Complete — 9 open findings (1 Critical, 2 High, 4 Medium, 2 Low)
+
+### Findings requiring action (by priority)
+
+| ID | Title | Priority | Effort |
+|----|-------|----------|--------|
+| AUDIT-101 | Auth status uses STS instead of ListFarms | Critical | Small — swap STS call for ListFarms |
+| AUDIT-102 | Missing config settings (`max_retries_per_task`, `max_failed_tasks_count`) | High | Small — add 2 settings + config fallback in bundle submit |
+| AUDIT-103 | Missing `--ignore-storage-profiles` on `download-output` | High | Small — add flag, follow sync-output pattern |
+| AUDIT-104 | Manifest snapshot includes `.manifest` files | Medium | Small — add exclusion filter |
+| AUDIT-105 | `--json` doesn't suppress human-readable output | Medium | Small — redirect to stderr or suppress |
+| AUDIT-106 | Telemetry `account_id` not resolved | Medium | Medium — credential fast-path |
+| AUDIT-107 | Debug snapshot reduced content | Medium | Small — expand queue.json, add storage_profile.json |
+| AUDIT-110 | Missing backward-compat flags | Low | Small — already tracked as #21d |
+| AUDIT-111 | `manifest diff --root` required vs optional | Low | Small — make optional |
+
+### Decisions needed
+
+- **AUDIT-108:** Rust-only subcommands (`job get-session`, `list-sessions`,
+  `list-steps`, `list-tasks`, `search`; `queue get-storage-profile`) —
+  remove, keep, or document as additions?
+- **AUDIT-109:** Rust-only `--json` on `bundle submit` — remove or keep?
+
+---
+
 ## #27 — Typed SDK API layer
 
 **Status:** ✅ Complete (all batches D5a–D5e done, audit clean)

@@ -401,7 +401,7 @@ async fn run_sync_output(
     }
 
     // Expand checkpoint dir and create it
-    let checkpoint_dir = expand_tilde(&checkpoint_dir);
+    let checkpoint_dir = crate::common::expand_tilde(&checkpoint_dir);
     fs::create_dir_all(&checkpoint_dir).map_err(|e| {
         CliError::Operation(format!(
             "Failed to create checkpoint directory {}: {e}", checkpoint_dir.display()
@@ -538,12 +538,8 @@ async fn run_sync_output(
     eprintln!();
 
     // Parse conflict resolution
-    let conflict = match conflict_resolution.to_uppercase().as_str() {
-        "SKIP" => FileConflictResolution::Skip,
-        "OVERWRITE" => FileConflictResolution::Overwrite,
-        "CREATE_COPY" => FileConflictResolution::CreateCopy,
-        other => return Err(CliError::Operation(format!("Unknown conflict resolution: {other}"))),
-    };
+    let conflict: FileConflictResolution = conflict_resolution.parse()
+        .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
     let updated_checkpoint = incremental_output_download(
@@ -1232,19 +1228,6 @@ mod duration_tests {
         let d = Duration::days(1) + Duration::hours(2);
         assert_eq!(format_duration(d), "1 day, 2:00:00.000000");
     }
-}
-
-fn expand_tilde(path: &str) -> PathBuf {
-    if path.starts_with("~/") || path == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(&path[2..]);
-        }
-        #[cfg(windows)]
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            return PathBuf::from(profile).join(&path[2..]);
-        }
-    }
-    PathBuf::from(path)
 }
 
 fn is_writable(path: &Path) -> bool {

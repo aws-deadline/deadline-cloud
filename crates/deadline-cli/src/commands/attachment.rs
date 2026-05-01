@@ -52,14 +52,7 @@ pub enum AttachmentAction {
 }
 
 fn parse_conflict_resolution(s: &str) -> Result<FileConflictResolution, String> {
-    match s.to_uppercase().as_str() {
-        "SKIP" => Ok(FileConflictResolution::Skip),
-        "OVERWRITE" => Ok(FileConflictResolution::Overwrite),
-        "CREATE_COPY" => Ok(FileConflictResolution::CreateCopy),
-        other => Err(format!(
-            "Invalid conflict resolution: {other}. Use SKIP, OVERWRITE, or CREATE_COPY"
-        )),
-    }
+    s.parse()
 }
 
 /// Resolved S3 credentials and URI for attachment operations.

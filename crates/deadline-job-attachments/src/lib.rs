@@ -11,4 +11,3 @@ pub mod path_mapping;
 pub mod progress_tracker;
 pub mod s3;
 pub mod upload;
-pub mod vfs;

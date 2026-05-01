@@ -239,24 +239,6 @@ pub fn summarize_paths_by_sequence(paths: &[&str]) -> Vec<PathSummary> {
         .collect()
 }
 
-/// Group paths by common directory prefixes.
-///
-/// First summarizes by sequence, then nests into a directory hierarchy.
-/// Returns top-level summaries with accumulated file counts.
-pub fn summarize_paths_by_nested_directory(paths: &[&str]) -> Vec<PathSummary> {
-    if paths.is_empty() {
-        return vec![];
-    }
-
-    let sequence_summaries = summarize_paths_by_sequence(paths);
-
-    // For each summary, split into directory components and build a tree.
-    // For now, return the flat sequence summaries — the nesting logic can be
-    // added when the CLI output formatting needs it.
-    // This satisfies the basic path summarization requirements.
-    sequence_summaries
-}
-
 /// Create a human-readable summary of a list of file paths.
 ///
 /// Groups files by common directory prefix and limits output to
@@ -271,28 +253,6 @@ pub fn summarize_path_list(
 ) -> String {
     if paths.is_empty() {
         return String::new();
-    }
-
-    // Helper to format bytes as human-readable
-    fn fmt_size(bytes: i64) -> String {
-        let postfixes = ["B", "KB", "MB", "GB", "TB"];
-        let mut converted = bytes as f64;
-        for postfix in &postfixes {
-            let rounded = (converted * 100.0).round() / 100.0;
-            if rounded < 1000.0 {
-                if *postfix == "B" {
-                    return format!("{} {postfix}", rounded as u64);
-                }
-                let s = format!("{rounded:.2}");
-                let s = s.trim_end_matches('0').trim_end_matches('.');
-                return format!("{s} {postfix}");
-            }
-            converted /= 1000.0;
-        }
-        let rounded = (converted * 100.0).round() / 100.0;
-        let s = format!("{rounded:.2}");
-        let s = s.trim_end_matches('0').trim_end_matches('.');
-        format!("{s} TB")
     }
 
     // Group paths by parent directory, tracking sizes per directory and per file
@@ -333,7 +293,7 @@ pub fn summarize_path_list(
         let summaries = summarize_paths_by_sequence(&file_refs);
 
         let size_suffix = if let Some(&dir_size) = dir_sizes.get(dir) {
-            format!(", {}", fmt_size(dir_size))
+            format!(", {}", human_readable_file_size(dir_size as u64))
         } else {
             String::new()
         };
@@ -345,7 +305,7 @@ pub fn summarize_path_list(
             let show = summaries.len().min(max_entries.saturating_sub(lines.len()));
             for summary in &summaries[..show] {
                 let child_size = file_sizes.get(&format!("{dir}/{}", summary.path))
-                    .map(|&s| format!(", {}", fmt_size(s)))
+                    .map(|&s| format!(", {}", human_readable_file_size(s as u64)))
                     .unwrap_or_default();
                 if summary.index_set.is_empty() {
                     lines.push(format!("  {} (1 file{child_size})\n", summary.path));
@@ -501,28 +461,6 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].path, "no_number.txt");
         assert!(result[0].index_set.is_empty());
-        assert_eq!(result[0].file_count, 1);
-    }
-
-    #[test]
-    fn nested_directories_grouped() {
-        let paths = vec![
-            "project/shots/frame_001.png",
-            "project/shots/frame_002.png",
-            "project/assets/texture.png",
-        ];
-        let result = summarize_paths_by_nested_directory(&paths);
-        // Should have entries — the exact nesting structure depends on implementation,
-        // but all files should be accounted for
-        let total_files: usize = result.iter().map(|s| s.file_count).sum();
-        assert_eq!(total_files, 3);
-    }
-
-    #[test]
-    fn single_file_returns_single_entry() {
-        let paths = vec!["only_file.txt"];
-        let result = summarize_paths_by_nested_directory(&paths);
-        assert_eq!(result.len(), 1);
         assert_eq!(result[0].file_count, 1);
     }
 
