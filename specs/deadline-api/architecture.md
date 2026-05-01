@@ -36,14 +36,16 @@ operation-name table. Session and credential state is managed by
 ```
 src/
 ├── lib.rs              # Re-exports all public modules
-├── client.rs           # collect_paginated, collect_paginated_raw,
-│                       #   apply_dcm_principal, format_sdk_error,
-│                       #   deadline_error, WithPrincipalId, pascal_to_snake
+├── client.rs           # collect_paginated, apply_dcm_principal,
+│                       #   format_sdk_error, deadline_error,
+│                       #   WithPrincipalId, pascal_to_snake
 ├── telemetry_interceptor.rs  # TelemetryInterceptor + pagination grouping
-├── job_api.rs          # Domain logic: list_jobs_by_filter_expression,
-│                       #   wait_for_create_job_to_complete, filter/sort builders,
-│                       #   build_sdk_attachments
-├── response_capture.rs # ResponseBodyCapture interceptor
+├── api.rs              # list_jobs_by_filter_expression, build_filter/sort_expressions,
+│                       #   typed list_sessions/list_steps/list_tasks paginators,
+│                       #   typed get_job/get_step/get_task/get_worker/get_session,
+│                       #   batch_get_steps_page/batch_get_tasks_page,
+│                       #   wait_for_create_job_to_complete (+ legacy wrappers pending D5d)
+├── response_capture.rs # [LEGACY — being removed in D5e] ResponseBodyCapture interceptor
 ├── session.rs          # Session caching, credential resolution, queue-scoped configs
 ├── auth.rs             # DCM detection, login/logout, auth status checks
 ├── job_monitoring.rs   # Poll job until terminal state, collect failed task details
@@ -53,6 +55,8 @@ src/
 ├── submitter_info.rs   # Submitter metadata (name, version, DCC info)
 ├── path_utils.rs       # File size formatting, path summarization
 ├── telemetry.rs        # Background telemetry client
+├── type_conversions.rs # Nested SDK type → Value helpers (shared by response structs)
+├── responses.rs        # Serializable response structs (From<Output> impls)
 └── update_checker.rs   # Remote version check, never panics
 ```
 
@@ -67,15 +71,19 @@ and records latency. Zero plaintext operation names in our code.
 **Callers drive the SDK fluent builder.** No wrapper functions that
 re-declare `&str` parameters. Callers write
 `client.get_farm().farm_id(id).send()` directly. The helpers
-(`collect_paginated`, `collect_paginated_raw`) handle pagination and
+(`collect_paginated`, `apply_dcm_principal`) handle pagination and
 error mapping only.
 
-**Raw JSON response capture for print paths only.** CLI `get` commands
-that print the full API response use `ResponseBodyCapture` per-call via
-`.customize().interceptor(cap).send()`. The interceptor converts
-datetimes to Python display format and strips null values. New API fields
-appear automatically without code changes. All other paths use typed SDK
-output accessors. See [response-capture.md](response-capture.md).
+**Typed SDK output everywhere.** All API calls return typed SDK output.
+Callers access fields via typed accessors (`.farm_id()`, `.name()`).
+Display paths use `From<Output>` response structs that manually extract
+all fields into serializable types. Nested SDK types that lack
+`Serialize` are converted via `type_conversions.rs` helpers.
+
+**`ResponseBodyCapture` is legacy (D5e removal).** A small number of
+remaining wrapper functions still use it for raw JSON. Do not use for
+new code. See [response-capture.md](response-capture.md) for historical
+context.
 
 **Global session cache.** A process-wide cache holds SDK configs keyed
 by profile name, and queue credential configs keyed by farm+queue pair.

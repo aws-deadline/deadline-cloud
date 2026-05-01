@@ -33,9 +33,28 @@ src/
 Python objects directly — no JSON serialization, no manual memory
 management.
 
-**`pythonize` for API responses.** API functions return
-`serde_json::Value` (from `ResponseBodyCapture`). The `pythonize` crate
-converts these to Python dicts without JSON string round-tripping.
+**Typed SDK → extract needed fields → pythonize to Python dict.** FFI
+functions call the SDK directly, extract only the fields the GUI needs,
+and return them as Python dicts via `pythonize`:
+
+```rust
+// List: SDK paginator → extract fields → pythonize
+let pages = collect_paginated(dl.list_farms().into_paginator().send()).await?;
+let farms: Vec<Value> = pages.iter().flat_map(|p| p.farms())
+    .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
+    .collect();
+pythonize(py, &json!({"farms": farms}))
+
+// Get: SDK output → response struct → serialize → pythonize
+let output = dl.get_queue().farm_id(f).queue_id(q).send().await?;
+let resp = QueueResponse::from(output);
+pythonize(py, &serde_json::to_value(&resp)?)
+```
+
+The GUI only consumes the specific fields it renders (e.g. `farmId`,
+`displayName` for a dropdown). The FFI layer extracts exactly those
+fields from typed SDK output — no full response dump, no raw JSON
+passthrough.
 
 **Python callables for callbacks.** Submission progress and confirmation
 callbacks accept `PyObject` (any Python callable). PyO3 calls them via

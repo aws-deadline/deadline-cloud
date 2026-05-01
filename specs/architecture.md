@@ -218,10 +218,9 @@ replaced by the Rust code compiled into the PyO3 module.
   scoping, telemetry (via a client-level interceptor), and error mapping
   for all Deadline Cloud API calls. Consumer crates import SDK types
   directly from `aws-sdk-deadline` and use the SDK's fluent builders at
-  callsite. For CLI commands that print the full API response verbatim,
-  the `ResponseBodyCapture` interceptor captures raw JSON (with datetime
-  conversion and null stripping). For all other paths, callers use typed
-  SDK output accessors. See `specs/patterns.md` § "AWS SDK for Rust Usage".
+  callsite. All API calls return typed SDK output. Display paths use
+  serializable response structs built from typed output via `From<Output>`
+  impls. See `specs/patterns.md` § "AWS SDK for Rust Usage".
 - **Config threading:** Functions that need config take `&IniConfig` (reads)
   or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
   are not the primary API.

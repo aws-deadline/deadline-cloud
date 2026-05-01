@@ -11,10 +11,13 @@ Write the minimum code to make the tests pass. Then:
    Python implementation before accepting. Do not use `INSTA_UPDATE=always`.
 
 For CLI commands calling AWS APIs, follow patterns in `specs/patterns.md`:
-- Typed API functions return SDK output types directly (default)
-- Raw API functions (`_raw` suffix) use `ResponseBodyCapture` for full wire JSON
-- Use typed for business logic and FFI; use raw only for CLI print-all paths
-- List functions: typed uses SDK paginator; raw uses manual `nextToken` loop
+- Callers own their SDK calls — no wrapper functions in api.rs
+- All API calls return typed SDK output; callers use typed accessors
+- List functions use SDK paginator via `client::collect_paginated`
+- Search functions (offset-based) call SDK `.send()` directly
+- Display paths build serializable response structs from typed output
+- DateTime formatting: `dt.fmt(DateTimeWithOffset).replace('T', " ").replace('Z', "+00:00")`
+- HashMap keys must be sorted for deterministic display output
 - Mock responses: include all fields the real API returns
 
 Refactor for clarity once green — but don't over-abstract.

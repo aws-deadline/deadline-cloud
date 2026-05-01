@@ -54,8 +54,8 @@ Use explicit type annotations in tests to document the expected return
 type — they serve as an extra compile-time assertion:
 
 ```rust
-let output: GetFarmOutput = get_farm("farm-abc", None, None).await.unwrap();
-let value: Value = get_farm_raw("farm-abc", None, None).await.unwrap();
+let output: GetFarmOutput = api::get_farm("farm-abc", None).await.unwrap();
+let pages: Vec<ListStepsOutput> = api::list_steps(farm, queue, job, config).await.unwrap();
 ```
 
 In production code, let inference handle local bindings. Function
@@ -72,74 +72,102 @@ that affect how we build API functions. Know these before writing code.
 The SDK output types don't implement `serde::Serialize`
 ([awslabs/aws-sdk-rust#269](https://github.com/awslabs/aws-sdk-rust/issues/269)).
 This means you cannot `serde_json::to_value(&output)` on an SDK response.
+For display paths, manually extract fields into a serializable struct or
+`serde_json::Map`.
 
-### Dual API pattern: typed + raw
+### Typed SDK pattern (the norm)
 
-API functions come in two variants:
+All API calls use typed SDK fluent builders and return typed SDK output.
+**No `ResponseBodyCapture`. No `serde_json::Value` from API responses.**
 
-1. **Typed (default name, e.g. `get_farm`):** Returns the SDK's native
-   output type (`GetFarmOutput`). Callers access fields via typed
-   accessors (`.farm_id()`, `.lifecycle_status()`). Use for business
-   logic, FFI, and list commands that cherry-pick fields.
-
-2. **Raw (`_raw` suffix, e.g. `get_farm_raw`):** Returns
-   `serde_json::Value` via the `ResponseBodyCapture` interceptor.
-   Includes all fields the API sends, even those the SDK doesn't model
-   yet. Use ONLY for CLI commands that dump the entire response to the
-   user (e.g. `deadline farm get`).
+**Callers own their SDK calls.** There are no thin wrapper functions in
+`api.rs` that just re-declare parameters. Callers write the SDK fluent
+builder directly at the call site:
 
 ```rust
-// Typed — compile-time safe field access, use by default
-pub async fn get_farm(...) -> Result<GetFarmOutput, DeadlineError>
-
-// Raw — full wire JSON for print paths only
-pub async fn get_farm_raw(...) -> Result<Value, DeadlineError>
+// Get — caller calls SDK directly
+let client = session::deadline_client(config).await;
+let output = client.get_farm().farm_id(id).send().await
+    .map_err(|e| format_sdk_error(&e))?;
+let name = output.display_name();  // typed field access
 ```
 
-**When to use which:**
-- Accessing specific fields for logic → typed
-- Passing a subset to FFI/Python → typed, then build a serializable struct
-- Printing the full API response verbatim → raw
-
-### `ResponseBodyCapture` pattern (raw variant only)
-
-The `_raw` functions use an SDK interceptor that captures the raw HTTP
-response body as `serde_json::Value`. The interceptor also converts
-datetimes to Python format and strips nulls. New API fields appear
-automatically without code changes.
-
-For the full pattern including pagination, search APIs, datetime
-handling, and known differences from boto3, see
-[`deadline-api/response-capture.md`](deadline-api/response-capture.md).
-
-### Typed variant pattern
-
-The typed functions call the SDK directly without the interceptor:
+**List — use SDK paginator via `collect_paginated`:**
 
 ```rust
-pub async fn get_farm(farm_id: &str, config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>)
-    -> Result<GetFarmOutput, DeadlineError>
-{
-    let client = session::deadline_client(config).await;
-    client.get_farm().farm_id(farm_id).send().await.map_err(sdk_err)
-}
-```
-
-For list functions, the typed variant uses the SDK's built-in paginator:
-
-```rust
-pub async fn list_farms(config: Option<&IniConfig>, telemetry: Option<&TelemetryClient>)
-    -> Result<Vec<FarmSummary>, DeadlineError>
-{
-    let client = session::deadline_client(config).await;
-    let mut farms = Vec::new();
-    let mut paginator = client.list_farms().into_paginator().send();
-    while let Some(page) = paginator.next().await {
-        let page = page.map_err(sdk_err)?;
-        farms.extend(page.farms());
+let client = session::deadline_client(config).await;
+let builder = client::apply_dcm_principal(client.list_farms(), config);
+let pages = client::collect_paginated(builder.into_paginator().send()).await?;
+for page in &pages {
+    for farm in page.farms() {
+        println!("{}: {}", farm.farm_id(), farm.display_name());
     }
-    Ok(farms)
 }
+```
+
+**Search (single-page, offset-based) — caller calls SDK directly:**
+
+```rust
+let client = session::deadline_client(config).await;
+let output = client.search_jobs()
+    .farm_id(farm)
+    .queue_ids(queue)
+    .item_offset(0)
+    .page_size(25)
+    .filter_expressions(filter)
+    .sort_expressions(sort)
+    .send().await
+    .map_err(|e| format_sdk_error(&e))?;
+for job in output.jobs() { /* typed JobSearchSummary access */ }
+```
+
+**Display paths — build serializable output at the call site:**
+
+```rust
+// For CLI commands that print the full response
+let output = client.get_job().farm_id(f).queue_id(q).job_id(j).send().await?;
+let resp = JobResponse::from(output);  // From<GetJobOutput> impl
+println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
+```
+
+### Shared infrastructure (not wrappers — utilities)
+
+| Utility | Purpose |
+|---------|---------|
+| `session::deadline_client(config)` | Session caching, user-agent, telemetry interceptor |
+| `client::collect_paginated(stream)` | Drains SDK paginator into `Vec<PageOutput>` |
+| `client::deadline_error(e)` | Maps `SdkError` → `DeadlineError` with code+message |
+| `client::format_sdk_error(&e)` | Formats `SdkError` as `"Code: message"` string |
+| `client::apply_dcm_principal(builder, config)` | DCM principal injection for list APIs |
+| `api::build_filter_expressions(json)` | Constructs SDK filter types from JSON |
+| `api::build_sort_expressions(json)` | Constructs SDK sort types from JSON |
+
+### DateTime formatting for display
+
+SDK `DateTime` values must be formatted to match Python CLI output:
+
+```rust
+fn format_datetime(dt: &aws_sdk_deadline::primitives::DateTime) -> String {
+    dt.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset)
+        .unwrap_or_default()
+        .replace('T', " ")
+        .replace('Z', "+00:00")
+}
+// Input:  2024-12-18T00:00:00Z
+// Output: 2024-12-18 00:00:00+00:00
+```
+
+### HashMap iteration and deterministic output
+
+SDK types use `HashMap` for maps (e.g. `task_run_status_counts`,
+`parameters`). HashMap iteration order is non-deterministic. **Always
+sort keys** when serializing map types to display output:
+
+```rust
+let mut pairs: Vec<_> = params.iter()
+    .map(|(k, v)| format!("{k}={v}"))
+    .collect();
+pairs.sort();
 ```
 
 ### Error formatting
@@ -148,8 +176,8 @@ The SDK's `SdkError` `Display` impl just says `"service error"` — it
 never includes the actual error code or message. Always use a helper
 that extracts the error code and message via `ProvideErrorMetadata`:
 
-- `api.rs::format_sdk_error` — generic, works for any AWS SDK error.
-- `api.rs::sdk_err` — wraps `format_sdk_error` into `DeadlineError`
+- `api::format_sdk_error` — generic, works for any AWS SDK error.
+- `api::sdk_err` — wraps `format_sdk_error` into `DeadlineError`
   for Deadline API calls.
 - `log_retrieval.rs::cw_sdk_err` — same pattern for CloudWatch Logs.
 - `s3.rs::format_sts_sdk_err` — same pattern for STS.
@@ -158,6 +186,16 @@ Output format: `"AccessDeniedException: User is not authorized..."`.
 
 **Never use `format!("{e}")` on an `SdkError`.** It produces `"service
 error"` which is useless to the user and breaks error-type detection.
+
+### Legacy: `ResponseBodyCapture` (being removed)
+
+> **⚠️ DEPRECATED — do not use for new code.**
+>
+> A small number of remaining wrapper functions in `api.rs` still use
+> `ResponseBodyCapture` to return `serde_json::Value`. These are being
+> deleted in D5d/D5e. See `specs/deadline-api/response-capture.md` for
+> historical context only.
+
 
 ## Credential Scoping for Non-Deadline AWS Services
 
@@ -180,17 +218,26 @@ credentials, caching, and endpoint propagation, see
 Two distinct patterns exist for JSON serialization in this codebase.
 Choose based on who controls the schema.
 
-### API responses → typed SDK output OR `serde_json::Value`
+### API responses → typed SDK output + serializable response structs
 
-- **Typed (default):** Use the SDK output type directly. Access fields
-  via typed accessors. Use for business logic and FFI.
-- **Raw (`_raw` suffix):** Use `ResponseBodyCapture` to capture raw
-  JSON as `serde_json::Value`. Use for CLI print paths that must show
-  all fields. Model types that parse API responses use manual
-  `from_json(&Value)` methods (e.g. `StorageProfile::from_json`).
+Use the SDK output type directly. Access fields via typed accessors.
+For display paths that need to print the full response, use a response
+struct with `#[derive(Serialize)]` and `From<Output>`:
 
-**Use typed for:** anything that accesses specific fields for logic or FFI.
-**Use raw for:** CLI commands that dump the full response to the user.
+```rust
+// Business logic — typed accessors
+let output = client.get_job()...send().await?;
+let name = output.name();
+let status = output.lifecycle_status();
+
+// Display path — response struct
+let resp = JobResponse::from(output);
+println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
+```
+
+Response structs live in `responses.rs`. Nested SDK types that lack
+`Serialize` are converted to `serde_json::Value` via helpers in
+`type_conversions.rs` that walk typed SDK accessors.
 
 ### Owned file formats → `#[derive(Serialize, Deserialize)]`
 

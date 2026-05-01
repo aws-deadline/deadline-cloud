@@ -1,5 +1,12 @@
 # ResponseBodyCapture
 
+> **⚠️ DEPRECATED — being removed in D5e. Do not use for new code.**
+>
+> All new API calls should use typed SDK output directly. See
+> `specs/patterns.md` § "AWS SDK for Rust Usage" for the current pattern.
+> This document is retained as historical context for the remaining legacy
+> wrappers in `api.rs` that still use this interceptor.
+
 ## Overview
 
 `raw_response.rs` implements an AWS SDK interceptor that captures the raw

@@ -45,7 +45,8 @@ which is compatible with Python's `datetime.fromisoformat()`.
 - Python serializes UTC as `+00:00` suffix; Rust uses `Z`. Both are valid
   ISO 8601 and interoperable.
 - Python's `_datetimes_to_str` recursively converts boto3 datetime objects.
-  Not needed in Rust since API responses arrive as strings via `ResponseBodyCapture`.
+  Not needed in Rust since typed SDK DateTime accessors provide the value directly
+  (formatted via `format_datetime` helper for display paths).
 
 ## Manifest S3 Download Pipeline
 

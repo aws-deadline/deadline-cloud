@@ -126,23 +126,28 @@ Look at `crates/deadline-cli/src/commands/farm.rs` for the pattern.
 
 ### Add a new API call
 
-All API calls live in `crates/deadline-api/src/api.rs` and use the
-`ResponseBodyCapture` interceptor to capture raw JSON responses. This is
-necessary because the AWS SDK for Rust output types don't implement
-`serde::Serialize`.
-
-Pattern:
+Callers own their SDK calls — there are no thin wrapper functions.
+Call the SDK fluent builder directly at the call site:
 
 ```rust
-let capture = ResponseBodyCapture::new();
-client.get_farm().farm_id(id)
-    .customize().interceptor(capture.clone()).send().await?;
-let json = capture.json()?;
+let client = deadline_api::session::deadline_client(config).await;
+let output = client.get_farm().farm_id(id).send().await
+    .map_err(|e| deadline_api::api::format_sdk_error(&e))?;
 ```
 
-For paginated list operations, use manual `nextToken` loops (SDK
-paginators don't support interceptors). See the `paginated_list` helper
-in `api.rs`.
+For paginated list operations, use the SDK paginator with
+`collect_paginated`:
+
+```rust
+let client = deadline_api::session::deadline_client(config).await;
+let pages = deadline_api::client::collect_paginated(
+    client.list_steps().farm_id(f).queue_id(q).job_id(j)
+        .into_paginator().send()
+).await?;
+for page in &pages {
+    for step in page.steps() { /* typed StepSummary access */ }
+}
+```
 
 For error handling, always use `format_sdk_error` or `sdk_err` — never
 `format!("{e}")` on an `SdkError`, which produces the useless string
@@ -199,8 +204,10 @@ See [specs/testing.md](specs/testing.md) for the full testing guide.
 - **Comments explain *what* and *why***, not Rust language concepts.
 - **Error formatting:** Always use `format_sdk_error` / `sdk_err` for
   AWS SDK errors. Never `format!("{e}")` on `SdkError`.
-- **API responses are `serde_json::Value`**, not typed SDK structs.
-  The `ResponseBodyCapture` interceptor captures raw HTTP JSON.
+- **API calls use typed SDK output.** Callers call the SDK fluent
+  builder directly and access fields via typed accessors. No wrapper
+  functions, no `serde_json::Value` from API responses. See
+  [specs/patterns.md](specs/patterns.md) § "AWS SDK for Rust Usage".
 - **Config is threaded, not global.** Functions take `&IniConfig` for
   reads or `&mut IniConfig` for writes.
 - **No mocking.** Use wiremock, real temp dirs, real config files.
