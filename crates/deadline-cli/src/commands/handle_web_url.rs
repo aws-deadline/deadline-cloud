@@ -368,7 +368,7 @@ pub(crate) fn parse_query_string(
                     "The URL query parameter {name} was provided multiple times, it may only be provided once."
                 ));
             }
-            result.insert(name.replace('-', "_"), values.into_iter().next().expect("infallible"));
+            result.insert(name.replace('-', "_"), values.into_iter().next().expect("values is non-empty"));
         }
     }
 

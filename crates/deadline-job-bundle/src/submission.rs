@@ -156,9 +156,12 @@ pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> 
         .captures(frame_string)
         .ok_or_else(|| op_err("Framelist not valid".into()))?;
 
-    let start: i64 = caps["start"].parse().expect("infallible");
-    let stop: i64 = caps.name("stop").map_or(start, |m| m.as_str().parse::<i64>().expect("infallible"));
-    let step: i64 = caps.name("step").map_or(if start <= stop { 1 } else { -1 }, |m| m.as_str().parse::<i64>().expect("infallible"));
+    let start: i64 = caps["start"].parse()
+        .map_err(|_| op_err(format!("Frame number '{}' out of range", &caps["start"])))?;
+    let stop: i64 = caps.name("stop").map_or(Ok(start), |m| m.as_str().parse::<i64>()
+        .map_err(|_| op_err(format!("Frame number '{}' out of range", m.as_str()))))?;
+    let step: i64 = caps.name("step").map_or(Ok(if start <= stop { 1 } else { -1 }), |m| m.as_str().parse::<i64>()
+        .map_err(|_| op_err(format!("Frame step '{}' out of range", m.as_str()))))?;
 
     if step == 0 {
         return Err(op_err("Frame step cannot be zero".into()));
@@ -583,7 +586,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 tc.record_event("com.amazon.rum.deadline.job_attachments.hashing_summary", details, false);
             }
 
-            let ja_settings = queue.job_attachment_settings().expect("infallible");
+            let ja_settings = queue.job_attachment_settings().expect("checked has_attachment_settings above");
             let s3_settings = JobAttachmentS3Settings::from_root_path(&format!(
                 "{}/{}",
                 ja_settings.s3_bucket_name(),

@@ -103,7 +103,7 @@ pub async fn list_jobs_by_filter_expression(
         }
 
         // Threshold: use the last job's createdAt for the next page
-        let ts = *last_ts.expect("infallible");
+        let ts = *last_ts.expect("set in loop body above");
         threshold_filter = Some(SearchFilterExpression::DateTimeFilter(
             DateTimeFilterExpression::builder()
                 .name("CREATED_AT")

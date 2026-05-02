@@ -207,7 +207,7 @@ pub fn get_setting(
     config: &IniConfig,
 ) -> Result<String, ConfigError> {
     let setting_def = validate_setting(setting_name)?;
-    let key = setting_name.split('.').nth(1).expect("infallible");
+    let key = setting_name.split('.').nth(1).expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
 
     match config.get(&section, key) {
@@ -245,7 +245,7 @@ pub fn set_setting(
     config: &mut IniConfig,
 ) -> Result<(), ConfigError> {
     let setting_def = validate_setting(setting_name)?;
-    let key = setting_name.split('.').nth(1).expect("infallible");
+    let key = setting_name.split('.').nth(1).expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
     config.set(&section, key, value);
     Ok(())

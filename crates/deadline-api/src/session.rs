@@ -271,7 +271,7 @@ impl QueueUserCredentialProvider {
             return Err(provider::error::CredentialsError::provider_error(err_msg));
         }
 
-        let output = result.expect("infallible");
+        let output = result.expect("Err case returned above");
         let creds = match output.credentials() {
             Some(c) if !c.access_key_id().is_empty() => c,
             _ => {

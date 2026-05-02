@@ -142,7 +142,7 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
         }
 
         // The largest minimum padding is likely the right padding for the group
-        let padding = group.iter().map(|np| np.padding_min).max().expect("infallible");
+        let padding = group.iter().map(|np| np.padding_min).max().expect("group is non-empty");
         let pattern = if padding > 1 {
             format!("%0{padding}d")
         } else {

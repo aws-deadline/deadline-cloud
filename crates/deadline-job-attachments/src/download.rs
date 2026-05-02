@@ -568,7 +568,7 @@ pub async fn get_output_manifests_by_asset_root(
         }
         return get_manifests_by_session_action_id(
             s3_settings, farm_id, queue_id, job_id,
-            step_id.expect("infallible"), task_id.expect("infallible"), sa_id,
+            step_id.expect("checked above"), task_id.expect("checked above"), sa_id,
             s3_client, account_id,
         )
         .await;

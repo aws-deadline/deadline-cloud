@@ -976,7 +976,7 @@ async fn incremental_output_download(
 
     // Step 4: Download output manifests and files
     eprintln!("Populating manifest S3 keys for {} jobs...", jobs_to_process.len());
-    let attachment_settings = queue.job_attachment_settings().expect("infallible");
+    let attachment_settings = queue.job_attachment_settings().expect("checked is_none above");
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
 
