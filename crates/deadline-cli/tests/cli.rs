@@ -18,8 +18,6 @@ mod config;
 mod credential_scoping;
 #[path = "cli/dcm.rs"]
 mod dcm;
-#[path = "cli/diagnostics.rs"]
-mod diagnostics;
 #[path = "cli/farm.rs"]
 mod farm;
 #[path = "cli/fleet.rs"]

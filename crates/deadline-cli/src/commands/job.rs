@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use deadline_api::{api, client, job_monitoring, log_retrieval, session};
 use deadline_api::log_retrieval::SessionAutoSelect;
-use deadline_api::responses::{self, JobResponse, SessionResponse};
+use deadline_api::responses::{self, JobResponse};
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use regex::Regex;
@@ -81,36 +81,7 @@ pub(crate) enum JobAction {
         #[arg(long)] queue_id: Option<String>,
         #[arg(long)] job_id: Option<String>,
     },
-    /// Get details of a specific session
-    GetSession {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-        #[arg(long)] session_id: String,
-    },
-    /// List sessions for a job
-    ListSessions {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-    },
-    /// List steps for a job
-    ListSteps {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-    },
-    /// List tasks for a step
-    ListTasks {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-        #[arg(long)] step_id: String,
-    },
+
     /// Wait for a job to complete
     Wait {
         #[arg(long)] profile: Option<String>,
@@ -167,18 +138,7 @@ pub(crate) enum JobAction {
         #[arg(long)]
         yes: bool,
     },
-    /// Search for jobs with filter and sort expressions
-    Search {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] filter_expressions: Option<String>,
-        #[arg(long)] sort_expressions: Option<String>,
-        #[arg(long, default_value = "5")]
-        page_size: i32,
-        #[arg(long, default_value = "0")]
-        item_offset: i32,
-    },
+
     /// EXPERIMENTAL - Generate statistics from a job with a trace
     TraceSchedule {
         #[arg(long)] profile: Option<String>,
@@ -270,97 +230,6 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 let job = get(&config, "defaults.job_id");
                 print_job_details(&farm, &queue, &job, &config).await
             }
-        }
-        JobAction::GetSession { profile, farm_id, queue_id, job_id, session_id } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            let resp = session::deadline_client(Some(&config)).await
-                .get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(&session_id)
-                .send().await
-                .map_err(|e| CliError::Operation(format!("Failed to get Session from Deadline:\n{}", client::format_sdk_error(&e))))?;
-            let session_resp = SessionResponse::from(resp);
-            let val = serde_json::to_value(&session_resp).map_err(|e| CliError::Operation(e.to_string()))?;
-            println!("{}", crate::common::cli_object_repr(&val));
-            Ok(())
-        }
-        JobAction::ListSessions { profile, farm_id, queue_id, job_id } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            let pages = client::collect_paginated(
-                session::deadline_client(Some(&config)).await
-                    .list_sessions().farm_id(&farm).queue_id(&queue).job_id(&job)
-                    .into_paginator().send()
-            ).await
-                .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
-            let sessions: Vec<serde_json::Value> = pages.iter()
-                .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
-                .map(|s| {
-                    let mut m = serde_json::Map::new();
-                    m.insert("sessionId".into(), serde_json::Value::String(s.session_id().to_owned()));
-                    m.insert("fleetId".into(), serde_json::Value::String(s.fleet_id().to_owned()));
-                    m.insert("workerId".into(), serde_json::Value::String(s.worker_id().to_owned()));
-                    m.insert("startedAt".into(), serde_json::Value::String(format_datetime(s.started_at())));
-                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_owned()));
-                    if let Some(ended) = s.ended_at() { m.insert("endedAt".into(), serde_json::Value::String(format_datetime(ended))); }
-                    serde_json::Value::Object(m)
-                })
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(sessions)));
-            Ok(())
-        }
-        JobAction::ListSteps { profile, farm_id, queue_id, job_id } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            let pages = client::collect_paginated(
-                session::deadline_client(Some(&config)).await
-                    .list_steps().farm_id(&farm).queue_id(&queue).job_id(&job)
-                    .into_paginator().send()
-            ).await
-                .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
-            let steps: Vec<serde_json::Value> = pages.iter()
-                .flat_map(aws_sdk_deadline::operation::list_steps::ListStepsOutput::steps)
-                .map(|s| {
-                    let mut m = serde_json::Map::new();
-                    m.insert("stepId".into(), serde_json::Value::String(s.step_id().to_owned()));
-                    m.insert("name".into(), serde_json::Value::String(s.name().to_owned()));
-                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_owned()));
-                    m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&s.created_at)));
-                    serde_json::Value::Object(m)
-                })
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(steps)));
-            Ok(())
-        }
-        JobAction::ListTasks { profile, farm_id, queue_id, job_id, step_id } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            let pages = client::collect_paginated(
-                session::deadline_client(Some(&config)).await
-                    .list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job).step_id(&step_id)
-                    .into_paginator().send()
-            ).await
-                .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
-            let tasks: Vec<serde_json::Value> = pages.iter()
-                .flat_map(aws_sdk_deadline::operation::list_tasks::ListTasksOutput::tasks)
-                .map(|t| {
-                    let mut m = serde_json::Map::new();
-                    m.insert("taskId".into(), serde_json::Value::String(t.task_id().to_owned()));
-                    m.insert("runStatus".into(), serde_json::Value::String(t.run_status().as_str().to_owned()));
-                    m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&t.created_at)));
-                    m.insert("createdBy".into(), serde_json::Value::String(t.created_by().to_owned()));
-                    serde_json::Value::Object(m)
-                })
-                .collect();
-            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Array(tasks)));
-            Ok(())
         }
         JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
             let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
@@ -928,32 +797,6 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             println!("\nRequeued a total of {total_requeued} tasks.");
             Ok(())
         }
-        JobAction::Search { profile, farm_id, queue_id, filter_expressions, sort_expressions, page_size, item_offset } => {
-            let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-
-            let filter_json = parse_json_or_file_arg(filter_expressions.as_deref())?;
-            let sort_json = parse_json_or_file_arg(sort_expressions.as_deref())?;
-
-            let resp = match search_jobs_call(
-                &farm, &[queue.as_str()], item_offset, page_size,
-                filter_json.as_ref(), sort_json.as_ref(),
-                Some(&config),
-            ).await {
-                Ok(r) => r,
-                Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
-                    return Err(CliError::Operation(format!(
-                        "Failed to search Jobs from Deadline:\n{e}{suggestion}"
-                    )));
-                }
-            };
-            print_search_jobs_output(&resp, item_offset);
-            Ok(())
-        }
         JobAction::TraceSchedule {
             profile, farm_id, queue_id, job_id,
             verbose, trace_format, trace_file,
@@ -1297,19 +1140,6 @@ fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::Sea
 }
 
 /// Parse a CLI argument that can be inline JSON or `file://path`.
-fn parse_json_or_file_arg(arg: Option<&str>) -> Result<Option<serde_json::Value>, CliError> {
-    let Some(arg) = arg else { return Ok(None) };
-    let content = if let Some(path) = arg.strip_prefix("file://") {
-        std::fs::read_to_string(path)
-            .map_err(|e| CliError::Operation(format!("Failed to read {path}: {e}")))?
-    } else {
-        arg.to_owned()
-    };
-    let val: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| CliError::Operation(format!("Invalid JSON: {e}")))?;
-    Ok(Some(val))
-}
-
 // ---------------------------------------------------------------------------
 // download-output implementation
 // ---------------------------------------------------------------------------

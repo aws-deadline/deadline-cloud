@@ -41,13 +41,6 @@ pub(crate) enum QueueAction {
         #[arg(long, default_value = "credentials_process", value_parser = ["credentials_process"])]
         output_format: String,
     },
-    /// Get a storage profile for a queue
-    GetStorageProfile {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] storage_profile_id: String,
-    },
     /// List queue parameter definitions from queue environments
     Paramdefs {
         #[arg(long)] profile: Option<String>,
@@ -314,28 +307,6 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                     details.insert("error_type".into(), serde_json::json!(e));
                     telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
                     Err(CliError::Operation(format!("Failed to export credentials:\n{e}")))
-                }
-            }
-        }
-        QueueAction::GetStorageProfile { profile, farm_id, queue_id, storage_profile_id } => {
-            let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
-            let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            match session::deadline_client(Some(&config)).await
-                .get_storage_profile_for_queue()
-                .farm_id(&farm).queue_id(&queue).storage_profile_id(&storage_profile_id)
-                .send().await {
-                Ok(output) => {
-                    let resp = storage_profile_output_to_value(&output);
-                    println!("{}", crate::common::cli_object_repr(&resp));
-                    Ok(())
-                }
-                Err(e) => {
-                    let err_str = client::format_sdk_error(&e);
-                    let suggestion = suggest_resources_on_client_error(
-                        &err_str, "GetStorageProfileForQueue", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
-                    Err(CliError::Operation(format!("Failed to get storage profile:\n{err_str}{suggestion}")))
                 }
             }
         }

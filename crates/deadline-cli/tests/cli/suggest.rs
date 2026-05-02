@@ -3,7 +3,7 @@
 //! These test that CLI commands include resource suggestions in error output
 //! when API calls fail with `AccessDenied` or `ResourceNotFound`.
 
-use deadline_test_server::deadline_api::{errors, farms, fleets, jobs, queues, queue_resources, workers};
+use deadline_test_server::deadline_api::{errors, farms, fleets, jobs, queues, workers};
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
@@ -142,32 +142,6 @@ async fn job_get_error_suggests_jobs_first() {
     ).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "--job-id", "job-bad"]));
-}
-
-// ── AUDIT-056: storage profile suggestion chain ─────────
-// GetStorageProfileForQueue error with storage profiles available → suggests profiles
-
-#[tokio::test]
-async fn queue_get_storage_profile_error_suggests_available_profiles() {
-    let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-
-    errors::mock_get_storage_profile_not_found(
-        &harness.server, "farm-abc", "queue-abc", "sp-bad",
-    ).await;
-    queue_resources::mock_list_storage_profiles_for_queue(
-        &harness.server, "farm-abc", "queue-abc",
-        &[json!({
-            "storageProfileId": "sp-good-123",
-            "displayName": "Linux Profile"
-        })],
-    ).await;
-
-    assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "get-storage-profile",
-        "--storage-profile-id", "sp-bad",
-    ]));
 }
 
 // GetJob error with paginated list_jobs for suggestions — verifies all pages are shown

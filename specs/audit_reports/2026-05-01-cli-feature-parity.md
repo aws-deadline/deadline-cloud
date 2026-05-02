@@ -166,12 +166,10 @@ and subcommands to identify Rust-only additions and missing flags.
   `job list-steps`, `job list-tasks`, `job search`,
   `queue get-storage-profile`
 - **Python behavior:** None of these subcommands exist.
-- **Rust behavior:** All 6 subcommands are implemented and functional.
-- **Impact:** Feature creep beyond Python CLI scope. May confuse users
-  expecting identical command sets. Some are used internally by
-  `trace-schedule`.
-- **Resolution:** Pending — decision needed: remove, keep, or document
-  as Rust-only additions
+- **Rust behavior:** All 6 subcommands were implemented and functional.
+- **Impact:** Feature creep beyond Python CLI scope.
+- **Resolution:** ✅ Removed — all 6 CLI subcommands and their tests
+  deleted. MCP server tools (which call the API directly) are unaffected.
 
 ### AUDIT-109: Rust-only `--json` flag on `bundle submit`
 
@@ -180,9 +178,9 @@ and subcommands to identify Rust-only additions and missing flags.
 - **Command/Function:** `deadline bundle submit --json`
 - **Python behavior:** No `--json` flag on `bundle submit` (only on
   `gui-submit`).
-- **Rust behavior:** Has `--json` flag for JSON output.
+- **Rust behavior:** Had `--json` flag for JSON output.
 - **Impact:** Minor feature addition beyond Python scope.
-- **Resolution:** Pending — decision needed: remove or keep
+- **Resolution:** ✅ Removed — `--json` flag and all related tests deleted.
 
 ### AUDIT-110: Missing backward-compat flags
 
@@ -274,8 +272,8 @@ and subcommands to identify Rust-only additions and missing flags.
 | AUDIT-105 | `--json` doesn't suppress human-readable output | Medium | Bug | ✅ Fixed |
 | AUDIT-106 | Telemetry `account_id` not resolved | Medium | Behavioral gap | ✅ Fixed |
 | AUDIT-107 | Debug snapshot has reduced content | Medium | Behavioral gap | ✅ Fixed |
-| AUDIT-108 | Rust-only subcommands not in Python CLI | Low | Extra Rust behavior | Pending |
-| AUDIT-109 | Rust-only `--json` on `bundle submit` | Low | Extra Rust behavior | Pending |
+| AUDIT-108 | Rust-only subcommands not in Python CLI | Low | Extra Rust behavior | ✅ Removed |
+| AUDIT-109 | Rust-only `--json` on `bundle submit` | Low | Extra Rust behavior | ✅ Removed |
 | AUDIT-110 | Missing backward-compat flags | Low | Behavioral gap | ✅ Fixed |
 | AUDIT-111 | `manifest diff --root` required vs optional | Low | Behavioral gap | ✅ Fixed |
 | AUDIT-112 | Config description text differs | Info | Nice-to-have | Accepted |

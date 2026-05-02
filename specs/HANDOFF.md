@@ -54,12 +54,12 @@ Active work item: Strict clippy lint resolution (see below).
 **Report:** `audit_reports/2026-05-01-cli-feature-parity.md`
 **Status:** All findings resolved.
 
-### Decisions needed
+### Decisions resolved
 
-- **AUDIT-108:** Rust-only subcommands (`job get-session`, `list-sessions`,
-  `list-steps`, `list-tasks`, `search`; `queue get-storage-profile`) —
-  remove, keep, or document?
-- **AUDIT-109:** Rust-only `--json` on `bundle submit` — remove or keep?
+- **AUDIT-108:** ✅ Removed — Rust-only subcommands (`job get-session`,
+  `list-sessions`, `list-steps`, `list-tasks`, `search`;
+  `queue get-storage-profile`) deleted. MCP tools unaffected.
+- **AUDIT-109:** ✅ Removed — `--json` flag on `bundle submit` deleted.
 
 ---
 

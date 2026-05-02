@@ -86,10 +86,6 @@ pub(crate) enum BundleAction {
         /// Generates a directory (or .zip) with `CreateJob` args and scripts.
         #[arg(long = "save-debug-snapshot")]
         save_debug_snapshot: Option<String>,
-
-        /// Output as JSON instead of human-readable text
-        #[arg(long)]
-        json: bool,
     },
 
     /// Open a GUI to submit an Open Job Description job bundle
@@ -179,7 +175,6 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             force_s3_check,
             no_force_s3_check,
             save_debug_snapshot,
-            json: json_output,
         } => {
             let job_parameters = parse_parameters(&parameter)?;
 
@@ -267,11 +262,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 force_s3_check: resolved_force_s3_check,
                 debug_snapshot_dir: effective_snapshot_dir,
                 config: Some(&config),
-                print_callback: if json_output {
-                    Box::new(|_msg| {}) // suppress library messages in JSON mode
-                } else {
-                    Box::new(|msg| println!("{msg}"))
-                },
+                print_callback: Box::new(|msg| println!("{msg}")),
                 hashing_progress_callback: Some(Box::new(move |meta| {
                     hash_progress.lock().expect("lock poisoned").callback(meta.progress as u64)
                 })),
@@ -315,16 +306,9 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                         .map_err(|e| CliError::Operation(format!("Failed to create zip: {e}")))?;
                     let _ = std::fs::remove_dir_all(tmp);
                 }
-                if json_output {
-                    println!("{}", serde_json::json!({"snapshotPath": snap_path}));
-                } else {
-                    println!("Saved job debug snapshot:");
-                    println!("    {snap_path}");
-                }
-            } else if json_output
-                && let Some(ref id) = job_id {
-                    println!("{}", serde_json::json!({"jobId": id}));
-                }
+                println!("Saved job debug snapshot:");
+                println!("    {snap_path}");
+            }
 
             // Update defaults.job_id only when no CLI overrides were provided
             if profile.is_none()
